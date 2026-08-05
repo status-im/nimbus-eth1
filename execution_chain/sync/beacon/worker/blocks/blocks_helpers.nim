@@ -20,6 +20,7 @@ import
 # ------------------------------------------------------------------------------
 
 func blkErrors*(buddy: BeaconPeerRef): string =
+  ## Note that application BAL errors are handled as part of blocks
   $buddy.nErrors.fetch.bdy & "/" & $buddy.nErrors.apply.blk
 
 proc bdyFetchRegisterError*(
@@ -61,8 +62,8 @@ func blkSessionStopped*(ctx: BeaconCtxRef): bool =
   ctx.pool.syncState != BeaconState.blocks
 
 func blkThroughput*(buddy: BeaconPeerRef): string =
-  ## Print throuhput sratistics
-  buddy.only.thPutStats.blk.toMeanVar.toStr
+  ## Print throuhput statistics
+  (buddy.only.thPutStats.blk + buddy.only.thPutStats.bal).toMeanVar.toStr
 
 # -------------
 

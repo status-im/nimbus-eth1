@@ -145,7 +145,7 @@ type
     fetch: tuple[
       hdr, bdy, bal: uint8]
     apply: tuple[
-      hdr, blk: uint8]
+      hdr, blk: uint8]               ## BAL errors are handled with blocks, here
 
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
@@ -162,6 +162,7 @@ type
   BeaconPeerData* = object
     ## Local descriptor data extension
     pivotHash*: Hash32               ## Peer best/latest hash (for `snap` sync)
+    supportsBal*: bool               ## Peer supports BAL (eth71 and later)
     nErrors*: PeerErrors             ## Error register
     thPutStats*: ThPutStats          ## Throughput statistics
     failedReq*: PeerFirstFetchReq    ## Avoid sending the same request twice
@@ -292,13 +293,19 @@ func toMeanVar*(w: StatsCollect): MeanVarStats =
     result.samples = w.samples
     result.total = w.total
 
+func `+`*[T: StatsCollect](a, b: T): T =
+  T(sum:     a.sum +     b.sum,
+    sum2:    a.sum2 +    b.sum2,
+    samples: a.samples + b.samples,
+    total:   a.total +   b.total)
+
 func toMeanVar*(w: ThPutStats): MeanVarStats =
   ## Combined statistics for headers and bodies
   toMeanVar StatsCollect(
-    sum:     w.hdr.sum +     w.blk.sum,
-    sum2:    w.hdr.sum2 +    w.blk.sum2,
-    samples: w.hdr.samples + w.blk.samples,
-    total:   w.hdr.total +   w.blk.total)
+    sum:     w.hdr.sum +     w.blk.sum +     w.bal.sum,
+    sum2:    w.hdr.sum2 +    w.blk.sum2 +    w.bal.sum2,
+    samples: w.hdr.samples + w.blk.samples + w.bal.samples,
+    total:   w.hdr.total +   w.blk.total +   w.bal.total)
 
 proc bpsSample*(
     stats: var StatsCollect;
