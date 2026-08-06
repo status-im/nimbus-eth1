@@ -41,9 +41,11 @@ type
     ETrieError                     ## Trie/mpt database error
     ECacheError                    ## Database cache error
     ECompleted                     ## Nothing to do, here
+    EArgumentError                 ## Inconsistent function arguments
+    EMissingBalSupport             ## Chain before `Amsterdam`
 
 const
-  EUnusedForFetch* = {ENoDataAvailable .. ECompleted}
+  EUnusedForFetch* = {ENoDataAvailable .. EMissingBalSupport}
     ## Shortcut for `case..of` directive. These error symbols are not used
     ## for fetching data via the `snap` or `eth` wire protocol.
 
@@ -234,5 +236,8 @@ const
   nProcBalErrThreshold* = 4
     ## Similar to `nFetchAccountSnapErrThreshold` but for the later part
     ## when errors occur while cached data packets are processed.
+
+  nProcBalDwnldBatchMax* = 10_000
+    ## Maximal size of single download batch for BALs.
 
 # End

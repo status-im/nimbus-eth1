@@ -11,9 +11,9 @@
 {.push raises:[].}
 
 import
-  ./bals/bals_fetch
+  ./bals/bals_download
 
 export
-  bals_fetch
+  bals_download
 
 # End

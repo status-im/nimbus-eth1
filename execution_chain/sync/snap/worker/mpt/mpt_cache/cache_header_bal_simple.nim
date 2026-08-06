@@ -49,6 +49,17 @@ proc getBal*(
     error info.failedToFetch "BAL", number, `error`=error
     return err()
 
+proc putBal*(
+    db: CacheDbRef;
+    number: BlockNumber;
+    bal: BlockAccessListRef;
+    info: static[string];
+      ): Opt[void] =
+  db.putBal(number, bal).isOkOr:
+    error info.failedUpdating "BAL", number, nBal=bal[].len, `error`=error
+    return err()
+  ok()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
