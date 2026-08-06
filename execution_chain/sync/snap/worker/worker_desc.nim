@@ -102,6 +102,7 @@ type
 
   SnapPeerData* = object
     ## Local descriptor data extension
+    supportsBal*: bool               ## Peer supports BAL (snap2 and later)
     finRoot*: Opt[StateRoot]         ## Some finalised state root (if any)
     notAvailMax*: BlockNumber        ## Max block number of rejected states
     nErrors*: PeerErrors             ## Error register
