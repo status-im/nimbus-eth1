@@ -8,11 +8,18 @@
 # those terms.
 
 import
+  json_rpc/errors,
   web3/execution_types,
-  ../beacon_engine
+  ../../core/tx_pool,
+  ../beacon_engine,
+  ./api_utils
 
 {.push gcsafe, raises:[].}
 
 proc getInclusionList*(ben: BeaconEngineRef,
-                       apiVersion: Version): InclusionList =
-  discard
+                       apiVersion: Version): InclusionList  {.raises: [ApplicationError].} =
+
+  if apiVersion == Version.V1:
+    return ben.txPool.getInclusionListV1()
+  else:
+    raise invalidParams("[getInclusionList] unsupported apiVersion: " & $apiVersion)

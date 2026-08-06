@@ -119,7 +119,8 @@ export
   removeTx,
   removeExpiredTxs,
   getBlobAndProofV1,
-  getBlobAndProofV2
+  getBlobAndProofV2,
+  getInclusionListV1
 
 # addTx(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError]
 # addTx(xp: TxPoolRef, tx: Transaction): Result[void, TxError]
@@ -130,6 +131,7 @@ export
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)
 # getBlobAndProofV1(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1]
 # getBlobAndProofV2(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2]
+# getInclusionListV1(xp: TxPoolRef): InclusionList
 
 proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
   let fromHash = if optHash.isSome: optHash.get

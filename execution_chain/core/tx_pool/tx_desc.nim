@@ -483,11 +483,11 @@ iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
     yield item
 
 iterator allItems*(xp: TxPoolRef): TxItemRef =
-  for _, item in xp.idTab:
+  for item in xp.idTab.values:
     yield item
 
 iterator byOrder*(xp: TxPoolRef): TxItemRef =
-  for _, item in xp.idTab:
+  for item in xp.idTab.values:
     yield item
 
 func isOrdered*(xp: TxPoolRef): bool =
@@ -525,6 +525,30 @@ func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2] =
         proofs: getProofs(np.proofs, val.blobIndex)))
 
   Opt.none(BlobAndProofV2)
+
+func getInclusionListV1*(xp: TxPoolRef): InclusionList =
+  const MaxILSize = 1024 * 8
+  var
+    rlpSize = 0
+    list = newSeqOfCap[TxItemRef](xp.idTab.len)
+    res: seq[TypedTransaction]
+
+  for item in xp.idTab.values:
+    # Inclusion List must not contains blob tx
+    if item.tx.txType == TxEip4844:
+      continue
+    list.add item
+
+  for i in countdown(list.len-1, 0):
+    var
+      item = list[i]
+      rlpBytes = rlp.encode(item.tx)
+    if rlpSize + rlpBytes.len > MaxILSize:
+      return move(res)
+    rlpSize += rlpBytes.len
+    res.add TypedTransaction(move(rlpBytes))
+
+  move(res)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters
