@@ -173,6 +173,51 @@ template balsDownload*(
 
   bodyRc
 
+template balsDownloadAppend*(
+    buddy: SnapPeerRef;                             # Snap peer
+    info: static[string];                           # Log message prefix
+    nBalsMax = nProcBalDefaultBatchMax;             # Max session size
+    nChunk = nProcBalDefaultChunk;                  # Process by data chunks
+      ): auto =
+  ## Async/template
+  ##
+  var bodyRc = Result[int,ErrorType].err(EGeneric)
+  block body:
+    let
+      db = buddy.ctx.pool.cacheDB
+      topHdrBn = db.lastHeaderNumber(info).valueOr: # get last header stored
+        BlockNumber(0)
+      topBalBn = db.lastBalNumber(info).valueOr:    # from last BAL stored
+        let w = db.getAccMissingIntv(info).valueOr: # try last flat state
+          bodyRc = typeof(bodyRc).err(ECacheError)
+          break body
+        w.number                                    # use this one as default
+
+    if topHdrBn <= topBalBn:                        # sanity check
+       bodyRc = typeof(bodyRc).err(EHeadersMissing) # need more headers
+       break body
+
+    # Download and save blocks
+    let
+      maxBn = min(topBalBn + nBalsMax.uint, topHdrBn)
+      firstBalBn = topBalBn + 1                    # first BAL to fetch
+    var
+      minBn = firstBalBn
+    while minBn <= maxBn:
+      let
+        nBals = min(nChunk, (maxBn - minBn + 1).int)
+        nProcessed = buddy.balsDownload(minBn, nBals, info).valueOr:
+          bodyRc = typeof(bodyRc).err(error)
+          break body
+      if nProcessed == 0:
+        bodyRc = typeof(bodyRc).ok((minBn - firstBalBn).int)
+        break body
+      minBn += nProcessed.uint
+
+    bodyRc = typeof(bodyRc).ok((maxBn - topBalBn).int)
+
+  bodyRc
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

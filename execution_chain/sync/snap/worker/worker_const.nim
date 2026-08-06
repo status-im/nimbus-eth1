@@ -43,9 +43,10 @@ type
     ECompleted                     ## Nothing to do, here
     EArgumentError                 ## Inconsistent function arguments
     EMissingBalSupport             ## Chain before `Amsterdam`
+    EHeadersMissing                ## Need to fetch more headers
 
 const
-  EUnusedForFetch* = {ENoDataAvailable .. EMissingBalSupport}
+  EUnusedForFetch* = {ENoDataAvailable .. EHeadersMissing}
     ## Shortcut for `case..of` directive. These error symbols are not used
     ## for fetching data via the `snap` or `eth` wire protocol.
 
@@ -237,7 +238,13 @@ const
     ## Similar to `nFetchAccountSnapErrThreshold` but for the later part
     ## when errors occur while cached data packets are processed.
 
-  nProcBalDwnldBatchMax* = 10_000
+  nProcBalDwnldBatchMax* = 800
     ## Maximal size of single download batch for BALs.
+
+  nProcBalDefaultChunk* = 80
+    ## Default size for auto downloading a single chunk of BALs.
+
+  nProcBalDefaultBatchMax* = 1000
+    ## Default maximum number of BALs for a single auto downloading session.
 
 # End
