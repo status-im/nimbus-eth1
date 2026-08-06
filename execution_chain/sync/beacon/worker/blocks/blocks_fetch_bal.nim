@@ -37,9 +37,7 @@ proc maybeSlowPeerError(
     buddy.balFetchRegisterError(slowPeer=true)
 
     # Do not repeat the same time-consuming failed request
-    buddy.only.failedReq = PeerFirstFetchReq(
-      state:   BeaconState.blocks,
-      balHash: hash)
+    buddy.only.failedReq.balHash = hash
 
     return true
 
@@ -70,8 +68,7 @@ proc getBals(
 
   doAssert startInx < req.blockHashes.len
 
-  if buddy.only.failedReq.state == BeaconState.blocks and
-     buddy.only.failedReq.balHash == req.blockHashes[startInx]:
+  if buddy.only.failedReq.balHash == req.blockHashes[startInx]:
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
   let
@@ -196,8 +193,8 @@ template fetchBlockAccessListsSome*(
     # Update download statistics
     let bps {.used.} = buddy.balSampleSize(elapsed, b.getEncodedLength)
 
-    # Request did not fail
-    buddy.only.failedReq.reset
+    # Request did not fail (for now)
+    buddy.only.failedReq.balHash = zeroHash32
 
     # Ban an overly slow peer for a while when observed consecutively.
     if fetchBalsErrTimeout < elapsed:

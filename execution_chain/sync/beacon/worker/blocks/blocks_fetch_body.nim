@@ -32,9 +32,7 @@ proc maybeSlowPeerError(
     buddy.bdyFetchRegisterError(slowPeer=true)
 
     # Do not repeat the same time-consuming failed request
-    buddy.only.failedReq = PeerFirstFetchReq(
-      state:     BeaconState.blocks,
-      blockHash: hash)
+    buddy.only.failedReq.bdyHash = hash
 
     return true
 
@@ -64,8 +62,7 @@ proc getBlockBodies(
 
   doAssert 0 < req.blockHashes.len
 
-  if buddy.only.failedReq.state == BeaconState.blocks and
-     buddy.only.failedReq.blockHash == req.blockHashes[0]:
+  if buddy.only.failedReq.bdyHash == req.blockHashes[0]:
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
   var resp: BlockBodiesPacket
@@ -179,7 +176,7 @@ template fetchBodies*(
     let bps {.used.} = buddy.bdySampleSize(elapsed, b.getEncodedLength)
 
     # Request did not fail
-    buddy.only.failedReq.reset
+    buddy.only.failedReq.bdyHash = zeroHash32
 
     # Ban an overly slow peer for a while when observed consecutively.
     if fetchBodiesErrTimeout < elapsed:

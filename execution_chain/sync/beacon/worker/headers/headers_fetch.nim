@@ -32,9 +32,7 @@ proc maybeSlowPeerError(
     buddy.hdrFetchRegisterError(slowPeer=true)
 
     # Do not repeat the same time-consuming failed request
-    buddy.only.failedReq = PeerFirstFetchReq(
-      state:       BeaconState.headers,
-      blockNumber: bn)
+    buddy.only.failedReq.blockNumber = bn
 
     return true
 
@@ -63,8 +61,8 @@ proc getBlockHeaders(
   ## Wrapper around `getBlockHeaders()`
   let start = Moment.now()
 
-  if buddy.only.failedReq.state == BeaconState.headers and
-     buddy.only.failedReq.blockNumber == bn:
+  if buddy.only.failedReq.blockNumber == bn and bn != BlockNumber(0):
+    # `bn == 0`: Special case when the header is fetched by hash, only.
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
   var resp: BlockHeadersPacket
@@ -209,7 +207,7 @@ template fetchHeadersReversed*(
     let bps = buddy.hdrSampleSize(elapsed, h.getEncodedLength)
 
     # This request did not fail (maybe another one did): reset anyway
-    buddy.only.failedReq.reset
+    buddy.only.failedReq.blockNumber = BlockNumber(0)
 
     # Ban an overly slow peer for a while when observed consecutively.
     if fetchHeadersErrTimeout < elapsed:
