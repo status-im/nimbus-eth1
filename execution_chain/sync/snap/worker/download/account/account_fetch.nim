@@ -16,6 +16,9 @@ import
   ../../[helpers, state_db, worker_desc],
   ./account_helpers
 
+logScope:
+  topics = "snap sync"
+
 type
   FetchAccountsResult* = Result[AccountRangePacket,ErrorType]
     ## Shortcut

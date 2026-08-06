@@ -211,4 +211,28 @@ const
     ## that the snap/1 protocol description recommends someting about
     ## 80-100 items for a 515K byte limit.
 
+  # -----------
+
+  ethBalFetchCapacity* = 10
+    ## Register first hash of last BAL request for error handling
+    ## support.
+
+  nFetchBalEthPeersMax* = 5
+    ## Try at most this many `eth` peers for fetchinga block access lists.
+
+  fetchBalRlpxTimeout* = chronos.seconds(50)
+    ## Timeout cap for the `RLPx` handlers, either `snap` or `eth`
+    ## when fetching block access lists.
+
+  fetchBalErrTimeout* = chronos.seconds(25)
+    ## Needed for detecting slow peers. If the response time exceeds this
+    ## threshold, the peer is considered `slow`.
+
+  nFetchBalErrThreshold* = 4
+    ## Maximum account fetch errors before zombification.
+
+  nProcBalErrThreshold* = 4
+    ## Similar to `nFetchAccountSnapErrThreshold` but for the later part
+    ## when errors occur while cached data packets are processed.
+
 # End
