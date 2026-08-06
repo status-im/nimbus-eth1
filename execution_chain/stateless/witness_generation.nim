@@ -88,7 +88,7 @@ proc build*(
     raiseAssert "Failed to get multiproof: " & $$error
 
   # Sort the proof nodes lexicographically as is done in execution-specs:
-  # https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L230
+  # https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L230
   multiProof.sort()
   witness.state = move(multiProof)
 
@@ -126,7 +126,7 @@ proc build*(
 
   if earliestBlockNumber.isSome():
     # Add headers in ascending block number order:
-    # https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L175-L176
+    # https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L175-L176
     for n in earliestBlockNumber.get() ..< parent.number:
       let blockHash = ledger.getBlockHash(BlockNumber(n))
       doAssert(blockHash != default(Hash32))
@@ -146,7 +146,7 @@ proc build*(
     codes.add(code)
 
   # Sort codes lexicographically as is done in execution-specs:
-  # https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L268
+  # https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless_host_exec_witness.py#L268
   codes.sort()
 
   var headers: seq[seq[byte]]
