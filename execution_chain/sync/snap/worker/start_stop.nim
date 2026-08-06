@@ -78,7 +78,6 @@ proc startSyncPeer*(buddy: SnapPeerRef): bool =
   buddy.only.peerType = buddy.peer.clientId.split('/',1)[0]
   buddy.only.failedReq = PeerFirstFetchReq(
     stateRoot:  StateRootSet.init stateDbCapacity,
-    accPath:   AccPathSet.init trieNodeAccPathCapacity,
     ethBalHash: EthBalHashSet.init ethBalFetchCapacity)
 
   # Reset global register for fall-back peer

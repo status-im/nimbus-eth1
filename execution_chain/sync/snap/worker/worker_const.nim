@@ -166,31 +166,6 @@ const
 
   # -----------
 
-  daemonWaitHealingInterval* = chronos.seconds(10)
-    ## Poll waiting for peers to process account and storage nodes
-
-  daemonWaitHealingFinishInterval* = chronos.seconds(5)
-    ## Wait for sync
-
-  trieNodeAccPathCapacity* = 10
-
-  fetchTrieNodeSnapTimeout* = chronos.seconds(120)
-    ## Similar to `fetchAccountSnapTimeout`
-
-  nFetchTrieNodeSnapErrThreshold* = 4
-    ## Similar to `nFetchAccountSnapErrThreshold`
-
-  fetchTrieNodeSnapBytesLimit* = 512 * 1024
-    ## Similar to `fetchAccountSnapBytesLimit`
-
-  nProcTrieNodeErrThreshold* = 4
-    ## Similar to `nProcAccountErrThreshold`
-
-  nFetchTrieNodeSnapItemsMax* = 1024
-    ## Maximal size of storage slots downloaded in a single message.
-
-  # -----------
-
   daemonWaitCodesInterval* = chronos.seconds(10)
     ## Poll waiting for peers to process contract codes
 
