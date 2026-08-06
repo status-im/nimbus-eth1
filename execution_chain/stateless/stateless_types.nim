@@ -20,7 +20,7 @@ export ssz_serialization, ssz_codec
 # ---------------------------------------------------------------------------
 
 # As per spec:
-# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless_ssz.py#L42
+# https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless_ssz.py#L42
 #
 # Not all consts are defined here as we get some of the types from beacon_chain datatypes
 
@@ -53,7 +53,7 @@ const
 # ---------------------------------------------------------------------------
 
 # As per spec:
-# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless_ssz.py#L105
+# https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless_ssz.py#L93
 #
 # Not all types are defined here as we get some of the types from beacon_chain datatypes
 
@@ -69,35 +69,23 @@ type
     codes*: List[ByteList[MAX_BYTES_PER_CODE], MAX_WITNESS_CODES]
     headers*: List[ByteList[MAX_BYTES_PER_HEADER], MAX_WITNESS_HEADERS]
 
-  # Optional uint64 encoded as a List of 0 or 1 elements.
-  ForkActivation* = object
-    block_number*: List[uint64, MAX_OPTIONAL_FORK_ACTIVATION_VALUES]
-    timestamp*: List[uint64, MAX_OPTIONAL_FORK_ACTIVATION_VALUES]
-
-  ForkConfig* = object
-    activation*: ForkActivation
-
-  # Note: named `StatelessChainConfig` to avoid name collision with EL `ChainConfig`
-  StatelessChainConfig* = object
-    chain_id*: uint64
-    active_fork*: ForkConfig
-
   StatelessInput* = object
     new_payload_request*: NewPayloadRequest
     witness*: ExecutionWitness
-    chain_config*: StatelessChainConfig
+    chain_id*: uint64
     public_keys*: List[ByteVector[PUBLIC_KEY_BYTES], MAX_PUBLIC_KEYS]
 
   StatelessValidationResult* = object
     new_payload_request_root*: Digest
     successful_validation*: bool
-    chain_config*: StatelessChainConfig
+    chain_id*: uint64
+    schema_id*: uint16
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless.py#L229
+# https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless.py#L183
 func compute_new_payload_request_root*(input: StatelessInput): Digest =
   ## Compute the request root for a stateless input via SSZ hash tree root.
   hash_tree_root(input.new_payload_request)
