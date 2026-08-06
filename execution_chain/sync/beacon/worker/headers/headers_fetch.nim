@@ -69,7 +69,7 @@ proc getBlockHeaders(
   try:
     resp = (await eth.getBlockHeaders(
       buddy.peer, req, fetchHeadersRlpxTimeout)).valueOr:
-        return err((ENoException,"","",Moment.now()-start))
+        return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
   except CancelledError as e:
@@ -92,7 +92,7 @@ template fetchHeadersReversed*(
     buddy: BeaconPeerRef;
     ivReq: BnRange;
     topHash: Hash32;
-      ): Opt[seq[Header]] =
+      ): auto =
   ## Async/template
   ##
   ## From the ethXX argument peer implied by `buddy` fetch a list of headers
@@ -136,7 +136,7 @@ template fetchHeadersReversed*(
       elapsed = rc.error.elapsed
       block evalError:
         case rc.error.excp:
-        of ENoException, ESyncerTermination:
+        of EGeneric, ESyncerTermination:
           break evalError
         of EPeerDisconnected, ECancelledError:
           buddy.nErrors.fetch.hdr.inc
@@ -220,7 +220,7 @@ template fetchHeadersReversed*(
       h[0].number).toStr, nResp=h.len, ela, thPut=(bps.toIECb(1) & "ps"),
       state, nErrors=buddy.nErrors.fetch.hdr
 
-    bodyRc = Opt[seq[Header]].ok(h)
+    bodyRc = typeof(bodyRc).ok(h)
 
   bodyRc # return
 

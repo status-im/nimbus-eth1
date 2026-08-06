@@ -63,7 +63,7 @@ proc getBals(
     startInx: int;
       ): Future[Result[FetchBalData,BeaconError]]
       {.async: (raises: []).} =
-  ## Wrapper around `getBlockHeaders()`
+  ## Wrapper around `getBlockAccessLists()`
   let start = Moment.now()
 
   doAssert startInx < req.blockHashes.len
@@ -78,7 +78,7 @@ proc getBals(
   try:
     resp = (await eth.getBlockAccessLists(
       buddy.peer, req, fetchBalsRlpxTimeout)).valueOr:
-        return err((ENoException,"","",Moment.now()-start))
+        return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
   except CancelledError as e:
@@ -101,7 +101,7 @@ template fetchBlockAccessListsSome*(
     buddy: BeaconPeerRef;
     request: BlockAccessListsRequest;               # list of block hashes
     startInx: int;                                  # start at this entry
-      ): Opt[seq[RawBlockAccessList]] =
+      ): auto =
   ## Async/template
   ##
   ## Request the raw (RLP-encoded) block access lists (EIP-7928) for the block
@@ -124,7 +124,7 @@ template fetchBlockAccessListsSome*(
       startHash {.inject.} = request.blockHashes[startInx]
 
     if nReq <= 0:
-      trace sendInfo & " empty request", peer, nReq, state=($buddy.syncState),
+      debug sendInfo & " empty request", peer, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bal
       bodyRc = typeof(bodyRc).ok(emptyRawBal)
       break body
@@ -140,7 +140,7 @@ template fetchBlockAccessListsSome*(
       elapsed = rc.error.elapsed
       block evalError:
         case rc.error.excp:
-        of ENoException, ESyncerTermination:
+        of EGeneric, ESyncerTermination:
           break evalError
         of EPeerDisconnected, ECancelledError:
           buddy.nErrors.fetch.bal.inc
@@ -150,8 +150,8 @@ template fetchBlockAccessListsSome*(
           buddy.balNoSampleSize(elapsed)
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, startHash=startHash.short, nReq,
-            ela=rc.error.elapsed.toStr, state=($buddy.syncState),
-            error=rc.errStr, nErrors=buddy.nErrors.fetch.bal
+            ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+            nErrors=buddy.nErrors.fetch.bal
           break body                                # return err()
 
         # Debug message for other errors
@@ -206,7 +206,7 @@ template fetchBlockAccessListsSome*(
     trace recvInfo, peer, startHash=startHash.short, nReq, nResp=b.len, ela,
       thPut=(bps.toIECb(1) & "ps"), state, nErrors=buddy.nErrors.fetch.bal
 
-    bodyRc =  typeof(bodyRc).ok(b)
+    bodyRc = typeof(bodyRc).ok(b)
 
   bodyRc
 

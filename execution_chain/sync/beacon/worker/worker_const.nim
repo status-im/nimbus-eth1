@@ -33,7 +33,7 @@ type
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
-    ENoException = 0
+    EGeneric = 0
     ESyncerTermination             ## Syncer was stopped
     EAlreadyTriedAndFailed         ## The same action failed before
     EPeerDisconnected              ## Exception
