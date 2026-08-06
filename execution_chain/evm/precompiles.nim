@@ -25,6 +25,7 @@ import
   ./evm_errors,
   ./computation,
   ./secp256r1verify,
+  ../transaction,
   eth/common/[base, addresses]
 
 from boringssl as bssl import nil
@@ -62,7 +63,7 @@ type
     paP256Verify
 
   SigRes = object
-    msgHash: array[32, byte]
+    msgHash: Hash32
     sig: Signature
 
 const
@@ -174,7 +175,7 @@ func getSignature(c: Computation): EvmResult[SigRes]  =
   var res = SigRes(sig: sig)
 
   # extract message hash, only need to copy when there is a valid signature
-  assign(res.msgHash, data.toOpenArray(0, 31))
+  assign(res.msgHash.data, data.toOpenArray(0, 31))
   ok(res)
 
 # ------------------------------------------------------------------------------
@@ -186,13 +187,15 @@ func ecRecover(c: Computation): EvmResultVoid =
     GasECRecover,
     reason="ECRecover Precompile")
 
-  let
-    sig = ? c.getSignature()
-    pubkey = recover(sig.sig, SkMessage(sig.msgHash)).valueOr:
+  let sig = ? c.getSignature()
+
+  var address: Address
+  {.cast(noSideEffect).}:
+    address = recoverSenderCached(sig.msgHash, sig.sig).valueOr:
       return err(prcErr(PrcInvalidSig))
 
   c.output.setLen(32)
-  assign(c.output.toOpenArray(12, 31), pubkey.toCanonicalAddress().data)
+  assign(c.output.toOpenArray(12, 31), address.data)
   ok()
 
 func sha256(c: Computation): EvmResultVoid =

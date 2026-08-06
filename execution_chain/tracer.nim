@@ -155,7 +155,7 @@ proc traceTransactionImpl(
     miner = vmState.coinbase()
 
   for idx, tx in transactions:
-    let sender = tx.recoverSender().expect("valid signature")
+    let sender = tx.recoverSenderCached().expect("valid signature")
     let recipient = tx.getRecipient(sender)
 
     if idx.uint64 == txIndex:
@@ -223,7 +223,7 @@ proc dumpBlockStateImpl(
     stateBefore = LedgerRef.init(com.ledger.baseTxFrame(), storeSlotHash = true)
 
   for idx, tx in blk.transactions:
-    let sender = tx.recoverSender().expect("valid signature")
+    let sender = tx.recoverSenderCached().expect("valid signature")
     let recipient = tx.getRecipient(sender)
     before.captureAccount(stateBefore, sender, senderName & $idx)
     before.captureAccount(stateBefore, recipient, recipientName & $idx)
@@ -238,7 +238,7 @@ proc dumpBlockStateImpl(
   var stateAfter = vmState.ledger
 
   for idx, tx in blk.transactions:
-    let sender = tx.recoverSender().expect("valid signature")
+    let sender = tx.recoverSenderCached().expect("valid signature")
     let recipient = tx.getRecipient(sender)
     after.captureAccount(stateAfter, sender, senderName & $idx)
     after.captureAccount(stateAfter, recipient, recipientName & $idx)
@@ -287,7 +287,7 @@ proc traceBlockImpl(
 
   for tx in blk.transactions:
     let
-      sender = tx.recoverSender().expect("valid signature")
+      sender = tx.recoverSenderCached().expect("valid signature")
       rc = vmState.processTransaction(tx, sender)
     if rc.isOk:
       gasUsed = gasUsed + rc.value.gasUsed

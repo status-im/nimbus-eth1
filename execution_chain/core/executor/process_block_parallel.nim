@@ -77,7 +77,7 @@ proc recoverAndPrefetchTask*(
 ): bool {.nimcall.} =
   # Recover the sender from the signature. `default(Address)` signals sig
   # check failure.
-  let sender = e[].tx[].recoverSender().valueOr(default(Address))
+  let sender = e[].tx[].recoverSenderCached().valueOr(default(Address))
   e[].sender = sender
   e[].senderReady.store(true, moRelease)
 
@@ -357,7 +357,7 @@ proc processTxTask(
     e[].preempted = true
     return false
 
-  let sender = e[].tx[].recoverSender().valueOr:
+  let sender = e[].tx[].recoverSenderCached().valueOr:
     e[].error = SharedString.init("could not recover sender")
     ctx[].cancelled.store(true, moRelease)
     return false

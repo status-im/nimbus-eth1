@@ -116,7 +116,7 @@ proc populateTransactionObject*(tx: Transaction,
   result.blockNumber = w3Qty(optionalNumber)
   result.blockTimestamp = w3Qty(optionalTimestamp)
 
-  if (let sender = tx.recoverSender(); sender.isOk):
+  if (let sender = tx.recoverSenderCached(); sender.isOk):
     result.`from` = sender[]
   result.gas = Quantity(tx.gasLimit)
   result.gasPrice = Quantity(tx.gasPrice)
@@ -205,7 +205,7 @@ proc populateBlockObject*(blockHash: Hash32,
 proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
   let
-    sender = tx.recoverSender()
+    sender = tx.recoverSenderCached()
     receipt = rec.to(Receipt)
   var res = ReceiptObject()
   res.transactionHash = tx.computeRlpHash
