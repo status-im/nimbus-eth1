@@ -308,12 +308,14 @@ template accAndStoNotify(
 
     when att == AttLeaf:
       stats.nAccLeaf.inc
-      let base = Hash32.fromBytes accPath.getBytes()
-      trd.putFlatAcc(base, payload, info)           # flat accounts table
-
-      let acc = payload.decodeAccount(info).valueOr:
-        stats.nAccErr.inc
-        break body
+      let
+        base = Hash32.fromBytes accPath.getBytes()
+        acc = payload.decodeAccount(info).valueOr:
+          stats.nAccErr.inc
+          break body
+      var
+        dirtyStorage = false
+        dirtyCode = false
 
       if acc.storageRoot != EMPTY_ROOT_HASH:
         stats.nAccSto.inc
@@ -336,6 +338,7 @@ template accAndStoNotify(
         # Save sub-ranges and re-install accout ranges
         if 0 < trd.ranges.chunks:
           trd.putStoMissingIntv(base, trd.ranges, info)
+          dirtyStorage = true
         trd.ranges = stash
 
         stats.nStoNodes += stats.nNodes             # collect storage stats
@@ -352,13 +355,18 @@ template accAndStoNotify(
               root=acc.codeHash.toStr, nErr=stats.nStoErr, `error`=error
             trd.cacheErr.inc
             stats.nCodeMissing.inc
+            dirtyCode = true
             break handleCode
 
           if 0 < code.len:
             trd.putFlatCode(base, code, info)       # contract codes table
           else:
             stats.nCodeMissing.inc
+            dirtyCode = true
             trd.putMissingBlob(base, info)          # missing contracts table
+
+      trd.putFlatAcc(                               # flat accounts table
+        base, dirtyStorage, dirtyCode, payload, info)
 
     elif att == AttDangling:
       stats.nAccDangl.inc
@@ -411,7 +419,7 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
       bodyRc = typeof(bodyRc).err(EClearError)
       break body
 
-    trace info & ": Analysing partion MPTs.."
+    trace info & ": Analysing partial MPTs.."
     let
       start = Moment.now()
       rc = traverseMpt(

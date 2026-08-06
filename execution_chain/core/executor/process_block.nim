@@ -22,7 +22,6 @@ import
   ../../block_access_list/[bal_tracker, bal_validation],
   ../dao,
   ../eip6110,
-  ../eip7997,
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
@@ -35,7 +34,7 @@ when compileOption("threads"):
 
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
-    let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
+    let sender {.inject.} = tx.recoverSenderCached().valueOr(default(Address))
     body
 
 template withSender(
@@ -119,9 +118,6 @@ proc procBlkPreamble(
   vmState.mutateLedger:
     if com.daoForkSupport and com.daoForkBlock.get == header.number:
       ledger.applyDAOHardFork()
-
-    if com.amsterdamTransition(vmState.parent.timestamp, header.timestamp):
-      ledger.applyEip7997()
 
   if not skipValidation: # Expensive!
     if blk.transactions.calcTxRoot != header.txRoot:

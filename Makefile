@@ -95,6 +95,8 @@ endif
 	eest_txpool_test \
 	eest_full_test \
 	eest_tool_test \
+	eest_benchmark \
+	eest_benchmark_test \
 	t8n \
 	t8n_test \
 	evmstate \
@@ -217,6 +219,9 @@ endif
 
 eest:
 	scripts/eest_ci_cache.sh
+
+eest_benchmark:
+	scripts/eest_ci_cache.sh benchmark
 
 # builds and runs the nimbus test suite
 test: | build deps rocksdb eest
@@ -376,8 +381,8 @@ nimbus_verified_proxy_wasm_debug: | build deps
 
 # Stateless related targets
 
-stateless_execution_baremetal: | build deps
-	$(ENV_SCRIPT) nim c --hints:off --cpu:riscv64 --os:any --mm:arc -d:useMalloc -d:chronicles_enabled:off -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace --compileOnly --genScript "execution_chain/stateless/stateless_execution.nim"
+stateless_guest_baremetal: | build deps
+	$(ENV_SCRIPT) nim c --hints:off --cpu:riscv64 --os:any --mm:arc -d:useMalloc -d:chronicles_enabled:off -d:keccakCacheEnabled:false -d:senderCacheEnabled:false -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace --compileOnly --genScript "execution_chain/stateless/stateless_guest.nim"
 
 stateless_execution_test: | build deps
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
@@ -385,32 +390,35 @@ stateless_execution_test: | build deps
 
 # EEST standalone targets - binary to run individual test vector files
 eest_engine: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_blockchain: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 # EEST test suite targets - to run the whole test suite for each category
 eest_engine_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_txpool_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_blockchain_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_stateless_execution_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
+
+eest_benchmark_test: | build deps eest_benchmark
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_full_test: | build deps eest
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/all_eest_tests.nim"
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/all_eest_tests.nim"
 	build/$@
 
 eest_tool_test: | build deps eest
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_tool_tests.nim"
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/eest_tool_tests.nim"
 	build/$@
 
 # builds transition tool

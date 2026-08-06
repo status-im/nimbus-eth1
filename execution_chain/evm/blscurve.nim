@@ -180,6 +180,18 @@ func isInf*(P: BLS_G2P): bool {.inline.} =
 func millerLoop*(P: BLS_G1P, Q: BLS_G2P): BLS_ACC {.inline.} =
   blst_miller_loop(toCV(result), toCC(Q), toCC(P))
 
+# Product of the Miller loops over all pairs, sharing the fp12 squarings
+# instead of running an independent Miller loop per pair.
+# The caller must exclude pairs containing a point at infinity: unlike
+# blst_miller_loop, blst_miller_loop_n has no infinity case.
+func millerLoopN*(ps: openArray[BLS_G1P], qs: openArray[BLS_G2P]): BLS_ACC =
+  # A nil second element tells blst the first pointer is a contiguous array.
+  let
+    p = [toCC(ps[0], cblst_p1_affine), nil]
+    q = [toCC(qs[0], cblst_p2_affine), nil]
+
+  blst_miller_loop_n(toCV(result), q[0].unsafeAddr, p[0].unsafeAddr, ps.len.uint)
+
 proc mul*(a: var BLS_ACC, b: BLS_ACC) {.inline.} =
   blst_fp12_mul(toCV(a), toCC(a), toCC(b))
 

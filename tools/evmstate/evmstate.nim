@@ -8,13 +8,14 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/[json, strutils, sets, tables, options, streams],
   chronicles,
   eth/common/keys,
   eth/common/transaction_utils,
   beacon_chain/process_state,
-  stew/byteutils,
   results,
   stint,
   ../../execution_chain/[evm/types, evm/state],
@@ -44,7 +45,7 @@ type
     tracerFlags: set[TracerFlags]
     error: string
 
-  StateResult* = object
+  StateResult* = ref object
     name* : string
     pass* : bool
     root* : Hash32
@@ -75,17 +76,21 @@ proc verifyResult(ctx: var StateContext,
                   callResult: LogResult) =
   ctx.error = ""
   if obtainedHash != ctx.expectedHash:
-    ctx.error = "post state root mismatch: got $1, want $2" %
-      [($obtainedHash).toLowerAscii, $ctx.expectedHash]
+    ctx.error = "post state root mismatch: got " &
+      ($obtainedHash).toLowerAscii &
+      ", want " &
+      $ctx.expectedHash
     return
 
   let actualLogsHash = computeRlpHash(callResult.logEntries)
   if actualLogsHash != ctx.expectedLogs:
-    ctx.error = "post state log hash mismatch: got $1, want $2" %
-      [($actualLogsHash).toLowerAscii, $ctx.expectedLogs]
+    ctx.error = "post state log hash mismatch: got " &
+      ($actualLogsHash).toLowerAscii &
+      ", want " &
+      $ctx.expectedLogs
     return
 
-proc writeResultToStdout(stateRes: seq[StateResult]) =
+proc writeResultToStdout(stateRes: seq[StateResult]): Result[void, string] =
   var n = newJArray()
   for res in stateRes:
     let z = %{
@@ -101,16 +106,24 @@ proc writeResultToStdout(stateRes: seq[StateResult]) =
       z["postState"] = res.postState
     n.add(z)
 
-  stdout.write(n.pretty)
-  stdout.write("\n")
+  try:
+    stdout.write(n.pretty)
+    stdout.write("\n")
+    ok()
+  except IOError as exc:
+    err(exc.msg)
 
-proc writeRootHashToStderr(stateRoot: Hash32) =
+proc writeRootHashToStderr(stateRoot: Hash32): Result[void, string] =
   let stateRoot = %{
     "stateRoot": %(stateRoot)
   }
-  stderr.writeLine($stateRoot)
+  try:
+    stderr.writeLine($stateRoot)
+    ok()
+  except IOError as exc:
+    err(exc.msg)
 
-proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
+proc runExecution(ctx: var StateContext, conf: StateConf, pre: GenesisAlloc): Result[StateResult, string] =
   let
     com     = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
     stream  = newFileStream(stderr)
@@ -121,11 +134,16 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
 
   let vmState = TestVMState()
   vmState.init(
-    parent = ctx.parent,
-    header = ctx.header,
-    com    = com,
+    parent  = ctx.parent,
+    header  = ctx.header,
+    com     = com,
     txFrame = com.db.baseTxFrame(),
-    tracer = tracer)
+    tracer  = tracer)
+
+  defer:
+    vmState.ledger.txFrame.dispose()
+    vmState.dispose()
+    com.db.close()
 
   vmState.mutateLedger:
     setupLedger(pre, ledger)
@@ -134,45 +152,35 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
   let sender = ctx.tx.recoverSender().valueOr:
     # Invalid signature, early exit
     let stateRoot = vmState.readOnlyLedger.getStateRoot()
-    return StateResult(
+    return ok(StateResult(
       name : ctx.name,
       pass : true,
       root : stateRoot,
       fork : ctx.forkStr
-    )
+    ))
 
-  var callResult: LogResult
-  defer:
-    let stateRoot = vmState.readOnlyLedger.getStateRoot()
-    ctx.verifyResult(vmState, stateRoot, callResult)
-    result = StateResult(
-      name : ctx.name,
-      pass : ctx.error.len == 0,
-      root : stateRoot,
-      fork : ctx.forkStr,
-      error: ctx.error
-    )
-    if conf.dumpEnabled:
-      result.state = dumpState(vmState.ledger)
-    if conf.postState:
-      result.postState = ctx.postState
-    if conf.jsonEnabled:
-      writeRootHashToStderr(stateRoot)
-    vmState.ledger.txFrame.dispose()
-    vmState.dispose()
-    com.db.close()
+  let callResult = vmState.processTransaction(ctx.tx, sender).valueOr(LogResult())
+  coinbaseStateClearing(vmState, ctx.header.coinbase)
 
-  try:
-    let res = vmState.processTransaction(ctx.tx, sender)
-    if res.isOk:
-      callResult = res.value
-    coinbaseStateClearing(vmState, ctx.header.coinbase)
-  except CatchableError as ex:
-    echo "FATAL: ", ex.msg
-    quit(QuitFailure)
-  except AssertionDefect as ex:
-    echo "FATAL: ", ex.msg
-    quit(QuitFailure)
+  let stateRoot = vmState.readOnlyLedger.getStateRoot()
+  ctx.verifyResult(vmState, stateRoot, callResult)
+
+  let res = StateResult(
+    name : ctx.name,
+    pass : ctx.error.len == 0,
+    root : stateRoot,
+    fork : ctx.forkStr,
+    error: ctx.error
+  )
+
+  if conf.dumpEnabled:
+    res.state = dumpState(vmState.ledger)
+  if conf.postState:
+    res.postState = ctx.postState
+  if conf.jsonEnabled:
+    ? writeRootHashToStderr(stateRoot)
+
+  ok(res)
 
 proc toTracerFlags(conf: StateConf): set[TracerFlags] =
   result = {
@@ -184,146 +192,122 @@ proc toTracerFlags(conf: StateConf): set[TracerFlags] =
   if conf.disableReturnData: result.incl TracerFlags.DisableReturnData
   if conf.disableStorage   : result.incl TracerFlags.DisableStorage
 
-template hasError(ctx: StateContext): bool =
-  ctx.error.len > 0
-
-proc parseTx(ctx: var StateContext, txData: JsonNode, subTest: JsonNode) =
+proc parseTx(ctx: var StateContext, txo: Txo, subTest: SubTest): Result[void, string] =
   try:
-    block txBytes:
-      if not subTest.hasKey("txbytes"):
-        break txBytes
+    if txo.secretKey.isSome:
+      ctx.tx = ? parseTx(txo, subTest.indexes, ctx.chainConfig.eip155Block.isSome)
+      return ok()
 
-      if subTest.hasKey("expectException"):
-        let exceptionString = subTest["expectException"].getStr
-        if "GASLIMIT_PRICE_PRODUCT_OVERFLOW" in exceptionString:
-          # high_gas_price_paris.json cannot be rlp decoded
-          # due to UInt256 gasPrice, while Nimbus tx gasPrice
-          # field is uint64.
-          # high_gas_price_paris.json can be decoded by parseTx.
-          break txBytes
-        if "NONCE_IS_MAX" in exceptionString:
-          break txBytes
+    if subTest.txbytes.len > 0:
+      ctx.tx = rlp.decode(subTest.txbytes, Transaction)
+      return ok()
 
-      let rlpBytes = hexToSeqByte(subTest["txbytes"].getStr)
-      ctx.tx = rlp.decode(rlpBytes, Transaction)
-      return
-
-    if txData.hasKey("secretKey"):
-      ctx.tx = parseTx(txData, subTest["indexes"])
-      return
-
-    doAssert(false, "Unsupported fixture format")
-  except KeyError as exc:
-    doAssert(false, exc.msg)
+    return err("Unsupported fixture format")
+  #except KeyError as exc:
+  #  return err(exc.msg)
   except RlpError as exc:
-    doAssert(false, exc.msg)
+    return err(exc.msg)
 
-proc executeTest(stateRes: var seq[StateResult], name: string, n: JsonNode, conf: StateConf): bool =
+func prepareFork(ctx: var StateContext, forkName: string): Result[void, string] =
+  ctx.forkStr = forkName
+  ctx.chainConfig = ? getChainConfig(forkName)
+  inc ctx.index
+  ok()
+
+proc runSubTest(ctx: var StateContext,
+                unit: StateUnit,
+                subTest: SubTest,
+                conf: StateConf): Result[StateResult, string] =
+  ctx.expectedHash = subTest.hash
+  ctx.expectedLogs = subTest.logs
+  if subTest.state.isNil.not:
+    ctx.postState  = subTest.state
+  ? ctx.parseTx(unit.txo, subTest)
+  ctx.runExecution(conf, unit.pre)
+
+proc executeTest(resList: var seq[StateResult], unit: StateUnit, conf: StateConf): Result[void, string] =
   var
     ctx = StateContext(
-      name: name,
+      index : 0,
+      name  : unit.name,
+      parent: ? parseParentHeader(unit.env),
+      header: ? parseHeader(unit.env),
     )
-
-  let
-    txData  = n["transaction"]
-    post    = n["post"]
-    pre     = n["pre"]
-
-  ctx.parent = parseParentHeader(n["env"])
-  ctx.header = parseHeader(n["env"])
 
   if conf.debugEnabled or conf.jsonEnabled:
     ctx.tracerFlags = toTracerFlags(conf)
 
-  var
-    index = 1
-    hasError = false
+  if conf.fork.len == 0:
+    for forkName, subTests in unit.post:
+      ? ctx.prepareFork(forkName)
+      for subTest in subTests.subs:
+        let res = ? ctx.runSubTest(unit, subTest, conf)
+        resList.add res
+    return ok()
 
-  template prepareFork(forkName: string) =
-    try:
-      ctx.forkStr = forkName
-      ctx.chainConfig = getChainConfig(forkName)
-    except ValueError as ex:
-      debugEcho ex.msg
-      return false
-    ctx.index = index
-    inc index
+  unit.post.withValue(conf.fork, val):
+    let subTests = val[]
+    ? ctx.prepareFork(conf.fork)
 
-  template runSubTest(subTest: JsonNode) =
-    ctx.expectedHash = Hash32.fromJson(subTest["hash"])
-    ctx.expectedLogs = Hash32.fromJson(subTest["logs"])
-    if subTest.hasKey("state"):
-      ctx.postState  = subTest["state"]
-    ctx.parseTx(txData, subTest)
-    let res = ctx.runExecution(conf, pre)
-    stateRes.add res
-    hasError = hasError or ctx.hasError
-
-  if conf.fork.len > 0:
-    if not post.hasKey(conf.fork):
-      stdout.writeLine("selected fork not available: " & conf.fork)
-      return false
-
-    let forkData = post[conf.fork]
-    prepareFork(conf.fork)
     if conf.subIndex.isNone:
-      for subTest in forkData:
-        runSubTest(subTest)
+      for subTest in subTests.subs:
+        let res = ? ctx.runSubTest(unit, subTest, conf)
+        resList.add res
     else:
       let index = conf.subIndex.get()
-      if index > forkData.len or index < 0:
-        stdout.writeLine("selected sub index out of range(0-$1), requested $2" %
-          [$forkData.len, $index])
-        return false
-      let subTest = forkData[index]
-      runSubTest(subTest)
-  else:
-    for forkName, forkData in post:
-      prepareFork(forkName)
-      for subTest in forkData:
-        runSubTest(subTest)
+      if index > subTests.subs.len or index < 0:
+        return err("selected sub index out of range(0-" &
+          $subTests.subs.len & "), requested " & $index)
+      let res = ? ctx.runSubTest(unit, subTests.subs[index], conf)
+      resList.add res
+    return ok()
+  do:
+    return err("selected fork not available: " & conf.fork)
 
-  not hasError
+func noError(list: openArray[StateResult]): bool =
+  for x in list:
+    if x.error.len > 0: return false
+  true
 
-proc prepareAndRun*(inputFile: string, conf: StateConf, T: type): T =
+proc prepareAndRun*(inputFile: string, conf: StateConf, T: type): Result[T, string] =
   let
-    fixture = json.parseFile(inputFile)
+    fixture = ? parseFixture(inputFile)
 
   var
     noError = true
-    stateRes = newSeqOfCap[StateResult](fixture.len)
+    stateRes = newSeqOfCap[StateResult](fixture.units.len)
 
-  if conf.index.isSome:
+  if conf.index.isNone:
+    for unit in fixture.units:
+      ? executeTest(stateRes, unit, conf)
+    noError = stateRes.noError
+  else:
     let
       index = conf.index.get()
-
     var
-      idx = 0
       found = false
 
-    for name, node in pairs(fixture):
+    for idx, unit in fixture.units:
       if idx == index:
-        noError = noError and executeTest(stateRes, name, node, conf)
+        ? executeTest(stateRes, unit, conf)
         found = true
-      inc idx
+    noError = stateRes.noError
 
     if not found:
-      stdout.writeLine("selected index out of range(0-$1), requested $2" %
-        [$idx, $index])
-  else:
-    for name, node in pairs(fixture):
-      noError = noError and executeTest(stateRes, name, node, conf)
+      return err("selected index out of range(0-" &
+        $fixture.units.len &
+        "), requested " & $index)
 
   when T is bool:
     if conf.disableOutput:
       if not noError and conf.enableError:
-        writeResultToStdout(stateRes)
+        ? writeResultToStdout(stateRes)
     else:
-      writeResultToStdout(stateRes)
+      ? writeResultToStdout(stateRes)
 
-    noError
+    ok(noError)
   else:
-    move(stateRes)
+    ok(move(stateRes))
 
 when defined(chronicles_runtime_filtering):
   type Lev = chronicles.LogLevel
@@ -340,16 +324,26 @@ when defined(chronicles_runtime_filtering):
     let level = v.toLogLevel
     setLogLevel(level)
 
-proc evmStateMain*() =
+proc evmStateMain*() {.raises: [IOError].} =
   # https://github.com/status-im/nimbus-eth1/issues/3131
   setStdIoUnbuffered()
 
-  let conf = StateConf.init()
+  let conf = try:
+               StateConf.init()
+             except CatchableError as exc:
+               fatal "Configuration error", msg=exc.msg
+               quit(QuitFailure)
+
   when defined(chronicles_runtime_filtering):
     setVerbosity(conf.verbosity)
 
   if conf.inputFile.len > 0:
-    if not prepareAndRun(conf.inputFile, conf, bool):
+    let res = prepareAndRun(conf.inputFile, conf, bool).valueOr:
+      fatal "Error when running test",
+        file=conf.inputFile,
+        msg=error
+      quit(QuitFailure)
+    if not res:
       quit(QuitFailure)
   else:
     ProcessState.setupStopHandlers()
@@ -358,7 +352,11 @@ proc evmStateMain*() =
       if (let reason = ProcessState.stopping(); reason.isSome()):
         echo "Shutting down, reason = ", reason[]
         break
-      let res = prepareAndRun(inputFile, conf, bool)
+      let res = prepareAndRun(inputFile, conf, bool).valueOr:
+        fatal "Error when running test",
+          file=inputFile,
+          msg=error
+        quit(QuitFailure)
       noError = noError and res
     if not noError:
       quit(QuitFailure)

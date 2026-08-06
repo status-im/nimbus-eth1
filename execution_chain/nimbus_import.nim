@@ -47,7 +47,11 @@ proc getMetadataLegacy(networkId: NetworkId): auto =
   # Network Specific Configurations
   # TODO: the merge block number could be fetched from the era1 file instead,
   #       specially if the accumulator is added to the chain metadata
-  let cfg = getMetadataForNetwork(networkId.name).cfg
+  let
+    network = networkId.name.valueOr:
+      fatal "Unsupported network", network = networkId
+      quit(QuitFailure)
+    cfg = getMetadataForNetwork(network).cfg
   if networkId == MainNet:
     (
       cfg,
@@ -89,10 +93,26 @@ template boolFlag(flags, b): PersistBlockFlags =
 proc running(): bool =
   not ProcessState.stopIt(notice("Shutting down", reason = it))
 
-proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
+type
+  Folder = object
+    dataDir: string
+    eraDir: string
+    ereDir: string
+    era1Dir: string
+
+func toFolder(config: ExecutionClientConf, params: NetworkParams): Folder =
+  Folder(
+    dataDir: config.dataDir(params),
+    eraDir : config.eraDir(params),
+    ereDir : config.ereDir(params),
+    era1Dir: config.era1Dir(params),
+  )
+
+proc importBlocks*(config: ExecutionClientConf, com: CommonRef, params: NetworkParams) =
   let
     start = com.db.baseTxFrame().getSavedStateBlockNumber() + 1
     time0 = Moment.now()
+    folder = config.toFolder(params)
 
   # These variables are used from closures on purpose, so as to place them on
   # the heap rather than the stack
@@ -116,6 +136,7 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
     cstats: PersistStats # stats at start of chunk
 
   defer:
+    persister.dispose()
     if csv != nil:
       close(csv)
 
@@ -199,15 +220,15 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
 
   # ere takes priority: use it if files are present in the ere directory
   # (either the explicit --ere-dir or the default <data-dir>/ere).
-  let networkName = config.networkId.name
-  let ereResult = EreDB.new(config.ereDir, networkName, mergeBlockNumber(config.networkId))
+  let networkName = params.getName()
+  let ereResult = EreDB.new(folder.ereDir, networkName, mergeBlockNumber(params.networkId))
   if ereResult.isOk():
     let db = ereResult.get()
     defer:
       db.dispose()
 
     notice "Importing ere archive",
-      start, dataDir = config.dataDir, ereDir = config.ereDir
+      start, dataDir = folder.dataDir, ereDir = folder.ereDir
 
     proc loadEreBlock(blockNumber: uint64): bool =
       db.getEthBlock(blockNumber, blk).isOkOr:
@@ -224,10 +245,10 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
   else:
     # Fall back to era1/era import, legacy way to be removed eventually
     notice "Could not open ere database, falling back to era1/era import",
-      ereDir = config.ereDir, networkName, error = ereResult.error
+      ereDir = folder.ereDir, networkName, error = ereResult.error
 
     let (cfg, genesis_validators_root, lastEra1Block, firstSlotAfterMerge) =
-      getMetadataLegacy(config.networkId)
+      getMetadataLegacy(params.networkId)
 
     # Finds the slot number to resume the import process
     # First it sets the initial lower bound to `firstSlotAfterMerge` + number of blocks after Era1
@@ -292,14 +313,14 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
 
     if lastEra1Block > 0 and start <= lastEra1Block:
       let
-        era1Name = config.networkId.name
-        db = Era1DB.new(config.era1Dir, era1Name, lastEra1Block + 1).valueOr:
+        era1Name = params.getName()
+        db = Era1DB.new(folder.era1Dir, era1Name, lastEra1Block + 1).valueOr:
           fatal "Could not open era1 database",
-            era1Dir = config.era1Dir, era1Name = era1Name, error = error
+            era1Dir = folder.era1Dir, era1Name = era1Name, error = error
           quit(QuitFailure)
 
       notice "Importing era1 archive",
-        start, dataDir = config.dataDir, era1Dir = config.era1Dir
+        start, dataDir = folder.dataDir, era1Dir = folder.era1Dir
 
       defer:
         db.dispose()
@@ -320,26 +341,26 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
 
     block era1Import:
       if blockNumber > lastEra1Block:
-        if not isDir(config.eraDir):
+        if not isDir(folder.eraDir):
           if blockNumber == 0:
             fatal "`era` directory not found, cannot start import",
-              blockNumber, eraDir = config.eraDir
+              blockNumber, eraDir = folder.eraDir
             quit(QuitFailure)
           else:
             notice "`era` directory not found, stopping import at merge boundary",
-              blockNumber, eraDir = config.eraDir
+              blockNumber, eraDir = folder.eraDir
             break era1Import
 
         notice "Importing era archive",
-          blockNumber, dataDir = config.dataDir, eraDir = config.eraDir
+          blockNumber, dataDir = folder.dataDir, eraDir = folder.eraDir
 
         let
-          eraDB = EraDB.new(cfg, config.eraDir, genesis_validators_root)
+          eraDB = EraDB.new(cfg, folder.eraDir, genesis_validators_root)
           (historical_roots, historical_summaries, endSlot) = loadHistoricalRootsFromEra(
-            config.eraDir, cfg
+            folder.eraDir, cfg
           ).valueOr:
             fatal "Could not load historical summaries",
-              eraDir = config.eraDir, error
+              eraDir = folder.eraDir, error
             quit(QuitFailure)
 
         # Load the last slot number

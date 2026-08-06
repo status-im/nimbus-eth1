@@ -138,7 +138,8 @@ proc runKeyLoader(noisy = defined(debug);
     test &"Load shared key file {fileInfo}":
       let
         config = @[dataDirCmdOpt,jwtSecretCmdOpt].makeConfig
-        secret = fakeKey.fakeGenSecret.jwtSharedSecret(config)
+        params = config.computeNetworkParams()
+        secret = fakeKey.fakeGenSecret.jwtSharedSecret(config, params)
         lines = config.jwtSecret.get.string.readLines(1)
 
       check secret.isOk
@@ -162,7 +163,8 @@ proc runKeyLoader(noisy = defined(debug);
     test &"Load shared key file {strippedInfo}, missing 0x prefix":
       let
         config = @[dataDirCmdOpt,jwtStrippedCmdOpt].makeConfig
-        secret = fakeKey.fakeGenSecret.jwtSharedSecret(config)
+        params = config.computeNetworkParams()
+        secret = fakeKey.fakeGenSecret.jwtSharedSecret(config, params)
         lines = config.jwtSecret.get.string.readLines(1)
 
       check secret.isOk
@@ -193,7 +195,8 @@ proc runKeyLoader(noisy = defined(debug);
 
       let
         config = @[dataDirCmdOpt].makeConfig
-        secret = fakeKey.fakeGenSecret.jwtSharedSecret(config)
+        params = config.computeNetworkParams()
+        secret = fakeKey.fakeGenSecret.jwtSharedSecret(config, params)
         lines = localKeyFile.readLines(1)
 
       check secret.isOk
@@ -215,10 +218,11 @@ proc runJwtAuth(noisy = defined(debug); keyFile = jwtKeyFile) =
     dataDirCmdOpt = &"--data-dir={dataDir}"
     jwtSecretCmdOpt = &"--jwt-secret={filePath}"
     config = @[dataDirCmdOpt,jwtSecretCmdOpt].makeConfig
+    params = config.computeNetworkParams()
 
     # The secret is just used for extracting the key, it would otherwise
     # be hidden in the closure of the handler function
-    secret = fakeKey.fakeGenSecret.jwtSharedSecret(config)
+    secret = fakeKey.fakeGenSecret.jwtSharedSecret(config, params)
 
     # The wrapper contains the handler function with the captured shared key
     authHook = secret.value.httpJwtAuth

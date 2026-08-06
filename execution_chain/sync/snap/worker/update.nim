@@ -27,6 +27,15 @@ func readyForMptAssembly(ctx: SnapCtxRef): bool =
   sdb.isComplete or
     accuAccountsCovMin < sdb.archivedCoverage() + sdb.accountsCoverage()
 
+proc pvStr(ctx: SnapCtxRef, info: static[string]): string =
+  if ctx.pool.pivot.isNone():
+    return "n/a"
+  let
+    pvHash = ctx.pool.pivot.toStr
+    pvNum = ctx.sessionPivotNum(info).valueOr:
+      return pvHash
+  pvHash & "(" & $pvNum & ")"
+
 # ------------------------------------------------------------------------------
 # Private FSA transition functions
 # ------------------------------------------------------------------------------
@@ -183,9 +192,11 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
       top=sdb.top, pivot=sdb.pivot.bnStr, nSyncPeers=ctx.nSyncPeers()
   of SnapAnalyse, SnapStop:
     chronicles.info info & ": State changed", prevState, newState,
-      pivot=ctx.pool.pivot.toStr, nSyncPeers=ctx.nSyncPeers()
-  of SnapIdle, SnapResume, SnapReady:
-    debug "State changed", prevState, newState
+      pivot=ctx.pvStr(info), nSyncPeers=ctx.nSyncPeers()
+  of SnapResume:
+    debug info & ": State changed", pivot=ctx.pvStr(info), prevState, newState
+  of SnapReady, SnapIdle:
+    debug info & ": State changed", prevState, newState
 
   newState
 

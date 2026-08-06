@@ -24,7 +24,8 @@ import
 export
   discoveryv4.NodeId,
   discoveryv4.Node,
-  discoveryv4.ENode
+  discoveryv4.ENode,
+  discoveryv5.Record
 
 logScope:
   topics = "p2p"
@@ -228,20 +229,23 @@ proc getRandomBootnode*(proto: Eth1Discovery): Opt[NodeV4] =
           return Opt.none(NodeV4)
       return Opt.some(newNode(enode))
 
-func getEnr*(proto: Eth1Discovery): Opt[string] =
-  ## Get the ENR URI string of the local node from DiscoveryV5.
+func getEnr*(proto: Eth1Discovery): Opt[discoveryv5.Record] =
+  ## Get the ENR of the local node from DiscoveryV5.
+  # Note: `Record` is qualified as `chronicles` also exports a `Record` symbol.
   if proto.discv5.isNil.not:
-    return Opt.some(proto.discv5.getRecord().toURI())
-  Opt.none(string)
+    return Opt.some(proto.discv5.getRecord())
+  Opt.none(discoveryv5.Record)
+
+func getEnrUri*(proto: Eth1Discovery): Opt[string] =
+  ## Get the ENR URI string of the local node from DiscoveryV5.
+  let record = proto.getEnr().valueOr:
+    return Opt.none(string)
+  Opt.some(record.toURI())
 
 func updateForkId*(proto: Eth1Discovery, forkId: ForkId) =
   # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/enr-entries/eth.md
   if proto.discv5.isNil.not:
-    let
-      list = [forkId]
-      bytes = rlp.encode(list)
-      kv = ("eth", bytes)
-    proto.discv5.updateRecord([kv]).isOkOr:
+    proto.discv5.updateRecord(enrFields({"eth": [forkId]})).isOkOr:
       return
 
 proc closeWait*(proto: Eth1Discovery) {.async: (raises: []).} =

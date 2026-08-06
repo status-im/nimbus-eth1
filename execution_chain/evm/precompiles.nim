@@ -25,6 +25,7 @@ import
   ./evm_errors,
   ./computation,
   ./secp256r1verify,
+  ../transaction,
   eth/common/[base, addresses]
 
 from boringssl as bssl import nil
@@ -62,7 +63,7 @@ type
     paP256Verify
 
   SigRes = object
-    msgHash: array[32, byte]
+    msgHash: Hash32
     sig: Signature
 
 const
@@ -174,7 +175,7 @@ func getSignature(c: Computation): EvmResult[SigRes]  =
   var res = SigRes(sig: sig)
 
   # extract message hash, only need to copy when there is a valid signature
-  assign(res.msgHash, data.toOpenArray(0, 31))
+  assign(res.msgHash.data, data.toOpenArray(0, 31))
   ok(res)
 
 # ------------------------------------------------------------------------------
@@ -186,13 +187,15 @@ func ecRecover(c: Computation): EvmResultVoid =
     GasECRecover,
     reason="ECRecover Precompile")
 
-  let
-    sig = ? c.getSignature()
-    pubkey = recover(sig.sig, SkMessage(sig.msgHash)).valueOr:
+  let sig = ? c.getSignature()
+
+  var address: Address
+  {.cast(noSideEffect).}:
+    address = recoverSenderCached(sig.msgHash, sig.sig).valueOr:
       return err(prcErr(PrcInvalidSig))
 
   c.output.setLen(32)
-  assign(c.output.toOpenArray(12, 31), pubkey.toCanonicalAddress().data)
+  assign(c.output.toOpenArray(12, 31), address.data)
   ok()
 
 func sha256(c: Computation): EvmResultVoid =
@@ -356,24 +359,15 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   if baseL > maxSize or expL > maxSize or modL > maxSize:
     return err(prcErr(PrcInvalidParam))
 
-  # TODO:
-  # add EVM special case:
-  # - modulo <= 1: return zero
-  # - exp == zero: return one
+  c.output.setLenUninit(modLen)
 
-  let output = modExp(
+  modExpInto(
     data.rangeToPadded(96, baseLen),
     data.rangeToPadded(96 + baseLen, expLen),
-    data.rangeToPadded(96 + baseLen + expLen, modLen)
+    data.rangeToPadded(96 + baseLen + expLen, modLen),
+    c.output
   )
 
-  # maximum output len is the same as modLen
-  # if it less than modLen, it will be zero padded at left
-  if output.len >= modLen:
-    assign(c.output, output.toOpenArray(output.len-modLen, output.len-1))
-  else:
-    c.output = newSeq[byte](modLen)
-    assign(c.output.toOpenArray(c.output.len-output.len, c.output.len-1), output)
   ok()
 
 func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
@@ -627,7 +621,8 @@ func blsPairing(c: Computation): EvmResultVoid =
   var
     g1 {.noinit.}: BLS_G1P
     g2 {.noinit.}: BLS_G2P
-    acc {.noinit.}: BLS_ACC
+    g1Points = newSeqOfCap[BLS_G1P](K)
+    g2Points = newSeqOfCap[BLS_G2P](K)
 
   # Decode pairs
   for i in 0..<K:
@@ -649,14 +644,18 @@ func blsPairing(c: Computation): EvmResultVoid =
     if not g2.subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
-    # Update pairing engine with G1 and G2 points
-    if i == 0:
-      acc = millerLoop(g1, g2)
-    else:
-      acc.mul(millerLoop(g1, g2))
+    # A pair with a point at infinity pairs to the identity, leaving the
+    # product unchanged. It must be skipped: millerLoopN cannot take one.
+    if g1.isInf or g2.isInf:
+      continue
+
+    g1Points.add g1
+    g2Points.add g2
 
   c.output.setLen(32)
-  if acc.check():
+
+  # An empty product is the identity, so the check succeeds.
+  if g1Points.len == 0 or millerLoopN(g1Points, g2Points).check():
     c.output[^1] = 1.byte
   ok()
 

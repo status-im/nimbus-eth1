@@ -23,6 +23,8 @@ import
   ../../execution_chain/stateless/witness_types,
   ../../execution_chain/stateless/stateless_types
 
+from ../../execution_chain/common/chain_config import GenesisAlloc, GenesisStorage, GenesisAccount
+
 # Common Type Definitions
 type
   GenesisHeader* = object
@@ -82,7 +84,7 @@ type
   UnitEnv* = object of RootObj
     network*: string
     genesisBlockHeader*: GenesisHeader
-    pre*: JsonNode
+    pre*: GenesisAlloc
     postState*: JsonNode
     lastblockhash*: Hash32
     config*: EnvConfig
@@ -135,6 +137,35 @@ proc readValue*(
   wrapValueError:
     for key in r.readObjectFields:
       blobScheduleParser(r, key, value)
+
+proc readValue*(r: var JsonReader[EthJson], val: var GenesisStorage)
+       {.raises: [IOError, SerializationError].} =
+  r.parseObjectCustomKey:
+    let slot = r.readValue(UInt256)
+  do:
+    val[slot] = r.readValue(UInt256)
+
+proc readValue*(r: var JsonReader[EthJson], val: var GenesisAccount)
+       {.raises: [IOError, SerializationError].} =
+  var balanceParsed = false
+  r.parseObject(key):
+    case key
+    of "code"   : r.readValue(val.code)
+    of "nonce"  : r.readValue(val.nonce)
+    of "balance":
+      r.readValue(val.balance)
+      balanceParsed = true
+    of "storage": r.readValue(val.storage)
+    else: discard r.readValue(JsonString)
+  if not balanceParsed:
+    r.raiseUnexpectedValue("GenesisAccount: balance required")
+
+proc readValue*(r: var JsonReader[EthJson], val: var GenesisAlloc)
+       {.raises: [IOError, SerializationError].} =
+  r.parseObjectCustomKey:
+    let address = r.readValue(Address)
+  do:
+    val[address] = r.readValue(GenesisAccount)
 
 proc readValue*(
     r: var JsonReader[EthJson], val: var PayloadParam

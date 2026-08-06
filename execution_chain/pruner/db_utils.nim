@@ -29,9 +29,7 @@ proc deleteTransactionsBe(kvt: KvtDbRef, txRoot: Hash32) =
   if txRoot == EMPTY_ROOT_HASH:
     return
 
-  kvt.delRangeBe(
-    hashIndexKey(txRoot, 0), hashIndexKey(txRoot, uint16.high), compactRange = true
-  ).isOkOr:
+  kvt.delRangeBe(hashIndexKey(txRoot, 0), hashIndexKey(txRoot, uint16.high)).isOkOr:
     warn "pruner: deleteTransactionsBe", txRoot, error
 
 proc deleteReceiptsBe(kvt: KvtDbRef, receiptsRoot: Hash32) =
@@ -39,9 +37,7 @@ proc deleteReceiptsBe(kvt: KvtDbRef, receiptsRoot: Hash32) =
     return
 
   kvt.delRangeBe(
-    hashIndexKey(receiptsRoot, 0),
-    hashIndexKey(receiptsRoot, uint16.high),
-    compactRange = true,
+    hashIndexKey(receiptsRoot, 0), hashIndexKey(receiptsRoot, uint16.high)
   ).isOkOr:
     warn "pruner: deleteReceiptsBe", receiptsRoot, error
 

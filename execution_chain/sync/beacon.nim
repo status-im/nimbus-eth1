@@ -49,6 +49,7 @@ proc addBeaconSyncProtocol(desc: BeaconSyncRef; PROTO: type) =
       worker.only.pivotHash = worker.peer.state(PROTO).latestHash
     elif PROTO is eth71:
       worker.only.pivotHash = worker.peer.state(PROTO).latestHash
+      worker.only.supportsBal = true
     else:
       {.error: "Unsupported eth/?? version".}
 

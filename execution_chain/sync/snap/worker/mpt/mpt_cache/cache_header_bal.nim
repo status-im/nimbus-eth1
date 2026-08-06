@@ -51,6 +51,7 @@ proc getHeader*(db: CacheDbRef, bn: BlockNumber): OptHeaderResult =
     return ok(Opt.none(Header))
   let hdr = data.decodeHeader().valueOr:
     return err(error)
+  doAssert bn == hdr.number                         # FIXME, will go away
   ok Opt.some(hdr)
 
 proc getBlockHash*(db: CacheDbRef, bn: BlockNumber): OptHashResult =
@@ -61,6 +62,7 @@ proc getBlockHash*(db: CacheDbRef, bn: BlockNumber): OptHashResult =
     return err(error)
   if hdr.isNone():
     return ok Opt.none(Hash32)
+  doAssert bn == hdr.unsafeGet.number               # FIXME, will go away
   ok Opt.some(hdr.unsafeGet.computeBlockHash)
 
 proc lastHeader*(db: CacheDbRef): OptHeaderResult =
@@ -105,6 +107,7 @@ iterator walkHeader*(db: CacheDbRef): WalkHeader =
       oops.error = error
       yield oops
       continue
+    doAssert key == header.number                   # FIXME, will go away
     yield (header,"")
 
 # -------------

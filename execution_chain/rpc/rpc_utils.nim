@@ -116,7 +116,7 @@ proc populateTransactionObject*(tx: Transaction,
   result.blockNumber = w3Qty(optionalNumber)
   result.blockTimestamp = w3Qty(optionalTimestamp)
 
-  if (let sender = tx.recoverSender(); sender.isOk):
+  if (let sender = tx.recoverSenderCached(); sender.isOk):
     result.`from` = sender[]
   result.gas = Quantity(tx.gasLimit)
   result.gasPrice = Quantity(tx.gasPrice)
@@ -205,7 +205,7 @@ proc populateBlockObject*(blockHash: Hash32,
 proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
   let
-    sender = tx.recoverSender()
+    sender = tx.recoverSenderCached()
     receipt = rec.to(Receipt)
   var res = ReceiptObject()
   res.transactionHash = tx.computeRlpHash
@@ -296,6 +296,9 @@ proc createAccessList*(header: Header,
               else: generateAddress(sender, nonce)
     precompiles = activePrecompilesList(fork)
 
+  defer:
+    vmState.dispose()
+
   var
     prevTracer = AccessListTracer.new(
       args.accessList.get(@[]),
@@ -317,9 +320,11 @@ proc createAccessList*(header: Header,
       tracer  = AccessListTracer.new(accessList, sender, to, precompiles)
       vmState = BaseVMState.new(parent, header, com, txFrame, tracer)
       res     = rpcCallEvm(args, header, vmState).valueOr:
+                  vmState.dispose()
                   txFrame.dispose()
                   handleError("failed to call evm: " & $error.code)
 
+    vmState.dispose()
     txFrame.dispose()
 
     if res.isError:

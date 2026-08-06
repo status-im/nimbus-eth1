@@ -96,11 +96,10 @@ proc setupConfig(): ExecutionClientConf =
     "--network:" & genesisFile
   ])
 
-proc setupCom(config: ExecutionClientConf): CommonRef =
+proc setupCom(params: NetworkParams): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
-    config.networkId,
-    config.networkParams
+    params
   )
 
 proc setupClient(port: Port): RpcHttpClient =
@@ -180,18 +179,19 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
 
   let
     conf  = setupConfig()
+    params = conf.computeNetworkParams()
 
-  conf.networkParams.genesis.alloc[contractAddress] = GenesisAccount(code: contractCode)
-  conf.networkParams.genesis.alloc[signer] = GenesisAccount(balance: oneETH)
-  conf.networkParams.genesis.alloc[create2Deployer] =
+  params.genesis.alloc[contractAddress] = GenesisAccount(code: contractCode)
+  params.genesis.alloc[signer] = GenesisAccount(balance: oneETH)
+  params.genesis.alloc[create2Deployer] =
     GenesisAccount(code: create2DeployerCode, nonce: 1)
 
   # Test data created for eth_getProof tests
-  conf.networkParams.genesis.alloc[regularAcc] = GenesisAccount(
+  params.genesis.alloc[regularAcc] = GenesisAccount(
     balance: 2_000_000_000.u256,
     nonce: 1.uint64)
 
-  conf.networkParams.genesis.alloc[contractAccWithStorage] = GenesisAccount(
+  params.genesis.alloc[contractAccWithStorage] = GenesisAccount(
     balance: 1_000_000_000.u256,
     nonce: 2.uint64,
     code: contractCode,
@@ -200,33 +200,33 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
       1.u256: 2345.u256,
     }.toTable)
 
-  conf.networkParams.genesis.alloc[contractAccNoStorage] = GenesisAccount(code: contractCode)
+  params.genesis.alloc[contractAccNoStorage] = GenesisAccount(code: contractCode)
 
   if envFork >= Shanghai:
-    conf.networkParams.config.shanghaiTime = Opt.some(0.EthTime)
+    params.config.shanghaiTime = Opt.some(0.EthTime)
 
   if envFork >= Cancun:
-    conf.networkParams.config.cancunTime = Opt.some(0.EthTime)
+    params.config.cancunTime = Opt.some(0.EthTime)
 
   if envFork >= Prague:
-    conf.networkParams.config.depositContractAddress = Opt.some(DEPOSIT_CONTRACT_ADDRESS)
-    conf.networkParams.config.pragueTime = Opt.some(0.EthTime)
-    conf.networkParams.config.osakaTime = Opt.some(3805601325.EthTime)
-    conf.networkParams.config.bpo1Time = Opt.some(3805701325.EthTime)
-    conf.networkParams.config.bpo2Time = Opt.some(3805801325.EthTime)
+    params.config.depositContractAddress = Opt.some(DEPOSIT_CONTRACT_ADDRESS)
+    params.config.pragueTime = Opt.some(0.EthTime)
+    params.config.osakaTime = Opt.some(3805601325.EthTime)
+    params.config.bpo1Time = Opt.some(3805701325.EthTime)
+    params.config.bpo2Time = Opt.some(3805801325.EthTime)
 
   if envFork >= Osaka:
-    conf.networkParams.config.osakaTime = Opt.some(0.EthTime)
-    conf.networkParams.config.bpo1Time = Opt.some(0.EthTime)
-    conf.networkParams.config.bpo2Time = Opt.some(0.EthTime)
+    params.config.osakaTime = Opt.some(0.EthTime)
+    params.config.bpo1Time = Opt.some(0.EthTime)
+    params.config.bpo2Time = Opt.some(0.EthTime)
 
   if envFork >= Amsterdam:
-    conf.networkParams.config.amsterdamTime = Opt.some(0.EthTime)
-    conf.networkParams.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
-    conf.networkParams.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
+    params.config.amsterdamTime = Opt.some(0.EthTime)
+    params.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
+    params.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
 
   let
-    com   = setupCom(conf)
+    com   = setupCom(params)
     chain = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(chain)
     server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
@@ -236,7 +236,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     client = setupClient(server.localAddress[0].port)
     rng    = newRng()
     am     = new AccountsManager
-    node   = setupEthNode(conf, rng[], eth68, eth69)
+    node   = setupEthNode(conf, params, rng[], eth68, eth69)
     nimbus = NimbusNode(
       ethNode: node,
     )
@@ -251,7 +251,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     quit(QuitFailure)
 
   setupServerAPI(serverApi, server, am)
-  setupCommonRpc(node, conf, server)
+  setupCommonRpc(node, conf, com, server)
   setupAdminRpc(nimbus, conf, server)
   setupDebugRpc(com, txPool, server)
   server.start()
@@ -265,7 +265,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     chain  : chain,
     am     : am,
     node   : node,
-    chainId: conf.networkParams.config.chainId,
+    chainId: params.config.chainId,
   )
 
 proc generateBlock(env: var TestEnv) =
@@ -371,7 +371,7 @@ proc rpcMain*() =
 
     test "net_version":
       let res = await client.net_version()
-      check res == $env.conf.networkId
+      check res == $env.com.networkId
 
     test "net_listening":
       let res = await client.net_listening()

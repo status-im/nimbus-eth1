@@ -49,6 +49,10 @@ type
     packet: BlockBodiesPacket
     elapsed: Duration
 
+  FetchBalData* = tuple
+    packet: BlockAccessListsPacket
+    elapsed: Duration
+
   PeerRanking* = tuple
     assessed: PerfClass
     ranking: int
@@ -134,14 +138,14 @@ type
     ##    samples:  -- Number of samples in sum/sum2
     ##    total:    -- Total number of bytes tranfered
     ##
-    hdr*, blk*: StatsCollect
+    hdr*, bdy*, bal*: StatsCollect
 
   PeerErrors* = tuple
     ## Count fetching and processing errors
     fetch: tuple[
-      hdr, bdy: uint8]
+      hdr, bdy, bal: uint8]
     apply: tuple[
-      hdr, blk: uint8]
+      hdr, blk: uint8]               ## BAL errors are handled with blocks, here
 
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
@@ -151,12 +155,14 @@ type
       blockNumber*: BlockNumber      ## First block number
     of BeaconState.blocks:
       blockHash*: Hash32             ## First block hash
+      balHash*: Hash32               ## First block hash used for BAL
     else:
       discard
 
   BeaconPeerData* = object
     ## Local descriptor data extension
     pivotHash*: Hash32               ## Peer best/latest hash (for `snap` sync)
+    supportsBal*: bool               ## Peer supports BAL (eth71 and later)
     nErrors*: PeerErrors             ## Error register
     thPutStats*: ThPutStats          ## Throughput statistics
     failedReq*: PeerFirstFetchReq    ## Avoid sending the same request twice
@@ -182,7 +188,7 @@ type
     ## Globally shared data extension
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
-    syncState*: BeaconState            ## Current syncer state
+    syncState*: BeaconState          ## Current syncer state
     standByMode*: bool               ## Do not generally activate if `true`
     subState*: SyncSubState          ## Additional state variables
     nextMetricsUpdate*: Moment       ## For updating metrics
@@ -287,13 +293,19 @@ func toMeanVar*(w: StatsCollect): MeanVarStats =
     result.samples = w.samples
     result.total = w.total
 
+func `+`*[T: StatsCollect](a, b: T): T =
+  T(sum:     a.sum +     b.sum,
+    sum2:    a.sum2 +    b.sum2,
+    samples: a.samples + b.samples,
+    total:   a.total +   b.total)
+
 func toMeanVar*(w: ThPutStats): MeanVarStats =
   ## Combined statistics for headers and bodies
   toMeanVar StatsCollect(
-    sum:     w.hdr.sum +     w.blk.sum,
-    sum2:    w.hdr.sum2 +    w.blk.sum2,
-    samples: w.hdr.samples + w.blk.samples,
-    total:   w.hdr.total +   w.blk.total)
+    sum:     w.hdr.sum +     w.bdy.sum +     w.bal.sum,
+    sum2:    w.hdr.sum2 +    w.bdy.sum2 +    w.bal.sum2,
+    samples: w.hdr.samples + w.bdy.samples + w.bal.samples,
+    total:   w.hdr.total +   w.bdy.total +   w.bal.total)
 
 proc bpsSample*(
     stats: var StatsCollect;
