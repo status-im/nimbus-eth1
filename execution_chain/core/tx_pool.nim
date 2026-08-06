@@ -285,7 +285,8 @@ export
   prevRandao,
   withdrawals,
   parentBeaconBlockRoot,
-  slotNumber
+  slotNumber,
+  focil
 
 # feeRecipient(xp: TxPoolRef): Address
 # timestamp(xp: TxPoolRef): EthTime
@@ -293,6 +294,7 @@ export
 # withdrawals(xp: TxPoolRef): seq[Withdrawal]
 # parentBeaconBlockRoot(xp: TxPoolRef): Hash32
 # slotNumber(xp: TxPoolRef): uint64
+# focil(xp: TxPoolRef): Focil
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes setters
@@ -305,7 +307,8 @@ export
   `withdrawals=`,
   `parentBeaconBlockRoot=`,
   `slotNumber=`,
-  `targetGasLimit=`
+  `targetGasLimit=`,
+  `focil=`
 
 # `feeRecipient=`(xp: TxPoolRef, val: Address)
 # `timestamp=`(xp: TxPoolRef, val: EthTime)
@@ -314,3 +317,4 @@ export
 # `parentBeaconBlockRoot=`(xp: TxPoolRef, val: Hash32)
 # `slotNumber=`(xp: TxPoolRef, val: uint64)
 # `targetGasLimit=`(xp: TxPoolRef, val: Opt[uint64])
+# `focil=`(xp: TxPoolRef, val: Focil)

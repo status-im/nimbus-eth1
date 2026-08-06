@@ -15,12 +15,14 @@ import
   eth/common/[transactions_rlp, blocks],
   chronicles,
   ../evm/state,
-  ../db/ledger
+  ../db/ledger,
+  ./tx_pool/tx_item
 
 from ../transaction import recoverSenderCached
 from ../evm/types import BaseVMState
 from ../utils/utils import short
 from ./validate import gasCost
+from ./pooled_txs import PooledTransaction
 from web3/engine_api_types import TypedTransaction
 
 type
@@ -33,7 +35,7 @@ proc decodeIL*(list: openArray[TypedTransaction]): DecodedIL =
     for x in list:
       res.list.add rlp.decode(distinctBase(x), Transaction)
   except RlpError as exc:
-    warn "Failed to decode Inclusion List transaction",
+    warn "[decodeIL] failed to decode Inclusion List transaction",
       msg = exc.msg
     return nil
 
@@ -145,3 +147,29 @@ proc validateInclusionList*(vmState: BaseVMState, decodedIL: openArray[Transacti
       invalidNonce,
       totalInclusionList=decodedIL.len
   true
+
+type
+  Focil* = ref object
+    list*: seq[TxItemRef]
+
+proc toTxItem(tx: Transaction): Result[TxItemRef, string] =
+  let sender = tx.recoverSenderCached().valueOr:
+    return err("[toTxItem] cannot recover sender")
+
+  ok(TxItemRef.new(
+    PooledTransaction(tx: tx),
+    tx.computeRlpHash(),
+    sender
+  ))
+
+proc toFocil*(list: openArray[TypedTransaction]): Result[Focil, string] =
+  var focil = Focil()
+  try:
+    for x in list:
+      let item = ? toTxItem(rlp.decode(distinctBase(x), Transaction))
+      focil.list.add item
+    ok(focil)
+  except RlpError as exc:
+    warn "[toFocil] failed to decode Inclusion List transaction",
+      msg = exc.msg
+    err(exc.msg)

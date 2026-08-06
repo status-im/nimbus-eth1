@@ -27,6 +27,7 @@ import
   ../../transaction/call_types,
   ../chain/forked_chain,
   ../pow/header,
+  ../focil,
   ../eip4844,
   ../eip7594,
   ../validate,
@@ -55,6 +56,7 @@ type
     beaconRoot  : Hash32 ## EIP-4788
     slotNumber  : uint64 ## EIP-7843
     targetGasLimit: Opt[uint64]
+    focil       : Focil
 
   TxPoolFlags* = enum
     XP_ORDERED
@@ -546,6 +548,9 @@ func parentBeaconBlockRoot*(xp: TxPoolRef): Hash32 =
 func slotNumber*(xp: TxPoolRef): uint64 =
   xp.pos.slotNumber
 
+func focil*(xp: TxPoolRef): Focil =
+  xp.pos.focil
+
 # ------------------------------------------------------------------------------
 # PoS payload attributes setters
 # ------------------------------------------------------------------------------
@@ -570,3 +575,6 @@ func `slotNumber=`*(xp: TxPoolRef, val: uint64) =
 
 func `targetGasLimit=`*(xp: TxPoolRef, val: Opt[uint64]) =
   xp.pos.targetGasLimit = val
+
+func `focil=`*(xp: TxPoolRef, val: Focil) =
+  xp.pos.focil = val
