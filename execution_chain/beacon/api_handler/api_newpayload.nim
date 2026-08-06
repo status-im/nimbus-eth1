@@ -15,6 +15,7 @@ import
   web3/[execution_types, primitives],
   json_rpc/errors,
   ../../core/tx_pool,
+  ../../core/focil,
   ../web3_eth_conv,
   ../beacon_engine,
   ../payload_conv,
@@ -178,7 +179,6 @@ proc newPayload*(ben: BeaconEngineRef,
     if inclusionList.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         ": inclusionList is expected from execution payload")
-    {.warning: "Please implement newPayload inclusionList validation".}
 
   let
     com = ben.com
@@ -300,4 +300,12 @@ proc newPayload*(ben: BeaconEngineRef,
     gasUsed = header.gasUsed,
     blobGas = header.blobGasUsed.get(0'u64)
 
-  return validStatus(blockHash)
+  if inclusionList.isSome:
+    let decodedIL = decodeIL(inclusionList.value)
+    if decodedIL.isNil:
+      raise invalidParams("newPayload cannot decode Inclusion List")
+
+    let validIL = validateInclusionList(chain.vmState, decodedIL.list, blk)
+    return validStatus(blockHash, validIL)
+  else:
+    return validStatus(blockHash)

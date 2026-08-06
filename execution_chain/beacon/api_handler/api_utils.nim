@@ -138,6 +138,13 @@ proc validStatus*(validHash: common.Hash32): PayloadStatus =
     latestValidHash: toValidHash(validHash)
   )
 
+proc validStatus*(validHash: common.Hash32, validIL: bool): PayloadStatus =
+  PayloadStatus(
+    status: PayloadExecutionStatus.valid,
+    latestValidHash: toValidHash(validHash),
+    inclusionListSatisfied: Opt.some(validIL)
+  )
+
 proc invalidParams*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiInvalidParams,
