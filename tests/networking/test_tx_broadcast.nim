@@ -122,10 +122,7 @@ proc close(env: BroadcastTestEnv) {.async: (raises: [CancelledError]).} =
 
 template setupEnvPair(env1, env2: untyped) =
   ## Declare two envs sharing one genesis file. They must share it:
-  ## writeRecentGenesis() stamps a whole-second timestamp, so building each
-  ## env from its own file yields mismatched genesis hashes whenever the two
-  ## calls straddle a second boundary — and the eth handshake then rejects
-  ## the peer with UselessPeerError.
+  ## writeRecentGenesis() stamps a whole-second timestamp
   let genesisPath = writeRecentGenesis()
   var env1 = newBroadcastTestEnv(genesisPath)
   var env2 = newBroadcastTestEnv(genesisPath)
