@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[typetraits, sets],
+  std/[typetraits, sets, tables],
   eth/rlp,
   eth/common/[transactions_rlp, blocks],
   chronicles,
@@ -150,7 +150,7 @@ proc validateInclusionList*(vmState: BaseVMState, decodedIL: openArray[Transacti
 
 type
   Focil* = ref object
-    list*: seq[TxItemRef]
+    list*: Table[Hash32, TxItemRef]
 
 proc toTxItem(tx: Transaction): Result[TxItemRef, string] =
   let sender = tx.recoverSenderCached().valueOr:
@@ -167,7 +167,7 @@ proc toFocil*(list: openArray[TypedTransaction]): Result[Focil, string] =
   try:
     for x in list:
       let item = ? toTxItem(rlp.decode(distinctBase(x), Transaction))
-      focil.list.add item
+      focil.list[item.id] = item
     ok(focil)
   except RlpError as exc:
     warn "[toFocil] failed to decode Inclusion List transaction",
