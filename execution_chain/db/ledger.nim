@@ -570,6 +570,9 @@ proc getNonce*(ledger: LedgerRef, address: Address): AccountNonce =
 
 func isDeployedCode(ledger: LedgerRef, codeHash: Hash32): bool =
   ## Check if codeHash was deployed in any currently active save point.
+  ## A deployment only counts while every save point it lives in is still
+  ## active: reverted deployments are rolled back and must not suppress
+  ## witness entries.
   var sp = ledger.savePoint
   while sp != nil:
     if codeHash in sp.deployedCodeHashes:
@@ -577,20 +580,22 @@ func isDeployedCode(ledger: LedgerRef, codeHash: Hash32): bool =
     sp = sp.parentSavePoint
   false
 
+proc recordCodeRead(ledger: LedgerRef, address: Address, acc: AccountRef) =
+  ## Mark the code as touched in the witness keys, unless the code was
+  ## deployed earlier in this block.
+  ## We overwrite any existing false entry so codeTouched is set to true
+  ## even if the account was previously accessed without touching the code.
+  if acc.isNil or acc.statement.codeHash == EMPTY_CODE_HASH or
+      not ledger.isDeployedCode(acc.statement.codeHash):
+    ledger.witnessKeys[(address, Opt.none(UInt256))] = true
+
 proc getCode*(ledger: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
   let acc = ledger.getAccount(address, false)
 
   if ledger.collectWitness:
-    let lookupKey = (address, Opt.none(UInt256))
-    # Only mark codeTouched if the code isn't deployed in this block.
-    # Deployed code can be recovered from tx data directly.
-    # We overwrite any existing false entry so codeTouched is set to true
-    # even if the account was previously accessed without touching the code.
-    if acc.isNil or acc.statement.codeHash == EMPTY_CODE_HASH or
-        not ledger.isDeployedCode(acc.statement.codeHash):
-      ledger.witnessKeys[lookupKey] = true
+    ledger.recordCodeRead(address, acc)
 
   if acc.isNil:
     when returnHash:
@@ -651,10 +656,7 @@ proc getCodeSize*(ledger: LedgerRef, address: Address): int =
   let acc = ledger.getAccount(address, false)
 
   if ledger.collectWitness:
-    let lookupKey = (address, Opt.none(UInt256))
-    if acc.isNil or acc.statement.codeHash == EMPTY_CODE_HASH or
-        not ledger.isDeployedCode(acc.statement.codeHash):
-      ledger.witnessKeys[lookupKey] = true
+    ledger.recordCodeRead(address, acc)
 
   if acc.isNil:
     return 0
