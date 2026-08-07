@@ -150,14 +150,9 @@ type
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
-    case state*: BeaconState
-    of BeaconState.headers:
-      blockNumber*: BlockNumber      ## First block number
-    of BeaconState.blocks:
-      blockHash*: Hash32             ## First block hash
-      balHash*: Hash32               ## First block hash used for BAL
-    else:
-      discard
+    blockNumber*: BlockNumber      ## Header state => first block number
+    bdyHash*: Hash32               ## Block state => first block hash
+    balHash*: Hash32               ## Block state => first block hash for BAL
 
   BeaconPeerData* = object
     ## Local descriptor data extension
