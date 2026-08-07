@@ -528,8 +528,7 @@ template update(s: var LruCache, key: auto, value: auto): bool =
   ## `value` is consumed either way and the replaced value is abandoned - if V
   ## owns manually allocated memory, dispose the existing value first (e.g. via
   ## `getPtr`) and be aware that a failed update drops `value`.
-  block:
-    var v = value
+  withMutable(value, v):
     s.update(subhash(key), key, v)
 
 proc refresh[K, V](
@@ -546,8 +545,7 @@ template refresh(s: var LruCache, key: auto, value: auto): bool =
   ## returns true if the item was refreshed, false if it was not in the cache.
   ##
   ## Same value ownership caveats as `update`.
-  block:
-    var v = value
+  withMutable(value, v):
     s.refresh(subhash(key), key, v)
 
 iterator putWithEvicted[K, V](
@@ -666,8 +664,7 @@ template put(s: var LruCache, key: auto, value: auto) =
   ##
   ## The replaced or evicted value is abandoned - if V owns manually allocated
   ## memory, use `putWithEvicted` instead so it can be disposed.
-  block:
-    var v = value
+  withMutable(value, v):
     s.put(subhash(key), key, v)
 
 # ConcurrentLruCache is a thread safe LRU cache designed to handle high
@@ -1079,9 +1076,8 @@ template putByHash*[K, V](
   ##
   ## The replaced or evicted value is abandoned - if V owns manually allocated
   ## memory, use `putWithEvictedByHash` instead so it can be disposed.
-  bind putByHashImpl
-  block:
-    var v = val
+  bind putByHashImpl, withMutable
+  withMutable(val, v):
     lru.putByHashImpl(keyHash, key, v)
 
 proc putWithEvictedByHashImpl[K, V](
@@ -1107,9 +1103,8 @@ template putWithEvictedByHash*[K, V](
   ##
   ## This is the ownership-preserving variant of `putByHash` and the only way to
   ## avoid leaking when V owns manually allocated memory.
-  bind putWithEvictedByHashImpl
-  block:
-    var v = val
+  bind putWithEvictedByHashImpl, withMutable
+  withMutable(val, v):
     lru.putWithEvictedByHashImpl(keyHash, key, v)
 
 template withGet*[K, V](
@@ -1157,12 +1152,12 @@ template put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
   ## memory, use `putWithEvicted` instead so it can be disposed.
   # A template rather than a proc taking `sink V`: a `sink` parameter is passed
   # by value for a V with no lifetime hooks, so the proc call would copy the
-  # whole value into its frame before the cache ever stores it. Binding the
-  # argument to a local here lets it be constructed in place and then handed
+  # whole value into its frame before the cache ever stores it. `withMutable`
+  # borrows an addressable copyable argument in place and otherwise binds it to
+  # a local, so the value is constructed or copied at most once and then handed
   # over by reference.
-  bind putImpl
-  block:
-    var v = val
+  bind putImpl, withMutable
+  withMutable(val, v):
     lru.putImpl(key, v)
 
 template putWithEvicted*[K, V](
@@ -1170,9 +1165,8 @@ template putWithEvicted*[K, V](
 ): Opt[V] =
   ## Insert or update `key` with `val`, returning the value it replaced or
   ## evicted (if any) so that the caller can dispose of it.
-  bind putWithEvictedByHashImpl
-  block:
-    var v = val
+  bind putWithEvictedByHashImpl, withMutable
+  withMutable(val, v):
     lru.putWithEvictedByHashImpl(lru.toKeyHash(key), key, v)
 
 proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] {.inline, noinit.} =
@@ -1201,9 +1195,8 @@ template update*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool 
   ##
   ## `val` is consumed either way and the replaced value is abandoned - if V
   ## owns manually allocated memory, prefer `putWithEvicted`.
-  bind updateImpl
-  block:
-    var v = val
+  bind updateImpl, withMutable
+  withMutable(val, v):
     lru.updateImpl(key, v)
 
 proc refreshImpl[K, V](
@@ -1220,9 +1213,8 @@ template refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool
   ## refreshed, false if it was not in the cache.
   ##
   ## Same value ownership caveats as `update`.
-  bind refreshImpl
-  block:
-    var v = val
+  bind refreshImpl, withMutable
+  withMutable(val, v):
     lru.refreshImpl(key, v)
 
 proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) {.inline.} =

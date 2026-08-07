@@ -66,6 +66,8 @@ proc containsGcMem(t: NimNode, depth: int): bool =
       return containsGcMem(t[^1], depth + 1)
     if t[0].eqIdent("set") or t[0].eqIdent("ptr"):
       return false
+    if t[0].eqIdent("range"):
+      return false
     return containsGcMem(t.getTypeImpl(), depth + 1)
   else:
     discard
@@ -86,6 +88,27 @@ proc containsGcMem(t: NimNode, depth: int): bool =
 
 macro supportsSharedMem*(T: typedesc): bool =
   newLit(not containsGcMem(T.getTypeInst()[1], 0))
+
+template withMutable*(val, v, body: untyped): untyped =
+  ## Run `body` with `v` bound to a mutable handle on `val`, copying only when
+  ## necessary: a copyable, addressable `val` is borrowed in place - consuming
+  ## it (see `consume`) is a plain copy that leaves the source untouched - while
+  ## a move-only or non-addressable `val` is captured into a local first.
+  ##
+  ## In the borrow case `val` is read only when it is consumed, so a `val` that
+  ## aliases storage owned by the consuming container (e.g. a value borrowed
+  ## from the very cache being written to) is not supported - copy such a value
+  ## explicitly instead.
+  block:
+    when supportsCopyMem(typeof(val)) and compiles(unsafeAddr(val)):
+      let vp = unsafeAddr(val)
+      template v(): untyped =
+        vp[]
+
+      body
+    else:
+      var v = val
+      body
 
 template consume*[V](value: var V): untyped =
   ## Take ownership of `value`, leaving it spent.

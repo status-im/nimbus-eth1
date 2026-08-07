@@ -382,9 +382,8 @@ template put*[K, V](s: var SharedTable[K, V], key: K, value: V) =
   ## SharedTable), the overwritten value is abandoned and leaked, so dispose the
   ## existing value first (e.g. via `withValue`) before updating an owning value.
   # A template rather than a proc taking `sink V` - see `consume`.
-  bind putImpl
-  block:
-    var v = value
+  bind putImpl, withMutable
+  withMutable(value, v):
     s.putImpl(key, v)
 
 template `[]=`*(s: var SharedTable, key, value: untyped) =

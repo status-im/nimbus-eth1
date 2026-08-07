@@ -77,6 +77,18 @@ type
   ArrayAlias = array[16, byte]
   SeqAlias = seq[byte]
 
+  RangeAlias = range[0'u8 .. 15'u8]
+
+  WithRange = object
+    # An inline `range[a..b]` field is represented by a self-referential node,
+    # unlike a named range alias - it must not blow the recursion depth limit
+    r: range[0 .. 100]
+    a: RangeAlias
+
+  WithRangeGc = object
+    r: range[0 .. 100]
+    s: seq[byte]
+
 suite "supportsSharedMem Tests":
   test "plain non-GC types are accepted":
     check:
@@ -93,6 +105,12 @@ suite "supportsSharedMem Tests":
       supportsSharedMem((int, uint16))
       supportsSharedMem((int, array[4, byte]))
       supportsSharedMem(Address)
+      supportsSharedMem(RangeAlias)
+      supportsSharedMem(range[0 .. 100])
+      supportsSharedMem(WithRange)
+      supportsSharedMem(array[4, range[0 .. 100]])
+
+      not supportsSharedMem(WithRangeGc)
 
   test "pointers and untraced proc types are accepted":
     check:
