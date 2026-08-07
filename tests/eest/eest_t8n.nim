@@ -9,6 +9,7 @@
 
 # To make the isMainModule functionality work
 {.define: unittest2DisableParamFiltering.}
+{.push raises: [].}
 
 import
   std/[os, json, options, tables, strutils],
@@ -50,12 +51,12 @@ type
   BCFile* = object
     units*: seq[BCUnit]
 
-BCData.useDefaultReaderIn T8Conv
-BCBlock.useDefaultReaderIn T8Conv
-EnvConfig.useDefaultReaderIn T8Conv
-BlobSchedule.useDefaultReaderIn T8Conv
+BCData.useDefaultReaderIn Fixture
+BCBlock.useDefaultReaderIn Fixture
+EnvConfig.useDefaultReaderIn Fixture
+BlobSchedule.useDefaultReaderIn Fixture
 
-T8Conv.automaticSerialization(seq[BCBlock], true)
+Fixture.automaticSerialization(seq[BCBlock], true)
 
 template wrapValueError(body: untyped) =
   try:
@@ -64,14 +65,14 @@ template wrapValueError(body: untyped) =
     r.raiseUnexpectedValue(exc.msg)
 
 proc readValue*(
-    r: var JsonReader[T8Conv],
+    r: var JsonReader[Fixture],
     value: var array[HardFork.Cancun .. HardFork.high, Opt[BlobSchedule]],
 ) {.gcsafe, raises: [SerializationError, IOError].} =
   wrapValueError:
     for key in r.readObjectFields:
       blobScheduleParser(r, key, value)
 
-proc readValue*(r: var JsonReader[T8Conv], val: var BCFile)
+proc readValue*(r: var JsonReader[Fixture], val: var BCFile)
        {.gcsafe, raises: [IOError, SerializationError].} =
   r.parseObject(key):
     val.units.add BCUnit(
@@ -177,11 +178,14 @@ template validateField(F: untyped, body: untyped = noAction) =
       ", want: " & header.F.toString )
 
 template debugState() =
-  let expectedAlloc = T8Conv.decode(bcdata.postState, GenesisAlloc)
-  debugEcho "got state: ",
-    @@(res.alloc).pretty,
-    ", expected state: ",
-    @@(expectedAlloc).pretty
+  try:
+    let expectedAlloc = Fixture.decode(bcdata.postState, GenesisAlloc)
+    debugEcho "got state: ",
+      @@(res.alloc).pretty,
+      ", expected state: ",
+      @@(expectedAlloc).pretty
+  except SerializationError as exc:
+    debugEcho "Serialization error: ", exc.msg
 
 func getRequests(unit: EngineUnitEnv, number: uint64): Result[string, string] =
   for payload in unit.engineNewPayloads:
@@ -219,7 +223,10 @@ template debugExcessBlobGas() =
 proc prettyBAL(bal: Opt[JsonString]): string =
   if bal.isNone:
     return "none"
-  parseJson(bal.value.string).pretty
+  try:
+    parseJson(bal.value.string).pretty
+  except CatchableError as exc:
+    "error: " & exc.msg
 
 template debugBlockAccessList() =
   let expectedBal = bal.prettyBAL()
@@ -251,7 +258,10 @@ proc compareResult(res: ExecOutput,
 proc runTest(bcdata: BCData, filePath: string, unitIndex: int): Result[void, string] =
   var
     prevAlloc = bcdata.pre
-    prevBlock = rlp.decode(bcdata.genesisRLP, Block)
+    prevBlock = try:
+                  rlp.decode(bcdata.genesisRLP, Block)
+                except RlpError as exc:
+                  return err(exc.msg)
 
   let
     blocks = toBlocks(bcdata.blocks)
@@ -276,7 +286,8 @@ proc runTest(bcdata: BCData, filePath: string, unitIndex: int): Result[void, str
       )
 
     var
-      res = ctx.transitionAction(conf, Opt.some(bcdata.config.blobSchedule))
+      res = ctx.transitionAction(conf, Opt.some(bcdata.config.blobSchedule)).valueOr:
+        return err(error.msg)
 
     ? compareResult(res,
         currBlock.header,
@@ -292,7 +303,11 @@ proc runTest(bcdata: BCData, filePath: string, unitIndex: int): Result[void, str
 
 proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = false, skipFiles: seq[string] = @[]) =
   let
-    BCFile = T8Conv.loadFile(filePath, BCFile, allowUnknownFields = true)
+    BCFile = try:
+               Fixture.loadFile(filePath, BCFile, allowUnknownFields = true)
+             except CatchableError as exc:
+               echo exc.msg
+               quit(QuitFailure)
     fileName = filePath.splitPath().tail
 
   for unitIndex, unit in BCFile.units:

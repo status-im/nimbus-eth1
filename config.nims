@@ -191,6 +191,9 @@ switch("hintAsError", "DuplicateModuleImport:on")
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
 
+# Globally memoize keccak256 hashes of short inputs
+switch("define", "keccakCacheEnabled:true")
+
 # We lock down rocksdb to a particular version
 # TODO self-build rocksdb dll on windows
 when not defined(use_system_rocksdb) and not defined(windows):

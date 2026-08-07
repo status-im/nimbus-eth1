@@ -50,8 +50,8 @@ proc getAccounts(
 
   var resp: AccountRangePacket
   try:
-    resp = (await buddy.peer.getAccountRange(
-                    req, fetchAccountSnapTimeout)).valueOr:
+    resp = (await snap.getAccountRange(
+                    buddy.peer, req, fetchAccountSnapTimeout)).valueOr:
         return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))

@@ -37,6 +37,7 @@ import
     test_op_misc,
     test_precompiles,
     test_rpc,
+    test_sender_recovery_cache,
     test_snap,
     test_transaction_json,
     test_transactions_receipts_storage,

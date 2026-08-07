@@ -685,6 +685,15 @@ const
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
     ),
+    TestSpec(
+      name  : "SlotNumber not supplied",
+      base  : "testdata/00-529",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Amsterdam", "0",
+      ),
+      output: T8nOutput(result: true),
+      expExitCode: ErrorConfig.int,
+    ),
   ]
 
 proc main() =

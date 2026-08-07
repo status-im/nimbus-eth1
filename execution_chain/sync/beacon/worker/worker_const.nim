@@ -33,7 +33,7 @@ type
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
-    ENoException = 0
+    EGeneric = 0
     ESyncerTermination             ## Syncer was stopped
     EAlreadyTriedAndFailed         ## The same action failed before
     EPeerDisconnected              ## Exception
@@ -127,8 +127,14 @@ const
   nFetchBodiesErrThreshold* = 4
     ## Similar to `nFetchHeadersErrThreshold`.
 
+
   fetchBalsRlpxTimeout* = chronos.seconds(50)
     ## Similar to `fetchBodiesRlpxTimeout`.
+
+  fetchBalsErrTimeout* = chronos.seconds(25)
+  nFetchBalsErrThreshold* = 4
+    ## Similar to `nFetchHeadersErrThreshold`.
+
 
   nProcBlocksErrThreshold* = 2
     ## Similar to `nStashHeadersErrThreshold`.

@@ -78,7 +78,7 @@ func classifyForFetching*(buddy: BeaconPeerRef): PeerRanking =
       return (qSlotsAvail, -1)
 
     template blk(b: BeaconPeerRef): StatsCollect =
-      b.only.thPutStats.blk
+      b.only.thPutStats.bdy + b.only.thPutStats.bal
 
     if buddy.blk.samples == 0:
       return (notEnoughData, -1)

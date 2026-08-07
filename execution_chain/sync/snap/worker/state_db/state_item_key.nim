@@ -183,12 +183,6 @@ func to*(w: ItemKeyRange; _: type float): (float,float) =
 # Functions extending the `ItemKeyRange` basic functionality
 # ------------------------------------------------------------------------------
 
-proc init*(T: type ItemKeyRangeSet, ivInit: ItemKeyRange): T =
-  ## Some shortcut
-  let ikrs = ItemKeyRangeSet.init()
-  discard ikrs.merge ivInit
-  ikrs
-
 proc fetchLeast*(ikrs: ItemKeyRangeSet; maxLen: UInt256): Opt[ItemKeyRange] =
   ## Borrowed from `unproc_item_keys.nim` for a single `ItemKeyRangeSet`
   ## (w/o the `borrowed` part.)
@@ -214,11 +208,28 @@ func totalRatio*(ikrs: ItemKeyRangeSet): float =
     return (if ikrs.chunks() == 0: 0f else: 1f)
   total.per256()
 
+# -------------------
+
+proc init*(T: type ItemKeyRangeSet, ivInit: ItemKeyRange): T =
+  ## Some shortcut
+  let ikrs = ItemKeyRangeSet.init()
+  discard ikrs.merge ivInit
+  ikrs
+
 func complement*(ikrs: ItemKeyRangeSet): ItemKeyRangeSet =
   ## Missing functionality from `interval_set` API.
   result = ItemKeyRangeSet.init ItemKeyRangeMax
   for iv in ikrs.increasing:
     discard result.reduce iv
+
+func covered*(ikrs: ItemKeyRangeSet, pt: ItemKey): bool =
+  ## Missing functionality from `interval_set` API.
+  0 < ikrs.covered(pt, pt)
+
+func `+=`*(a, b: ItemKeyRangeSet) =
+  ## Missing functionality from `interval_set` API.
+  for iv in b.increasing:
+    discard a.merge iv
 
 # ------------------------------------------------------------------------------
 # End

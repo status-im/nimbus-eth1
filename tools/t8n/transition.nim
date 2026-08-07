@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/[json, strutils, tables, os, streams],
   eth/[rlp, trie, eip1559],
@@ -28,7 +30,6 @@ import
   ../../execution_chain/evm/tracer/json_tracer
 
 const
-  wrapExceptionEnabled* {.booldefine.} = true
   stdinSelector = "stdin"
 
 type
@@ -46,7 +47,7 @@ proc init(_: type Dispatch): Dispatch =
   result.stdout = newJObject()
   result.stderr = newJObject()
 
-proc dispatch(dis: var Dispatch, baseDir, fName, name: string, obj: JsonNode) =
+proc dispatch(dis: var Dispatch, baseDir, fName, name: string, obj: JsonNode): Result[void, T8NErr] =
   case fName
   of "stdout":
     dis.stdout[name] = obj
@@ -61,7 +62,11 @@ proc dispatch(dis: var Dispatch, baseDir, fName, name: string, obj: JsonNode) =
                  baseDir / fName
                else:
                  fName
-    writeFile(path, obj.pretty)
+    try:
+      writeFile(path, obj.pretty)
+    except IOError as exc:
+      return err(t8nerr(ErrorIO, exc.msg))
+  ok()
 
 proc calcWithdrawalsRoot(w: Opt[seq[Withdrawal]]): Opt[Hash32] =
   if w.isNone:
@@ -138,24 +143,50 @@ proc defaultTraceStreamFilename(conf: T8NConf,
                 conf.outputBaseDir
               else:
                 "."
-    fName = "$1/trace-$2-$3.jsonl" % [baseDir, $txIndex, txHash]
+    fName = baseDir &
+      "/trace-" &
+      $txIndex & "-" &
+      txHash & ".jsonl"
   (baseDir, fName)
 
-proc defaultTraceStream(conf: T8NConf, txIndex: int, txHash: Hash32): Stream =
-  let (baseDir, fName) = defaultTraceStreamFilename(conf, txIndex, txHash)
-  createDir(baseDir)
-  newFileStream(fName, fmWrite)
+template wrapException(body: untyped): auto =
+  try:
+    body
+  except IOError as exc:
+    err(t8nerr(ErrorIO, exc.msg))
+  except OSError as exc:
+    err(t8nerr(ErrorIO, exc.msg))
 
-proc traceToFileStream(path: string, txIndex: int): Stream =
+proc defaultTraceStream(conf: T8NConf, txIndex: int, txHash: Hash32): Result[Stream, T8NErr] =
+  wrapException:
+    let (baseDir, fName) = defaultTraceStreamFilename(conf, txIndex, txHash)
+    createDir(baseDir)
+    ok(newFileStream(fName, fmWrite))
+
+proc traceToFileStream(path: string, txIndex: int): Result[Stream, T8NErr] =
   # replace whatever `.ext` to `-${txIndex}.jsonl`
-  let
-    file = path.splitFile
-    folder = if file.dir.len == 0: "." else: file.dir
-    fName = "$1/$2-$3.jsonl" % [folder, file.name, $txIndex]
-  if file.dir.len > 0: createDir(file.dir)
-  newFileStream(fName, fmWrite)
+  wrapException:
+    let
+      file = path.splitFile
+      folder = if file.dir.len == 0: "." else: file.dir
+      fName = folder & "/" & file.name & "-" & $txIndex & ".jsonl"
+    if file.dir.len > 0: createDir(file.dir)
+    ok(newFileStream(fName, fmWrite))
 
-proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMState): bool =
+proc setupStream(traceMode: string, conf: T8NConf, txIndex: int, txHash: Hash32): Result[(bool, Stream), T8NErr] =
+  if traceMode == "stdout":
+    # don't close stdout or stderr
+    ok((false, newFileStream(stdout)))
+  elif traceMode == "stderr":
+    ok((false, newFileStream(stderr)))
+  elif traceMode.len > 0:
+    let stream = ? traceToFileStream(traceMode, txIndex)
+    ok((true, stream))
+  else:
+    let stream = ? defaultTraceStream(conf, txIndex, txHash)
+    ok((true, stream))
+
+proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMState): Result[bool, T8NErr] =
   var tracerFlags = {
     TracerFlags.DisableMemory,
     TracerFlags.DisableStorage,
@@ -168,19 +199,9 @@ proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMStat
   if conf.traceNostack: tracerFlags.incl TracerFlags.DisableStack
   if conf.traceReturnData: tracerFlags.excl TracerFlags.DisableReturnData
 
-  var closeStream = true
-  let traceMode = conf.traceEnabled.get
-  let stream = if traceMode == "stdout":
-                 # don't close stdout or stderr
-                 closeStream = false
-                 newFileStream(stdout)
-               elif traceMode == "stderr":
-                 closeStream = false
-                 newFileStream(stderr)
-               elif traceMode.len > 0:
-                 traceToFileStream(traceMode, txIndex)
-               else:
-                 defaultTraceStream(conf, txIndex, txHash)
+  let
+    traceMode = conf.traceEnabled.get
+    (closeStream, stream) = ? setupStream(traceMode, conf, txIndex, txHash)
 
   if stream.isNil:
     let traceLoc =
@@ -188,21 +209,23 @@ proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMStat
         traceMode
       else:
         defaultTraceStreamFilename(conf, txIndex, txHash)[1]
-    raise newError(ErrorConfig, "Unable to open tracer stream: " & traceLoc)
+    return err(t8nerr(ErrorConfig, "Unable to open tracer stream: " & traceLoc))
 
   vmState.tracer = newJsonTracer(stream, tracerFlags, false)
-  closeStream
+  ok(closeStream)
 
-proc closeTrace(vmState: BaseVMState, closeStream: bool) =
-  let tracer = JsonTracer(vmState.tracer)
-  if tracer.isNil.not and closeStream:
-    tracer.close()
+proc closeTrace(vmState: BaseVMState, closeStream: bool): Result[void, T8NErr] =
+  wrapException:
+    let tracer = JsonTracer(vmState.tracer)
+    if tracer.isNil.not and closeStream:
+      tracer.close()
+    ok()
 
 proc exec(ctx: TransContext,
           vmState: BaseVMState,
           stateReward: Option[UInt256],
           header: Header,
-          conf: T8NConf): ExecOutput =
+          conf: T8NConf): Result[ExecOutput, T8NErr] =
 
   var
     receipts = newSeqOfCap[TxReceipt](ctx.txList.len)
@@ -234,7 +257,7 @@ proc exec(ctx: TransContext,
       prevHash = ctx.env.blockHashes.getOrDefault(prevNumber)
 
     if prevHash == static(default(Hash32)):
-      raise newError(ErrorConfig, "previous block hash not found for block number: " & $prevNumber)
+      return err(t8nerr(ErrorConfig, "previous block hash not found for block number: " & $prevNumber))
 
     vmState.processParentBlockHash(prevHash)
 
@@ -260,7 +283,7 @@ proc exec(ctx: TransContext,
 
     var closeStream = true
     if conf.traceEnabled.isSome:
-      closeStream = setupTrace(conf, txIndex, computeRlpHash(tx), vmState)
+      closeStream = ? setupTrace(conf, txIndex, computeRlpHash(tx), vmState)
 
     if vmState.balTrackerEnabled:
       vmState.balTracker.setBlockAccessIndex(includedTx.len + 1)
@@ -268,7 +291,7 @@ proc exec(ctx: TransContext,
     let rc = vmState.processTransaction(tx, sender)
 
     if conf.traceEnabled.isSome:
-      closeTrace(vmState, closeStream)
+      ? closeTrace(vmState, closeStream)
 
     if rc.isErr:
       rejected.add RejectedTx(
@@ -330,15 +353,15 @@ proc exec(ctx: TransContext,
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     # Execute EIP-7002 and EIP-7251 before calculating stateRoot
     withdrawalReqs = processDequeueWithdrawalRequests(vmState).valueOr:
-      raise newError(ErrorConfig, error)
+      return err(t8nerr(ErrorConfig, error))
     consolidationReqs = processDequeueConsolidationRequests(vmState).valueOr:
-      raise newError(ErrorConfig, error)
+      return err(t8nerr(ErrorConfig, error))
 
     if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
       builderDepositReqs = processBuilderDepositRequests(vmState).valueOr:
-        raise newError(ErrorConfig, error)
+        return err(t8nerr(ErrorConfig, error))
       builderExitReqs = processBuilderExitRequests(vmState).valueOr:
-        raise newError(ErrorConfig, error)
+        return err(t8nerr(ErrorConfig, error))
 
   # Commit block access list tracker changes for post-execution system calls
   if vmState.balTrackerEnabled:
@@ -381,7 +404,7 @@ proc exec(ctx: TransContext,
       allLogs.add rec.logs
     var
       depositReqs = parseDepositLogs(allLogs, vmState.com.depositContractAddress).valueOr:
-        raise newError(ErrorEVM, error)
+        return err(t8nerr(ErrorEVM, error))
       executionRequests: seq[seq[byte]]
 
     template append(dst, reqType, reqData) =
@@ -411,20 +434,7 @@ proc exec(ctx: TransContext,
   if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
     output.result.gasUsed = max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed)
 
-  output
-
-template wrapException(body: untyped) =
-  when wrapExceptionEnabled:
-    try:
-      body
-    except IOError as e:
-      raise newError(ErrorIO, e.msg)
-    except RlpError as e:
-      raise newError(ErrorRlp, e.msg)
-    except ValueError as e:
-      raise newError(ErrorJson, e.msg)
-  else:
-    body
+  ok(output)
 
 proc setupAlloc(ledger: LedgerRef, alloc: GenesisAlloc) =
   for accAddr, acc in alloc:
@@ -452,181 +462,200 @@ method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
 
   return h
 
-proc parseChainConfig(network: string): ChainConfig =
-  result = getChainConfig(network).valueOr:
-    raise newError(ErrorConfig, error)
+proc parseChainConfig(network: string): Result[ChainConfig, T8NErr] =
+  let conf = getChainConfig(network).valueOr:
+    return err(t8nerr(ErrorConfig, error))
+  ok(conf)
 
-proc calcBaseFee(env: EnvStruct): UInt256 =
+proc calcBaseFee(env: EnvStruct): Result[UInt256, T8NErr] =
   if env.parentGasUsed.isNone:
-    raise newError(ErrorConfig,
-      "'parentBaseFee' exists but missing 'parentGasUsed' in env section")
+    return err(t8nerr(ErrorConfig,
+      "'parentBaseFee' exists but missing 'parentGasUsed' in env section"))
 
   if env.parentGasLimit.isNone:
-    raise newError(ErrorConfig,
-      "'parentBaseFee' exists but missing 'parentGasLimit' in env section")
+    return err(t8nerr(ErrorConfig,
+      "'parentBaseFee' exists but missing 'parentGasLimit' in env section"))
 
-  calcEip1599BaseFee(
-    env.parentGasLimit.get,
-    env.parentGasUsed.get,
-    env.parentBaseFee.get)
+  ok(
+    calcEip1599BaseFee(
+      env.parentGasLimit.get,
+      env.parentGasUsed.get,
+      env.parentBaseFee.get)
+  )
 
-proc processInputs*(ctx: var TransContext, conf: T8NConf) =
-  wrapException:
-    if conf.inputAlloc.len == 0 and conf.inputEnv.len == 0 and conf.inputTxs.len == 0:
-      raise newError(ErrorConfig, "either one of input is needeed(alloc, txs, or env)")
+proc processInputs*(ctx: var TransContext, conf: T8NConf): Result[void, T8NErr] =
+  if conf.inputAlloc.len == 0 and conf.inputEnv.len == 0 and conf.inputTxs.len == 0:
+    return err(t8nerr(ErrorConfig, "either one of input is needeed(alloc, txs, or env)"))
 
-    # We need to load three things: alloc, env and transactions.
-    # May be either in stdin input or in files.
+  # We need to load three things: alloc, env and transactions.
+  # May be either in stdin input or in files.
 
-    if conf.inputAlloc == stdinSelector or
-       conf.inputEnv == stdinSelector or
-       conf.inputTxs == stdinSelector:
-      ctx.parseInputFromStdin()
+  if conf.inputAlloc == stdinSelector or
+    conf.inputEnv == stdinSelector or
+    conf.inputTxs == stdinSelector:
+    ? ctx.parseInputFromStdin()
 
-    if conf.inputAlloc != stdinSelector and conf.inputAlloc.len > 0:
-      ctx.parseAlloc(conf.inputAlloc)
+  if conf.inputAlloc != stdinSelector and conf.inputAlloc.len > 0:
+    ? ctx.parseAlloc(conf.inputAlloc)
 
-    if conf.inputEnv != stdinSelector and conf.inputEnv.len > 0:
-      ctx.parseEnv(conf.inputEnv)
+  if conf.inputEnv != stdinSelector and conf.inputEnv.len > 0:
+    ? ctx.parseEnv(conf.inputEnv)
 
-    if conf.inputTxs != stdinSelector and conf.inputTxs.len > 0:
-      if conf.inputTxs.endsWith(".rlp"):
+  if conf.inputTxs != stdinSelector and conf.inputTxs.len > 0:
+    if conf.inputTxs.endsWith(".rlp"):
+      try:
         let data = readFile(conf.inputTxs)
-        ctx.parseTxsRlp(data.strip(chars={'"', ' ', '\r', '\n', '\t'}))
-      else:
-        ctx.parseTxsJson(conf.inputTxs)
+        ? ctx.parseTxsRlp(data.strip(chars={'"', ' ', '\r', '\n', '\t'}))
+      except IOError as exc:
+        return err(t8nerr(ErrorIO, exc.msg))
+    else:
+      ? ctx.parseTxsJson(conf.inputTxs)
 
-proc dispatchOutput*(ctx: TransContext, conf: T8NConf, res: ExecOutput) =
-  var dis = Dispatch.init()
-  createDir(conf.outputBaseDir)
+  ok()
 
-  dis.dispatch(conf.outputBaseDir, conf.outputAlloc, "alloc", @@(res.alloc))
-  dis.dispatch(conf.outputBaseDir, conf.outputResult, "result", @@(res.result))
+proc dispatchOutput*(ctx: TransContext, conf: T8NConf, res: ExecOutput): Result[void, T8NErr] =
+  wrapException:
+    var dis = Dispatch.init()
+    createDir(conf.outputBaseDir)
 
-  let txList = ctx.filterGoodTransactions()
-  let body = @@(rlp.encode(txList))
-  dis.dispatch(conf.outputBaseDir, conf.outputBody, "body", body)
+    ? dis.dispatch(conf.outputBaseDir, conf.outputAlloc, "alloc", @@(res.alloc))
+    ? dis.dispatch(conf.outputBaseDir, conf.outputResult, "result", @@(res.result))
 
-  if dis.stdout.len > 0:
-    stdout.write(dis.stdout.pretty)
-    stdout.write("\n")
+    let txList = ctx.filterGoodTransactions()
+    let body = @@(rlp.encode(txList))
+    ? dis.dispatch(conf.outputBaseDir, conf.outputBody, "body", body)
 
-  if dis.stderr.len > 0:
-    stderr.write(dis.stderr.pretty)
-    stderr.write("\n")
+    if dis.stdout.len > 0:
+      stdout.write(dis.stdout.pretty)
+      stdout.write("\n")
+
+    if dis.stderr.len > 0:
+      stderr.write(dis.stderr.pretty)
+      stderr.write("\n")
+    ok()
 
 proc transitionAction*(ctx: var TransContext,
                        conf: T8NConf,
-                       blobSchedule = Opt.none(BlobScheduleList)): ExecOutput =
-  wrapException:
-    let uncleHash = if ctx.env.parentUncleHash == default(Hash32):
-                      EMPTY_UNCLE_HASH
-                    else:
-                      ctx.env.parentUncleHash
+                       blobSchedule = Opt.none(BlobScheduleList)): Result[ExecOutput, T8NErr] =
+  let uncleHash = if ctx.env.parentUncleHash == default(Hash32):
+                    EMPTY_UNCLE_HASH
+                  else:
+                    ctx.env.parentUncleHash
 
-    let parent = Header(
-      stateRoot: emptyRlpHash,
-      timestamp: ctx.env.parentTimestamp,
-      difficulty: ctx.env.parentDifficulty.get(0.u256),
-      ommersHash: uncleHash,
-      number: ctx.env.currentNumber - 1'u64,
-      blobGasUsed: ctx.env.parentBlobGasUsed,
-      excessBlobGas: ctx.env.parentExcessBlobGas,
-    )
+  let parent = Header(
+    stateRoot: emptyRlpHash,
+    timestamp: ctx.env.parentTimestamp,
+    difficulty: ctx.env.parentDifficulty.get(0.u256),
+    ommersHash: uncleHash,
+    number: ctx.env.currentNumber - 1'u64,
+    blobGasUsed: ctx.env.parentBlobGasUsed,
+    excessBlobGas: ctx.env.parentExcessBlobGas,
+  )
 
-    let config = parseChainConfig(conf.stateFork)
-    config.depositContractAddress = ctx.env.depositContractAddress
-    config.chainId = conf.stateChainId.ChainId
+  let config = ? parseChainConfig(conf.stateFork)
+  config.depositContractAddress = ctx.env.depositContractAddress
+  config.chainId = conf.stateChainId.ChainId
 
-    if blobSchedule.isSome:
-      # Not part of t8n spec, but needed when testing against EEST
-      config.blobSchedule = blobSchedule.value
+  if blobSchedule.isSome:
+    # Not part of t8n spec, but needed when testing against EEST
+    config.blobSchedule = blobSchedule.value
 
-    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, config)
-    com.taskpool = Taskpool.new()
+  let com = CommonRef.new(newCoreDbRef DefaultDbMemory, config)
+  com.taskpool = try:
+                   Taskpool.new()
+                 except CatchableError as exc:
+                   return err(t8nerr(ErrorValue, exc.msg))
 
-    # Sanity check, to not `panic` in state_transition
-    if com.isLondonOrLater(ctx.env.currentNumber, ctx.env.currentTimestamp):
-      if ctx.env.currentBaseFee.isSome:
-        # Already set, currentBaseFee has precedent over parentBaseFee.
-        discard
-      elif ctx.env.parentBaseFee.isSome:
-        ctx.env.currentBaseFee = Opt.some(calcBaseFee(ctx.env))
-      else:
-        raise newError(ErrorConfig, "EIP-1559 config but missing 'currentBaseFee' in env section")
-
-    if com.isShanghaiOrLater(ctx.env.currentTimestamp) and ctx.env.withdrawals.isNone:
-      raise newError(ErrorConfig, "Shanghai config but missing 'withdrawals' in env section")
-
-    if com.isCancunOrLater(ctx.env.currentTimestamp):
-      if ctx.env.parentBeaconBlockRoot.isNone:
-        raise newError(ErrorConfig, "Cancun config but missing 'parentBeaconBlockRoot' in env section")
+  # Sanity check, to not `panic` in state_transition
+  if com.isLondonOrLater(ctx.env.currentNumber, ctx.env.currentTimestamp):
+    if ctx.env.currentBaseFee.isSome:
+      # Already set, currentBaseFee has precedent over parentBaseFee.
+      discard
+    elif ctx.env.parentBaseFee.isSome:
+      let baseFee = ? calcBaseFee(ctx.env)
+      ctx.env.currentBaseFee = Opt.some(baseFee)
     else:
-      # un-set it if it has been set too early
-      ctx.env.parentBeaconBlockRoot = Opt.none(Hash32)
+      return err(t8nerr(ErrorConfig, "EIP-1559 config but missing 'currentBaseFee' in env section"))
 
-    let isMerged = config.terminalTotalDifficulty.isSome and
-                   config.terminalTotalDifficulty.value == 0.u256
-    if isMerged:
-      if ctx.env.currentRandom.isNone:
-        raise newError(ErrorConfig, "post-merge requires currentRandom to be defined in env")
+  if com.isShanghaiOrLater(ctx.env.currentTimestamp) and ctx.env.withdrawals.isNone:
+    return err(t8nerr(ErrorConfig, "Shanghai config but missing 'withdrawals' in env section"))
 
-      if ctx.env.currentDifficulty.isSome and ctx.env.currentDifficulty.value.isZero.not:
-        raise newError(ErrorConfig, "post-merge difficulty must be zero (or omitted) in env")
-      ctx.env.currentDifficulty = Opt.none(DifficultyInt)
+  if com.isCancunOrLater(ctx.env.currentTimestamp):
+    if ctx.env.parentBeaconBlockRoot.isNone:
+      return err(t8nerr(ErrorConfig, "Cancun config but missing 'parentBeaconBlockRoot' in env section"))
+  else:
+    # un-set it if it has been set too early
+    ctx.env.parentBeaconBlockRoot = Opt.none(Hash32)
 
-    elif ctx.env.currentDifficulty.isNone:
-      if ctx.env.parentDifficulty.isNone:
-        raise newError(ErrorConfig, "currentDifficulty was not provided, and cannot be calculated due to missing parentDifficulty")
+  let isMerged = config.terminalTotalDifficulty.isSome and
+                config.terminalTotalDifficulty.value == 0.u256
+  if isMerged:
+    if ctx.env.currentRandom.isNone:
+      return err(t8nerr(ErrorConfig, "post-merge requires currentRandom to be defined in env"))
 
-      if ctx.env.currentNumber == 0.BlockNumber:
-        raise newError(ErrorConfig, "currentDifficulty needs to be provided for block number 0")
+    if ctx.env.currentDifficulty.isSome and ctx.env.currentDifficulty.value.isZero.not:
+      return err(t8nerr(ErrorConfig, "post-merge difficulty must be zero (or omitted) in env"))
+    ctx.env.currentDifficulty = Opt.none(DifficultyInt)
 
-      if ctx.env.currentTimestamp <= ctx.env.parentTimestamp:
-        raise newError(ErrorConfig,
-          "currentDifficulty cannot be calculated -- currentTime ($1) needs to be after parent time ($2)" %
-            [$ctx.env.currentTimestamp, $ctx.env.parentTimestamp])
+  elif ctx.env.currentDifficulty.isNone:
+    if ctx.env.parentDifficulty.isNone:
+      return err(t8nerr(ErrorConfig, "currentDifficulty was not provided, and cannot be calculated due to missing parentDifficulty"))
 
-      ctx.env.currentDifficulty = Opt.some(calcDifficulty(com,
-        ctx.env.currentTimestamp, parent))
+    if ctx.env.currentNumber == 0.BlockNumber:
+      return err(t8nerr(ErrorConfig, "currentDifficulty needs to be provided for block number 0"))
 
-    # Calculate the excessBlobGas
-    if ctx.env.currentExcessBlobGas.isNone:
-      # If it is not explicitly defined, but we have the parent values, we try
-      # to calculate it ourselves.
-      if parent.excessBlobGas.isSome and parent.blobGasUsed.isSome:
-        ctx.env.currentExcessBlobGas = Opt.some com.calcExcessBlobGas(parent, com.toHardFork(ctx.env.currentTimestamp))
+    if ctx.env.currentTimestamp <= ctx.env.parentTimestamp:
+      return err(t8nerr(ErrorConfig,
+        "currentDifficulty cannot be calculated -- currentTime (" &
+        $ctx.env.currentTimestamp & ") needs to be after parent time (" &
+        $ctx.env.parentTimestamp & ")"))
 
-    let header  = envToHeader(ctx.env)
+    ctx.env.currentDifficulty = Opt.some(calcDifficulty(com,
+      ctx.env.currentTimestamp, parent))
 
-    var vmState = TestVMState(
-      blockHashes: ctx.env.blockHashes,
-      hashError: ""
-    )
+  # Calculate the excessBlobGas
+  if ctx.env.currentExcessBlobGas.isNone:
+    # If it is not explicitly defined, but we have the parent values, we try
+    # to calculate it ourselves.
+    if parent.excessBlobGas.isSome and parent.blobGasUsed.isSome:
+      ctx.env.currentExcessBlobGas = Opt.some com.calcExcessBlobGas(parent, com.toHardFork(ctx.env.currentTimestamp))
 
-    vmState.init(
-      parent      = parent,
-      header      = header,
-      com         = com,
-      txFrame     = com.db.baseTxFrame(),
-      storeSlotHash = true,
-      enableBalTracker = com.isAmsterdamOrLater(ctx.env.currentTimestamp),
-    )
+  if com.isAmsterdamOrLater(ctx.env.currentTimestamp):
+    if ctx.env.slotNumber.isNone:
+      return err(t8nerr(ErrorConfig, "slotNumber was not provided"))
 
-    vmState.mutateLedger:
-      ledger.setupAlloc(ctx.alloc)
-      ledger.persist(clearEmptyAccount = false)
+  let header  = envToHeader(ctx.env)
 
-    ctx.parseTxs(com.chainId)
-    let res = exec(ctx, vmState, conf.stateReward, header, conf)
+  var vmState = TestVMState(
+    blockHashes: ctx.env.blockHashes,
+    hashError: ""
+  )
 
-    if vmState.hashError.len > 0:
-      raise newError(ErrorMissingBlockhash, vmState.hashError)
+  vmState.init(
+    parent      = parent,
+    header      = header,
+    com         = com,
+    txFrame     = com.db.baseTxFrame(),
+    storeSlotHash = true,
+    enableBalTracker = com.isAmsterdamOrLater(ctx.env.currentTimestamp),
+  )
 
-    vmState.ledger.txFrame.dispose()
-    vmState.dispose()
-    vmState = nil
+  defer:
+    if not vmState.isNil():
+      vmState.ledger.txFrame.dispose()
+      vmState.dispose()
+      vmState = nil
     com.shutdownTaskpool()
     com.db.close()
 
-    return res
+  vmState.mutateLedger:
+    ledger.setupAlloc(ctx.alloc)
+    ledger.persist(clearEmptyAccount = false)
+
+  ? ctx.parseTxs(com.chainId)
+  let res = ? exec(ctx, vmState, conf.stateReward, header, conf)
+
+  if vmState.hashError.len > 0:
+    return err(t8nerr(ErrorMissingBlockhash, vmState.hashError))
+
+  ok(res)

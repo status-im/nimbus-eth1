@@ -79,6 +79,9 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       com.db.baseTxFrame()
     )
 
+  defer:
+    vmState.dispose()
+
   case toLowerAscii(label)
   of "ecrecover": data.doTest(vmState, paEcRecover)
   of "sha256"   : data.doTest(vmState, paSha256)

@@ -307,6 +307,14 @@ proc putFlatSlot*(
 proc delFlatSlot*(db: CacheDbRef, accPath, slotKey: Hash32): DelResult =
   db.del65(cFlatSlot, accPath, slotKey)
 
+proc delFlatSlot*(db: CacheDbRef, accPath: Hash32): DelResult =
+  for (key1,key2,value) in db.adb.colWalk65 key65(cFlatSlot, accPath):
+    if key1 != accPath:
+      break
+    db.del65(cFlatSlot, key1, key2).isOkOr:
+      return err(error)
+  ok()
+
 proc clearFlatSlot*(db: CacheDbRef): DelResult =
   db.clr1 cFlatSlot
 
