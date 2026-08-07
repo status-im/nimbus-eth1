@@ -122,6 +122,19 @@ proc shortLog(witness: ExecutionWitness): string =
     res.add header.asSeq().to0xHex() & "\n"
   res
 
+const
+  # Fixtures with a deliberately mutated `executionWitness` (extra unused
+  # nodes, or complete but unsorted) to test the resilience of the stateless
+  # executor. The generated witness legitimately differs from these, so the
+  # comparison falls back to the subset check instead of the strict one.
+  mutatedWitnessFiles = [
+    "validation_state_extra_unused_trie_node.json",
+    "validation_state_unsorted_but_complete.json",
+    "validation_codes_extra_unused_bytecode.json",
+    "validation_codes_unsorted_but_complete.json",
+    "witness_headers_extra_unused_older_ancestor.json",
+  ]
+
 proc compare(
     generated, expected: ExecutionWitness, strict = false
 ): Result[void, string] =
@@ -163,7 +176,10 @@ proc compare(
   ok()
 
 proc runTest(
-    env: TestEnv, unit: BlockchainUnitEnv, statelessEnabled = false
+    env: TestEnv,
+    unit: BlockchainUnitEnv,
+    statelessEnabled = false,
+    strictWitness = true,
 ): Future[Result[void, string]] {.async.} =
   let blocks = parseBlocks(unit.blocks)
   var latestStateRoot = unit.genesisBlockHeader.stateRoot
@@ -255,13 +271,14 @@ proc runTest(
           # Execution requests are derived from execution output, which is no
           # longer available after import. An actualy production setup would
           # receive them prepped in the engine API newPayload call instead.
-          input = ?build_stateless_input(
-            blk.blk,
-            generatedWitness,
-            fixtureInput.new_payload_request.executionRequests,
-            encode(bal),
-            env.chain.com.chainId.truncate(uint64),
-          )
+          input =
+            ?build_stateless_input(
+              blk.blk,
+              generatedWitness,
+              fixtureInput.new_payload_request.executionRequests,
+              encode(bal),
+              env.chain.com.chainId.truncate(uint64),
+            )
           outputBytes = run_stateless_guest(serialize_stateless_input(input))
           output = ?deserialize_stateless_output(outputBytes)
 
@@ -288,9 +305,10 @@ proc runTest(
           return err("Host-built chain config does not match the test vector")
         if input.public_keys != fixtureInput.public_keys:
           return err("Host-built public keys do not match the test vector")
-        # The generated witness must be a subset of the test vector witness,
-        # which may deliberately contain extra nodes and differ in order.
-        ?compare(generatedWitness, fixtureInput.witness)
+        # The generated witness must be identical to the test vector witness,
+        # except for fixtures that deliberately mutate the witness (see
+        # mutatedWitnessFiles) where the generated witness must be a subset.
+        ?compare(generatedWitness, fixtureInput.witness, strict = strictWitness)
 
         # TODO:
         #Disabled for the same reason as the new payload request comparison
@@ -347,7 +365,9 @@ proc processFile*(
           testUnit, header, rpcEnabled = false, statelessEnabled, parallelEnabled
         )
 
-        let testResult = waitFor env.runTest(testUnit, statelessEnabled)
+        let testResult = waitFor env.runTest(
+          testUnit, statelessEnabled, strictWitness = fileName notin mutatedWitnessFiles
+        )
         check testResult == Result[void, string].ok()
 
         env.close()
