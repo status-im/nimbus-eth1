@@ -120,6 +120,13 @@ proc close(env: BroadcastTestEnv) {.async: (raises: [CancelledError]).} =
   await env.wire.stop()
   await env.chain.stopProcessingQueue()
 
+template setupEnvPair(env1, env2: untyped) =
+  ## Declare two envs sharing one genesis file. They must share it:
+  ## writeRecentGenesis() stamps a whole-second timestamp
+  let genesisPath = writeRecentGenesis()
+  var env1 = newBroadcastTestEnv(genesisPath)
+  var env2 = newBroadcastTestEnv(genesisPath)
+
 const
   MAX_ACTION_HANDLER = 512
 
@@ -188,8 +195,7 @@ suite "Tx broadcast queue":
     ## Integration test: with a synced chain and full action queue,
     ## handleTxHashesBroadcast should return immediately (not block).
     proc runTest() {.async.} =
-      var env1 = newBroadcastTestEnv()
-      var env2 = newBroadcastTestEnv()
+      setupEnvPair(env1, env2)
 
       env2.node.startListening()
       let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
@@ -239,8 +245,7 @@ suite "Tx broadcast queue":
   test "handleTransactionsBroadcast returns immediately when action queue is full":
     ## Same as above but for direct transaction broadcasts.
     proc runTest() {.async.} =
-      var env1 = newBroadcastTestEnv()
-      var env2 = newBroadcastTestEnv()
+      setupEnvPair(env1, env2)
 
       env2.node.startListening()
       let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
@@ -291,8 +296,7 @@ suite "Tx broadcast queue":
     ## getPooledTransactions — return immediately instead of burning the
     ## 10s request timeout.
     proc runTest() {.async.} =
-      var env1 = newBroadcastTestEnv()
-      var env2 = newBroadcastTestEnv()
+      setupEnvPair(env1, env2)
 
       env2.node.startListening()
       let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
@@ -339,8 +343,7 @@ suite "Tx broadcast queue":
     ## The fix always advances `i`, fetching the oversized tx alone
     ## instead of looping without making progress.
     proc runTest() {.async.} =
-      var env1 = newBroadcastTestEnv()
-      var env2 = newBroadcastTestEnv()
+      setupEnvPair(env1, env2)
 
       env2.node.startListening()
       let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
