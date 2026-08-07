@@ -10,7 +10,7 @@
 
 {.push raises: [], gcsafe.}
 
-import std/macros
+import std/[macros, typetraits]
 
 proc containsGcMem(t: NimNode, depth: int): bool
 
@@ -86,3 +86,17 @@ proc containsGcMem(t: NimNode, depth: int): bool =
 
 macro supportsSharedMem*(T: typedesc): bool =
   newLit(not containsGcMem(T.getTypeInst()[1], 0))
+
+template consume*[V](value: var V): untyped =
+  ## Take ownership of `value`, leaving it spent.
+  ##
+  ## Containers that store a value should take it as `var` and consume it here
+  ## rather than declare a `sink` parameter: for a V with no lifetime hooks the
+  ## compiler passes a `sink` parameter by value, so every call frame the value
+  ## crosses costs a full copy of it, while a `var` parameter is passed by
+  ## reference. Such a V has nothing to release, so the consuming assignment is
+  ## a plain copy; only a V with hooks needs the move.
+  when supportsCopyMem(V):
+    value
+  else:
+    move(value)
