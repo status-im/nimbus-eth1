@@ -99,7 +99,8 @@ type
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
 
-    collectWitness: bool
+    collectWitness*: bool
+
     witnessKeys: WitnessTable
       ## Used to collect the keys of all read accounts, code and storage slots.
       ## Maps a tuple of address and slot (optional) to the codeTouched flag.
@@ -720,6 +721,11 @@ proc addBalance*(
       let acc = ledger.getAccount(address)
       if acc.isEmpty:
         ledger.makeDirty(address).flags.incl Touched
+    elif ledger.collectWitness:
+      # The reference implementation reads the account even for a zero-value
+      # credit (e.g. zero-amount withdrawals, zero-fee coinbase payments), so
+      # the address must be part of the execution witness.
+      discard ledger.getAccount(address, shouldCreate = false)
     return
   ledger.setBalance(address, ledger.getBalance(address) + delta)
 
