@@ -26,10 +26,6 @@ const skipFiles = [
   #
   # --- eest_zkevm files with failures ---
   #
-  # Witness codes mismatch -> codes optimisation: implemented in
-  # https://github.com/status-im/nimbus-eth1/pull/4099
-  "witness_codes_create_same_hash_then_read.json",
-
   # No fail yet as we don't check/use public keys. We could check them easily
   # but the better way is to use them as optimization and check automatically
   # that way.
