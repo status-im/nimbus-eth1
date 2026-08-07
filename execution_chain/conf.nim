@@ -350,7 +350,7 @@ type
 
     rewriteDatadirId* {.
       hidden
-      desc: "Rewrite selected network config hash to database"
+      desc: "Skip the check that the data dir genesis block matches the selected network"
       name: "debug-rewrite-datadir-id".}: bool
 
     aristoDbMaxSnapshots* {.
