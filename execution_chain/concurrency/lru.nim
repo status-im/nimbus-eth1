@@ -16,7 +16,11 @@
 
 {.push raises: [], gcsafe.}
 
-import std/[atomics, cpuinfo, hashes, math, typetraits], results, ./readwritelock
+import
+  std/[atomics, cpuinfo, hashes, math, typetraits],
+  results,
+  ./readwritelock,
+  ./type_traits
 
 export hashes, results
 
@@ -324,9 +328,7 @@ proc init[K, V](T: type LruCache[K, V], capacity: int, initialSize: int = 0): T 
   ## grow reallocations as the cache fills.
   static:
     doAssert supportsCopyMem(K), "K must be a non-GC type"
-    # V is intentionally not required to be `supportsCopyMem` so that move-only,
-    # non-GC value types (e.g. SharedBytes) are allowed. V must still not
-    # contain any GC managed memory.
+    doAssert supportsSharedMem(V), "V must be a non-GC type"
 
   doAssert initialSize <= capacity, "initialSize must not exceed capacity"
   result.capacity = capacity
@@ -730,9 +732,7 @@ proc init*[K, V](
   # are using the cache while initialising it.
   static:
     doAssert supportsCopyMem(K), "K must be a non-GC type"
-    # V is intentionally not required to be `supportsCopyMem` so that move-only,
-    # non-GC value types (e.g. SharedBytes) are allowed. V must still not
-    # contain any GC managed memory.
+    doAssert supportsSharedMem(V), "V must be a non-GC type"
 
   doAssert lru.state == State.UNINITIALIZED
   doAssert shardBits >= 0 and shardBits <= 30
@@ -962,7 +962,7 @@ template withValueImpl[K, V](
     let
       sh = keyHash.subhash
       s = addr lru.shards[keyHash.shardIdx]
-    
+
     var valuePtr: ptr V
     when peek:
       s.lock.withReadLock:

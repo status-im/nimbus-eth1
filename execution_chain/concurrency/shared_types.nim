@@ -16,7 +16,7 @@
 
 {.push raises: [], gcsafe.}
 
-import std/[hashes, math, typetraits], results
+import std/[hashes, math, typetraits], results, ./type_traits
 from system/ansi_c import c_realloc, c_free
 
 export hashes, results
@@ -259,9 +259,7 @@ proc init*[K, V](T: type SharedTable[K, V], initialSize: int = 0): T =
   ## to hold that many entries without growing.
   static:
     doAssert supportsCopyMem(K), "K must be a non-GC type"
-    # V is intentionally not required to be `supportsCopyMem` so that move-only,
-    # non-GC value types (e.g. SharedBytes or a nested SharedTable) are allowed.
-    # V must still not contain any GC managed memory.
+    doAssert supportsSharedMem(V), "V must be a non-GC type"
 
   if initialSize > 0:
     let allocated =

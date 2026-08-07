@@ -11,7 +11,7 @@
 {.used.}
 
 import
-  std/[importutils, sequtils],
+  std/[atomics, importutils, sequtils],
   unittest2,
   taskpools,
   ../../execution_chain/concurrency/lru {.all.},
@@ -1326,6 +1326,27 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
       seen == 70
       lru.peek(key) == Opt.some(70)
 
+# `getOccupiedSharedMem` only accounts for Nim's shared heap, which the cache
+# uses for its node and bucket arrays - `SharedSeq` allocates its payload with
+# `c_malloc` and so a leaked value is invisible to it. The helpers below count
+# the live values instead, which is what catches a value that the cache fails to
+# hand back to the caller. They live at module scope so that the tasks spawned
+# below don't capture them.
+var liveValues: Atomic[int]
+
+proc trackedBytes(bytes: openArray[byte]): SharedBytes =
+  discard liveValues.fetchAdd(1, moRelaxed)
+  SharedBytes.init(bytes)
+
+proc disposeTracked(v: var SharedBytes) =
+  v.dispose()
+  discard liveValues.fetchSub(1, moRelaxed)
+
+proc noteAbandoned() =
+  ## Account for a value that the cache is documented to abandon - its memory is
+  ## deliberately leaked by the test that calls this.
+  discard liveValues.fetchSub(1, moRelaxed)
+
 suite "ConcurrentLruCache with move-only values Tests":
   proc newCache(
       capacity: int, threadSafe: bool
@@ -1337,7 +1358,7 @@ suite "ConcurrentLruCache with move-only values Tests":
 
   proc disposeAll(lru: var ConcurrentLruCache[int, SharedBytes]) =
     for value in lru.mvalues():
-      value.dispose()
+      value.disposeTracked()
     lru.dispose()
 
   for threadSafe in [false, true]:
@@ -1348,8 +1369,8 @@ suite "ConcurrentLruCache with move-only values Tests":
       defer:
         lru.disposeAll()
 
-      lru.put(1, SharedBytes.init([1'u8, 2, 3]))
-      lru.put(2, SharedBytes.init([4'u8, 5, 6, 7]))
+      lru.put(1, trackedBytes([1'u8, 2, 3]))
+      lru.put(2, trackedBytes([4'u8, 5, 6, 7]))
 
       check:
         lru.len() == 2
@@ -1383,26 +1404,49 @@ suite "ConcurrentLruCache with move-only values Tests":
         key = 7
         keyHash = lru.toKeyHash(key)
 
-      lru.putByHash(keyHash, key, SharedBytes.init([7'u8, 7]))
+      lru.putByHash(keyHash, key, trackedBytes([7'u8, 7]))
 
       var seen = newSeq[byte]()
       lru.withGetByHash(keyHash, key, v):
         seen = v.data()
       check seen == @[7'u8, 7]
 
+    test "putWithEvicted and withPeek with a precomputed hash" & mode:
+      var lru = newCache(10, threadSafe)
+      defer:
+        lru.disposeAll()
+
+      let
+        key = 7
+        keyHash = lru.toKeyHash(key)
+
+      check lru.putWithEvictedByHash(keyHash, key, trackedBytes([7'u8])).isNone()
+
+      var replaced = lru.putWithEvictedByHash(keyHash, key, trackedBytes([8'u8, 8]))
+      check:
+        replaced.isSome()
+        replaced.unsafeGet().data() == @[7'u8]
+        lru.len() == 1
+      replaced.unsafeGet().disposeTracked()
+
+      var seen = newSeq[byte]()
+      lru.withPeekByHash(keyHash, key, v):
+        seen = v.data()
+      check seen == @[8'u8, 8]
+
     test "putWithEvicted returns the replaced value" & mode:
       var lru = newCache(10, threadSafe)
       defer:
         lru.disposeAll()
 
-      check lru.putWithEvicted(1, SharedBytes.init([1'u8, 2, 3])).isNone()
+      check lru.putWithEvicted(1, trackedBytes([1'u8, 2, 3])).isNone()
 
-      var replaced = lru.putWithEvicted(1, SharedBytes.init([9'u8, 9]))
+      var replaced = lru.putWithEvicted(1, trackedBytes([9'u8, 9]))
       check:
         replaced.isSome()
         replaced.unsafeGet().data() == @[1'u8, 2, 3]
         lru.len() == 1
-      replaced.unsafeGet().dispose()
+      replaced.unsafeGet().disposeTracked()
 
       var seen = newSeq[byte]()
       lru.withGet(1, v):
@@ -1414,11 +1458,11 @@ suite "ConcurrentLruCache with move-only values Tests":
       defer:
         lru.disposeAll()
 
-      lru.put(1, SharedBytes.init([1'u8]))
-      lru.put(2, SharedBytes.init([2'u8]))
+      lru.put(1, trackedBytes([1'u8]))
+      lru.put(2, trackedBytes([2'u8]))
       check lru.len() == 2
 
-      var evicted = lru.putWithEvicted(3, SharedBytes.init([3'u8]))
+      var evicted = lru.putWithEvicted(3, trackedBytes([3'u8]))
       check:
         evicted.isSome()
         evicted.unsafeGet().data() == @[1'u8]
@@ -1426,15 +1470,73 @@ suite "ConcurrentLruCache with move-only values Tests":
         not lru.contains(1)
         lru.contains(2)
         lru.contains(3)
-      evicted.unsafeGet().dispose()
+      evicted.unsafeGet().disposeTracked()
+
+    test "update replaces and promotes, abandoning the previous value" & mode:
+      var lru = newCache(2, threadSafe)
+      defer:
+        lru.disposeAll()
+
+      check not lru.update(1, trackedBytes([0'u8]))
+      noteAbandoned() # a failed update consumes the value it was given
+      check lru.len() == 0
+
+      lru.put(1, trackedBytes([1'u8]))
+      lru.put(2, trackedBytes([2'u8]))
+
+      check lru.update(1, trackedBytes([9'u8, 9]))
+      noteAbandoned() # `update` drops the value it replaced
+
+      var seen = newSeq[byte]()
+      lru.withPeek(1, v):
+        seen = v.data()
+      check seen == @[9'u8, 9]
+
+      # 1 was promoted by the update so 2 is now the least recently used
+      var evicted = lru.putWithEvicted(3, trackedBytes([3'u8]))
+      check:
+        evicted.isSome()
+        evicted.unsafeGet().data() == @[2'u8]
+        lru.contains(1)
+        lru.contains(3)
+      evicted.unsafeGet().disposeTracked()
+
+    test "refresh replaces without promoting, abandoning the previous value" & mode:
+      var lru = newCache(2, threadSafe)
+      defer:
+        lru.disposeAll()
+
+      check not lru.refresh(1, trackedBytes([0'u8]))
+      noteAbandoned() # a failed refresh consumes the value it was given
+      check lru.len() == 0
+
+      lru.put(1, trackedBytes([1'u8]))
+      lru.put(2, trackedBytes([2'u8]))
+
+      check lru.refresh(1, trackedBytes([9'u8, 9]))
+      noteAbandoned() # `refresh` drops the value it replaced
+
+      var seen = newSeq[byte]()
+      lru.withPeek(1, v):
+        seen = v.data()
+      check seen == @[9'u8, 9]
+
+      # 1 was not promoted by the refresh so it is still the least recently used
+      var evicted = lru.putWithEvicted(3, trackedBytes([3'u8]))
+      check:
+        evicted.isSome()
+        evicted.unsafeGet().data() == @[9'u8, 9]
+        lru.contains(2)
+        lru.contains(3)
+      evicted.unsafeGet().disposeTracked()
 
     test "pop transfers ownership of the value" & mode:
       var lru = newCache(10, threadSafe)
       defer:
         lru.disposeAll()
 
-      lru.put(1, SharedBytes.init([1'u8, 2, 3]))
-      lru.put(2, SharedBytes.init([4'u8, 5]))
+      lru.put(1, trackedBytes([1'u8, 2, 3]))
+      lru.put(2, trackedBytes([4'u8, 5]))
 
       var popped = lru.pop(1)
       check:
@@ -1443,7 +1545,7 @@ suite "ConcurrentLruCache with move-only values Tests":
         lru.len() == 1
         not lru.contains(1)
         lru.pop(1).isNone()
-      popped.unsafeGet().dispose()
+      popped.unsafeGet().disposeTracked()
 
     test "values survive growth and eviction churn" & mode:
       const capacity = 200
@@ -1452,10 +1554,9 @@ suite "ConcurrentLruCache with move-only values Tests":
         lru.disposeAll()
 
       for i in 0 ..< capacity * 4:
-        var evicted =
-          lru.putWithEvicted(i, SharedBytes.init([byte(i and 0xff), 1, 2]))
+        var evicted = lru.putWithEvicted(i, trackedBytes([byte(i and 0xff), 1, 2]))
         if evicted.isSome():
-          evicted.unsafeGet().dispose()
+          evicted.unsafeGet().disposeTracked()
 
       check lru.len() == capacity
 
@@ -1465,20 +1566,99 @@ suite "ConcurrentLruCache with move-only values Tests":
           seen = v.data()
         check seen == @[byte(i and 0xff), 1, 2]
 
-    test "does not leak shared memory" & mode:
-      let before = getOccupiedSharedMem()
+    test "does not leak shared memory or values" & mode:
+      let
+        before = getOccupiedSharedMem()
+        liveBefore = liveValues.load(moRelaxed)
+
       for _ in 0 ..< 20:
         var lru = newCache(8, threadSafe)
         for i in 0 ..< 32:
-          var evicted = lru.putWithEvicted(i, SharedBytes.init([byte(i), byte(i)]))
+          var evicted = lru.putWithEvicted(i, trackedBytes([byte(i), byte(i)]))
           if evicted.isSome():
-            evicted.unsafeGet().dispose()
+            evicted.unsafeGet().disposeTracked()
 
         var popped = lru.pop(31)
-        popped.unsafeGet().dispose()
+        popped.unsafeGet().disposeTracked()
 
         lru.disposeAll()
-      check getOccupiedSharedMem() == before
+
+      check:
+        # the node and bucket arrays, which live on Nim's shared heap
+        getOccupiedSharedMem() == before
+        # the values themselves, which do not
+        liveValues.load(moRelaxed) == liveBefore
+
+    test "mvalues yields nothing for an empty cache" & mode:
+      var
+        lru = newCache(10, threadSafe)
+        count = 0
+      for value in lru.mvalues():
+        count += value.len()
+      check count == 0
+      lru.disposeAll()
+
+  test "a value type holding GC memory is rejected at compile time":
+    template initCompiles(T: typedesc): bool =
+      compiles(
+        block:
+          var lru: ConcurrentLruCache[int, T]
+          lru.init(10)
+      )
+
+    check:
+      initCompiles(SharedBytes)
+      initCompiles(int)
+      not initCompiles(seq[byte])
+      not initCompiles(string)
+      not initCompiles(Opt[seq[byte]])
+
+  test "mvalues visits the values in every shard":
+    const
+      numKeys = 100
+      shardBits = 3
+
+    var lru: ConcurrentLruCache[int, SharedBytes]
+    lru.init(1024, shardBits = shardBits, threadSafe = true)
+    check lru.numShards() == 8
+
+    for i in 0 ..< numKeys:
+      lru.put(i, trackedBytes([byte(i)]))
+    check lru.len() == numKeys
+
+    var count = 0
+    for value in lru.mvalues():
+      inc count
+      value.disposeTracked()
+    check count == numKeys
+
+    lru.dispose()
+
+  test "mvalues yields nothing for an uninitialized cache":
+    var
+      lru: ConcurrentLruCache[int, SharedBytes]
+      count = 0
+    for value in lru.mvalues():
+      count += value.len()
+    check count == 0
+
+  test "the ownership-preserving accessors are available for move-only values":
+    # `get` and `peek` copy the value out and so do not compile for a move-only
+    # V, but that cannot be asserted here: the `=copy` error is raised by the
+    # `injectdestructors` pass, which runs after `compiles` has already accepted
+    # the call. What is pinned instead is that the accessors which borrow or
+    # transfer ownership - the ones the docs point at as the alternative - stay
+    # usable.
+    var lru = newCache(10, threadSafe = false)
+    defer:
+      lru.disposeAll()
+
+    lru.put(1, trackedBytes([1'u8]))
+
+    check:
+      compiles(lru.pop(1))
+      compiles(lru.putWithEvicted(1, trackedBytes([2'u8])))
+      compiles(lru.putWithEvictedByHash(lru.toKeyHash(1), 1, trackedBytes([2'u8])))
 
   test "concurrent put, withGet and pop of SharedBytes":
     const
@@ -1500,9 +1680,9 @@ suite "ConcurrentLruCache with move-only values Tests":
       for i in 0 ..< count:
         let key = base + i
         var evicted =
-          cache[].putWithEvicted(key, SharedBytes.init([byte(key and 0xff), 3]))
+          cache[].putWithEvicted(key, trackedBytes([byte(key and 0xff), 3]))
         if evicted.isSome():
-          evicted.unsafeGet().dispose()
+          evicted.unsafeGet().disposeTracked()
 
     proc tpRead(cache: ptr ConcurrentLruCache[int, SharedBytes], base, count: int) =
       for i in 0 ..< count:
@@ -1529,6 +1709,13 @@ suite "ConcurrentLruCache with move-only values Tests":
     for i in 0 ..< totalKeys:
       var popped = lru.pop(i)
       check popped.isSome()
-      popped.unsafeGet().dispose()
+      popped.unsafeGet().disposeTracked()
 
     check lru.len() == 0
+
+  test "every value put into the cache was handed back to the caller":
+    # Runs last and so guards the whole suite - `getOccupiedSharedMem` cannot
+    # see `SharedSeq` payloads, so this is what actually catches a value that
+    # the cache loses track of. The only values unaccounted for here are the
+    # ones the tests above deliberately abandoned via `noteAbandoned`.
+    check liveValues.load(moRelaxed) == 0
