@@ -28,18 +28,27 @@ type
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
     EGeneric = 0                   ## Not further specified error
-    ENoDataAvailable               ## Out of scope, unsuuported state
-    EMissingEthContext             ## Cannot retrieve `eth` peer descriptor
     EAlreadyTriedAndFailed         ## The same action failed before
     EPeerDisconnected              ## Exception
     ECatchableError                ## Exception
     ECancelledError                ## Exception
+
+    # The following symbols are not used in fetch functions (see below
+    # the symbol set `EUnusedForFetch`.)
+    ENoDataAvailable               ## Out of scope, unsuuported state
+    EMissingEthContext             ## Cannot retrieve `eth` peer descriptor
     ELockError                     ## Locked by some other peer
     ETrieError                     ## Trie/mpt database error
     ECacheError                    ## Database cache error
     ECompleted                     ## Nothing to do, here
 
 const
+  EUnusedForFetch* = {ENoDataAvailable .. ECompleted}
+    ## Shortcut for `case..of` directive. These error symbols are not used
+    ## for fetching data via the `snap` or `eth` wire protocol.
+
+  # -----------------
+
   snapAsmFolder* = "snap"
     ## Folder for assembly database (different from aristo `ecdb` folder)
 
