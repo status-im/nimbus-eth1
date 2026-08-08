@@ -61,6 +61,7 @@ type
     accountsManager*: ref AccountsManager
     rng*: ref HmacDrbgContext
     backgroundPruner*: BackgroundPrunerRef
+    balPruner*: BalPrunerRef
 
 proc closeWait*(nimbus: NimbusNode) {.async.} =
   trace "Graceful shutdown"
@@ -84,6 +85,9 @@ proc closeWait*(nimbus: NimbusNode) {.async.} =
 
   if nimbus.backgroundPruner.isNil.not:
     waitedFutures.add nimbus.backgroundPruner.stop()
+
+  if nimbus.balPruner.isNil.not:
+    waitedFutures.add nimbus.balPruner.stop()
 
   if nimbus.txEvictor.isNil.not:
     waitedFutures.add nimbus.txEvictor.stop()

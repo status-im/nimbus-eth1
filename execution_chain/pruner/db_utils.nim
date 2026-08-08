@@ -53,6 +53,10 @@ proc deleteWithdrawalsBe(kvt: KvtDbRef, withdrawalsRoot: Hash32) =
   kvt.delBe(withdrawalsKey(withdrawalsRoot).toOpenArray).isOkOr:
     warn "pruner: deleteWithdrawalsBe", withdrawalsRoot, error
 
+proc deleteBlockAccessListBe*(kvt: KvtDbRef, blockHash: Hash32) =
+  kvt.delBe(blockHashToBlockAccessListKey(blockHash).toOpenArray).isOkOr:
+    warn "pruner: deleteBlockAccessListBe", blockHash, error
+
 proc deleteBlockBodyAndReceiptsBe*(kvt: KvtDbRef, header: Header) =
   kvt.deleteTransactionsBe(header.transactionsRoot)
   kvt.deleteUnclesBe(header.ommersHash)
@@ -64,15 +68,27 @@ proc deleteBlockBodyAndReceiptsBe*(kvt: KvtDbRef, header: Header) =
 # Direct-backend progress tracking
 # ------------------------------------------------------------------------------
 
-proc setChainTailBe*(kvt: KvtDbRef, blockNumber: BlockNumber) =
+proc setBlockNumberBe(kvt: KvtDbRef, key: DbKey, blockNumber: BlockNumber) =
   let
-    key = tailIdKey()
     value = blockNumber.toBytesLE()
     batch = kvt.putBegFn().expect("pruner: putBegFn")
   kvt.putKvpFn(batch, key.toOpenArray, value)
   kvt.putEndFn(batch).expect("pruner: putEndFn")
 
-proc getChainTailBe*(kvt: KvtDbRef): BlockNumber =
-  let blkNum = kvt.getBe(tailIdKey().toOpenArray).valueOr:
+proc getBlockNumberBe(kvt: KvtDbRef, key: DbKey): BlockNumber =
+  let blkNum = kvt.getBe(key.toOpenArray).valueOr:
     return BlockNumber(0)
   BlockNumber(uint64.fromBytesLE(blkNum))
+
+proc setChainTailBe*(kvt: KvtDbRef, blockNumber: BlockNumber) =
+  kvt.setBlockNumberBe(tailIdKey(), blockNumber)
+
+proc getChainTailBe*(kvt: KvtDbRef): BlockNumber =
+  kvt.getBlockNumberBe(tailIdKey())
+
+proc setBalTailBe*(kvt: KvtDbRef, blockNumber: BlockNumber) =
+  ## Records the block number up to which block access lists have been pruned.
+  kvt.setBlockNumberBe(balTailIdKey(), blockNumber)
+
+proc getBalTailBe*(kvt: KvtDbRef): BlockNumber =
+  kvt.getBlockNumberBe(balTailIdKey())

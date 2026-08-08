@@ -24,6 +24,7 @@ import
   ../execution_chain/db/kvt,
   ../execution_chain/db/kvt/[kvt_desc, kvt_init/memory_only, kvt_utils],
   ../execution_chain/db/storage_types,
+  ../execution_chain/block_access_list/bal_utils,
   ../execution_chain/pruner,
   ../execution_chain/pruner/[db_utils, serialize]
 
@@ -420,6 +421,19 @@ suite "Pruner backend operation shape":
 
     kvt.close()
 
+  test "a pruned block access list costs exactly 1 del":
+    let
+      kvt = KvtDbRef.init()
+      counts = kvt.countOps()
+      blkHash = hash32"5555555555555555555555555555555555555555555555555555555555555555"
+
+    kvt.deleteBlockAccessListBe(blkHash)
+
+    check counts.delRange == 0
+    check counts.del == 1
+
+    kvt.close()
+
   test "empty roots cost nothing":
     let
       kvt = KvtDbRef.init()
@@ -437,3 +451,143 @@ suite "Pruner backend operation shape":
     check counts.del == 0
 
     kvt.close()
+
+suite "Block access list pruner tests":
+  const balBytes = @[1'u8, 2, 3]
+
+  var env = setupEnv()
+
+  # Builds a canonical header chain on top of genesis where each block from
+  # `firstBalBlock` onwards is an Amsterdam block sitting in its own epoch and
+  # holding a block access list. Returns the block hashes indexed by number.
+  proc buildChain(
+      com: CommonRef, numBlocks: int, firstBalBlock: int
+  ): seq[Hash32] =
+    let
+      kvt = com.db.kvt
+      txFrame = com.db.baseTxFrame()
+
+    var hashes = @[com.genesisHeader.computeBlockHash]
+    for i in 1 .. numBlocks:
+      let hasBal = i >= firstBalBlock
+      var header = Header(
+        number: BlockNumber(i),
+        parentHash: hashes[i - 1],
+        difficulty: 0.u256,
+      )
+      if hasBal:
+        header.baseFeePerGas = Opt.some(0.u256)
+        header.withdrawalsRoot = Opt.some(EMPTY_ROOT_HASH)
+        header.blobGasUsed = Opt.some(0'u64)
+        header.excessBlobGas = Opt.some(0'u64)
+        header.parentBeaconBlockRoot = Opt.some(default(Hash32))
+        header.requestsHash = Opt.some(default(Hash32))
+        header.blockAccessListHash = Opt.some(
+          hash32"6666666666666666666666666666666666666666666666666666666666666666")
+        header.slotNumber = Opt.some(uint64(i) * SLOTS_PER_EPOCH)
+
+      let blkHash = header.computeBlockHash
+      txFrame.persistHeader(blkHash, header).expect("persistHeader")
+      hashes.add blkHash
+
+      if hasBal:
+        kvt.putBe(blockHashToBlockAccessListKey(blkHash).toOpenArray, balBytes)
+
+    hashes
+
+  proc hasBal(kvt: KvtDbRef, blkHash: Hash32): bool =
+    kvt.hasBe(blockHashToBlockAccessListKey(blkHash).toOpenArray)
+
+  # The head slot such that all blocks up to and including `lastPrunedBlock`
+  # fall outside of the retention period
+  func headSlotFor(lastPrunedBlock: int): uint64 =
+    (BAL_RETENTION_EPOCHS + uint64(lastPrunedBlock)) * SLOTS_PER_EPOCH
+
+  test "block access lists outside the retention period are deleted":
+    let
+      com = env.newCom()
+      kvt = com.db.kvt
+      hashes = com.buildChain(numBlocks = 10, firstBalBlock = 1)
+      pruner = BalPrunerRef.init(com)
+      pruned = waitFor pruner.prune(
+        com.db.baseTxFrame(), BlockNumber(10), headSlotFor(5))
+
+    check pruned == 5
+
+    for i in 1 .. 5:
+      check not kvt.hasBal(hashes[i])
+    for i in 6 .. 10:
+      check kvt.hasBal(hashes[i])
+
+    check pruner.tail == BlockNumber(6)
+    check kvt.getBalTailBe() == BlockNumber(6)
+
+  test "block access lists within the retention period are retained":
+    let
+      com = env.newCom()
+      kvt = com.db.kvt
+      hashes = com.buildChain(numBlocks = 10, firstBalBlock = 1)
+      pruner = BalPrunerRef.init(com)
+      pruned = waitFor pruner.prune(
+        com.db.baseTxFrame(), BlockNumber(10), headSlotFor(0))
+
+    check pruned == 0
+
+    for i in 1 .. 10:
+      check kvt.hasBal(hashes[i])
+
+    check kvt.getBalTailBe() == BlockNumber(0)
+
+  test "pruning starts at the first block holding a block access list":
+    let
+      com = env.newCom()
+      kvt = com.db.kvt
+      hashes = com.buildChain(numBlocks = 10, firstBalBlock = 5)
+      pruner = BalPrunerRef.init(com)
+      pruned = waitFor pruner.prune(
+        com.db.baseTxFrame(), BlockNumber(10), headSlotFor(7))
+
+    check pruned == 3
+
+    for i in 5 .. 7:
+      check not kvt.hasBal(hashes[i])
+    for i in 8 .. 10:
+      check kvt.hasBal(hashes[i])
+
+    check pruner.tail == BlockNumber(8)
+
+  test "pruning resumes from the stored tail":
+    let
+      com = env.newCom()
+      kvt = com.db.kvt
+      hashes = com.buildChain(numBlocks = 10, firstBalBlock = 1)
+      txFrame = com.db.baseTxFrame()
+
+    check (waitFor BalPrunerRef.init(com, batchSize = 2).prune(
+      txFrame, BlockNumber(10), headSlotFor(4))) == 4
+
+    let pruner = BalPrunerRef.init(com)
+    check pruner.tail == BlockNumber(5)
+
+    # Only the blocks which newly fell outside of the retention period are
+    # visited in the second run
+    check (waitFor pruner.prune(txFrame, BlockNumber(10), headSlotFor(6))) == 2
+
+    for i in 1 .. 6:
+      check not kvt.hasBal(hashes[i])
+    for i in 7 .. 10:
+      check kvt.hasBal(hashes[i])
+
+    check kvt.getBalTailBe() == BlockNumber(7)
+
+  test "pruning is a no-op before Amsterdam":
+    let
+      com = env.newCom()
+      pruner = BalPrunerRef.init(com, loopDelay = chronos.milliseconds(50))
+
+    pruner.start()
+    waitFor sleepAsync(chronos.milliseconds(100))
+    waitFor pruner.stop()
+
+    check pruner.tail == BlockNumber(0)
+    check com.db.kvt.getBalTailBe() == BlockNumber(0)
