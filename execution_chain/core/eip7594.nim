@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   ../constants,
@@ -17,7 +17,7 @@ import
 from std/sequtils import mapIt
 
 proc validateBlobTransactionWrapper7594*(tx: PooledTransaction):
-                                     Result[void, string] =
+                                         Result[void, string] =
   doAssert(tx.blobsBundle.isNil.not)
   doAssert(tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594)
 
@@ -67,8 +67,7 @@ proc validateBlobTransactionWrapper7594*(tx: PooledTransaction):
       cellIndices.add i.uint64
 
     # bullet 3.iii.c
-    let cf = ?kzg.computeCellsAndKzgProofs(blobs[k])
-    cells.add cf.cells
+    cells.add ?kzg.computeCells(blobs[k])
 
   let res = kzg.verifyCellKzgProofBatch(
     commitments,

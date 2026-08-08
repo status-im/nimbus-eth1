@@ -29,6 +29,8 @@ const
     trEthRecvReceived & "BlockHeaders (0x04)"
   trEthRecvReceivedBlockBodies* =
     trEthRecvReceived & "BlockBodies (0x06)"
+  trEthRecvReceivedBals* =
+    trEthRecvReceived & "BlockAccessLists (0x13)"
 
   trEthRecvProtocolViolation* =
     "<< " & prettyEthProtoName & " Protocol violation, "
@@ -45,6 +47,8 @@ const
     trEthSendSending & "GetBlockHeaders (0x03)"
   trEthSendSendingGetBlockBodies* =
     trEthSendSending & "GetBlockBodies (0x05)"
+  trEthSendSendingGetBals* =
+    trEthSendSending & "GetBlockAccessLists (0x12)"
 
   trEthSendReplying* =
     ">> " & prettyEthProtoName & " Replying "

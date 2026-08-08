@@ -32,9 +32,7 @@ proc maybeSlowPeerError(
     buddy.hdrFetchRegisterError(slowPeer=true)
 
     # Do not repeat the same time-consuming failed request
-    buddy.only.failedReq = PeerFirstFetchReq(
-      state:       BeaconState.headers,
-      blockNumber: bn)
+    buddy.only.failedReq.blockNumber = bn
 
     return true
 
@@ -63,15 +61,15 @@ proc getBlockHeaders(
   ## Wrapper around `getBlockHeaders()`
   let start = Moment.now()
 
-  if buddy.only.failedReq.state == BeaconState.headers and
-     buddy.only.failedReq.blockNumber == bn:
+  if buddy.only.failedReq.blockNumber == bn and bn != BlockNumber(0):
+    # `bn == 0`: Special case when the header is fetched by hash, only.
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
   var resp: BlockHeadersPacket
   try:
-    resp = (await buddy.peer.getBlockHeaders(
-      req, fetchHeadersRlpxTimeout)).valueOr:
-        return err((ENoException,"","",Moment.now()-start))
+    resp = (await eth.getBlockHeaders(
+      buddy.peer, req, fetchHeadersRlpxTimeout)).valueOr:
+        return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
   except CancelledError as e:
@@ -94,7 +92,7 @@ template fetchHeadersReversed*(
     buddy: BeaconPeerRef;
     ivReq: BnRange;
     topHash: Hash32;
-      ): Opt[seq[Header]] =
+      ): auto =
   ## Async/template
   ##
   ## From the ethXX argument peer implied by `buddy` fetch a list of headers
@@ -138,7 +136,7 @@ template fetchHeadersReversed*(
       elapsed = rc.error.elapsed
       block evalError:
         case rc.error.excp:
-        of ENoException, ESyncerTermination:
+        of EGeneric, ESyncerTermination:
           break evalError
         of EPeerDisconnected, ECancelledError:
           buddy.nErrors.fetch.hdr.inc
@@ -209,7 +207,7 @@ template fetchHeadersReversed*(
     let bps = buddy.hdrSampleSize(elapsed, h.getEncodedLength)
 
     # This request did not fail (maybe another one did): reset anyway
-    buddy.only.failedReq.reset
+    buddy.only.failedReq.blockNumber = BlockNumber(0)
 
     # Ban an overly slow peer for a while when observed consecutively.
     if fetchHeadersErrTimeout < elapsed:
@@ -222,7 +220,7 @@ template fetchHeadersReversed*(
       h[0].number).toStr, nResp=h.len, ela, thPut=(bps.toIECb(1) & "ps"),
       state, nErrors=buddy.nErrors.fetch.hdr
 
-    bodyRc = Opt[seq[Header]].ok(h)
+    bodyRc = typeof(bodyRc).ok(h)
 
   bodyRc # return
 

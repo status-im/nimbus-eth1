@@ -60,6 +60,11 @@ import
   ./[cache_api1, cache_api33, cache_api65,
      cache_const, cache_desc, cache_iter, cache_rlp]
 
+const emptyFlatAccData* = block:
+  var q: CacheFlatAccData
+  q.account = EMPTY_ACCOUNT
+  q
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -212,20 +217,44 @@ proc getFlatAcc*(db: CacheDbRef, accPath: Hash32): OptFlatAccResult =
   let data = db.get33(cFlatAccount, accPath).valueOr:
     return err(error)
   if data.len == 0:
-    return ok Opt.none(Account)
+    return ok Opt.none(CacheFlatAccData)
   var res = data.decodeFlatAccData().valueOr:
     return err(error)
   ok Opt.some(move res)
 
-proc putFlatAcc*(db: CacheDbRef, accPath: Hash32, account: Account): PutResult =
-  db.put33(cFlatAccount, accPath, encodeFlatAccData(account))
+proc putFlatAcc*(
+  db: CacheDbRef;
+  accPath: Hash32;
+  dirtyStorage: bool;
+  dirtyCode: bool;
+  account: Account;
+    ): PutResult =
+  var accData: CacheFlatAccData
+  accData.dirtyStorage = dirtyStorage
+  accData.dirtyCode = dirtyCode
+  accData.account = account
+  db.put33(cFlatAccount, accPath, encodeFlatAccData(accData))
 
 proc putFlatAcc*(
-    db: CacheDbRef;
-    accPath: Hash32;
-    data: openArray[byte];
-      ): PutResult =
-  db.put33(cFlatAccount, accPath, data)
+  db: CacheDbRef;
+  accPath: Hash32;
+  accData: CacheFlatAccData;
+    ): PutResult =
+  db.put33(cFlatAccount, accPath, encodeFlatAccData(accData))
+
+proc putFlatAcc*(
+  db: CacheDbRef;
+  accPath: Hash32;
+  dirtyStorage: bool;
+  dirtyCode: bool;
+  payload: openArray[byte];                         # rlp encoded Account
+    ): PutResult =
+  var data: CacheFlatAccData
+  data.dirtyStorage = dirtyStorage
+  data.dirtyCode = dirtyCode
+  data.account = payload.decodeAccPayloadData().valueOr:
+    return err(error)
+  db.put33(cFlatAccount, accPath, encodeFlatAccData(data))
 
 proc delFlatAcc*(db: CacheDbRef, accPath: Hash32): DelResult =
   db.del33(cFlatAccount, accPath)
@@ -277,6 +306,14 @@ proc putFlatSlot*(
 
 proc delFlatSlot*(db: CacheDbRef, accPath, slotKey: Hash32): DelResult =
   db.del65(cFlatSlot, accPath, slotKey)
+
+proc delFlatSlot*(db: CacheDbRef, accPath: Hash32): DelResult =
+  for (key1,key2,value) in db.adb.colWalk65 key65(cFlatSlot, accPath):
+    if key1 != accPath:
+      break
+    db.del65(cFlatSlot, key1, key2).isOkOr:
+      return err(error)
+  ok()
 
 proc clearFlatSlot*(db: CacheDbRef): DelResult =
   db.clr1 cFlatSlot

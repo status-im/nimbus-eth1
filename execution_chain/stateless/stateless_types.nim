@@ -11,8 +11,7 @@
 
 import ssz_serialization, beacon_chain/spec/[eth2_merkleization, ssz_codec]
 
-from beacon_chain/spec/datatypes/gloas import ExecutionPayload
-from beacon_chain/spec/datatypes/electra import ExecutionRequests
+from beacon_chain/spec/datatypes/gloas import ExecutionPayload, ExecutionRequests
 
 export ssz_serialization, ssz_codec
 
@@ -26,7 +25,6 @@ export ssz_serialization, ssz_codec
 # Not all consts are defined here as we get some of the types from beacon_chain datatypes
 
 const
-  MAX_BLOB_COMMITMENTS_PER_BLOCK* = 4096
   MAX_WITNESS_NODES* = 1 shl 22 # 2^22
   MAX_WITNESS_CODES* = 1 shl 18 # 2^18
   MAX_WITNESS_HEADERS* = 256
@@ -62,7 +60,7 @@ const
 type
   NewPayloadRequest* = object
     executionPayload*: ExecutionPayload
-    versionedHashes*: List[Digest, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+    versionedHashes*: seq[Digest]
     parentBeaconBlockRoot*: Digest
     executionRequests*: ExecutionRequests
 

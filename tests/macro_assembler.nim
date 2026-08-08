@@ -254,6 +254,8 @@ proc generateVMProxy(masm: MacroAssembler): VMProxy =
     vmProxyProc = quote do:
       proc `vmProxySym`(): bool =
         let `vmState` = initVMEnv(`fork`)
+        defer:
+          `vmState`.dispose()
         `setup`
         let boa = `body`
         runVM(`vmState`, boa)
