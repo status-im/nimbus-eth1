@@ -74,7 +74,7 @@ func validateKeys*(witness: Witness, expectedKeys: WitnessTable): Result[void, s
 
   ok()
 
-# https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless.py#L255
+# https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless.py#L255
 func verifyHeaders*(
     witness: ExecutionWitness, header: Header
 ): Result[seq[Header], string] =
