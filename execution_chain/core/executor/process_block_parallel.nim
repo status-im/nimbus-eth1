@@ -30,6 +30,8 @@ import
   results,
   stew/assign2
 
+const MinTxCountForOptimisticPrefetch = 6
+
 type
   OptimisticPrefetchCtx* = object
     com: CommonRef
@@ -136,9 +138,11 @@ template withSenderParallel*(
     ctx: OptimisticPrefetchCtx
     ctxPtr: ptr OptimisticPrefetchCtx = nil
 
-  # Skip optimistic state prefetch when block access list prefetch is running
-  # to avoid prefetching the same state twice.
-  if vmState.com.optimisticStatePrefetchEnabled() and
+  # Skip optimistic state prefetch when there are only a few transactions to
+  # process, or when block access list prefetch is running to avoid prefetching
+  # the same state twice.
+  if txs.len >= MinTxCountForOptimisticPrefetch and
+      vmState.com.optimisticStatePrefetchEnabled() and
       not vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
     ctx.parent = vmState.parent
     ctx.blockCtx = vmState.blockCtx
