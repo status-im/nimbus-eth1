@@ -23,6 +23,7 @@ import
   ./db/aristo/aristo_compute,
   ./db/core_db/persistent,
   ./sync/wire_protocol,
+  ./common/genesis,
   ./portal/portal,
   ./networking/[bootnodes, netkeys],
   beacon_chain/[nimbus_binary_common, process_state, nimbus_rest_common],
@@ -257,19 +258,20 @@ proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef, para
   nimbus.init(config, com, params)
   nimbus
 
-proc preventLoadingDataDirForTheWrongNetwork(com: CommonRef; config: ExecutionClientConf) =
+proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf, params: NetworkParams) =
   if config.rewriteDatadirId:
     return
 
   let
-    storedHeader = com.db.baseTxFrame().getBlockHeader(0'u64).valueOr:
+    storedHeader = db.baseTxFrame().getBlockHeader(0'u64).valueOr:
       return
     storedHash = storedHeader.computeBlockHash
+    expectedHash = params.genesisBlockHash()
 
-  if storedHash != com.genesisHash:
+  if storedHash != expectedHash:
     fatal "Data dir already initialized with other network configuration",
       get=storedHash,
-      expected=com.genesisHash
+      expected=expectedHash
     quit(QuitFailure)
 
 
@@ -293,6 +295,8 @@ proc setupCommonRef*(
 
   let coreDB = AristoDbRocks.newCoreDbRef(config.dataDir(params), dbOpts)
 
+  preventLoadingDataDirForTheWrongNetwork(coreDB, config, params)
+
   let com = CommonRef.new(
     db = coreDB,
     params = params,
@@ -305,8 +309,6 @@ proc setupCommonRef*(
     balParallelExecution = config.balParallelExecution and
         not config.statelessProvider and not disableParallelFeatures,
     parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures)
-
-  preventLoadingDataDirForTheWrongNetwork(com, config)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",

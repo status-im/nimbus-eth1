@@ -349,7 +349,7 @@ type
 
     rewriteDatadirId* {.
       hidden
-      desc: "Skip the check that the data dir genesis block matches the selected network"
+      desc: "Skip checking that the genesis block matches the selected network"
       name: "debug-rewrite-datadir-id".}: bool
 
     aristoDbMaxSnapshots* {.
