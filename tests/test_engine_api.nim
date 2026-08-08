@@ -156,7 +156,7 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -170,7 +170,7 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
     payload = ? client.getPayload(Version.V1, fcuRes.payloadId.get)
     npRes = ? client.newPayloadV1(payload.executionPayload)
 
-  discard ? client.forkchoiceUpdated(Version.V1, ForkchoiceStateV1(
+  discard ? client.forkchoiceUpdated(Version.V1, ForkchoiceState(
     headBlockHash: npRes.latestValidHash.get
   ))
   let bn = ? client.blockNumber()
@@ -208,7 +208,7 @@ proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -275,7 +275,7 @@ proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
     client = env.client
     genesisHeader = ? client.latestHeader()
     genesisHash = genesisHeader.computeBlockHash
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: genesisHash
     )
     time = getTime().toUnix
@@ -314,7 +314,7 @@ proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
       suggestedFeeRecipient: default(Address),
       withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
     )
-    updateC = ForkchoiceStateV1(
+    updateC = ForkchoiceState(
       headBlockHash: payloadA.blockHash,
       finalizedBlockHash: genesisHash,
     )
@@ -334,7 +334,7 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -411,7 +411,7 @@ proc genesisShouldCanonicalTest(env: TestEnv): Result[void, string] =
     return err("lastestValidHash should not empty")
 
   let
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: params.payload.blockHash,
       safeBlockHash: params.payload.parentHash,
       finalizedBlockHash: params.payload.parentHash,
@@ -503,7 +503,7 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix

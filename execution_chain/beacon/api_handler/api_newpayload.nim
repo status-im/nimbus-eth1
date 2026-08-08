@@ -15,6 +15,7 @@ import
   web3/[execution_types, primitives],
   json_rpc/errors,
   ../../core/tx_pool,
+  ../../core/focil,
   ../web3_eth_conv,
   ../beacon_engine,
   ../payload_conv,
@@ -111,7 +112,7 @@ template validatePayload(apiVersion, payloadVersion, payload) =
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
 func validateExecutionRequest(blockHash: Hash32,
             requests: openArray[seq[byte]], apiVersion: Version):
-              Opt[PayloadStatusV1] {.raises: [ApplicationError].} =
+              Opt[PayloadStatus] {.raises: [ApplicationError].} =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
@@ -152,8 +153,9 @@ proc newPayload*(ben: BeaconEngineRef,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(seq[seq[byte]])):
-                   Future[PayloadStatusV1] {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
+                 executionRequests = Opt.none(seq[seq[byte]]),
+                 inclusionList = Opt.none(InclusionList)):
+                   Future[PayloadStatus] {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
 
   trace "Engine API request received",
     meth = "newPayload",
@@ -172,6 +174,11 @@ proc newPayload*(ben: BeaconEngineRef,
     let res = validateExecutionRequest(payload.blockHash, executionRequests.value, apiVersion)
     if res.isSome:
       return res.value
+
+  if apiVersion >= Version.V6:
+    if inclusionList.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": inclusionList is expected from execution payload")
 
   let
     com = ben.com
@@ -293,4 +300,12 @@ proc newPayload*(ben: BeaconEngineRef,
     gasUsed = header.gasUsed,
     blobGas = header.blobGasUsed.get(0'u64)
 
-  return validStatus(blockHash)
+  if inclusionList.isSome:
+    let decodedIL = decodeIL(inclusionList.value)
+    if decodedIL.isNil:
+      raise invalidParams("newPayload cannot decode Inclusion List")
+
+    let validIL = validateInclusionList(chain.vmState, decodedIL.list, blk)
+    return validStatus(blockHash, validIL)
+  else:
+    return validStatus(blockHash)
