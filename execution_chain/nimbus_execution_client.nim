@@ -165,7 +165,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
     # The user-facing flag is --discv5, but discv4 is still enabled alongside
     # it until the discv4 code is removed.
     nimbus.ethNode.connectToNetwork(
-      enableDiscV4 = config.discv5,
+      enableDiscV4 = false,
       enableDiscV5 = config.discv5,
     )
 

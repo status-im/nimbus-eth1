@@ -36,7 +36,7 @@ proc gasEip2929AccountCheck*(c: Computation; address: Address): GasInt =
       else:
         COLD_ACCOUNT_ACCESS_2929
     else:
-      WarmStorageReadCost
+      WARM_ACCESS
 
 proc gasEip8038AccountCheck*(c: Computation; address: Address): GasInt =
   c.vmState.mutateLedger:
@@ -44,7 +44,7 @@ proc gasEip8038AccountCheck*(c: Computation; address: Address): GasInt =
       ledger.accessList(address)
       COLD_ACCOUNT_ACCESS_8038
     else:
-      WarmStorageReadCost
+      WARM_ACCESS
 
 proc gasEip2929AccountCheck*(c: Computation; address: Address, slot: UInt256): GasInt =
   c.vmState.mutateLedger:
@@ -55,7 +55,7 @@ proc gasEip2929AccountCheck*(c: Computation; address: Address, slot: UInt256): G
       else:
         COLD_STORAGE_ACCESS_2929
     else:
-      WarmStorageReadCost
+      WARM_ACCESS
 
 proc gasEip8038AccountCheck*(c: Computation; address: Address, slot: UInt256): GasInt =
   c.vmState.mutateLedger:
@@ -63,7 +63,7 @@ proc gasEip8038AccountCheck*(c: Computation; address: Address, slot: UInt256): G
       ledger.accessList(address, slot)
       COLD_STORAGE_ACCESS_8038
     else:
-      WarmStorageReadCost
+      WARM_ACCESS
 
 func checkInStaticContext*(c: Computation): EvmResultVoid =
   ## Verify static context in handler function, raise an error otherwise
@@ -83,7 +83,7 @@ proc delegateResolutionCost*(c: Computation, address: Address): GasInt =
       else:
         COLD_ACCOUNT_ACCESS_2929
     else:
-      return WarmStorageReadCost
+      return WARM_ACCESS
 
 # ------------------------------------------------------------------------------
 # End
