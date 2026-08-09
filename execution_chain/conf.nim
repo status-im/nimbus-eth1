@@ -28,7 +28,6 @@ import
   ./[constants, compile_info, version_info],
   ./common/chain_config,
   ./common/chain_config_loader,
-  ./common/chain_config_hash,
   ./db/opts
 
 export net, defs, jsdefs, jsnet, nat_toml, nimbus_binary_common, options
@@ -350,7 +349,7 @@ type
 
     rewriteDatadirId* {.
       hidden
-      desc: "Rewrite selected network config hash to database"
+      desc: "Skip checking that the genesis block matches the selected network"
       name: "debug-rewrite-datadir-id".}: bool
 
     aristoDbMaxSnapshots* {.
@@ -640,7 +639,7 @@ func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
 
 func getName*(params: NetworkParams): string =
   params.networkId.name().valueOr:
-    $calcHash(params)
+    "custom-" & $params.networkId
 
 proc dataDir*(config: ExecutionClientConf, params: NetworkParams): string =
   string config.dataDirFlag.get(OutDir defaultDataDir("", params.getName()))
