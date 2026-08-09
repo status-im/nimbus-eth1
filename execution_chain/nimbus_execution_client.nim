@@ -16,16 +16,14 @@ import
   chronicles,
   eth/net/nat,
   metrics,
-  stew/byteutils,
   kzg4844/kzg,
   ./[conf, constants, nimbus_desc, nimbus_import, rpc, version_info],
   ./core/block_import,
   ./core/chain/forked_chain/chain_serialize,
   ./db/aristo/aristo_compute,
   ./db/core_db/persistent,
-  ./db/storage_types,
   ./sync/wire_protocol,
-  ./common/chain_config_hash,
+  ./common/genesis,
   ./portal/portal,
   ./networking/[bootnodes, netkeys],
   beacon_chain/[nimbus_binary_common, process_state, nimbus_rest_common],
@@ -261,29 +259,19 @@ proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef, para
   nimbus
 
 proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf, params: NetworkParams) =
-  proc writeDataDirId(kvt: CoreDbTxRef, calculatedId: Hash32) =
-    info "Writing data dir ID", ID=calculatedId
-    kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
-      fatal "Cannot write data dir ID", ID=calculatedId
-      quit(QuitFailure)
-    db.persist(kvt)
-
-  let
-    kvt = db.baseTxFrame()
-    calculatedId = calcHash(params)
-    dataDirIdBytes = kvt.get(dataDirIdKey().toOpenArray).valueOr:
-      # an empty database
-      writeDataDirId(kvt, calculatedId)
-      return
-
   if config.rewriteDatadirId:
-    writeDataDirId(kvt, calculatedId)
     return
 
-  if calculatedId.data != dataDirIdBytes:
+  let
+    storedHeader = db.baseTxFrame().getBlockHeader(0'u64).valueOr:
+      return
+    storedHash = storedHeader.computeBlockHash
+    expectedHash = params.genesisBlockHash()
+
+  if storedHash != expectedHash:
     fatal "Data dir already initialized with other network configuration",
-      get=dataDirIdBytes.toHex,
-      expected=calculatedId
+      get=storedHash,
+      expected=expectedHash
     quit(QuitFailure)
 
 
