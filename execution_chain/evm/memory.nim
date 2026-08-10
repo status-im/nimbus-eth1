@@ -24,16 +24,15 @@ func init*(_: type EvmMemory): EvmMemory =
     bytes: newSeqOfCap[byte](1024)
   )
 
-func len*(memory: EvmMemory): int =
+template len*(memory: EvmMemory): int =
   memory.bytes.len
 
-func extend*(memory: var EvmMemory; startPos, size: int) =
-  if size <= 0:
-    return
-  let newSize = ceil32(startPos + size)
-  if newSize <= len(memory):
-    return
-  memory.bytes.setLen(newSize)
+template extend*(memory: var EvmMemory; startPos, size: int) =
+  let sz = size
+  if sz > 0:
+    let newSize = ceil32(startPos + sz)
+    if newSize > memory.bytes.len:
+      memory.bytes.setLen(newSize)
 
 func init*(_: type EvmMemory, size: Natural): EvmMemory =
   result = EvmMemory.init()
@@ -45,7 +44,7 @@ template read*(memory: EvmMemory, startPos, size: int): openArray[byte] =
 template read32Bytes*(memory: EvmMemory, startPos: int): openArray[byte] =
   memory.bytes.toOpenArray(startPos, startPos + 31)
 
-func write*(memory: var EvmMemory, startPos: Natural, value: openArray[byte]): EvmResultVoid =
+func write*(memory: var EvmMemory, startPos: Natural, value: openArray[byte]): EvmResultVoid {.inline.} =
   let size = value.len
   if size == 0:
     return
@@ -55,7 +54,7 @@ func write*(memory: var EvmMemory, startPos: Natural, value: openArray[byte]): E
   assign(memory.bytes.toOpenArray(startPos, int(startPos + size) - 1), value)
   ok()
 
-func write*(memory: var EvmMemory, startPos: Natural, value: byte): EvmResultVoid =
+func write*(memory: var EvmMemory, startPos: Natural, value: byte): EvmResultVoid {.inline.} =
   if startPos + 1 > memory.len:
     return err(memErr(MemoryFull))
   memory.bytes[startPos] = value
@@ -96,6 +95,5 @@ func writePadded*(memory: var EvmMemory, data: openArray[byte],
   # with zeros, it can be rewrite by some opcode
   # so we need to clean the garbage if current op supply us with
   # `data` shorter than `len`
-  while mi < padEnd:
-    memory.bytes[mi] = 0.byte
-    inc mi
+  if mi < padEnd:
+    zeroMem(addr memory.bytes[mi], padEnd - mi)

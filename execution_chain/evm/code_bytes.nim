@@ -45,10 +45,10 @@ func fromHex*(T: type CodeBytesRef, hex: string): Opt[CodeBytesRef] =
   except ValueError:
     Opt.none(CodeBytesRef)
 
-func bytes*(c: CodeBytesRef): lent seq[byte] =
+func bytes*(c: CodeBytesRef): lent seq[byte] {.inline.} =
   c[].bytes
 
-func len*(c: CodeBytesRef): int =
+func len*(c: CodeBytesRef): int {.inline.} =
   len(c.bytes)
 
 # Bounds checking done manually - this is a hotspot in the EVM
