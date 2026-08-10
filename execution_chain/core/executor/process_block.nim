@@ -34,7 +34,7 @@ when compileOption("threads"):
 
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
-    let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
+    let sender {.inject.} = tx.recoverSenderCached().valueOr(default(Address))
     body
 
 template withSender(

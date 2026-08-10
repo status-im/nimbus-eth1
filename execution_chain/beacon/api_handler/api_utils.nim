@@ -23,13 +23,13 @@ import
 
 {.push gcsafe, raises:[].}
 
-proc update(ctx: var sha256, wd: WithdrawalV1) =
+func update(ctx: var sha256, wd: WithdrawalV1) =
   ctx.update(toBytesBE distinctBase wd.index)
   ctx.update(toBytesBE distinctBase wd.validatorIndex)
   ctx.update(distinctBase wd.address)
   ctx.update(toBytesBE distinctBase wd.amount)
 
-proc computePayloadId*(blockHash: common.Hash32,
+func computePayloadId*(blockHash: common.Hash32,
                        params: PayloadAttributes): Bytes8 =
   var dest: common.Hash32
   var ctx: sha256
@@ -49,10 +49,9 @@ proc computePayloadId*(blockHash: common.Hash32,
   ctx.clear()
   (distinctBase result)[0..7] = dest.data[0..7]
 
-proc validateBlockHash*(header: common.Header,
+func validateBlockHash*(header: common.Header,
                         wantHash: common.Hash32,
-                        version: Version): Result[void, PayloadStatusV1]
-                          {.gcsafe.} =
+                        version: Version): Result[void, PayloadStatusV1] =
   let gotHash = header.computeBlockHash
   if wantHash != gotHash:
     let status = if version == Version.V1:
@@ -72,13 +71,13 @@ proc validateBlockHash*(header: common.Header,
 template toValidHash*(x: common.Hash32): Opt[Hash32] =
   Opt.some(x)
 
-proc simpleFCU*(status: PayloadStatusV1): ForkchoiceUpdatedResponse =
+func simpleFCU*(status: PayloadStatusV1): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: status)
 
-proc simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
+func simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: PayloadStatusV1(status: status))
 
-proc simpleFCU*(status: PayloadExecutionStatus,
+func simpleFCU*(status: PayloadExecutionStatus,
                 msg: string): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
     payloadStatus: PayloadStatusV1(
@@ -87,7 +86,7 @@ proc simpleFCU*(status: PayloadExecutionStatus,
     )
   )
 
-proc invalidFCU*(
+func invalidFCU*(
     validationError: string,
     hash = default(common.Hash32)): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus:
@@ -98,7 +97,7 @@ proc invalidFCU*(
     )
   )
 
-proc validFCU*(id: Opt[Bytes8],
+func validFCU*(id: Opt[Bytes8],
                validHash: common.Hash32): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
     payloadStatus: PayloadStatusV1(
@@ -108,67 +107,71 @@ proc validFCU*(id: Opt[Bytes8],
     payloadId: id
   )
 
-proc invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatusV1 =
+func invalidStatus*(
+    validHash: Opt[common.Hash32], msg: string): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.invalid,
-    latestValidHash: toValidHash(validHash),
+    latestValidHash: validHash,
     validationError: Opt.some(msg)
   )
 
-proc invalidStatus*(validHash = default(common.Hash32)): PayloadStatusV1 =
+func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatusV1 =
+  invalidStatus(Opt.some(validHash), msg)
+
+func invalidStatus*(validHash = default(common.Hash32)): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash)
   )
 
-proc acceptedStatus*(validHash: common.Hash32): PayloadStatusV1 =
+func acceptedStatus*(validHash: common.Hash32): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.accepted,
     latestValidHash: toValidHash(validHash)
   )
 
-proc acceptedStatus*(): PayloadStatusV1 =
+func acceptedStatus*(): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.accepted
   )
 
-proc validStatus*(validHash: common.Hash32): PayloadStatusV1 =
+func validStatus*(validHash: common.Hash32): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.valid,
     latestValidHash: toValidHash(validHash)
   )
 
-proc invalidParams*(msg: string): ref ApplicationError =
+func invalidParams*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiInvalidParams,
     msg: msg
   )
 
-proc invalidForkChoiceState*(msg: string): ref ApplicationError =
+func invalidForkChoiceState*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiInvalidForkchoiceState,
     msg: msg
   )
 
-proc unknownPayload*(msg: string): ref ApplicationError =
+func unknownPayload*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiUnknownPayload,
     msg: msg
   )
 
-proc invalidAttr*(msg: string): ref ApplicationError =
+func invalidAttr*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiInvalidPayloadAttributes,
     msg: msg
   )
 
-proc unsupportedFork*(msg: string): ref ApplicationError =
+func unsupportedFork*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiUnsupportedFork,
     msg: msg
   )
 
-proc tooLargeRequest*(msg: string): ref ApplicationError =
+func tooLargeRequest*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiTooLargeRequest,
     msg: msg

@@ -20,7 +20,7 @@ import
   ../../execution_chain/networking/p2p,
   ../../execution_chain/sync/wire_protocol,
   ../../execution_chain/sync/wire_protocol/eth/eth_handler {.all.},
-  ../../execution_chain/sync/beacon/worker/blocks/blocks_bal,
+  ../../execution_chain/sync/beacon/worker/blocks/blocks_fetch_bal,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/core_db/core_apps,
@@ -57,7 +57,7 @@ procSuite "devp2p eth/71 Tests":
 
     let
       req = BlockAccessListsRequest(blockHashes: @[default(Hash32)])
-      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+      respOpt = await eth.getBlockAccessLists(peer, req, timeout = chronos.seconds(3))
     check respOpt.isSome()
 
     let resp = respOpt.get()
@@ -89,7 +89,7 @@ procSuite "devp2p eth/71 Tests":
 
     let
       req = BlockAccessListsRequest(blockHashes: @[blockHash])
-      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+      respOpt = await eth.getBlockAccessLists(peer, req, timeout = chronos.seconds(3))
     check respOpt.isSome()
 
     let resp = respOpt.get()
@@ -125,7 +125,7 @@ procSuite "devp2p eth/71 Tests":
 
     let
       req = BlockAccessListsRequest(blockHashes: @[blockHash])
-      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+      respOpt = await eth.getBlockAccessLists(peer, req, timeout = chronos.seconds(3))
     check respOpt.isSome()
 
     let resp = respOpt.get()
@@ -168,7 +168,7 @@ procSuite "devp2p eth/71 Tests":
     let
       req = BlockAccessListsRequest(
         blockHashes: @[unavailableHash, emptyHash, nonEmptyHash])
-      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+      respOpt = await eth.getBlockAccessLists(peer, req, timeout = chronos.seconds(3))
     check respOpt.isSome()
 
     let resp = respOpt.get()
@@ -208,7 +208,7 @@ procSuite "devp2p eth/71 Tests":
 
     let
       req = BlockAccessListsRequest(blockHashes: hashes)
-      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+      respOpt = await eth.getBlockAccessLists(peer, req, timeout = chronos.seconds(3))
     check respOpt.isSome()
 
     let resp = respOpt.get()
@@ -252,7 +252,7 @@ procSuite "devp2p eth/71 Tests":
 
     let
       req = BlockAccessListsRequest(blockHashes: hashes)
-      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(10))
+      respOpt = await eth.getBlockAccessLists(peer, req, timeout = chronos.seconds(10))
     check respOpt.isSome()
 
     let resp = respOpt.get()
@@ -367,7 +367,7 @@ procSuite "devp2p eth/71 Tests":
     # Verify the connection remains usable after sending BlockRangeUpdate.
     let
       req = BlockAccessListsRequest(blockHashes: @[default(Hash32)])
-      respOpt = await peer.getBlockAccessLists(req, timeout = chronos.seconds(3))
+      respOpt = await eth.getBlockAccessLists(peer, req, timeout = chronos.seconds(3))
     check respOpt.isSome()
 
     await env2.close()

@@ -208,12 +208,13 @@ proc loadCallCode(c: Computation, flags: set[MsgFlags]): CodeBytesRef =
   ## after the opcode gas charge but before the depth/balance early exits,
   ## so the read hits the witness even when the call fails early (spec order).
   ##
-  ## TODO: the precompile short-circuit below differs from the spec.
-  ## The spec's `call()` always does `get_account(code_address)` to fetch
-  ## the code hash (precompile dispatch only happens later), so on a
-  ## zero-value CALL to a precompile a spec witness probably includes the
-  ## account's exclusion-proof nodes while ours does not. TBI
+  ## Precompiles execute natively and don't need their account, but the spec's
+  ## `call()` does `get_account(code_address)` before precompile dispatch, so the
+  ## account access must appear in the witness. Replicate that read only when a
+  ## witness is being collected, keeping normal precompile calls on the fast path.
   if MsgFlags.Precompile in flags:
+    if c.vmState.collectWitness:
+      discard c.vmState.readOnlyLedger.getCode(c.msg.delegateTo)
     return CodeBytesRef(nil)
 
   c.vmState.readOnlyLedger.getCode(c.msg.delegateTo)

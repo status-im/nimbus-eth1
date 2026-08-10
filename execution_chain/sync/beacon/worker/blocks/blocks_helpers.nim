@@ -20,6 +20,7 @@ import
 # ------------------------------------------------------------------------------
 
 func blkErrors*(buddy: BeaconPeerRef): string =
+  ## Note that application BAL errors are handled as part of blocks
   $buddy.nErrors.fetch.bdy & "/" & $buddy.nErrors.apply.blk
 
 proc bdyFetchRegisterError*(
@@ -28,6 +29,21 @@ proc bdyFetchRegisterError*(
     forceZombie = false) =
   buddy.nErrors.fetch.bdy.inc
   if nFetchBodiesErrThreshold < buddy.nErrors.fetch.bdy:
+    if not forceZombie and buddy.ctx.nSyncPeers() == 1 and slowPeer:
+      # Remember that the current peer is the last one and is lablelled slow.
+      # It would have been zombified if it were not the last one. This can be
+      # used in functions -- depending on context -- that will trigger if the
+      # if the pool of available sync peers becomes empty.
+      buddy.ctx.pool.lastSlowPeer = Opt.some(buddy.peerID)
+    else:
+      buddy.ctrl.zombie = true # abandon slow peer unless last one
+
+proc balFetchRegisterError*(
+    buddy: BeaconPeerRef;
+    slowPeer = false;
+    forceZombie = false) =
+  buddy.nErrors.fetch.bal.inc
+  if nFetchBalsErrThreshold < buddy.nErrors.fetch.bal:
     if not forceZombie and buddy.ctx.nSyncPeers() == 1 and slowPeer:
       # Remember that the current peer is the last one and is lablelled slow.
       # It would have been zombified if it were not the last one. This can be
@@ -46,23 +62,39 @@ func blkSessionStopped*(ctx: BeaconCtxRef): bool =
   ctx.pool.syncState != BeaconState.blocks
 
 func blkThroughput*(buddy: BeaconPeerRef): string =
-  ## Print throuhput sratistics
-  buddy.only.thPutStats.blk.toMeanVar.toStr
+  ## Print throuhput statistics
+  (buddy.only.thPutStats.bdy + buddy.only.thPutStats.bal).toMeanVar.toStr
 
 # -------------
 
-proc blkNoSampleSize*(
+proc bdyNoSampleSize*(
     buddy: BeaconPeerRef;
     elapsed: chronos.Duration;
       ) =
-  discard buddy.only.thPutStats.blk.bpsSample(elapsed, 0)
+  discard buddy.only.thPutStats.bdy.bpsSample(elapsed, 0)
 
-proc blkSampleSize*(
+proc bdySampleSize*(
     buddy: BeaconPeerRef;
     elapsed: chronos.Duration;
     size: int;
       ): uint =
-  result = buddy.only.thPutStats.blk.bpsSample(elapsed, size)
+  result = buddy.only.thPutStats.bdy.bpsSample(elapsed, size)
+  buddy.ctx.updateEtaBlocks()
+
+# -------------
+
+proc balNoSampleSize*(
+    buddy: BeaconPeerRef;
+    elapsed: chronos.Duration;
+      ) =
+  discard buddy.only.thPutStats.bal.bpsSample(elapsed, 0)
+
+proc balSampleSize*(
+    buddy: BeaconPeerRef;
+    elapsed: chronos.Duration;
+    size: int;
+      ): uint =
+  result = buddy.only.thPutStats.bal.bpsSample(elapsed, size)
   buddy.ctx.updateEtaBlocks()
 
 # ------------------------------------------------------------------------------
