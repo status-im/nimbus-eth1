@@ -67,7 +67,7 @@ import
   results,
   ./core_db/[base, base_desc],
   ./aristo/aristo_tx_blobify,
-  ./kvt/[kvt_desc, kvt_tx_blobify],
+  ./kvt/[kvt_desc],
   ./storage_types
 
 export base, base_desc, results
@@ -86,13 +86,10 @@ proc storeTxFrame*(
   ## persistence layer to write each block's frame into the base frame.
   let
     aristoBlob = blobifyTxFrame(src.aTx)
-    kvtBlob    = blobifyKvtTxFrame(src.kTx)
 
-  var blob = newSeqOfCap[byte](8 + aristoBlob.len + kvtBlob.len)
+  var blob = newSeqOfCap[byte](8 + aristoBlob.len)
   blob.add aristoBlob.len.uint32.toBytesBE
   blob.add aristoBlob
-  blob.add kvtBlob.len.uint32.toBytesBE
-  blob.add kvtBlob
 
   target.put(txFrameKey(blockHash).toOpenArray, blob)
 
@@ -118,17 +115,9 @@ proc loadTxFrameAsChild*(
     aLen    = uint64(uint32.fromBytesBE(blob.toOpenArray(0, 3)))
   if blobLen < 4'u64 + aLen + 4'u64:
     return err(DataInvalid.toError("aristo region truncated"))
-  let kOff = 4'u64 + aLen
-  let kLen = uint64(uint32.fromBytesBE(blob.toOpenArray(int(kOff), int(kOff) + 3)))
-  if blobLen < kOff + 4'u64 + kLen:
-    return err(DataInvalid.toError("kvt region truncated"))
 
   let aData = deblobifyTxFrame(blob.toOpenArray(4, int(4'u64 + aLen) - 1)).valueOr:
     return err(error.toError("aristo deblobify"))
-
-  let kData = deblobifyKvtTxFrame(
-      blob.toOpenArray(int(kOff + 4'u64), int(kOff + 4'u64 + kLen) - 1)).valueOr:
-    return err(error.toError("kvt deblobify"))
 
   let frame = parent.txFrameBegin()
   frame.aTx.sTab        = aData.sTab
@@ -137,7 +126,6 @@ proc loadTxFrameAsChild*(
   frame.aTx.stoLeaves   = aData.stoLeaves
   frame.aTx.vTop        = aData.vTop
   frame.aTx.blockNumber = aData.blockNumber
-  frame.kTx.sTab        = kData
 
   ok frame
 

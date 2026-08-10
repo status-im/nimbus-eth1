@@ -34,27 +34,8 @@ type
   RdbBackendRef* = ref object of TypedBackendRef
     rdb: RdbInst              ## Allows low level access to database
 
-  RdbPutHdlRef = ref object of TypedPutHdlRef
-    session*: SharedWriteBatchRef
-
 logScope:
   topics = "kvt-backend"
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc newSession(db: RdbBackendRef, session: SharedWriteBatchRef): RdbPutHdlRef =
-  result = RdbPutHdlRef(session: session)
-  result.TypedPutHdlRef.beginSession db
-
-proc getSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
-  hdl.TypedPutHdlRef.verifySession db
-  hdl.RdbPutHdlRef
-
-proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
-  hdl.TypedPutHdlRef.finishSession db
-  hdl.RdbPutHdlRef
 
 # ------------------------------------------------------------------------------
 # Private functions: standard interface
@@ -116,40 +97,14 @@ proc multiGetKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): MultiGetKvpFn =
 
 # -------------
 
-proc putBegFn(db: RdbBackendRef): PutBegFn =
-  result =
-    proc(): Result[PutHdlRef,KvtError] =
-      ok db.newSession(db.rdb.begin())
-
-
 proc putKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): PutKvpFn =
   result =
-    proc(hdl: PutHdlRef; k, v: openArray[byte]) =
-      let hdl = hdl.getSession db
-      if hdl.error == KvtError(0):
-
-        # Collect batch session arguments
-        db.rdb.put(hdl.session, k, v, cf).isOkOr:
-          hdl.error = error[0]
-          hdl.info = error[1]
-          return
-
-
-proc putEndFn(db: RdbBackendRef, cf: static[KvtCFs]): PutEndFn =
-  result =
-    proc(hdl: PutHdlRef): Result[void,KvtError] =
-      let hdl = hdl.endSession db
-      if hdl.error != KvtError(0):
+    proc(key, val: openArray[byte]): Result[void, KvtError] =
+      db.rdb.put(key, val, cf).isOkOr:
         when extraTraceMessages:
-          debug "putEndFn: failed", error=hdl.error, info=hdl.info
-        db.rdb.rollback(hdl.session)
-        return err(hdl.error)
+          debug "putKvpFn() failed", error=($error)
+        return err(RdbBeDriverPutError)
 
-      # Commit session
-      db.rdb.commit(hdl.session, cf).isOkOr:
-        when extraTraceMessages:
-          trace "putEndFn: failed", error=($error[0]), info=error[1]
-          return err(error[0])
       ok()
 
 # -------------
@@ -209,9 +164,7 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
   db.lenKvpFn = lenKvpFn(be, cf)
   db.multiGetKvpFn = multiGetKvpFn(be, cf)
 
-  db.putBegFn = putBegFn be
   db.putKvpFn = putKvpFn(be, cf)
-  db.putEndFn = putEndFn(be, cf)
 
   db.delKvpFn = delKvpFn(be, cf)
   db.delRangeKvpFn = delRangeKvpFn(be, cf)

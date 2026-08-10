@@ -78,9 +78,7 @@ proc deleteBlockAccessListsBe*(
 proc setBlockNumberBe(kvt: KvtDbRef, key: DbKey, blockNumber: BlockNumber) =
   let
     value = blockNumber.toBytesLE()
-    batch = kvt.putBegFn().expect("pruner: putBegFn")
-  kvt.putKvpFn(batch, key.toOpenArray, value)
-  kvt.putEndFn(batch).expect("pruner: putEndFn")
+  kvt.put(key.toOpenArray, value).expect("pruner: put")
 
 proc getBlockNumberBe(kvt: KvtDbRef, key: DbKey): BlockNumber =
   let blkNum = kvt.getBe(key.toOpenArray).valueOr:
