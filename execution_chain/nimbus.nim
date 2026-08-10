@@ -184,7 +184,24 @@ type
     tcpPort: Port
     udpPort: Option[Port]
 
-var jwtKey: JwtSharedKey
+var
+  jwtKey: JwtSharedKey
+
+  natExtIp: Opt[IpAddress]
+    ## External address, resolved once from the main thread by `setupSharedNat`.
+    ## `nim-eth`'s NAT module keeps the port mapping renewal thread, its close
+    ## channel and its `addQuitProc` registration in process-wide globals, so it
+    ## must be entered exactly once per process - see `sharedNatConfig`.
+
+proc sharedNatConfig(): NatConfig =
+  ## NAT port mapping is performed once, from the main thread, for the ports of
+  ## both clients. The beacon and execution threads must therefore never run
+  ## their own mapping: handing them a fixed external IP makes `setupAddress`
+  ## return immediately instead of reaching `redirectPorts`.
+  if natExtIp.isSome():
+    NatConfig(hasExtIp: true, extIp: natExtIp.get())
+  else:
+    NatConfig(hasExtIp: false, nat: NatNone)
 
 proc dataDir*(config: NimbusConf): string =
   string config.dataDirFlag.get(
@@ -227,6 +244,7 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
   config.statusBarEnabled = false # Multi-threading issues due to logging
   config.tcpPort = p.tcpPort
   config.udpPort = p.udpPort
+  config.nat = sharedNatConfig() # NAT is set up once, from the main thread
 
   config.rpcEnabled.reset() # --rpc is meant for the EL
 
@@ -274,6 +292,7 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
   config.agentString = "nimbus"
   config.tcpPort = p.tcpPort
   config.udpPortFlag = p.udpPort
+  config.nat = sharedNatConfig() # NAT is set up once, from the main thread
 
   info "Launching execution client", version = FullVersionStr, config
 
@@ -345,16 +364,50 @@ proc runCombinedClient() =
       "Baked-in KZG setup is correct"
     )
 
+  let
+    bnTcpPort = config.beaconTcpPort.get(config.tcpPort.get(Port defaultEth2TcpPort))
+    bnUdpPort = config.beaconUdpPort.get(config.udpPort.get(Port defaultEth2TcpPort))
+    ecTcpPort =
+      # -1/+1 to make sure global default is respected but +1 is applied to --tcp-port
+      config.executionTcpPort.get(
+        Port(uint16(config.tcpPort.get(Port(defaultExecutionPort - 1))) + 1)
+      )
+    ecUdpPort =
+      if config.executionUdpPort.isSome:
+        config.executionUdpPort
+      elif config.udpPort.isSome:
+        some(Port(uint16(config.udpPort.get()) + 1))
+      else:
+        none(Port)
+
+  # `nim-eth`'s NAT module keeps the port mapping renewal thread, its close
+  # channel and its `addQuitProc` registration in process-wide globals. Entering
+  # it from both the beacon and the execution thread overwrites the thread
+  # handle, reopens the channel underneath a running thread and registers the
+  # exit handler twice - the resulting double `stopNatThread()` joins an already
+  # joined thread and wedges the process on shutdown. So map all four ports here,
+  # once, and pass the result to both threads via `sharedNatConfig`.
+  block setupSharedNat:
+    let ecConfig = ecconf.makeConfig(ignoreUnknown = true)
+    natExtIp = setupAddress(
+      ecConfig.nat,
+      ecConfig.listenAddress,
+      @[
+        (port: bnTcpPort, protocol: PortProtocol.TCP),
+        (port: bnUdpPort, protocol: PortProtocol.UDP),
+        (port: ecTcpPort, protocol: PortProtocol.TCP),
+        (port: ecUdpPort.get(ecTcpPort), protocol: PortProtocol.UDP),
+      ],
+      NimbusName & " " & NimbusVersion,
+    ).ip
+
   var bnThread: Thread[BeaconThreadConfig]
   let bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
   createThread(
     bnThread,
     runBeaconNode,
     BeaconThreadConfig(
-      tsp: bnStop,
-      tcpPort: config.beaconTcpPort.get(config.tcpPort.get(Port defaultEth2TcpPort)),
-      udpPort: config.beaconUdpPort.get(config.udpPort.get(Port defaultEth2TcpPort)),
-      elSync: config.elSync,
+      tsp: bnStop, tcpPort: bnTcpPort, udpPort: bnUdpPort, elSync: config.elSync
     ),
   )
 
@@ -363,21 +416,7 @@ proc runCombinedClient() =
   createThread(
     ecThread,
     runExecutionClient,
-    ExecutionThreadConfig(
-      tsp: ecStop,
-      tcpPort:
-        # -1/+1 to make sure global default is respected but +1 is applied to --tcp-port
-        config.executionTcpPort.get(
-          Port(uint16(config.tcpPort.get(Port(defaultExecutionPort - 1))) + 1)
-        ),
-      udpPort:
-        if config.executionUdpPort.isSome:
-          config.executionUdpPort
-        elif config.udpPort.isSome:
-          some(Port(uint16(config.udpPort.get()) + 1))
-        else:
-          none(Port),
-    ),
+    ExecutionThreadConfig(tsp: ecStop, tcpPort: ecTcpPort, udpPort: ecUdpPort),
   )
 
   while not ProcessState.stopIt(notice("Shutting down", reason = it)):
