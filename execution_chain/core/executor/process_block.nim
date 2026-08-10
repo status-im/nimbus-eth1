@@ -286,6 +286,10 @@ proc procBlkEpilogue(
         return err("blockAccessListHash mismatch, expect: " &
           $header.blockAccessListHash.get & ", got: " & $balHash)
 
+      if vmState.com.balPostExecValidation:
+        bal.validate(header.blockAccessListHash.get, header.gasLimit).isOkOr:
+          return err("blockAccessList failed post-execution validation: " & $error)
+
     if not skipStateRootCheck:
       let stateRoot = vmState.ledger.getStateRoot()
       if header.stateRoot != stateRoot:
