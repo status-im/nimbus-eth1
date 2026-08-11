@@ -155,6 +155,7 @@ proc processBlock*(
     # when building the witness.
     vmState.ledger.clearWitnessKeys()
     vmState.ledger.clearCollapsedSiblings()
+    vmState.ledger.clearDeployedCodeHashes()
     vmState.ledger.clearBlockHashesCache()
 
     processBlock()

@@ -464,12 +464,16 @@ proc newPayloadInvalidRLP(env: TestEnv): Result[void, string] =
       params.parentBeaconBlockRoot,
       params.executionRequests)
 
-  if res.isOk:
-    return err("res should error on undecodable payload")
+  # An undecodable payload is an invalid block, not an invalid request, so it
+  # is reported as an invalid payload status.
+  if res.isErr:
+    return err("res should not error on undecodable payload: " & res.error)
 
-  if $engineApiInvalidParams notin res.error:
-    return err("invalid error code: " & res.error &
-      " expect: " & $engineApiInvalidParams)
+  if res.get.status != PayloadExecutionStatus.invalid:
+    return err("res.status should be equal to PayloadExecutionStatus.invalid")
+
+  if res.get.latestValidHash.isSome:
+    return err("latestValidHash should be none for an undecodable payload")
 
   ok()
 

@@ -15,6 +15,7 @@ import
   eth/eip1559,
   eth/common/[blocks, hashes, accounts, headers, addresses],
   ../db/[ledger, core_db],
+  ../db/core_db/memory_only,
   ../constants,
   ../utils/utils,
   ./chain_config
@@ -90,10 +91,18 @@ proc writeGenesis*(g: Genesis, db: CoreDbTxRef, fork: HardFork): Header =
 proc writeGenesis*(params: NetworkParams, db: CoreDbTxRef): Header =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
-  let map = toForkTransitionTable(params.config)
-  let fork =
-    map.toHardFork(forkDeterminationInfo(0.BlockNumber, params.genesis.timestamp))
+  let
+    map = toForkTransitionTable(params.config)
+    forkDeterminer = ForkDeterminationInfo(
+      number: 0.BlockNumber,
+      td: Opt.some(0.u256),
+      time: Opt.some(params.genesis.timestamp))
+    fork = map.toHardFork(forkDeterminer)
   writeGenesis(params.genesis, db, fork)
+
+proc genesisBlockHash*(params: NetworkParams): Hash32 =
+  let db = newCoreDbRef(AristoDbMemory)
+  writeGenesis(params, db.baseTxFrame()).computeBlockHash
 
 # ------------------------------------------------------------------------------
 # End
