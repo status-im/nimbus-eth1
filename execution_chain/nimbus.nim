@@ -188,16 +188,11 @@ var
   jwtKey: JwtSharedKey
 
   natExtIp: Opt[IpAddress]
-    ## External address, resolved once from the main thread by `setupSharedNat`.
-    ## `nim-eth`'s NAT module keeps the port mapping renewal thread, its close
-    ## channel and its `addQuitProc` registration in process-wide globals, so it
-    ## must be entered exactly once per process - see `sharedNatConfig`.
+    ## Resolved once by the main thread - see `setupSharedNat`
 
 proc sharedNatConfig(): NatConfig =
-  ## NAT port mapping is performed once, from the main thread, for the ports of
-  ## both clients. The beacon and execution threads must therefore never run
-  ## their own mapping: handing them a fixed external IP makes `setupAddress`
-  ## return immediately instead of reaching `redirectPorts`.
+  ## A fixed external IP makes `setupAddress` return without port mapping, so
+  ## the bn/ec threads stay out of `nim-eth`'s single-caller NAT globals.
   if natExtIp.isSome():
     NatConfig(hasExtIp: true, extIp: natExtIp.get())
   else:
@@ -244,7 +239,7 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
   config.statusBarEnabled = false # Multi-threading issues due to logging
   config.tcpPort = p.tcpPort
   config.udpPort = p.udpPort
-  config.nat = sharedNatConfig() # NAT is set up once, from the main thread
+  config.nat = sharedNatConfig() # NAT is done once, on the main thread
 
   config.rpcEnabled.reset() # --rpc is meant for the EL
 
@@ -292,7 +287,7 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
   config.agentString = "nimbus"
   config.tcpPort = p.tcpPort
   config.udpPortFlag = p.udpPort
-  config.nat = sharedNatConfig() # NAT is set up once, from the main thread
+  config.nat = sharedNatConfig() # NAT is done once, on the main thread
 
   info "Launching execution client", version = FullVersionStr, config
 
@@ -380,13 +375,9 @@ proc runCombinedClient() =
       else:
         none(Port)
 
-  # `nim-eth`'s NAT module keeps the port mapping renewal thread, its close
-  # channel and its `addQuitProc` registration in process-wide globals. Entering
-  # it from both the beacon and the execution thread overwrites the thread
-  # handle, reopens the channel underneath a running thread and registers the
-  # exit handler twice - the resulting double `stopNatThread()` joins an already
-  # joined thread and wedges the process on shutdown. So map all four ports here,
-  # once, and pass the result to both threads via `sharedNatConfig`.
+  # `nim-eth` NAT keeps its renewal thread, close channel and `addQuitProc` in
+  # process-wide globals, so entering it from both threads orphans a thread
+  # handle and joins it twice at exit, hanging shutdown. Map all four ports once.
   block setupSharedNat:
     let ecConfig = ecconf.makeConfig(ignoreUnknown = true)
     natExtIp = setupAddress(
