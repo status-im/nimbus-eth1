@@ -621,20 +621,31 @@ proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Futu
   c.queueOrphan(parent, finalized)
 
 proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
-  while true:
-    # Cooperative concurrency: one block per loop iteration - because
-    # we run both networking and CPU-heavy things like block processing
-    # on the same thread, we need to make sure that there is steady progress
-    # on the networking side or we get long lockups that lead to timeouts.
-    const
-      # We cap waiting for an idle slot in case there's a lot of network traffic
-      # taking up all CPU - we don't want to _completely_ stop processing blocks
-      # in this case - doing so also allows us to benefit from more batching /
-      # larger network reads when under load.
-      idleTimeout = 10.milliseconds
+  # Networking and block processing share this thread, so we have to hand the
+  # thread back regularly or network reads stall and peers time us out.
+  #
+  # We yield per batch, not per item:
+  #   - per item  -> costs up to `idleTimeout` for every single block
+  #   - per batch -> pay that once per `processingBudget` of work
+  const
+    # Cap on how long we wait for an idle slot. Under heavy network load the
+    # loop may never go idle, and we don't want to stop processing entirely.
+    # Waiting also lets reads batch up into fewer, larger ones.
+    idleTimeout = 10.milliseconds
 
-    discard await idleAsync().withTimeout(idleTimeout)
+    # Max CPU time to spend before yielding. Keep well under the peer response
+    # timeouts, otherwise the syncer starts banning honest peers as slow.
+    processingBudget = 50.milliseconds
+
+  var lastYield = Moment.now()
+  while true:
+    if processingBudget <= Moment.now() - lastYield:
+      discard await idleAsync().withTimeout(idleTimeout)
+      lastYield = Moment.now()
+
     let
+      # Yields on its own when the queue is empty, so an idle node stays
+      # cooperative even though the budget check above rarely fires.
       item = await c.queue.popFirst()
       res = await item.handler()
 

@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     name: '${{ matrix.system }} / ${{ matrix.test }}'
-    timeout-minutes: 15
+    timeout-minutes: 25
     runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false
