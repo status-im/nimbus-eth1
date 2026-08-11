@@ -295,6 +295,9 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
       fatal "Cannot compute root keys", msg = error
       quit(QuitFailure)
 
+  defer:
+    com.db.close()
+
   dynamicLogScope(comp = "ec"):
     nimbus_execution_client.runExeClient(config, com, params, p.tsp.justWait())
 
