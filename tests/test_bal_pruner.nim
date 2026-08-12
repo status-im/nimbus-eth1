@@ -180,7 +180,7 @@ suite "Block access list pruner tests":
 
     check kvt.getBalTailBe() == BlockNumber(8)
 
-  test "pruning skips over unreadable blocks":
+  test "pruning stops at an unreadable block and skips it on the next cycle":
     let
       com = env.newCom()
       kvt = com.db.kvt
@@ -189,11 +189,18 @@ suite "Block access list pruner tests":
     com.db.baseTxFrame().del(
       blockNumberToHashKey(BlockNumber(3)).toOpenArray).expect("del")
 
-    let
-      pruner = BalPrunerRef.init(com)
-      pruned = waitFor pruner.prune(BlockNumber(10), headSlotFor(5))
+    let pruner = BalPrunerRef.init(com)
 
-    check pruned == 4
+    # The cycle stops at the unreadable block, keeping the progress made so far
+    check (waitFor pruner.prune(BlockNumber(10), headSlotFor(5))) == 2
+    check kvt.getBalTailBe() == BlockNumber(3)
+
+    # The next cycle skips over it
+    check (waitFor pruner.prune(BlockNumber(10), headSlotFor(5))) == 0
+    check kvt.getBalTailBe() == BlockNumber(4)
+
+    # And the remaining blocks outside of the retention period are pruned
+    check (waitFor pruner.prune(BlockNumber(10), headSlotFor(5))) == 2
 
     for i in [1, 2, 4, 5]:
       check not kvt.hasBal(hashes[i])
@@ -231,6 +238,24 @@ suite "Block access list pruner tests":
 
     check kvt.hasBal(hashes[5])
     check kvt.getBalTailBe() == BlockNumber(6)
+
+  test "the tail is not advanced when the head trails the tail":
+    let
+      com = env.newCom()
+      kvt = com.db.kvt
+      hashes = com.buildChain(numBlocks = 10, firstBalBlock = 1)
+      pruner = BalPrunerRef.init(com)
+
+    kvt.setBalTailBe(BlockNumber(8))
+
+    # Block 8 is outside of the retention period but sits ahead of the head, so
+    # there is nothing to prune and the tail must stay where it is
+    for _ in 1 .. 3:
+      check (waitFor pruner.prune(BlockNumber(5), headSlotFor(9))) == 0
+      check kvt.getBalTailBe() == BlockNumber(8)
+
+    for i in 1 .. 10:
+      check kvt.hasBal(hashes[i])
 
   test "pruning resumes from the stored tail":
     let

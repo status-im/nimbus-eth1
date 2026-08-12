@@ -19,7 +19,7 @@ import
   ./common
 
 logScope:
-  topics = "bal pruner"
+  topics = "bal_pruner"
 
 type
   BalPrunerRef* = ref object
@@ -40,7 +40,8 @@ proc findFirstBalBlock(txFrame: CoreDbTxRef, head: BlockNumber): Opt[BlockNumber
     let
       mid = lo + (hi - lo) div 2
       header = txFrame.getBlockHeader(mid).valueOr:
-        warn "Skipping block with an unreadable header", blkNum = mid, error
+        # Expected on a node which doesn't hold the full history
+        debug "Skipping block with an unreadable header", blkNum = mid, error
         lo = mid + 1
         continue
 
@@ -94,16 +95,24 @@ proc prune*(
       return 0
     kvt.setBalTailBe(tail)
 
-  let header = txFrame.getBlockHeader(tail)
-  if header.isOk() and header[].isWithinBalRetentionPeriod(headSlot):
+  let header = txFrame.getBlockHeader(tail).valueOr:
+    warn "Skipping block with an unreadable header", blkNum = tail, error
+    kvt.setBalTailBe(tail + 1)
+    return 0
+
+  if header.isWithinBalRetentionPeriod(headSlot):
     return 0
 
   let cutoff = findRetentionCutoff(txFrame, tail, head, headSlot)
+
+  if cutoff <= tail:
+    return 0
 
   var
     currentBlock = tail
     pruned = 0'u64
     blockHashes = newSeqOfCap[Hash32](pruner.batchSize.int)
+    unreadableBlock = false
 
   while currentBlock < cutoff:
     let batchEnd = min(cutoff, currentBlock + pruner.batchSize)
@@ -112,22 +121,20 @@ proc prune*(
     while currentBlock < batchEnd:
       let blockHash = txFrame.getBlockHash(currentBlock).valueOr:
         warn "Failed to get block hash", blkNum = currentBlock, error
-        currentBlock += 1
-        continue
+        unreadableBlock = true
+        break
       blockHashes.add blockHash
       currentBlock += 1
 
     kvt.deleteBlockAccessListsBe(blockHashes, currentBlock)
     pruned += blockHashes.len.uint64
 
+    if unreadableBlock:
+      break
+
     if currentBlock < cutoff:
       await sleepAsync(chronos.milliseconds(100))
       txFrame = pruner.com.db.baseTxFrame()
-
-  if currentBlock == tail:
-    warn "Skipping block with an unreadable header", blkNum = currentBlock
-    currentBlock += 1
-    kvt.setBalTailBe(currentBlock)
 
   if pruned > 0:
     info "Pruned block access lists", pruned, tail = currentBlock, head

@@ -253,7 +253,7 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, para
         "Restart with --prune=true or use a fresh data directory."
       quit(QuitFailure)
 
-  if com.activationTime(Amsterdam).isSome:
+  if config.balPruning and com.activationTime(Amsterdam).isSome:
     nimbus.balPruner = BalPrunerRef.init(com)
     nimbus.balPruner.start()
 
