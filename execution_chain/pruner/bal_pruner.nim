@@ -69,47 +69,59 @@ proc findFirstBalBlock(txFrame: CoreDbTxRef, head: BlockNumber): Opt[BlockNumber
 # ------------------------------------------------------------------------------
 
 proc prune*(
-    pruner: BalPrunerRef, txFrame: CoreDbTxRef, head: BlockNumber, headSlot: uint64
+    pruner: BalPrunerRef, head: BlockNumber, headSlot: uint64
 ): Future[uint64] {.async: (raises: [CancelledError]).} =
   ## Deletes the block access lists of the canonical blocks between the pruner
   ## tail and `head` which are no longer within the retention period relative to
   ## `headSlot`. Returns the number of deleted block access lists.
   let kvt = pruner.com.db.kvt
+  var txFrame = pruner.com.db.baseTxFrame()
 
   if pruner.tail == 0:
     pruner.tail = findFirstBalBlock(txFrame, head).valueOr:
       return 0
+    # Persist immediately so that the search runs at most once per database
+    # lifetime instead of on every restart
+    kvt.setBalTailBe(pruner.tail)
 
   var
     currentBlock = pruner.tail
     blocksSinceSave = 0'u64
     pruned = 0'u64
 
-  while currentBlock <= head:
-    let
-      blockHash = txFrame.getBlockHash(currentBlock).valueOr:
-        warn "Failed to get block hash", blkNum = currentBlock, error
-        break
-      header = txFrame.getBlockHeader(blockHash).valueOr:
-        warn "Failed to get header", blkNum = currentBlock, error
-        break
+  block walk:
+    while currentBlock <= head:
+      block currentBlockDone:
+        let
+          blockHash = txFrame.getBlockHash(currentBlock).valueOr:
+            # A block whose canonical hash or header cannot be read holds no
+            # retrievable block access list; skip it so that a single
+            # unreadable block cannot stall pruning forever
+            warn "Failed to get block hash", blkNum = currentBlock, error
+            break currentBlockDone
+          header = txFrame.getBlockHeader(blockHash).valueOr:
+            warn "Failed to get header", blkNum = currentBlock, error
+            break currentBlockDone
 
-    if header.isWithinBalRetentionPeriod(headSlot):
-      break
+        if header.isWithinBalRetentionPeriod(headSlot):
+          break walk
 
-    if header.blockAccessListHash.isSome():
-      kvt.deleteBlockAccessListBe(blockHash)
-      pruned += 1
+        if header.blockAccessListHash.isSome():
+          kvt.deleteBlockAccessListBe(blockHash)
+          pruned += 1
 
-    currentBlock += 1
-    blocksSinceSave += 1
+      currentBlock += 1
+      blocksSinceSave += 1
 
-    if blocksSinceSave >= pruner.batchSize:
-      kvt.setBalTailBe(currentBlock)
-      pruner.tail = currentBlock
-      blocksSinceSave = 0
+      if blocksSinceSave >= pruner.batchSize:
+        kvt.setBalTailBe(currentBlock)
+        pruner.tail = currentBlock
+        blocksSinceSave = 0
 
-      await sleepAsync(chronos.milliseconds(100))
+        await sleepAsync(chronos.milliseconds(100))
+        # The base frame may have been swapped out and disposed by a block
+        # persist during the sleep and must not be used after that
+        txFrame = pruner.com.db.baseTxFrame()
 
   if currentBlock > pruner.tail:
     kvt.setBalTailBe(currentBlock)
@@ -131,7 +143,7 @@ proc pruneCycle*(pruner: BalPrunerRef) {.async: (raises: [CancelledError]).} =
     headSlot = headHeader.slotNumber.valueOr:
       return
 
-  discard await pruner.prune(txFrame, head, headSlot)
+  discard await pruner.prune(head, headSlot)
 
 proc pruneLoop(pruner: BalPrunerRef) {.async: (raises: [CancelledError]).} =
   info "Starting block access list pruner"

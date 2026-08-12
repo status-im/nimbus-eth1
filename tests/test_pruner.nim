@@ -509,8 +509,7 @@ suite "Block access list pruner tests":
       kvt = com.db.kvt
       hashes = com.buildChain(numBlocks = 10, firstBalBlock = 1)
       pruner = BalPrunerRef.init(com)
-      pruned = waitFor pruner.prune(
-        com.db.baseTxFrame(), BlockNumber(10), headSlotFor(5))
+      pruned = waitFor pruner.prune(BlockNumber(10), headSlotFor(5))
 
     check pruned == 5
 
@@ -528,15 +527,16 @@ suite "Block access list pruner tests":
       kvt = com.db.kvt
       hashes = com.buildChain(numBlocks = 10, firstBalBlock = 1)
       pruner = BalPrunerRef.init(com)
-      pruned = waitFor pruner.prune(
-        com.db.baseTxFrame(), BlockNumber(10), headSlotFor(0))
+      pruned = waitFor pruner.prune(BlockNumber(10), headSlotFor(0))
 
     check pruned == 0
 
     for i in 1 .. 10:
       check kvt.hasBal(hashes[i])
 
-    check kvt.getBalTailBe() == BlockNumber(0)
+    # The discovered first-BAL block is persisted even when nothing is pruned,
+    # so that the binary search does not repeat on restart
+    check kvt.getBalTailBe() == BlockNumber(1)
 
   test "pruning starts at the first block holding a block access list":
     let
@@ -544,8 +544,7 @@ suite "Block access list pruner tests":
       kvt = com.db.kvt
       hashes = com.buildChain(numBlocks = 10, firstBalBlock = 5)
       pruner = BalPrunerRef.init(com)
-      pruned = waitFor pruner.prune(
-        com.db.baseTxFrame(), BlockNumber(10), headSlotFor(7))
+      pruned = waitFor pruner.prune(BlockNumber(10), headSlotFor(7))
 
     check pruned == 3
 
@@ -556,22 +555,47 @@ suite "Block access list pruner tests":
 
     check pruner.tail == BlockNumber(8)
 
+  test "pruning skips over unreadable blocks":
+    let
+      com = env.newCom()
+      kvt = com.db.kvt
+      hashes = com.buildChain(numBlocks = 10, firstBalBlock = 1)
+
+    # Simulate a gap in the canonical chain data
+    com.db.baseTxFrame().del(
+      blockNumberToHashKey(BlockNumber(3)).toOpenArray).expect("del")
+
+    let
+      pruner = BalPrunerRef.init(com)
+      pruned = waitFor pruner.prune(BlockNumber(10), headSlotFor(5))
+
+    check pruned == 4
+
+    for i in [1, 2, 4, 5]:
+      check not kvt.hasBal(hashes[i])
+    # The unreadable block is passed over and its block access list left behind
+    check kvt.hasBal(hashes[3])
+    for i in 6 .. 10:
+      check kvt.hasBal(hashes[i])
+
+    check pruner.tail == BlockNumber(6)
+    check kvt.getBalTailBe() == BlockNumber(6)
+
   test "pruning resumes from the stored tail":
     let
       com = env.newCom()
       kvt = com.db.kvt
       hashes = com.buildChain(numBlocks = 10, firstBalBlock = 1)
-      txFrame = com.db.baseTxFrame()
 
     check (waitFor BalPrunerRef.init(com, batchSize = 2).prune(
-      txFrame, BlockNumber(10), headSlotFor(4))) == 4
+      BlockNumber(10), headSlotFor(4))) == 4
 
     let pruner = BalPrunerRef.init(com)
     check pruner.tail == BlockNumber(5)
 
     # Only the blocks which newly fell outside of the retention period are
     # visited in the second run
-    check (waitFor pruner.prune(txFrame, BlockNumber(10), headSlotFor(6))) == 2
+    check (waitFor pruner.prune(BlockNumber(10), headSlotFor(6))) == 2
 
     for i in 1 .. 6:
       check not kvt.hasBal(hashes[i])
