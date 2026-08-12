@@ -63,12 +63,12 @@ proc deleteBlockBodyAndReceiptsBe*(kvt: KvtDbRef, header: Header) =
 proc deleteBlockAccessListsBe*(
     kvt: KvtDbRef, blockHashes: openArray[Hash32], tail: BlockNumber
 ) =
-  let batch = kvt.putBegFn().expect("pruner: putBegFn")
+  let batch = kvt.putBegFn().expect("deleteBlockAccessListsBe: putBegFn")
   for blockHash in blockHashes:
     kvt.putKvpFn(
       batch, blockHashToBlockAccessListKey(blockHash).toOpenArray, default(seq[byte]))
-  kvt.putKvpFn(batch, balPrunerStateKey().toOpenArray, tail.toBytesLE())
-  kvt.putEndFn(batch).expect("pruner: putEndFn")
+  kvt.putKvpFn(batch, balTailKey().toOpenArray, tail.toBytesLE())
+  kvt.putEndFn(batch).expect("deleteBlockAccessListsBe: putEndFn")
 
 
 # ------------------------------------------------------------------------------
@@ -95,7 +95,7 @@ proc getChainTailBe*(kvt: KvtDbRef): BlockNumber =
 
 proc setBalTailBe*(kvt: KvtDbRef, blockNumber: BlockNumber) =
   ## Records the block number up to which block access lists have been pruned.
-  kvt.setBlockNumberBe(balPrunerStateKey(), blockNumber)
+  kvt.setBlockNumberBe(balTailKey(), blockNumber)
 
 proc getBalTailBe*(kvt: KvtDbRef): BlockNumber =
-  kvt.getBlockNumberBe(balPrunerStateKey())
+  kvt.getBlockNumberBe(balTailKey())

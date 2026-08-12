@@ -33,7 +33,7 @@ type
     tail = 14
     prunerState = 15
     txFrame = 16
-    balPrunerState = 17
+    balTail = 17
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -75,8 +75,8 @@ func prunerStateKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(prunerState)
   result.dataEndPos = 1
 
-func balPrunerStateKey*(): DbKey {.inline.} =
-  result.data[0] = byte ord(balPrunerState)
+func balTailKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(balTail)
   result.dataEndPos = 1
 
 func txFrameKey*(h: Hash32): DbKey {.inline.} =
