@@ -407,6 +407,17 @@ jobs:
           echo '```' >> release_notes.md
           echo '' >> release_notes.md
 
+      - name: Delete previous nightly release
+        # Required, not just tidiness: action-gh-release updates an existing
+        # release with "draft: existingRelease.draft", ignoring the draft input
+        # below. Without a delete the rolling nightly keeps whatever state it
+        # already had, so a published one can never go back to being a draft.
+        # Tolerate a missing release/tag - a draft never creates the git tag.
+        if: needs.setup.outputs.is_nightly == 'true'
+        run: gh release delete nightly --cleanup-tag --yes || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create release
         id: create_release
         uses: softprops/action-gh-release@v2
