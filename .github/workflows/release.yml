@@ -53,7 +53,7 @@ jobs:
             BRANCH="${GITHUB_REF#refs/heads/}"
             {
               echo "is_nightly=true"
-              echo "version=nightly-latest"
+              echo "version=nightly"
               echo "docker_tag=nightly"
               echo "release_tag=nightly"
               echo "release_name=Nightly build (\"${BRANCH}\" branch, ${SHA8})"
@@ -413,8 +413,15 @@ jobs:
         # below. Without a delete the rolling nightly keeps whatever state it
         # already had, so a published one can never go back to being a draft.
         # Tolerate a missing release/tag - a draft never creates the git tag.
+        # --repo is required: this job has no checkout, so gh cannot infer the
+        # repository from a git remote.
         if: needs.setup.outputs.is_nightly == 'true'
-        run: gh release delete nightly --cleanup-tag --yes || true
+        run: |
+          if gh release delete nightly --cleanup-tag --yes --repo "${GITHUB_REPOSITORY}"; then
+            echo "Deleted the previous nightly release."
+          else
+            echo "No previous nightly release to delete, or its tag was already gone."
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
