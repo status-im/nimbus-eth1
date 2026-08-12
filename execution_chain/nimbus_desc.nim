@@ -24,7 +24,8 @@ import
   ./sync/wire_protocol,
   ./beacon/beacon_engine,
   ./common,
-  ./pruner
+  ./pruner,
+  ./bal_pruner
 
 when enabledLogLevel == TRACE:
   import std/sequtils
@@ -42,7 +43,8 @@ export
   snap_sync,
   beacon_engine,
   common,
-  pruner
+  pruner,
+  bal_pruner
 
 type
   NimbusNode* = ref object

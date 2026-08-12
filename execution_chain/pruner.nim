@@ -15,10 +15,10 @@ import
   chronos,
   results,
   eth/common/times,
-  ./pruner/[bal_pruner, db_utils, serialize],
+  ./pruner/[db_utils, serialize],
   ./common
 
-export bal_pruner, serialize
+export serialize
 
 logScope:
   topics = "pruner"

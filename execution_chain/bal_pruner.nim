@@ -13,10 +13,10 @@ import
   chronicles,
   chronos,
   results,
-  ../block_access_list/bal_utils,
-  ../db/core_db,
-  ./db_utils,
-  ../common
+  ./block_access_list/bal_utils,
+  ./db/core_db,
+  ./pruner/db_utils,
+  ./common
 
 logScope:
   topics = "bal pruner"
