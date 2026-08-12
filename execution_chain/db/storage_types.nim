@@ -23,7 +23,7 @@ type
     canonicalHeadHash = 4
     slotHashToSlot = 5
     contractHash = 6
-    dataDirId = 7
+    dataDirId = 7 # Deprecated - keep to avoid reuse which might breaking existing databases
     fcuNumAndHash = 8
     fcState = 9
     beaconHeader = 10
@@ -65,10 +65,6 @@ func blockNumberToHashKey*(u: BlockNumber): DbKey {.inline.} =
 
 func canonicalHeadHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(canonicalHeadHash)
-  result.dataEndPos = 1
-
-func dataDirIdKey*(): DbKey {.inline.} =
-  result.data[0] = byte ord(dataDirId)
   result.dataEndPos = 1
 
 func tailIdKey*(): DbKey {.inline.} =
