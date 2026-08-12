@@ -8,21 +8,87 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+# Runs either as a tagged release (push of a "v*" tag) or as a nightly
+# (nightly_build.yml calls it with "nightly: true"), so the nightly exercises
+# the same pipeline a real release uses. The "setup" job resolves everything
+# that differs between the two modes.
+
 on:
   push:
     tags:
     - 'v*' # "v1.2.3"
+  workflow_call:
+    inputs:
+      nightly:
+        description: 'Run as a nightly build instead of a tagged release'
+        required: false
+        default: false
+        type: boolean
 
 name: Upload Release Asset
 
 jobs:
+  setup:
+    name: Resolve build identity
+    runs-on: ubuntu-latest
+
+    outputs:
+      is_nightly:    ${{ steps.identity.outputs.is_nightly }}
+      version:       ${{ steps.identity.outputs.version }}
+      docker_tag:    ${{ steps.identity.outputs.docker_tag }}
+      docker_latest: ${{ steps.identity.outputs.docker_latest }}
+      release_tag:   ${{ steps.identity.outputs.release_tag }}
+      release_name:  ${{ steps.identity.outputs.release_name }}
+      npm_version:   ${{ steps.identity.outputs.npm_version }}
+      wasm_dir:      ${{ steps.identity.outputs.wasm_dir }}
+
+    steps:
+      - name: Resolve identity
+        id: identity
+        env:
+          NIGHTLY: ${{ inputs.nightly }}
+        run: |
+          SHA8="${GITHUB_SHA:0:8}"
+
+          if [[ "${NIGHTLY}" == "true" ]]; then
+            BRANCH="${GITHUB_REF#refs/heads/}"
+            {
+              echo "is_nightly=true"
+              echo "version=nightly-latest"
+              echo "docker_tag=nightly"
+              # deliberately empty: a nightly must never move ":latest"
+              echo "docker_latest="
+              echo "release_tag=nightly"
+              echo "release_name=Nightly build (\"${BRANCH}\" branch, ${SHA8})"
+              echo "npm_version=0.0.0-nightly"
+              echo "wasm_dir=nightly"
+            } >> "$GITHUB_OUTPUT"
+          else
+            if [[ "${GITHUB_REF}" != refs/tags/* ]]; then
+              echo "Release mode requires a tag ref, got '${GITHUB_REF}'." >&2
+              echo "Call this workflow with 'nightly: true' to build from a branch." >&2
+              exit 1
+            fi
+            TAG="${GITHUB_REF#refs/tags/}"
+            {
+              echo "is_nightly=false"
+              echo "version=${TAG}-${SHA8}"
+              echo "docker_tag=${TAG}"
+              echo "docker_latest=latest"
+              echo "release_tag=${TAG}"
+              echo "release_name=Release build (\"${TAG}\")"
+              echo "npm_version=${TAG#v}"
+              echo "wasm_dir=${TAG}"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
   matrix_config:
     uses: ./.github/workflows/matrix_config.yml
     with:
       exclude_field: "branch"
 
   build:
-    needs: matrix_config
+    needs: [setup, matrix_config]
 
     strategy:
       fail-fast: false
@@ -50,10 +116,6 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
-      - name: Extract branch name
-        id: extract_branch
-        run: echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
       - name: Build project
         id: make_dist
         run: |
@@ -69,20 +131,32 @@ jobs:
           echo "archive_dir=${ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
           # Compose per-component tarball names
-          REFNAME="${{ github.ref }}"
-          TAG="${REFNAME#refs/tags/}"
           OS="${{ matrix.os }}"
           CPU="${{ matrix.cpu }}"
+          VER="${{ needs.setup.outputs.version }}"
 
-          NEC_TAR="nimbus-${OS}-${CPU}-${TAG}-$(git rev-parse --short=8 HEAD).tar.gz"
-          NVP_TAR="nimbus_verified_proxy-${OS}-${CPU}-${TAG}-$(git rev-parse --short=8 HEAD).tar.gz"
-          LVP_TAR="libverifproxy-${OS}-${CPU}-${TAG}-$(git rev-parse --short=8 HEAD).tar.gz"
+          NEC_TAR="nimbus-${OS}-${CPU}-${VER}.tar.gz"
+          NVP_TAR="nimbus_verified_proxy-${OS}-${CPU}-${VER}.tar.gz"
+          LVP_TAR="libverifproxy-${OS}-${CPU}-${VER}.tar.gz"
 
-          # Pack only the relevant binaries (and their checksums) from build/
-          # Add additional files (LICENSE, README, configs) if desired with extra -C args.
-          tar -czf "${NEC_TAR}" --exclude="build/nimbus_verified_proxy*" --exclude="build/libverifproxy" -C "${ARCHIVE_DIR}" .
-          tar -czf "${NVP_TAR}" --exclude="build/nimbus*" --exclude="build/librocksdb.dll" --exclude="build/libverifproxy" -C "${ARCHIVE_DIR}" .
-          tar -czf "${LVP_TAR}" --exclude="build/nimbus*" --exclude="build/nimbus_verified_proxy*" --exclude="build/librocksdb.dll" -C "${ARCHIVE_DIR}" .
+          # Pack each component from an explicit member list, not from exclude
+          # patterns: "--exclude=build/nimbus*" also matches
+          # "build/nimbus_verified_proxy", which shipped a proxy tarball with no
+          # proxy in it. Listing members makes tar fail if a binary is missing.
+          COMMON=(README.md)
+          LVP_MEMBERS=(build/libverifproxy build/libverifproxy.a.sha512sum)
+          if [[ "${OS}" == "windows" ]]; then
+            COMMON+=(README-Windows.md)
+            NEC_MEMBERS=(build/nimbus.exe build/nimbus.sha512sum build/librocksdb.dll)
+            NVP_MEMBERS=(build/nimbus_verified_proxy.exe build/nimbus_verified_proxy.sha512sum)
+          else
+            NEC_MEMBERS=(build/nimbus build/nimbus.sha512sum)
+            NVP_MEMBERS=(build/nimbus_verified_proxy build/nimbus_verified_proxy.sha512sum)
+          fi
+
+          tar -czf "${NEC_TAR}" -C "${ARCHIVE_DIR}" "${COMMON[@]}" "${NEC_MEMBERS[@]}"
+          tar -czf "${NVP_TAR}" -C "${ARCHIVE_DIR}" "${COMMON[@]}" "${NVP_MEMBERS[@]}"
+          tar -czf "${LVP_TAR}" -C "${ARCHIVE_DIR}" "${COMMON[@]}" "${LVP_MEMBERS[@]}"
 
           # Generate sha512 for the tarballs themselves
           sha512sum "${NEC_TAR}" > "${NEC_TAR}.sha512sum"
@@ -136,26 +210,33 @@ jobs:
           retention-days: 2
 
       - name: Login to Docker Hub
-        # This step runs only if the tag starts with 'v'
-        if: matrix.os == 'linux' && startsWith(github.ref, 'refs/tags/v')
+        if: matrix.os == 'linux'
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push a Docker image for end users
-        # This step runs only if the tag starts with 'v'
-        if: matrix.os == 'linux' && startsWith(github.ref, 'refs/tags/v')
+        if: matrix.os == 'linux'
         run: |
           cd dist
           tar -xzf ${{ steps.make_dist.outputs.archive }}
           mv ${{ steps.make_dist.outputs.archive_dir }} ../docker/dist/binaries/nimbus-eth1
           cd ../docker/dist/binaries
-          REFNAME="${{ github.ref }}"
-          TAG="${REFNAME#refs/tags/}"
-          DOCKER_BUILDKIT=1 docker build -f Dockerfile.${{ matrix.os }}-${{ matrix.cpu }} -t statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}-${TAG} -t statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}-latest .
-          docker push statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}-${TAG}
-          docker push statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}-latest
+
+          # A nightly publishes ":<os>-<cpu>-nightly" only; docker_latest is
+          # empty there so that ":<os>-<cpu>-latest" keeps pointing at a release.
+          IMG=statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}
+          TAG="${{ needs.setup.outputs.docker_tag }}"
+          LATEST="${{ needs.setup.outputs.docker_latest }}"
+
+          DOCKER_BUILDKIT=1 docker build -f Dockerfile.${{ matrix.os }}-${{ matrix.cpu }} -t ${IMG}-${TAG} .
+          docker push ${IMG}-${TAG}
+
+          if [[ -n "${LATEST}" ]]; then
+            docker tag ${IMG}-${TAG} ${IMG}-${LATEST}
+            docker push ${IMG}-${LATEST}
+          fi
 
   build-wasm:
     name: 'wasm'
@@ -201,15 +282,60 @@ jobs:
           path: build/nimbus_verified_proxy_wasm/
           retention-days: 2
 
+  run-binary:
+    needs: [setup, matrix_config, build]
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix_config.outputs.matrix) }}
+
+    defaults:
+      run:
+        shell: bash
+
+    name: 'run-binary-${{ matrix.os }}-${{ matrix.cpu }}'
+    runs-on: ${{ matrix.builder }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - id: shared-action
+        uses: ./.github/actions/shared
+        with:
+          llvm-mingw: true
+          nim-cache: false
+          rocksdb-cache: false
+          eest-cache: false
+
+      - name: Download execution client artefact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.os }}-${{ matrix.cpu }}-execution
+
+      - name: Download verified proxy artefact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.os }}-${{ matrix.cpu }}-proxy
+
+      - name: Run binary
+        run: |
+          VER="${{ needs.setup.outputs.version }}"
+          tar -xzf nimbus-${{ matrix.os }}-${{ matrix.cpu }}-${VER}.tar.gz
+          tar -xzf nimbus_verified_proxy-${{ matrix.os }}-${{ matrix.cpu }}-${VER}.tar.gz
+          build/nimbus --help
+          build/nimbus_verified_proxy --help
+
+      - name: Test libverifproxy
+        run: |
+          make libverifproxy_test
+          build/libverifproxy_test
+
   docker-multiarch:
     name: Create multi-arch Docker manifest
-    needs: build
+    needs: [setup, build]
     runs-on: ubuntu-latest
     steps:
-      - name: Extract tag name
-        id: extract_tag
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
       - name: Login to Docker Hub
         uses: docker/login-action@v4
         with:
@@ -218,12 +344,13 @@ jobs:
 
       - name: Create and push multi-arch manifest (versioned)
         run: |
-          TAG="${{ steps.extract_tag.outputs.tag }}"
+          TAG="${{ needs.setup.outputs.docker_tag }}"
           docker buildx imagetools create -t statusim/nimbus-eth1:${TAG} \
             statusim/nimbus-eth1:linux-amd64-${TAG} \
             statusim/nimbus-eth1:linux-arm64-${TAG}
 
       - name: Create and push multi-arch manifest (latest)
+        if: needs.setup.outputs.docker_latest != ''
         run: |
           docker buildx imagetools create -t statusim/nimbus-eth1:latest \
             statusim/nimbus-eth1:linux-amd64-latest \
@@ -231,15 +358,11 @@ jobs:
 
   deploy-wasm:
     name: Deploy WASM
-    needs: [build-wasm]
+    needs: [setup, build-wasm]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Extract tag name
-        id: extract_tag
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
       - name: Checkout wasm-deploy branch
         uses: actions/checkout@v6
         with:
@@ -251,7 +374,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: wasm
-          path: wasm-deploy/${{ steps.extract_tag.outputs.tag }}/
+          path: wasm-deploy/${{ needs.setup.outputs.wasm_dir }}/
 
       - name: Force-push to wasm-deploy
         run: |
@@ -259,20 +382,16 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet || git commit -m "chore: update ${{ steps.extract_tag.outputs.tag }}"
+          git diff --cached --quiet || git commit -m "chore: update ${{ needs.setup.outputs.wasm_dir }}"
           git push origin HEAD:wasm-deploy --force
 
   prepare-release:
     name: Prepare release draft
-    needs: [build, docker-multiarch]
+    needs: [setup, build, docker-multiarch]
     runs-on: ubuntu-latest
     steps:
       - name: Download artefacts
         uses: actions/download-artifact@v8
-
-      - name: Extract branch name
-        id: extract_branch
-        run: echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Create release notes
         run: |
@@ -330,7 +449,8 @@ jobs:
         with:
           draft: true
           prerelease: false
-          name: 'Release build ("${{ steps.extract_branch.outputs.tag_name }}")'
+          tag_name: ${{ needs.setup.outputs.release_tag }}
+          name: ${{ needs.setup.outputs.release_name }}
           body_path: release_notes.md
           files: |
             linux-amd64-execution/*
@@ -346,27 +466,9 @@ jobs:
             macos-arm64-proxy/*
             macos-arm64-libverifproxy/*
 
-      - name: Delete artefacts
-        uses: geekyeggo/delete-artifact@v6
-        with:
-          failOnError: false
-          name: |
-            linux-amd64-execution
-            linux-amd64-proxy
-            linux-amd64-libverifproxy
-            linux-arm64-execution
-            linux-arm64-proxy
-            linux-arm64-libverifproxy
-            windows-amd64-execution
-            windows-amd64-proxy
-            windows-amd64-libverifproxy
-            macos-arm64-execution
-            macos-arm64-proxy
-            macos-arm64-libverifproxy
-
   publish-npm:
     name: Publish WASM to GitHub Packages
-    needs: [build-wasm]
+    needs: [setup, build-wasm]
     runs-on: ubuntu-22.04
 
     permissions:
@@ -387,19 +489,52 @@ jobs:
           path: nimbus_verified_proxy/library/bindings/wasm/
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           registry-url: 'https://npm.pkg.github.com'
           scope: '@status-im'
 
-      - name: Set version from tag
+      - name: Set version
         run: |
           cd nimbus_verified_proxy/library/bindings/wasm
-          npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
+          npm version "${{ needs.setup.outputs.npm_version }}" --no-git-tag-version
+
+      - name: Delete existing nightly package version
+        if: needs.setup.outputs.is_nightly == 'true'
+        run: |
+          VERSION_ID=$(gh api /orgs/status-im/packages/npm/nimbus-verified-proxy/versions \
+            --jq '.[] | select(.name == "0.0.0-nightly") | .id' 2>/dev/null || true)
+          if [ -n "$VERSION_ID" ]; then
+            gh api --method DELETE /orgs/status-im/packages/npm/nimbus-verified-proxy/versions/$VERSION_ID
+            echo "Deleted version ID $VERSION_ID"
+          else
+            echo "No existing nightly version found, skipping"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish
-        run: npm publish
+        run: npm publish ${{ needs.setup.outputs.is_nightly == 'true' && '--tag nightly' || '' }}
         working-directory: nimbus_verified_proxy/library/bindings/wasm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  cleanup:
+    name: Remove artefacts
+    needs: [prepare-release, run-binary, deploy-wasm, publish-npm]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete artefacts
+        uses: geekyeggo/delete-artifact@v6
+        with:
+          failOnError: false
+          name: |
+            *-execution
+            *-execution-checksum
+            *-proxy
+            *-proxy-checksum
+            *-libverifproxy
+            *-libverifproxy-checksum
+            wasm
