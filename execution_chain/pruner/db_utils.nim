@@ -57,6 +57,20 @@ proc deleteBlockAccessListBe*(kvt: KvtDbRef, blockHash: Hash32) =
   kvt.delBe(blockHashToBlockAccessListKey(blockHash).toOpenArray).isOkOr:
     warn "pruner: deleteBlockAccessListBe", blockHash, error
 
+proc pruneBlockAccessListsBe*(
+    kvt: KvtDbRef, blockHashes: openArray[Hash32], tail: BlockNumber
+) =
+  ## Deletes the given block access lists and records the new tail in a single
+  ## atomic write batch. Writing an empty value deletes the key at the backend
+  ## level, the same way frame deletions reach the backend via `persist`.
+  let batch = kvt.putBegFn().expect("pruner: putBegFn")
+  for blockHash in blockHashes:
+    kvt.putKvpFn(
+      batch, blockHashToBlockAccessListKey(blockHash).toOpenArray,
+      default(seq[byte]))
+  kvt.putKvpFn(batch, balTailIdKey().toOpenArray, tail.toBytesLE())
+  kvt.putEndFn(batch).expect("pruner: putEndFn")
+
 proc deleteBlockBodyAndReceiptsBe*(kvt: KvtDbRef, header: Header) =
   kvt.deleteTransactionsBe(header.transactionsRoot)
   kvt.deleteUnclesBe(header.ommersHash)

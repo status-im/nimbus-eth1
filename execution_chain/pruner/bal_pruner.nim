@@ -64,6 +64,37 @@ proc findFirstBalBlock(txFrame: CoreDbTxRef, head: BlockNumber): Opt[BlockNumber
 
   found
 
+proc findRetentionCutoff(
+    txFrame: CoreDbTxRef, tail: BlockNumber, head: BlockNumber, headSlot: uint64
+): BlockNumber =
+  ## Binary search for the first canonical block within the retention period,
+  ## relying on the predicate being monotonic in the block number. Blocks whose
+  ## header cannot be read are treated as within the retention period so that
+  ## the bulk delete below the returned cutoff can never remove a block access
+  ## list which must still be retained; the per-block walk in `prune` steps
+  ## over such blocks instead.
+  var
+    lo = tail
+    hi = head
+
+  while lo <= hi:
+    let
+      mid = lo + (hi - lo) div 2
+      header = txFrame.getBlockHeader(mid).valueOr:
+        if mid == 0:
+          return 0
+        hi = mid - 1
+        continue
+
+    if header.isWithinBalRetentionPeriod(headSlot):
+      if mid == 0:
+        return 0
+      hi = mid - 1
+    else:
+      lo = mid + 1
+
+  lo
+
 # ------------------------------------------------------------------------------
 # Public API
 # ------------------------------------------------------------------------------
@@ -89,6 +120,46 @@ proc prune*(
     blocksSinceSave = 0'u64
     pruned = 0'u64
 
+  # Common case: the tail block is still within the retention period and there
+  # is nothing to prune, discovered with a single header read
+  block quickCheck:
+    let header = txFrame.getBlockHeader(currentBlock).valueOr:
+      break quickCheck
+    if header.isWithinBalRetentionPeriod(headSlot):
+      return 0
+
+  # Bulk phase: every block below the cutoff is out of retention and can be
+  # deleted knowing only its hash, saving a header read and decode per block.
+  # Each batch commits its deletes and the tail update in one atomic write
+  # batch, so a crash cannot separate the two.
+  let cutoff = findRetentionCutoff(txFrame, currentBlock, head, headSlot)
+  var blockHashes = newSeqOfCap[Hash32](pruner.batchSize.int)
+
+  while currentBlock < cutoff:
+    let batchEnd = min(cutoff, currentBlock + pruner.batchSize)
+
+    blockHashes.setLen(0)
+    while currentBlock < batchEnd:
+      let blockHash = txFrame.getBlockHash(currentBlock).valueOr:
+        warn "Failed to get block hash", blkNum = currentBlock, error
+        currentBlock += 1
+        continue
+      blockHashes.add blockHash
+      currentBlock += 1
+
+    kvt.pruneBlockAccessListsBe(blockHashes, currentBlock)
+    pruner.tail = currentBlock
+    pruned += blockHashes.len.uint64
+
+    if currentBlock < cutoff:
+      await sleepAsync(chronos.milliseconds(100))
+      # The base frame may have been swapped out and disposed by a block
+      # persist during the sleep and must not be used after that
+      txFrame = pruner.com.db.baseTxFrame()
+
+  # Per-block walk for whatever the conservative cutoff search left behind:
+  # normally just the first block within retention, plus any unreadable blocks
+  # and their successors up to the true retention boundary
   block walk:
     while currentBlock <= head:
       block currentBlockDone:
@@ -139,8 +210,12 @@ proc pruneCycle*(pruner: BalPrunerRef) {.async: (raises: [CancelledError]).} =
     headHeader = txFrame.getBlockHeader(head).valueOr:
       warn "Failed to get head header", blkNum = head, error
       return
-    # Blocks before Amsterdam carry no slot number and no block access list
+    # Blocks before Amsterdam activation carry no slot number and no block
+    # access list; a missing slot number after activation means a corrupt
+    # header
     headSlot = headHeader.slotNumber.valueOr:
+      if pruner.com.isAmsterdamOrLater(headHeader.timestamp):
+        warn "Head header is missing its slot number", blkNum = head
       return
 
   discard await pruner.prune(head, headSlot)

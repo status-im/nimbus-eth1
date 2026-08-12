@@ -581,6 +581,35 @@ suite "Block access list pruner tests":
     check pruner.tail == BlockNumber(6)
     check kvt.getBalTailBe() == BlockNumber(6)
 
+  test "the cutoff search treats unreadable blocks as within retention":
+    let
+      com = env.newCom()
+      kvt = com.db.kvt
+      hashes = com.buildChain(numBlocks = 10, firstBalBlock = 1)
+
+    # Pre-seed the tail so that pruning starts at block 1 and make block 5 --
+    # the first block probed by the cutoff search over [1, 10] -- unreadable
+    kvt.setBalTailBe(BlockNumber(1))
+    com.db.baseTxFrame().del(
+      blockNumberToHashKey(BlockNumber(5)).toOpenArray).expect("del")
+
+    let
+      pruner = BalPrunerRef.init(com)
+      pruned = waitFor pruner.prune(BlockNumber(10), headSlotFor(5))
+
+    # Blocks 1-4 are bulk deleted below the conservative cutoff while block 5
+    # is stepped over by the per-block walk, retaining its block access list
+    check pruned == 4
+
+    for i in 1 .. 4:
+      check not kvt.hasBal(hashes[i])
+    check kvt.hasBal(hashes[5])
+    for i in 6 .. 10:
+      check kvt.hasBal(hashes[i])
+
+    check pruner.tail == BlockNumber(6)
+    check kvt.getBalTailBe() == BlockNumber(6)
+
   test "pruning resumes from the stored tail":
     let
       com = env.newCom()
