@@ -36,7 +36,6 @@ jobs:
       is_nightly:    ${{ steps.identity.outputs.is_nightly }}
       version:       ${{ steps.identity.outputs.version }}
       docker_tag:    ${{ steps.identity.outputs.docker_tag }}
-      docker_latest: ${{ steps.identity.outputs.docker_latest }}
       release_tag:   ${{ steps.identity.outputs.release_tag }}
       release_name:  ${{ steps.identity.outputs.release_name }}
       npm_version:   ${{ steps.identity.outputs.npm_version }}
@@ -56,8 +55,6 @@ jobs:
               echo "is_nightly=true"
               echo "version=nightly-latest"
               echo "docker_tag=nightly"
-              # deliberately empty: a nightly must never move ":latest"
-              echo "docker_latest="
               echo "release_tag=nightly"
               echo "release_name=Nightly build (\"${BRANCH}\" branch, ${SHA8})"
               echo "npm_version=0.0.0-nightly"
@@ -74,7 +71,6 @@ jobs:
               echo "is_nightly=false"
               echo "version=${TAG}-${SHA8}"
               echo "docker_tag=${TAG}"
-              echo "docker_latest=latest"
               echo "release_tag=${TAG}"
               echo "release_name=Release build (\"${TAG}\")"
               echo "npm_version=${TAG#v}"
@@ -209,34 +205,33 @@ jobs:
           path: ./dist/${{ steps.make_dist.outputs.lvp_tar }}.sha512sum
           retention-days: 2
 
-      - name: Login to Docker Hub
+      - name: Build a Docker image for end users
         if: matrix.os == 'linux'
-        uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push a Docker image for end users
-        if: matrix.os == 'linux'
+        id: docker_build
         run: |
           cd dist
           tar -xzf ${{ steps.make_dist.outputs.archive }}
           mv ${{ steps.make_dist.outputs.archive_dir }} ../docker/dist/binaries/nimbus-eth1
           cd ../docker/dist/binaries
 
-          # A nightly publishes ":<os>-<cpu>-nightly" only; docker_latest is
-          # empty there so that ":<os>-<cpu>-latest" keeps pointing at a release.
-          IMG=statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}
-          TAG="${{ needs.setup.outputs.docker_tag }}"
-          LATEST="${{ needs.setup.outputs.docker_latest }}"
+          IMG=statusim/nimbus-eth1:${{ matrix.os }}-${{ matrix.cpu }}-${{ needs.setup.outputs.docker_tag }}
+          DOCKER_BUILDKIT=1 docker build -f Dockerfile.${{ matrix.os }}-${{ matrix.cpu }} -t ${IMG} .
+          echo "image=${IMG}" >> $GITHUB_OUTPUT
 
-          DOCKER_BUILDKIT=1 docker build -f Dockerfile.${{ matrix.os }}-${{ matrix.cpu }} -t ${IMG}-${TAG} .
-          docker push ${IMG}-${TAG}
+      # Parked, not pushed - docker_release.yml publishes it.
+      - name: Save Docker image
+        if: matrix.os == 'linux'
+        run: docker save ${{ steps.docker_build.outputs.image }} | gzip > docker-image.tar.gz
 
-          if [[ -n "${LATEST}" ]]; then
-            docker tag ${IMG}-${TAG} ${IMG}-${LATEST}
-            docker push ${IMG}-${LATEST}
-          fi
+      - name: Upload Docker image artefact
+        if: matrix.os == 'linux'
+        uses: actions/upload-artifact@v7
+        with:
+          name: docker-image-${{ matrix.os }}-${{ matrix.cpu }}
+          path: docker-image.tar.gz
+          # A release must outlive the review of its draft; a nightly only has
+          # to reach the docker-release job in this same run.
+          retention-days: ${{ needs.setup.outputs.is_nightly == 'true' && 1 || 30 }}
 
   build-wasm:
     name: 'wasm'
@@ -331,30 +326,15 @@ jobs:
           make libverifproxy_test
           build/libverifproxy_test
 
-  docker-multiarch:
-    name: Create multi-arch Docker manifest
+  docker-release:
+    name: Publish nightly Docker images
+    # A tagged release reaches this same workflow when its draft is published.
+    if: needs.setup.outputs.is_nightly == 'true'
     needs: [setup, build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Login to Docker Hub
-        uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Create and push multi-arch manifest (versioned)
-        run: |
-          TAG="${{ needs.setup.outputs.docker_tag }}"
-          docker buildx imagetools create -t statusim/nimbus-eth1:${TAG} \
-            statusim/nimbus-eth1:linux-amd64-${TAG} \
-            statusim/nimbus-eth1:linux-arm64-${TAG}
-
-      - name: Create and push multi-arch manifest (latest)
-        if: needs.setup.outputs.docker_latest != ''
-        run: |
-          docker buildx imagetools create -t statusim/nimbus-eth1:latest \
-            statusim/nimbus-eth1:linux-amd64-latest \
-            statusim/nimbus-eth1:linux-arm64-latest
+    uses: ./.github/workflows/docker_release.yml
+    with:
+      tag: ${{ needs.setup.outputs.docker_tag }}
+    secrets: inherit
 
   deploy-wasm:
     name: Deploy WASM
@@ -387,7 +367,7 @@ jobs:
 
   prepare-release:
     name: Prepare release draft
-    needs: [setup, build, docker-multiarch]
+    needs: [setup, build]
     runs-on: ubuntu-latest
     steps:
       - name: Download artefacts
