@@ -29,6 +29,8 @@ type
     loopFut: Future[void].Raising([CancelledError])
 
 proc findFirstBalBlock(txFrame: CoreDbTxRef, head: BlockNumber): Opt[BlockNumber] =
+  # TODO: Once snap sync is implemented we should start from the beginning of history
+  # instead of from genesis (block 0)
   var
     lo = BlockNumber(0)
     hi = head
@@ -37,13 +39,12 @@ proc findFirstBalBlock(txFrame: CoreDbTxRef, head: BlockNumber): Opt[BlockNumber
   while lo <= hi:
     let
       mid = lo + (hi - lo) div 2
-      header = txFrame.getBlockHeaderOpt(mid).valueOr:
-        warn "Failed to get header", blkNum = mid, error
-        return Opt.none(BlockNumber)
+      header = txFrame.getBlockHeader(mid).valueOr:
+        warn "Skipping block with an unreadable header", blkNum = mid, error
+        lo = mid + 1
+        continue
 
-    if header.isNone():
-      lo = mid + 1
-    elif header.value().blockAccessListHash.isSome():
+    if header.blockAccessListHash.isSome():
       found = Opt.some(mid)
       if mid == 0:
         break
@@ -83,6 +84,7 @@ proc prune*(
 ): Future[uint64] {.async: (raises: [CancelledError]).} =
 
   let kvt = pruner.com.db.kvt
+
   var
     txFrame = pruner.com.db.baseTxFrame()
     tail = kvt.getBalTailBe()
@@ -92,20 +94,16 @@ proc prune*(
       return 0
     kvt.setBalTailBe(tail)
 
+  let header = txFrame.getBlockHeader(tail)
+  if header.isOk() and header[].isWithinBalRetentionPeriod(headSlot):
+    return 0
+
+  let cutoff = findRetentionCutoff(txFrame, tail, head, headSlot)
+
   var
     currentBlock = tail
-    savedTail = tail
-    blocksSinceSave = 0'u64
     pruned = 0'u64
-
-  block quickCheck:
-    let header = txFrame.getBlockHeader(currentBlock).valueOr:
-      break quickCheck
-    if header.isWithinBalRetentionPeriod(headSlot):
-      return 0
-
-  let cutoff = findRetentionCutoff(txFrame, currentBlock, head, headSlot)
-  var blockHashes = newSeqOfCap[Hash32](pruner.batchSize.int)
+    blockHashes = newSeqOfCap[Hash32](pruner.batchSize.int)
 
   while currentBlock < cutoff:
     let batchEnd = min(cutoff, currentBlock + pruner.batchSize)
@@ -119,44 +117,16 @@ proc prune*(
       blockHashes.add blockHash
       currentBlock += 1
 
-    kvt.pruneBlockAccessListsBe(blockHashes, currentBlock)
-    savedTail = currentBlock
+    kvt.deleteBlockAccessListsBe(blockHashes, currentBlock)
     pruned += blockHashes.len.uint64
 
     if currentBlock < cutoff:
       await sleepAsync(chronos.milliseconds(100))
       txFrame = pruner.com.db.baseTxFrame()
 
-  block walk:
-    while currentBlock <= head:
-      block currentBlockDone:
-        let
-          blockHash = txFrame.getBlockHash(currentBlock).valueOr:
-            warn "Failed to get block hash", blkNum = currentBlock, error
-            break currentBlockDone
-          header = txFrame.getBlockHeader(blockHash).valueOr:
-            warn "Failed to get header", blkNum = currentBlock, error
-            break currentBlockDone
-
-        if header.isWithinBalRetentionPeriod(headSlot):
-          break walk
-
-        if header.blockAccessListHash.isSome():
-          kvt.deleteBlockAccessListBe(blockHash)
-          pruned += 1
-
-      currentBlock += 1
-      blocksSinceSave += 1
-
-      if blocksSinceSave >= pruner.batchSize:
-        kvt.setBalTailBe(currentBlock)
-        savedTail = currentBlock
-        blocksSinceSave = 0
-
-        await sleepAsync(chronos.milliseconds(100))
-        txFrame = pruner.com.db.baseTxFrame()
-
-  if currentBlock > savedTail:
+  if currentBlock == tail:
+    warn "Skipping block with an unreadable header", blkNum = currentBlock
+    currentBlock += 1
     kvt.setBalTailBe(currentBlock)
 
   if pruned > 0:
@@ -167,17 +137,17 @@ proc prune*(
 proc pruneCycle*(pruner: BalPrunerRef) {.async: (raises: [CancelledError]).} =
   let
     txFrame = pruner.com.db.baseTxFrame()
-    head = txFrame.getSavedStateBlockNumber()
-    headHeader = txFrame.getBlockHeader(head).valueOr:
-      warn "Failed to get head header", blkNum = head, error
+    headNumber = txFrame.getSavedStateBlockNumber()
+    headHeader = txFrame.getBlockHeader(headNumber).valueOr:
+      warn "Failed to get head header", blkNum = headNumber, error
       return
 
     headSlot = headHeader.slotNumber.valueOr:
       if pruner.com.isAmsterdamOrLater(headHeader.timestamp):
-        warn "Head header is missing its slot number", blkNum = head
+        warn "Head header is missing its slot number", blkNum = headNumber
       return
 
-  discard await pruner.prune(head, headSlot)
+  discard await pruner.prune(headNumber, headSlot)
 
 proc pruneLoop(pruner: BalPrunerRef) {.async: (raises: [CancelledError]).} =
   info "Starting block access list pruner"
@@ -194,7 +164,7 @@ proc init*(
 ): T =
   T(
     com: com,
-    batchSize: batchSize,
+    batchSize: max(1'u64, batchSize),
     loopDelay: loopDelay,
   )
 

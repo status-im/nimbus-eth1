@@ -163,25 +163,6 @@ proc getBlockHeader*(
   let blockHash = ?db.getBlockHash(n)
   db.getBlockHeader(blockHash)
 
-proc getBlockHeaderOpt*(
-    db: CoreDbTxRef;
-    n: BlockNumber;
-      ): Result[Opt[Header], string] =
-  const info = "getBlockHeaderOpt()"
-  let hashData = db.getOrEmpty(blockNumberToHashKey(n).toOpenArray).valueOr:
-    return err(info & ": " & $$error)
-  if hashData == EmptyBlob:
-    return ok(Opt.none(Header))
-
-  wrapRlpException info:
-    let
-      blockHash = rlp.decode(hashData, Hash32)
-      headerData = db.getOrEmpty(genericHashKey(blockHash).toOpenArray).valueOr:
-        return err(info & ": " & $$error)
-    if headerData == EmptyBlob:
-      return ok(Opt.none(Header))
-    return ok(Opt.some(rlp.decode(headerData, Header)))
-
 proc getCanonicalHeaderHash*(db: CoreDbTxRef): Result[Hash32, string] =
   db.getHash(canonicalHeadHashKey())
 

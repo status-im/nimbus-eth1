@@ -421,19 +421,6 @@ suite "Pruner backend operation shape":
 
     kvt.close()
 
-  test "a pruned block access list costs exactly 1 del":
-    let
-      kvt = KvtDbRef.init()
-      counts = kvt.countOps()
-      blkHash = hash32"5555555555555555555555555555555555555555555555555555555555555555"
-
-    kvt.deleteBlockAccessListBe(blkHash)
-
-    check counts.delRange == 0
-    check counts.del == 1
-
-    kvt.close()
-
   test "empty roots cost nothing":
     let
       kvt = KvtDbRef.init()
@@ -552,6 +539,30 @@ suite "Block access list pruner tests":
 
     check kvt.getBalTailBe() == BlockNumber(8)
 
+  test "the first block search skips over unreadable headers":
+    let
+      com = env.newCom()
+      kvt = com.db.kvt
+      hashes = com.buildChain(numBlocks = 10, firstBalBlock = 5)
+      txFrame = com.db.baseTxFrame()
+
+    # Only blocks 5 and above are stored, as on a snap synced node
+    for i in 1 .. 4:
+      txFrame.del(blockNumberToHashKey(BlockNumber(i)).toOpenArray).expect("del")
+
+    let
+      pruner = BalPrunerRef.init(com)
+      pruned = waitFor pruner.prune(BlockNumber(10), headSlotFor(7))
+
+    check pruned == 3
+
+    for i in 5 .. 7:
+      check not kvt.hasBal(hashes[i])
+    for i in 8 .. 10:
+      check kvt.hasBal(hashes[i])
+
+    check kvt.getBalTailBe() == BlockNumber(8)
+
   test "pruning skips over unreadable blocks":
     let
       com = env.newCom()
@@ -597,6 +608,11 @@ suite "Block access list pruner tests":
     for i in 6 .. 10:
       check kvt.hasBal(hashes[i])
 
+    check kvt.getBalTailBe() == BlockNumber(5)
+
+    check (waitFor pruner.prune(BlockNumber(10), headSlotFor(5))) == 0
+
+    check kvt.hasBal(hashes[5])
     check kvt.getBalTailBe() == BlockNumber(6)
 
   test "pruning resumes from the stored tail":

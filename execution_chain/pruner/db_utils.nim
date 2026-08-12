@@ -53,27 +53,23 @@ proc deleteWithdrawalsBe(kvt: KvtDbRef, withdrawalsRoot: Hash32) =
   kvt.delBe(withdrawalsKey(withdrawalsRoot).toOpenArray).isOkOr:
     warn "pruner: deleteWithdrawalsBe", withdrawalsRoot, error
 
-proc deleteBlockAccessListBe*(kvt: KvtDbRef, blockHash: Hash32) =
-  kvt.delBe(blockHashToBlockAccessListKey(blockHash).toOpenArray).isOkOr:
-    warn "pruner: deleteBlockAccessListBe", blockHash, error
-
-proc pruneBlockAccessListsBe*(
-    kvt: KvtDbRef, blockHashes: openArray[Hash32], tail: BlockNumber
-) =
-  let batch = kvt.putBegFn().expect("pruner: putBegFn")
-  for blockHash in blockHashes:
-    kvt.putKvpFn(
-      batch, blockHashToBlockAccessListKey(blockHash).toOpenArray,
-      default(seq[byte]))
-  kvt.putKvpFn(batch, balTailIdKey().toOpenArray, tail.toBytesLE())
-  kvt.putEndFn(batch).expect("pruner: putEndFn")
-
 proc deleteBlockBodyAndReceiptsBe*(kvt: KvtDbRef, header: Header) =
   kvt.deleteTransactionsBe(header.transactionsRoot)
   kvt.deleteUnclesBe(header.ommersHash)
   if header.withdrawalsRoot.isSome:
     kvt.deleteWithdrawalsBe(header.withdrawalsRoot.get())
   kvt.deleteReceiptsBe(header.receiptsRoot)
+
+proc deleteBlockAccessListsBe*(
+    kvt: KvtDbRef, blockHashes: openArray[Hash32], tail: BlockNumber
+) =
+  let batch = kvt.putBegFn().expect("pruner: putBegFn")
+  for blockHash in blockHashes:
+    kvt.putKvpFn(
+      batch, blockHashToBlockAccessListKey(blockHash).toOpenArray, default(seq[byte]))
+  kvt.putKvpFn(batch, balPrunerStateKey().toOpenArray, tail.toBytesLE())
+  kvt.putEndFn(batch).expect("pruner: putEndFn")
+
 
 # ------------------------------------------------------------------------------
 # Direct-backend progress tracking
@@ -99,7 +95,7 @@ proc getChainTailBe*(kvt: KvtDbRef): BlockNumber =
 
 proc setBalTailBe*(kvt: KvtDbRef, blockNumber: BlockNumber) =
   ## Records the block number up to which block access lists have been pruned.
-  kvt.setBlockNumberBe(balTailIdKey(), blockNumber)
+  kvt.setBlockNumberBe(balPrunerStateKey(), blockNumber)
 
 proc getBalTailBe*(kvt: KvtDbRef): BlockNumber =
-  kvt.getBlockNumberBe(balTailIdKey())
+  kvt.getBlockNumberBe(balPrunerStateKey())
