@@ -412,21 +412,39 @@ jobs:
         # release with "draft: existingRelease.draft", ignoring the draft input
         # below. Without a delete the rolling nightly keeps whatever state it
         # already had, so a published one can never go back to being a draft.
-        # Tolerate a missing release/tag - a draft never creates the git tag.
-        # --repo is required: this job has no checkout, so gh cannot infer the
-        # repository from a git remote.
         if: needs.setup.outputs.is_nightly == 'true'
-        run: |
-          if gh release delete nightly --cleanup-tag --yes --repo "${GITHUB_REPOSITORY}"; then
-            echo "Deleted the previous nightly release."
-          else
-            echo "No previous nightly release to delete, or its tag was already gone."
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
 
+            // Must list rather than getReleaseByTag: that endpoint does not
+            // return drafts, and once this works the nightly always is one.
+            const releases = await github.paginate(github.rest.repos.listReleases, {
+              owner, repo, per_page: 100,
+            });
+
+            for (const release of releases.filter((r) => r.tag_name === 'nightly')) {
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: release.id });
+              core.info(`Deleted release ${release.id} (draft: ${release.draft})`);
+            }
+
+            // A draft never creates the git tag, so a missing ref is expected.
+            try {
+              await github.rest.git.deleteRef({ owner, repo, ref: 'tags/nightly' });
+              core.info('Deleted tag nightly');
+            } catch (error) {
+              if (error.status !== 404 && error.status !== 422) throw error;
+              core.info('No nightly tag to delete');
+            }
+
+      # Two different mechanisms, deliberately - the same split nimbus-eth2
+      # makes. action-gh-release picks create-or-update by itself and only
+      # honours "draft" on create, so it is safe only where the tag is
+      # guaranteed fresh. That holds for a "v*" tag and never for the rolling
+      # nightly, which is created explicitly instead.
       - name: Create release
-        id: create_release
+        if: needs.setup.outputs.is_nightly != 'true'
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -437,18 +455,23 @@ jobs:
           name: ${{ needs.setup.outputs.release_name }}
           body_path: release_notes.md
           files: |
-            linux-amd64-execution/*
-            linux-amd64-proxy/*
-            linux-amd64-libverifproxy/*
-            linux-arm64-execution/*
-            linux-arm64-proxy/*
-            linux-arm64-libverifproxy/*
-            windows-amd64-execution/*
-            windows-amd64-proxy/*
-            windows-amd64-libverifproxy/*
-            macos-arm64-execution/*
-            macos-arm64-proxy/*
-            macos-arm64-libverifproxy/*
+            *-execution/*
+            *-proxy/*
+            *-libverifproxy/*
+
+      - name: Create nightly release
+        if: needs.setup.outputs.is_nightly == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create nightly --draft \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "${{ needs.setup.outputs.release_name }}" \
+            --notes-file release_notes.md \
+            *-execution/* \
+            *-proxy/* \
+            *-libverifproxy/*
 
   publish-npm:
     name: Publish WASM to GitHub Packages
