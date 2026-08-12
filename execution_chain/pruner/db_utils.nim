@@ -60,9 +60,6 @@ proc deleteBlockAccessListBe*(kvt: KvtDbRef, blockHash: Hash32) =
 proc pruneBlockAccessListsBe*(
     kvt: KvtDbRef, blockHashes: openArray[Hash32], tail: BlockNumber
 ) =
-  ## Deletes the given block access lists and records the new tail in a single
-  ## atomic write batch. Writing an empty value deletes the key at the backend
-  ## level, the same way frame deletions reach the backend via `persist`.
   let batch = kvt.putBegFn().expect("pruner: putBegFn")
   for blockHash in blockHashes:
     kvt.putKvpFn(

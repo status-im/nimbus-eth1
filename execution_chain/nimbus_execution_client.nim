@@ -255,8 +255,6 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, para
         "Restart with --prune=true or use a fresh data directory."
       quit(QuitFailure)
 
-  # Block access lists (EIP-7928) only exist from the Amsterdam fork onwards,
-  # so there is nothing to prune on networks which don't have it scheduled
   if com.config.amsterdamTime.isSome:
     nimbus.balPruner = BalPrunerRef.init(com)
     nimbus.balPruner.start()
