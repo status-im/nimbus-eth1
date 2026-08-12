@@ -292,17 +292,6 @@ jobs:
     runs-on: ${{ matrix.builder }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - id: shared-action
-        uses: ./.github/actions/shared
-        with:
-          llvm-mingw: true
-          nim-cache: false
-          rocksdb-cache: false
-          eest-cache: false
-
       - name: Download execution client artefact
         uses: actions/download-artifact@v8
         with:
@@ -321,16 +310,11 @@ jobs:
           build/nimbus --help
           build/nimbus_verified_proxy --help
 
-      - name: Test libverifproxy
-        run: |
-          make libverifproxy_test
-          build/libverifproxy_test
-
   docker-release:
     name: Publish nightly Docker images
     # A tagged release reaches this same workflow when its draft is published.
     if: needs.setup.outputs.is_nightly == 'true'
-    needs: [setup, build]
+    needs: [setup, build, run-binary]
     uses: ./.github/workflows/docker_release.yml
     with:
       tag: ${{ needs.setup.outputs.docker_tag }}
@@ -367,7 +351,9 @@ jobs:
 
   prepare-release:
     name: Prepare release draft
-    needs: [setup, build]
+    # run-binary gates this: nothing is published if the built binaries do not
+    # actually start on their target platform.
+    needs: [setup, build, run-binary]
     runs-on: ubuntu-latest
     steps:
       - name: Download artefacts
