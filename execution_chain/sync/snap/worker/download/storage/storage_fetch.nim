@@ -51,8 +51,8 @@ proc getStorage(
 
   var resp: StorageRangesPacket
   try:
-    resp = (await buddy.peer.getStorageRanges(
-                    req, fetchStorageSnapTimeout)).valueOr:
+    resp = (await snap.getStorageRanges(
+                      buddy.peer, req, fetchStorageSnapTimeout)).valueOr:
         return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))

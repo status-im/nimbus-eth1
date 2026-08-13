@@ -256,6 +256,19 @@ suite "SharedTable with move-only values Tests":
   # non-GC value types (SharedBytes, nested SharedTable) whose `=copy` is
   # forbidden. The table must move values internally and never copy them.
 
+  test "a value type holding GC memory is rejected at compile time":
+    template initCompiles(T: typedesc): bool =
+      compiles(
+        block:
+          var t = SharedTable[int, T].init()
+      )
+
+    check:
+      initCompiles(SharedBytes)
+      initCompiles(int)
+      not initCompiles(seq[byte])
+      not initCompiles(string)
+
   test "stores and retrieves SharedBytes values via withValue":
     var t = SharedTable[int, SharedBytes].init()
     t.put(1, SharedBytes.init([1'u8, 2, 3]))

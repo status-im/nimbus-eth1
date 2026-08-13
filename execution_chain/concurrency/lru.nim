@@ -16,7 +16,11 @@
 
 {.push raises: [], gcsafe.}
 
-import std/[atomics, cpuinfo, hashes, math, typetraits], results, ./readwritelock
+import
+  std/[atomics, cpuinfo, hashes, math, typetraits],
+  results,
+  ./readwritelock,
+  ./type_traits
 
 export hashes, results
 
@@ -56,6 +60,13 @@ type
     ## The layout of the LRU node list was inspired by:
     ## * https://github.com/phuslu/lru
     ## * https://github.com/goossaert/hashmap
+    ##
+    ## Values are only ever moved (never copied) internally so the cache can
+    ## hold move-only, non-GC value types such as `SharedBytes`. As a
+    ## consequence the cache does not own the lifetime of its values: when the
+    ## value type owns manually allocated memory, the caller is responsible for
+    ## disposing values that are replaced, evicted or still resident when the
+    ## cache is disposed.
     ##
     ## Limitations:
     ##
@@ -210,7 +221,7 @@ func tableBucket(s: LruCache, subhash: uint32, key: auto): Opt[uint32] =
 template tableBucket(s: LruCache, key: auto): Opt[uint32] =
   s.tableBucket(subhash(key), key)
 
-func tableGet(s: LruCache, subhash: uint32, key: auto): Opt[uint32] =
+func tableGet(s: LruCache, subhash: uint32, key: auto): Opt[uint32] {.inline.} =
   if s.used == 0:
     Opt.none(uint32)
   else:
@@ -278,6 +289,10 @@ proc grow[K, V](v: var LruCache[K, V], newSize: uint32) =
   else:
     v.nodesLen = newSize.int
 
+  # `resizeShared` leaves the extension uninitialized - zero the newly usable
+  # slots so that storing a value into a fresh node never overwrites garbage
+  zeroMem(addr v.nodes[oldSize], (newSize - oldSize).int * sizeof(LruNode[K, V]))
+
   # Create fully linked list of items - this keeps the move logic free of
   # special cases for uninitialized nodes
   for i in oldSize ..< newSize:
@@ -313,13 +328,17 @@ proc init[K, V](T: type LruCache[K, V], capacity: int, initialSize: int = 0): T 
   ## grow reallocations as the cache fills.
   static:
     doAssert supportsCopyMem(K), "K must be a non-GC type"
-    doAssert supportsCopyMem(V), "V must be a non-GC type"
+    doAssert supportsSharedMem(V), "V must be a non-GC type"
+
   doAssert initialSize <= capacity, "initialSize must not exceed capacity"
   result.capacity = capacity
   if initialSize > 0:
     result.grow(uint32(initialSize + 1))
 
 proc dispose(s: var LruCache) =
+  ## Free the shared memory held by the cache. The stored values are discarded
+  ## without being disposed - if V owns manually allocated memory, dispose each
+  ## value first (via the `mvalues` iterator), otherwise that memory is leaked.
   if s.nodesLen > 0:
     deallocShared(s.nodes)
     s.nodes = nil
@@ -337,6 +356,16 @@ proc `=copy`[K, V](
 ) {.error: "Copying LruCache is forbidden".} =
   discard
 
+iterator mvalues[K, V](s: var LruCache[K, V]): var V =
+  ## Mutable references to the values in MRU order - starting from the front
+  ## with the item that was most recently added or accessed.
+  if s.nodesLen > 0:
+    var pos = s.nodes[0].next
+    for _ in 0 ..< s.used:
+      let next = s.nodes[pos].next
+      yield s.nodes[pos].value
+      pos = next
+
 when false:
   iterator mruIndices(s: LruCache): uint32 =
     if s.nodesLen > 0:
@@ -352,12 +381,6 @@ when false:
       yield s.nodes[index].key
 
   iterator values(s: var LruCache, mru: static bool = false): lent LruCache.V =
-    ## Values in MRU order - starting from the front with the item that was most
-    ## recently added or accessed.
-    for index in s.mruIndices:
-      yield s.nodes[index].value
-
-  iterator mvalues(s: var LruCache, mru: static bool = false): var LruCache.V =
     ## Values in MRU order - starting from the front with the item that was most
     ## recently added or accessed.
     for index in s.mruIndices:
@@ -410,10 +433,15 @@ proc del(s: var LruCache, subhash: uint32, key: auto): bool {.discardable.} =
   true
 
 template del(s: var LruCache, key: auto) =
-  ## Remove item from cache, if present - does nothing if it was missing
+  ## Remove item from cache, if present - does nothing if it was missing.
+  ##
+  ## The removed value is discarded. If V owns manually allocated memory, use
+  ## `pop` instead and dispose the returned value, otherwise it is leaked.
   s.del(subhash(key), key)
 
-proc pop[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
+proc pop[K, V](
+    s: var LruCache[K, V], subhash: uint32, key: auto
+): Opt[V] {.noinit.} =
   if s.used == 0:
     return Opt.none(V)
 
@@ -426,24 +454,37 @@ proc pop[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
   s.used -= 1
 
 template pop[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
-  ## Retrieve item and remove it from LRU cache
+  ## Retrieve item and remove it from LRU cache, transferring ownership of the
+  ## value to the caller
   s.pop(subhash(key), key)
 
-proc get[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
+proc get[K, V](
+    s: var LruCache[K, V], subhash: uint32, key: auto
+): Opt[V] {.inline, noinit.} =
   let index = ?s.tableGet(subhash, key)
   s.moveToFront(index)
   result = Opt.some(s.nodes[index].value)
 
 template get[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
-  ## Retrieve item and move it to the front of the LRU cache
+  ## Retrieve item and move it to the front of the LRU cache.
+  ##
+  ## The value is copied out, so this requires a copyable V and will not compile
+  ## for move-only value types (e.g. SharedBytes); use `getPtr` to borrow such
+  ## values in place instead.
   s.get(subhash(key), key)
 
-func peek[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): Opt[V] =
+func peek[K, V](
+    s: var LruCache[K, V], subhash: uint32, key: auto
+): Opt[V] {.inline, noinit.} =
   let index = ?s.tableGet(subhash, key)
   result = Opt.some(s.nodes[index].value)
 
 template peek[K, V](s: var LruCache[K, V], key: auto): Opt[V] =
-  ## Retrieve item without moving it to the front
+  ## Retrieve item without moving it to the front.
+  ##
+  ## The value is copied out, so this requires a copyable V and will not compile
+  ## for move-only value types (e.g. SharedBytes); use `peekPtr` to borrow such
+  ## values in place instead.
   s.peek(subhash(key), key)
 
 proc getPtr[K, V](s: var LruCache[K, V], subhash: uint32, key: auto): ptr V =
@@ -470,93 +511,112 @@ proc moveToFront(s: var LruCache, subhash: uint32, key: auto) =
     return
   s.moveToFront(index)
 
-proc update(s: var LruCache, subhash: uint32, key: auto, value: auto): bool =
+proc update[K, V](
+    s: var LruCache[K, V], subhash: uint32, key: auto, value: var V
+): bool {.inline.} =
   let index = s.tableGet(subhash, key).valueOr:
     return false
 
-  s.nodes[index].value = value
+  s.nodes[index].value = consume(value)
   s.moveToFront(index)
   result = true
 
 template update(s: var LruCache, key: auto, value: auto): bool =
   ## Update and move an existing item to the front of the LRU cache - returns
-  ## true if the item was updated, false if it was not in the cache
-  s.update(subhash(key), key, value)
+  ## true if the item was updated, false if it was not in the cache.
+  ##
+  ## `value` is consumed either way and the replaced value is abandoned - if V
+  ## owns manually allocated memory, dispose the existing value first (e.g. via
+  ## `getPtr`) and be aware that a failed update drops `value`.
+  withMutable(value, v):
+    s.update(subhash(key), key, v)
 
-proc refresh(s: var LruCache, subhash: uint32, key: auto, value: auto): bool =
+proc refresh[K, V](
+    s: var LruCache[K, V], subhash: uint32, key: auto, value: var V
+): bool {.inline.} =
   let index = s.tableGet(subhash, key).valueOr:
     return false
 
-  s.nodes[index].value = value
+  s.nodes[index].value = consume(value)
   result = true
 
 template refresh(s: var LruCache, key: auto, value: auto): bool =
   ## Update existing item without moving it to the front of the LRU cache -
-  ## returns true if the item was refreshed, false if it was not in the cache
-  s.refresh(subhash(key), key, value)
+  ## returns true if the item was refreshed, false if it was not in the cache.
+  ##
+  ## Same value ownership caveats as `update`.
+  withMutable(value, v):
+    s.refresh(subhash(key), key, v)
 
 iterator putWithEvicted[K, V](
-    s: var LruCache, subhash: uint32, key: K, value: V
-): tuple[evicted: bool, key: LruCache.K, value: LruCache.V] =
+    s: var LruCache[K, V], subhash: uint32, key: K, value: var V
+): tuple[evicted: bool, key: K, value: ptr V] =
   if s.used + 1 >= s.nodesLen:
     s.grow(uint32(min(s.capacity, targetLen(s.used)) + 1))
 
   if s.nodesLen > 0: # if capacity was 0, there will be no growth
-    let
-      bucket = s.tableBucket(subhash, key)
+    let bucket = s.tableBucket(subhash, key)
+    var index: uint32
 
-      index =
-        if bucket.isSome(): # Replacing an existing item
-          let index = s.buckets[bucket[]].index
-          yield (false, s.nodes[index].key, s.nodes[index].value)
+    if bucket.isSome(): # Replacing an existing item
+      index = s.buckets[bucket[]].index
+      yield (false, s.nodes[index].key, addr s.nodes[index].value)
 
-          s.nodes[index].value = value
-          index
+      s.nodes[index].value = consume(value)
+    else:
+      let
+        last = s.nodes[0].prev
+        node = addr s.nodes[last]
+        evicted = s.tableBucket(node[].key)
+
+      # Evict the least recently used item from the lookup table - the bucket
+      # comparison avoids a false positive which happens when the last node holds
+      # a default-initialized key (or a key that has not been cleared during
+      # `del`) but that key currently has been assigned elsewhere
+      if evicted.isSome():
+        let evictedIndex = s.buckets[evicted[]].index
+
+        if evictedIndex == last:
+          # Evict the tail (instead of updating it)
+          yield (true, s.nodes[evictedIndex].key, addr s.nodes[evictedIndex].value)
+          toOpenArray(s.buckets, 0, s.bucketsLen - 1).tableDel(evicted[])
         else:
-          let
-            last = s.nodes[0].prev
-            node = addr s.nodes[last]
-            evicted = s.tableBucket(node[].key)
+          s.used += 1
+      else:
+        s.used += 1
 
-          # Evict the least recently used item from the lookup table - the bucket
-          # comparison avoids a false positive which happens when the last node holds
-          # a default-initialized key (or a key that has not been cleared during
-          # `del`) but that key currently has been assigned elsewhere
-          if evicted.isSome():
-            let index = s.buckets[evicted[]].index
+      node[].key = key
+      node[].value = consume(value)
 
-            if index == last:
-              # Evict the tail (instead of updating it)
-              yield (true, s.nodes[index].key, s.nodes[index].value)
-              toOpenArray(s.buckets, 0, s.bucketsLen - 1).tableDel(evicted[])
-            else:
-              s.used += 1
-          else:
-            s.used += 1
-
-          node[].key = key
-          node[].value = value
-
-          toOpenArray(s.buckets, 0, s.bucketsLen - 1).tablePut(subhash, last)
-          last
+      toOpenArray(s.buckets, 0, s.bucketsLen - 1).tablePut(subhash, last)
+      index = last
 
     s.moveToFront(index)
 
 iterator putWithEvicted[K, V](
-    s: var LruCache, key: K, value: V
-): tuple[evicted: bool, key: LruCache.K, value: LruCache.V] =
+    s: var LruCache[K, V], key: K, value: sink V
+): tuple[evicted: bool, key: K, value: ptr V] =
   ## Insert a new item in the cache, replacing the least recently used one and
-  ## yielding the updated or evicted item(s), if any, with their pre-put value.
+  ## yielding the updated or evicted item(s), if any, with a pointer to their
+  ## pre-put value.
+  ##
+  ## The yielded pointer is only valid for the duration of the loop body, after
+  ## which the slot is overwritten - move or dispose the value there when V owns
+  ## manually allocated memory.
   ##
   ## Note: Although the API supports evicting more than one item, currently this
   ## cannot cannot happen - future versions may include options for evaluating
   ## the cost of each item at which point several "cheap" items may get evicted
   ## when an expensive item is added.
+  # An inline iterator's parameters become locals of the caller, so `sink` here
+  # costs the same single copy as binding the argument to a local would - unlike
+  # a proc, there is no extra frame for the value to cross. `value` is then a
+  # mutable local, which binds to the `var` parameter below without copying.
   for v in s.putWithEvicted(subhash(key), key, value):
     yield v
 
-proc put(
-    s: var LruCache, subhash: uint32, key: auto, value: auto
+proc put[K, V](
+    s: var LruCache[K, V], subhash: uint32, key: auto, value: var V
 ): bool {.discardable.} =
   ## Returns true if `s.len` increased (a new entry occupied a free slot), false
   ## if the put replaced an existing entry or evicted the LRU item.
@@ -570,7 +630,7 @@ proc put(
   if bucket.isSome():
     # Replacing an existing item - no need to read old key/value
     let index = s.buckets[bucket[]].index
-    s.nodes[index].value = value
+    s.nodes[index].value = consume(value)
     s.moveToFront(index)
     return false
 
@@ -593,7 +653,7 @@ proc put(
 
   let node = addr s.nodes[last]
   node[].key = key
-  node[].value = value
+  node[].value = consume(value)
 
   toOpenArray(s.buckets, 0, s.bucketsLen - 1).tablePut(subhash, last)
   s.moveToFront(last)
@@ -601,7 +661,11 @@ proc put(
 template put(s: var LruCache, key: auto, value: auto) =
   ## Insert or update an item in the cache, replacing the least recently used
   ## one if inserting the item would exceed capacity.
-  s.put(subhash(key), key, value)
+  ##
+  ## The replaced or evicted value is abandoned - if V owns manually allocated
+  ## memory, use `putWithEvicted` instead so it can be disposed.
+  withMutable(value, v):
+    s.put(subhash(key), key, v)
 
 # ConcurrentLruCache is a thread safe LRU cache designed to handle high
 # throughput concurrent reads and writes from multiple threads. It uses a
@@ -611,6 +675,12 @@ template put(s: var LruCache, key: auto, value: auto) =
 # key's hash while the LruCache inside each shard picks buckets from the low
 # bits of the (folded) hash - keeping the two bit ranges disjoint avoids any
 # correlation between shard and bucket placement.
+#
+# Like the underlying LruCache, values are only ever moved (never copied)
+# internally so the cache can hold move-only, non-GC value types such as
+# SharedBytes. The cache does not own the lifetime of its values: use
+# `putWithEvicted` and `pop` to reclaim replaced, evicted and removed values and
+# the `mvalues` iterator to dispose whatever is left before `dispose`.
 #
 # This sharded implementation performs badly for the single threaded scenario
 # so as a temporary workaround we use a case object and based on the threadSafe
@@ -637,12 +707,15 @@ type
 
   ConcurrentLruCache*[K, V] = object
     state: State
-    case threadSafe: bool
-    of true:
-      shards: ptr UncheckedArray[Shard[K, V]]
-      shardBits: int
-    of false:
-      cache: LruCache[K, V]
+    # Deliberately not a `case` object: every read of `shards`/`cache` would
+    # then emit a variant field check, and these are the hottest accessors in
+    # the cache. The branch on `threadSafe` already establishes which of the two
+    # is live, and the unused one costs a handful of bytes per cache, not per
+    # entry.
+    cache: LruCache[K, V]
+    threadSafe: bool
+    shards: ptr UncheckedArray[Shard[K, V]]
+    shardBits: int
 
 func defaultShardBits*(cpuCount: int): int =
   # Default shard count of roughly 4 * cpuCount, rounded up to the nearest
@@ -673,7 +746,8 @@ proc init*[K, V](
   # are using the cache while initialising it.
   static:
     doAssert supportsCopyMem(K), "K must be a non-GC type"
-    doAssert supportsCopyMem(V), "V must be a non-GC type"
+    doAssert supportsSharedMem(V), "V must be a non-GC type"
+
   doAssert lru.state == State.UNINITIALIZED
   doAssert shardBits >= 0 and shardBits <= 30
   doAssert initialSize <= capacity, "initialSize must not exceed capacity"
@@ -701,9 +775,28 @@ proc init*[K, V](
       cache: LruCache[K, V].init(capacity, initialSize),
     )
 
+iterator mvalues*[K, V](lru: var ConcurrentLruCache[K, V]): var V =
+  ## Mutable references to every value held by the cache, in an unspecified
+  ## order across shards.
+  ##
+  ## This iterator takes no locks and so is not thread safe - it is intended for
+  ## disposing owning values before `dispose` and the caller must ensure that no
+  ## other threads are using the cache while iterating.
+  if lru.state == State.INITIALIZED:
+    if lru.threadSafe:
+      for i in 0 ..< lru.numShards():
+        for value in lru.shards[i].cache.mvalues():
+          yield value
+    else:
+      for value in lru.cache.mvalues():
+        yield value
+
 proc dispose*[K, V](lru: var ConcurrentLruCache[K, V]) =
   # dispose is not thread safe and so the caller must ensure that no other threads
   # are using the cache while disposing it.
+  #
+  # The stored values are discarded without being disposed - if V owns manually
+  # allocated memory, dispose each value first via the `mvalues` iterator.
   if lru.state == State.INITIALIZED:
     if lru.threadSafe:
       for i in 0 ..< lru.numShards():
@@ -797,39 +890,52 @@ func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   else:
     lru.cache.len
 
-func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool =
-  if lru.threadSafe:
-    withShardRead(lru, key):
-      s.cache.contains(sh, key)
+func contains*[K, V](lru: var ConcurrentLruCache[K, V], key: K): bool {.inline.} =
+  # Assigning `result` inside each branch rather than yielding the `if` as an
+  # expression matters for the value-returning accessors below, where the
+  # expression form makes the compiler stage the result in a temporary and copy
+  # it out. Kept uniform here so the shape is not accidentally reintroduced.
+  if not lru.threadSafe:
+    result = lru.cache.contains(key)
   else:
-    lru.cache.contains(key)
-
-func peek*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
-  if lru.threadSafe:
     withShardRead(lru, key):
-      s.cache.peek(sh, key)
-  else:
-    lru.cache.peek(key)
+      result = s.cache.contains(sh, key)
 
-proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
-  if lru.threadSafe:
+func peek*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] {.inline, noinit.} =
+  ## Retrieve the value for `key` without promoting it.
+  ##
+  ## The value is copied out, so this requires a copyable V and will not compile
+  ## for move-only value types (e.g. SharedBytes); use `withPeek` to borrow such
+  ## values in place instead.
+  if not lru.threadSafe:
+    result = lru.cache.peek(key)
+  else:
+    withShardRead(lru, key):
+      result = s.cache.peek(sh, key)
+
+proc get*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] {.inline, noinit.} =
+  ## Retrieve the value for `key`, promoting it towards the most-recently-used
+  ## end (sampled).
+  ##
+  ## The value is copied out, so this requires a copyable V and will not compile
+  ## for move-only value types (e.g. SharedBytes); use `withGet` to borrow such
+  ## values in place instead.
+  if not lru.threadSafe:
+    result = lru.cache.get(key)
+  else:
     let
       h = hash(key)
       sh = h.toSubhash()
       s = addr lru.shards[h.toShardIdx(lru.shardBits)]
 
-    var value: Opt[V]
     s.lock.withReadLock:
-      value = s.cache.peek(sh, key)
+      result = s.cache.peek(sh, key)
 
-    if value.isSome():
+    if result.isSome():
       inc tlsLruGetCounter
       if (tlsLruGetCounter and SAMPLE_MASK) == 0'u32:
         s.lock.withWriteLock:
           s.cache.moveToFront(sh, key)
-    value
-  else:
-    lru.cache.get(key)
 
 
 type
@@ -872,7 +978,7 @@ template withValueImpl[K, V](
     let
       sh = keyHash.subhash
       s = addr lru.shards[keyHash.shardIdx]
-    
+
     var valuePtr: ptr V
     when peek:
       s.lock.withReadLock:
@@ -950,18 +1056,56 @@ template withPeekByHash*[K, V](
   ## position unchanged (like `peek`) rather than promoting it.
   withValueImpl(lru, keyHash, key, value, true, foundBody, notFoundBody)
 
-proc putByHash*[K, V](
-    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, val: V
-) =
-  if lru.threadSafe:
+proc putByHashImpl[K, V](
+    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, val: var V
+) {.inline.} =
+  if not lru.threadSafe:
+    lru.cache.put(keyHash.subhash, key, val)
+  else:
     let
       sh = keyHash.subhash
       s = addr lru.shards[keyHash.shardIdx]
     s.lock.withWriteLock:
       if s.cache.put(sh, key, val):
         s.usedCount.store(s.cache.len, moRelaxed)
+
+template putByHash*[K, V](
+    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, val: V
+) =
+  ## Insert or update `key` with `val`, which is moved into the cache.
+  ##
+  ## The replaced or evicted value is abandoned - if V owns manually allocated
+  ## memory, use `putWithEvictedByHash` instead so it can be disposed.
+  bind putByHashImpl, withMutable
+  withMutable(val, v):
+    lru.putByHashImpl(keyHash, key, v)
+
+proc putWithEvictedByHashImpl[K, V](
+    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, val: var V
+): Opt[V] =
+  template putInto(cache: var LruCache[K, V], sh: uint32) =
+    for (_, _, evictedVal) in cache.putWithEvicted(sh, key, val):
+      result = Opt.some(move(evictedVal[]))
+
+  if not lru.threadSafe:
+    putInto(lru.cache, keyHash.subhash)
   else:
-    lru.cache.put(keyHash.subhash, key, val)
+    let s = addr lru.shards[keyHash.shardIdx]
+    s.lock.withWriteLock:
+      putInto(s.cache, keyHash.subhash)
+      s.usedCount.store(s.cache.len, moRelaxed)
+
+template putWithEvictedByHash*[K, V](
+    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, val: V
+): Opt[V] =
+  ## Insert or update `key` with `val`, returning the value it replaced or
+  ## evicted (if any) so that the caller can dispose of it.
+  ##
+  ## This is the ownership-preserving variant of `putByHash` and the only way to
+  ## avoid leaking when V owns manually allocated memory.
+  bind putWithEvictedByHashImpl, withMutable
+  withMutable(val, v):
+    lru.putWithEvictedByHashImpl(keyHash, key, v)
 
 template withGet*[K, V](
     lru: var ConcurrentLruCache[K, V], key: K, value, body: untyped
@@ -993,37 +1137,92 @@ template withPeek*[K, V](
   ## unchanged (like `peek`) rather than promoting it.
   withValueImpl(lru, lru.toKeyHash(key), key, value, true, foundBody, notFoundBody)
 
-proc put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
-  lru.putByHash(lru.toKeyHash(key), key, val)
+proc putImpl[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: var V) {.inline.} =
+  # The single-shard path goes straight to the inner cache - the `putByHash`
+  # frame would be one more the value has to cross.
+  if not lru.threadSafe:
+    lru.cache.put(subhash(key), key, val)
+  else:
+    lru.putByHashImpl(lru.toKeyHash(key), key, val)
 
-proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] =
-  if lru.threadSafe:
+template put*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V) =
+  ## Insert or update `key` with `val`, which is moved into the cache.
+  ##
+  ## The replaced or evicted value is abandoned - if V owns manually allocated
+  ## memory, use `putWithEvicted` instead so it can be disposed.
+  # A template rather than a proc taking `sink V`: a `sink` parameter is passed
+  # by value for a V with no lifetime hooks, so the proc call would copy the
+  # whole value into its frame before the cache ever stores it. `withMutable`
+  # borrows an addressable copyable argument in place and otherwise binds it to
+  # a local, so the value is constructed or copied at most once and then handed
+  # over by reference.
+  bind putImpl, withMutable
+  withMutable(val, v):
+    lru.putImpl(key, v)
+
+template putWithEvicted*[K, V](
+    lru: var ConcurrentLruCache[K, V], key: K, val: V
+): Opt[V] =
+  ## Insert or update `key` with `val`, returning the value it replaced or
+  ## evicted (if any) so that the caller can dispose of it.
+  bind putWithEvictedByHashImpl, withMutable
+  withMutable(val, v):
+    lru.putWithEvictedByHashImpl(lru.toKeyHash(key), key, v)
+
+proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] {.inline, noinit.} =
+  ## Remove `key` from the cache and return its value, transferring ownership to
+  ## the caller. Prefer this over `del` when V owns manually allocated memory.
+  if not lru.threadSafe:
+    result = lru.cache.pop(key)
+  else:
     withShardWrite(lru, key):
-      let r = s.cache.pop(sh, key)
-      if r.isSome():
+      result = s.cache.pop(sh, key)
+      if result.isSome():
         s.usedCount.store(s.cache.len, moRelaxed)
-      r
-  else:
-    lru.cache.pop(key)
 
-proc update*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
-  if lru.threadSafe:
+proc updateImpl[K, V](
+    lru: var ConcurrentLruCache[K, V], key: K, val: var V
+): bool {.inline.} =
+  if not lru.threadSafe:
+    result = lru.cache.update(subhash(key), key, val)
+  else:
     withShardWrite(lru, key):
-      s.cache.update(sh, key, val)
-  else:
-    lru.cache.update(key, val)
+      result = s.cache.update(sh, key, val)
 
-proc refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
-  if lru.threadSafe:
+template update*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
+  ## Update and promote an existing item - returns true if the item was updated,
+  ## false if it was not in the cache.
+  ##
+  ## `val` is consumed either way and the replaced value is abandoned - if V
+  ## owns manually allocated memory, prefer `putWithEvicted`.
+  bind updateImpl, withMutable
+  withMutable(val, v):
+    lru.updateImpl(key, v)
+
+proc refreshImpl[K, V](
+    lru: var ConcurrentLruCache[K, V], key: K, val: var V
+): bool {.inline.} =
+  if not lru.threadSafe:
+    result = lru.cache.refresh(subhash(key), key, val)
+  else:
     withShardWrite(lru, key):
-      s.cache.refresh(sh, key, val)
-  else:
-    lru.cache.refresh(key, val)
+      result = s.cache.refresh(sh, key, val)
 
-proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) =
-  if lru.threadSafe:
+template refresh*[K, V](lru: var ConcurrentLruCache[K, V], key: K, val: V): bool =
+  ## Update an existing item without promoting it - returns true if the item was
+  ## refreshed, false if it was not in the cache.
+  ##
+  ## Same value ownership caveats as `update`.
+  bind refreshImpl, withMutable
+  withMutable(val, v):
+    lru.refreshImpl(key, v)
+
+proc del*[K, V](lru: var ConcurrentLruCache[K, V], key: K) {.inline.} =
+  ## Remove `key` from the cache, discarding its value. If V owns manually
+  ## allocated memory, use `pop` instead and dispose the returned value.
+  if not lru.threadSafe:
+    lru.cache.del(key)
+  else:
     withShardWrite(lru, key):
       if s.cache.del(sh, key):
         s.usedCount.store(s.cache.len, moRelaxed)
-  else:
-    lru.cache.del(key)

@@ -23,13 +23,13 @@ import
 
 {.push gcsafe, raises:[].}
 
-proc update(ctx: var sha256, wd: WithdrawalV1) =
+func update(ctx: var sha256, wd: WithdrawalV1) =
   ctx.update(toBytesBE distinctBase wd.index)
   ctx.update(toBytesBE distinctBase wd.validatorIndex)
   ctx.update(distinctBase wd.address)
   ctx.update(toBytesBE distinctBase wd.amount)
 
-proc computePayloadId*(blockHash: common.Hash32,
+func computePayloadId*(blockHash: common.Hash32,
                        params: PayloadAttributes): Bytes8 =
   var dest: common.Hash32
   var ctx: sha256
@@ -49,10 +49,11 @@ proc computePayloadId*(blockHash: common.Hash32,
   ctx.clear()
   (distinctBase result)[0..7] = dest.data[0..7]
 
-proc validateBlockHash*(header: common.Header,
+func validateBlockHash*(header: common.Header,
                         wantHash: common.Hash32,
                         version: Version): Result[void, PayloadStatus]
                           {.gcsafe.} =
+
   let gotHash = header.computeBlockHash
   if wantHash != gotHash:
     let status = if version == Version.V1:
@@ -78,7 +79,7 @@ proc simpleFCU*(status: PayloadStatus): ForkchoiceUpdatedResponse =
 proc simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: PayloadStatus(status: status))
 
-proc simpleFCU*(status: PayloadExecutionStatus,
+func simpleFCU*(status: PayloadExecutionStatus,
                 msg: string): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
     payloadStatus: PayloadStatus(
@@ -87,7 +88,7 @@ proc simpleFCU*(status: PayloadExecutionStatus,
     )
   )
 
-proc invalidFCU*(
+func invalidFCU*(
     validationError: string,
     hash = default(common.Hash32)): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus:
@@ -98,7 +99,7 @@ proc invalidFCU*(
     )
   )
 
-proc validFCU*(id: Opt[Bytes8],
+func validFCU*(id: Opt[Bytes8],
                validHash: common.Hash32): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
     payloadStatus: PayloadStatus(
@@ -108,10 +109,10 @@ proc validFCU*(id: Opt[Bytes8],
     payloadId: id
   )
 
-proc invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatus =
+proc invalidStatus*(validHash: Opt[common.Hash32], msg: string): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.invalid,
-    latestValidHash: toValidHash(validHash),
+    latestValidHash: validHash,
     validationError: Opt.some(msg)
   )
 
@@ -121,6 +122,9 @@ proc invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
     latestValidHash: toValidHash(validHash)
   )
 
+func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatus =
+  invalidStatus(Opt.some(validHash), msg)
+  
 proc acceptedStatus*(validHash: common.Hash32): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.accepted,
@@ -146,36 +150,37 @@ proc validStatus*(validHash: common.Hash32, validIL: bool): PayloadStatus =
   )
 
 proc invalidParams*(msg: string): ref ApplicationError =
+
   (ref ApplicationError)(
     code: engineApiInvalidParams,
     msg: msg
   )
 
-proc invalidForkChoiceState*(msg: string): ref ApplicationError =
+func invalidForkChoiceState*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiInvalidForkchoiceState,
     msg: msg
   )
 
-proc unknownPayload*(msg: string): ref ApplicationError =
+func unknownPayload*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiUnknownPayload,
     msg: msg
   )
 
-proc invalidAttr*(msg: string): ref ApplicationError =
+func invalidAttr*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiInvalidPayloadAttributes,
     msg: msg
   )
 
-proc unsupportedFork*(msg: string): ref ApplicationError =
+func unsupportedFork*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiUnsupportedFork,
     msg: msg
   )
 
-proc tooLargeRequest*(msg: string): ref ApplicationError =
+func tooLargeRequest*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiTooLargeRequest,
     msg: msg

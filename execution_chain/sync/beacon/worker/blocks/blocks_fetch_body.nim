@@ -32,9 +32,7 @@ proc maybeSlowPeerError(
     buddy.bdyFetchRegisterError(slowPeer=true)
 
     # Do not repeat the same time-consuming failed request
-    buddy.only.failedReq = PeerFirstFetchReq(
-      state:     BeaconState.blocks,
-      blockHash: hash)
+    buddy.only.failedReq.bdyHash = hash
 
     return true
 
@@ -64,15 +62,14 @@ proc getBlockBodies(
 
   doAssert 0 < req.blockHashes.len
 
-  if buddy.only.failedReq.state == BeaconState.blocks and
-     buddy.only.failedReq.blockHash == req.blockHashes[0]:
+  if buddy.only.failedReq.bdyHash == req.blockHashes[0]:
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
   var resp: BlockBodiesPacket
   try:
-    resp = (await buddy.peer.getBlockBodies(
-      req, fetchBodiesRlpxTimeout)).valueOr:
-        return err((ENoException,"","",Moment.now()-start))
+    resp = (await eth.getBlockBodies(
+      buddy.peer, req, fetchBodiesRlpxTimeout)).valueOr:
+        return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
   except CancelledError as e:
@@ -94,7 +91,7 @@ proc getBlockBodies(
 template fetchBodies*(
     buddy: BeaconPeerRef;
     request: BlockBodiesRequest;
-      ): Opt[seq[BlockBody]] =
+      ): auto =
   ## Async/template
   ##
   ## Fetch bodies from the network.
@@ -125,7 +122,7 @@ template fetchBodies*(
       elapsed = rc.error.elapsed
       block evalError:
         case rc.error.excp:
-        of ENoException, ESyncerTermination:
+        of EGeneric, ESyncerTermination:
           break evalError
         of EPeerDisconnected, ECancelledError:
           buddy.nErrors.fetch.bdy.inc
@@ -135,8 +132,8 @@ template fetchBodies*(
           buddy.bdyNoSampleSize(elapsed)
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, startHash=startHash.short, nReq,
-            ela=rc.error.elapsed.toStr, state=($buddy.syncState),
-            error=rc.errStr, nErrors=buddy.nErrors.fetch.bdy
+            ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+            nErrors=buddy.nErrors.fetch.bdy
           break body                                # return err()
 
         # Debug message for other errors
@@ -179,7 +176,7 @@ template fetchBodies*(
     let bps {.used.} = buddy.bdySampleSize(elapsed, b.getEncodedLength)
 
     # Request did not fail
-    buddy.only.failedReq.reset
+    buddy.only.failedReq.bdyHash = zeroHash32
 
     # Ban an overly slow peer for a while when observed consecutively.
     if fetchBodiesErrTimeout < elapsed:

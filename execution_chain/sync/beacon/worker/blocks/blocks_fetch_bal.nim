@@ -37,9 +37,7 @@ proc maybeSlowPeerError(
     buddy.balFetchRegisterError(slowPeer=true)
 
     # Do not repeat the same time-consuming failed request
-    buddy.only.failedReq = PeerFirstFetchReq(
-      state:   BeaconState.blocks,
-      balHash: hash)
+    buddy.only.failedReq.balHash = hash
 
     return true
 
@@ -65,13 +63,12 @@ proc getBals(
     startInx: int;
       ): Future[Result[FetchBalData,BeaconError]]
       {.async: (raises: []).} =
-  ## Wrapper around `getBlockHeaders()`
+  ## Wrapper around `getBlockAccessLists()`
   let start = Moment.now()
 
   doAssert startInx < req.blockHashes.len
 
-  if buddy.only.failedReq.state == BeaconState.blocks and
-     buddy.only.failedReq.balHash == req.blockHashes[startInx]:
+  if buddy.only.failedReq.balHash == req.blockHashes[startInx]:
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
   let
@@ -79,9 +76,9 @@ proc getBals(
   var
     resp: BlockAccessListsPacket
   try:
-    resp = (await buddy.peer.getBlockAccessLists(
-      req, fetchBalsRlpxTimeout)).valueOr:
-        return err((ENoException,"","",Moment.now()-start))
+    resp = (await eth.getBlockAccessLists(
+      buddy.peer, req, fetchBalsRlpxTimeout)).valueOr:
+        return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
   except CancelledError as e:
@@ -104,7 +101,7 @@ template fetchBlockAccessListsSome*(
     buddy: BeaconPeerRef;
     request: BlockAccessListsRequest;               # list of block hashes
     startInx: int;                                  # start at this entry
-      ): Opt[seq[RawBlockAccessList]] =
+      ): auto =
   ## Async/template
   ##
   ## Request the raw (RLP-encoded) block access lists (EIP-7928) for the block
@@ -127,7 +124,7 @@ template fetchBlockAccessListsSome*(
       startHash {.inject.} = request.blockHashes[startInx]
 
     if nReq <= 0:
-      trace sendInfo & " empty request", peer, nReq, state=($buddy.syncState),
+      debug sendInfo & " empty request", peer, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bal
       bodyRc = typeof(bodyRc).ok(emptyRawBal)
       break body
@@ -143,7 +140,7 @@ template fetchBlockAccessListsSome*(
       elapsed = rc.error.elapsed
       block evalError:
         case rc.error.excp:
-        of ENoException, ESyncerTermination:
+        of EGeneric, ESyncerTermination:
           break evalError
         of EPeerDisconnected, ECancelledError:
           buddy.nErrors.fetch.bal.inc
@@ -153,8 +150,8 @@ template fetchBlockAccessListsSome*(
           buddy.balNoSampleSize(elapsed)
         of EAlreadyTriedAndFailed:
           trace recvInfo & " error", peer, startHash=startHash.short, nReq,
-            ela=rc.error.elapsed.toStr, state=($buddy.syncState),
-            error=rc.errStr, nErrors=buddy.nErrors.fetch.bal
+            ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+            nErrors=buddy.nErrors.fetch.bal
           break body                                # return err()
 
         # Debug message for other errors
@@ -196,8 +193,8 @@ template fetchBlockAccessListsSome*(
     # Update download statistics
     let bps {.used.} = buddy.balSampleSize(elapsed, b.getEncodedLength)
 
-    # Request did not fail
-    buddy.only.failedReq.reset
+    # Request did not fail (for now)
+    buddy.only.failedReq.balHash = zeroHash32
 
     # Ban an overly slow peer for a while when observed consecutively.
     if fetchBalsErrTimeout < elapsed:
@@ -209,7 +206,7 @@ template fetchBlockAccessListsSome*(
     trace recvInfo, peer, startHash=startHash.short, nReq, nResp=b.len, ela,
       thPut=(bps.toIECb(1) & "ps"), state, nErrors=buddy.nErrors.fetch.bal
 
-    bodyRc =  typeof(bodyRc).ok(b)
+    bodyRc = typeof(bodyRc).ok(b)
 
   bodyRc
 
