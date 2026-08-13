@@ -19,7 +19,7 @@ import
   ./common
 
 logScope:
-  topics = "bal_pruner"
+  topics = "bal pruner"
 
 type
   BalPrunerRef* = ref object
@@ -133,7 +133,7 @@ proc prune*(
       break
 
     if currentBlock < cutoff:
-      await sleepAsync(chronos.milliseconds(100))
+      await sleepAsync(chronos.seconds(2))
       txFrame = pruner.com.db.baseTxFrame()
 
   if pruned > 0:
