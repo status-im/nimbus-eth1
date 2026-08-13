@@ -392,10 +392,6 @@ proc getBlockAccessLists*(
 
   ok()
 
-proc deleteBlockAccessList*(db: CoreDbTxRef, blockHash: Hash32) =
-  db.del(blockHashToBlockAccessListKey(blockHash).toOpenArray)
-    .expect("deleteBlockAccessList should succeed")
-
 proc getBlockBody*(
     db: CoreDbTxRef;
     header: Header;
