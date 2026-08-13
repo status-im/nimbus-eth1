@@ -20,16 +20,20 @@ import
   ../payload_conv,
   ./api_utils
 
+from ../../rpc/engine_ssz_types import EngineFork, PayloadStatus
+from ../../rpc/engine_ssz_conv import toSsz, toWeb3
+from beacon_chain/spec/forks import ForkyExecutionPayload
+from ../ssz_eth_conv import ethBlock, toHash32
+
 {.push gcsafe, raises:[].}
 
 logScope:
   topics = "beacon engine"
 
-func validateVersionedHashed(payload: ExecutionPayload,
-                              expected: openArray[Hash32]): bool {.raises: [RlpError].} =
+func validateVersionedHashed(txs: openArray[Transaction],
+                              expected: openArray[Hash32]): bool =
   var versionedHashes: seq[VersionedHash]
-  for x in payload.transactions:
-    let tx = rlp.decode(distinctBase(x), Transaction)
+  for tx in txs:
     versionedHashes.add tx.versionedHashes
 
   if versionedHashes.len != expected.len:
@@ -40,62 +44,65 @@ func validateVersionedHashed(payload: ExecutionPayload,
       return false
   true
 
-template validateVersion(com, timestamp, payloadVersion, apiVersion) =
-  if apiVersion == Version.V5:
+# REMOVE WHEN DROPPING JSON-RPC
+template validateVersionMethod(apiVersion, com, timestamp, payloadVersion) =
+  if apiVersion == execution_types.Version.V5:
     if not com.isAmsterdamOrLater(timestamp):
       raise unsupportedFork("newPayloadV5 expect payload timestamp fall within Amsterdam")
-    if payloadVersion != Version.V4:
+    if payloadVersion != execution_types.Version.V4:
       raise invalidParams("newPayload" & $apiVersion &
       " expect ExecutionPayloadV4" &
       " but got ExecutionPayload" & $payloadVersion)
 
-  elif apiVersion == Version.V4:
+  elif apiVersion == execution_types.Version.V4:
     if not com.isPragueOrLater(timestamp):
       raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague")
-    if payloadVersion != Version.V3:
+    if payloadVersion != execution_types.Version.V3:
       raise invalidParams("newPayload" & $apiVersion &
       " expect ExecutionPayloadV3" &
       " but got ExecutionPayload" & $payloadVersion)
 
-  elif apiVersion == Version.V3:
+  elif apiVersion == execution_types.Version.V3:
     if not com.isCancunOrLater(timestamp):
       raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
-    if payloadVersion != Version.V3:
+    if payloadVersion != execution_types.Version.V3:
       raise invalidParams("newPayload" & $apiVersion &
       " expect ExecutionPayloadV3" &
       " but got ExecutionPayload" & $payloadVersion)
 
-  if com.isAmsterdamOrLater(timestamp):
-    if payloadVersion != Version.V4:
-      raise invalidParams("if timestamp is Amsterdam or later, " &
-        "payload must be ExecutionPayloadV4, got ExecutionPayload" & $payloadVersion)
+template validateForkTimestamp(fork, com, timestamp) =
+  case fork
+  of EngineFork.Amsterdam:
+    if not com.isAmsterdamOrLater(timestamp):
+      raise invalidParams("newPayload: payload timestamp is not yet Amsterdam")
 
-  elif com.isPragueOrLater(timestamp):
-    if payloadVersion != Version.V3:
-      raise invalidParams("if timestamp is Prague or later, " &
-        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
+  of EngineFork.Cancun, EngineFork.Prague, EngineFork.Osaka:
+    if com.isAmsterdamOrLater(timestamp):
+      raise invalidParams("newPayload: if timestamp is Amsterdam or later, " &
+        "payload must be ExecutionPayloadV4")
+    elif not com.isCancunOrLater(timestamp):
+      raise invalidParams("newPayload: payload timestamp is not yet Cancun")
 
-  elif com.isCancunOrLater(timestamp):
-    if payloadVersion != Version.V3:
-      raise invalidParams("if timestamp is Cancun or later, " &
-        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
+  of EngineFork.Shanghai:
+    if com.isCancunOrLater(timestamp):
+      raise invalidParams("newPayload: if timestamp is Cancun or later, " &
+        "payload must be ExecutionPayloadV3")
+    elif not com.isShanghaiOrLater(timestamp):
+      raise invalidParams("newPayload: payload timestamp is not yet Shanghai")
 
-  elif com.isShanghaiOrLater(timestamp):
-    if payloadVersion != Version.V2:
-      raise invalidParams("if timestamp is Shanghai or later, " &
-        "payload must be ExecutionPayloadV2, got ExecutionPayload" & $payloadVersion)
+  of EngineFork.Paris:
+    if com.isShanghaiOrLater(timestamp):
+      raise invalidParams("newPayload: if timestamp is Shanghai or later, " &
+        "payload must be ExecutionPayloadV2")
 
-  elif payloadVersion != Version.V1:
-    raise invalidParams("if timestamp is earlier than Shanghai, " &
-      "payload must be ExecutionPayloadV1, got ExecutionPayload" & $payloadVersion)
-
+# REMOVE WHEN DROPPING JSON-RPC
 template validatePayload(apiVersion, payloadVersion, payload) =
-  if payloadVersion >= Version.V2:
+  if payloadVersion >= execution_types.Version.V2:
     if payload.withdrawals.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "withdrawals is expected from execution payload")
 
-  if apiVersion >= Version.V3 or payloadVersion >= Version.V3:
+  if apiVersion >= execution_types.Version.V3 or payloadVersion >= execution_types.Version.V3:
     if payload.blobGasUsed.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "blobGasUsed is expected from execution payload")
@@ -103,31 +110,31 @@ template validatePayload(apiVersion, payloadVersion, payload) =
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
 
-  if apiVersion >= Version.V5 or payloadVersion >= Version.V4:
+  if apiVersion >= execution_types.Version.V5 or payloadVersion >= execution_types.Version.V4:
     if payload.blockAccessList.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "blockAccessList is expected from execution payload")
 
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
 func validateExecutionRequest(blockHash: Hash32,
-            requests: openArray[seq[byte]], apiVersion: Version):
-              Opt[PayloadStatusV1] {.raises: [ApplicationError].} =
+            requests: openArray[seq[byte]], fork: EngineFork):
+              Opt[PayloadStatus] {.raises: [ApplicationError].} =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
-      raise invalidParams("newPayload" & $apiVersion &
+      raise invalidParams("newPayload" & $fork &
         ": " & "Execution request data must not be empty")
 
     let requestType = request[0]
     if requestType.int <= previousRequestType:
-      raise invalidParams("newPayload" & $apiVersion &
+      raise invalidParams("newPayload" & $fork &
         ": " & "Execution requests are not in strictly ascending order")
 
     if request.len == 1:
-      raise invalidParams("newPayload" & $apiVersion &
+      raise invalidParams("newPayload" & $fork &
         ": " & "Empty data for request type " & $requestType)
 
-    if apiVersion >= Version.V5:
+    if fork == EngineFork.Amsterdam:
       if requestType notin [
         DEPOSIT_REQUEST_TYPE,
         WITHDRAWAL_REQUEST_TYPE,
@@ -135,84 +142,62 @@ func validateExecutionRequest(blockHash: Hash32,
         BUILDER_DEPOSIT_REQUEST_TYPE,
         BUILDER_EXIT_REQUEST_TYPE]:
         return Opt.some(invalidStatus(blockHash,
-          "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
+          "newPayload" & $fork & ": Invalid execution request type" & $requestType))
     else:
       if requestType notin [
         DEPOSIT_REQUEST_TYPE,
         WITHDRAWAL_REQUEST_TYPE,
         CONSOLIDATION_REQUEST_TYPE]:
         return Opt.some(invalidStatus(blockHash,
-          "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
+          "newPayload" & $fork & ": Invalid execution request type" & $requestType))
 
     previousRequestType = requestType.int
   err()
 
-proc newPayload*(ben: BeaconEngineRef,
-                 apiVersion: Version,
-                 payload: ExecutionPayload,
-                 versionedHashes = Opt.none(seq[Hash32]),
-                 beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(seq[seq[byte]])):
-                   Future[PayloadStatusV1] {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
-
-  trace "Engine API request received",
-    meth = "newPayload",
-    number = payload.blockNumber,
-    hash = payload.blockHash
-
-  if apiVersion >= Version.V3:
-    if beaconRoot.isNone:
-      raise invalidParams("newPayloadV3 expect beaconRoot but got none")
-
-  if apiVersion >= Version.V4:
-    if executionRequests.isNone:
-      raise invalidParams("newPayload" & $apiVersion &
-        ": executionRequests is expected from execution payload")
-
-    let res = validateExecutionRequest(payload.blockHash, executionRequests.value, apiVersion)
-    if res.isSome:
-      return res.value
-
+proc processNewPayload(ben: BeaconEngineRef,
+                        fork: EngineFork,
+                        blk: Block,
+                        blockAccessList: Opt[BlockAccessListRef],
+                        blockHash: Hash32,
+                        versionedHashes: Opt[seq[Hash32]], # only needed for json rpc spec
+                        executionRequests: Opt[seq[seq[byte]]]):
+                          Future[PayloadStatus]
+                            {.async: (raises: [CancelledError, ApplicationError]).} =
   let
-    com = ben.com
+    com   = ben.com
     chain = ben.chain
-    timestamp = ethTime payload.timestamp
-    version = payload.version
-
-  validatePayload(apiVersion, version, payload)
-  validateVersion(com, timestamp, version, apiVersion)
-
-  let
-    requestsHash = calcRequestsHash(executionRequests)
-    blk =
-      try:
-        ethBlock(payload, beaconRoot, requestsHash)
-      except RlpError as e:
-        warn "Failed to decode payload",
-          error = e.msg
-        return invalidStatus(Opt.none(Hash32),
-          "Failed to decode block in payload: " & e.msg)
-    blockAccessList =
-      try:
-        blockAccessList(payload)
-      except RlpError as e:
-        warn "Failed to decode payload",
-          error = e.msg
-        return invalidStatus(Opt.none(Hash32),
-          "Failed to decode BAL in payload: " & e.msg)
 
   template header: Header = blk.header
 
-  if apiVersion >= Version.V3:
-    if versionedHashes.isNone:
-      raise invalidParams("newPayload" & $apiVersion &
-        " expect blobVersionedHashes but got none")
-    if not validateVersionedHashed(payload, versionedHashes.value):
+  trace "Engine API request received",
+    meth = "newPayload",
+    number = header.number,
+    hash = blockHash
+
+  if fork >= EngineFork.Cancun:
+    if header.parentBeaconBlockRoot.isNone:
+      raise invalidParams("newPayload" & $fork & " expect beaconRoot but got none")
+
+  if fork >= EngineFork.Prague:
+    if executionRequests.isNone:
+      raise invalidParams("newPayload" & $fork &
+        ": executionRequests is expected from execution payload")
+
+    let res = validateExecutionRequest(blockHash, executionRequests.value, fork)
+    if res.isSome:
+      return res.value
+
+  validateForkTimestamp(fork, com, header.timestamp)
+
+  if versionedHashes.isSome:
+    if not validateVersionedHashed(blk.transactions, versionedHashes.value):
       return invalidStatus(header.parentHash, "invalid blob versionedHashes")
 
-  let blockHash = payload.blockHash
-  header.validateBlockHash(blockHash, version).isOkOr:
-    return error
+  # validateBlockHash still returns the web3 PayloadStatusV1 shape (it needs
+  # PayloadExecutionStatus.invalid_block_hash, which the SSZ PayloadStatusCode
+  # has no equivalent for)
+  header.validateBlockHash(blockHash, fork).isOkOr:
+    return toSsz(error)
 
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.
@@ -239,7 +224,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # triggering too early
   let ttd = com.ttd.get(high(UInt256))
 
-  if version == Version.V1:
+  if fork == EngineFork.Paris:
     let txFrame = chain.latestTxFrame()
     let ptd  = txFrame.getScore(header.parentHash).valueOr:
       0.u256
@@ -296,3 +281,72 @@ proc newPayload*(ben: BeaconEngineRef,
     blobGas = header.blobGasUsed.get(0'u64)
 
   return validStatus(blockHash)
+
+# REMOVE WHEN DROPPING JSON-RPC
+# assigns the earliest fork per version tag
+func apiVersionFork(apiVersion: execution_types.Version): EngineFork =
+  case apiVersion
+  of execution_types.Version.V1: EngineFork.Paris
+  of execution_types.Version.V2: EngineFork.Shanghai
+  of execution_types.Version.V3: EngineFork.Cancun
+  of execution_types.Version.V4: EngineFork.Prague
+  of execution_types.Version.V5, execution_types.Version.V6: EngineFork.Amsterdam
+
+# REMOVE WHEN DROPPING JSON-RPC
+proc newPayload*(ben: BeaconEngineRef,
+                 apiVersion: execution_types.Version,
+                 payload: ExecutionPayload,
+                 versionedHashes = Opt.none(seq[Hash32]),
+                 beaconRoot = Opt.none(Hash32),
+                 executionRequests = Opt.none(seq[seq[byte]])):
+                   Future[PayloadStatusV1] {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
+  let apiFork = apiVersionFork(apiVersion)
+
+  let
+    com = ben.com
+    timestamp = ethTime payload.timestamp
+    payloadVersion = payload.version
+
+  validatePayload(apiVersion, payloadVersion, payload)
+  validateVersionMethod(apiVersion, com, timestamp, payloadVersion)
+
+  if apiFork >= EngineFork.Cancun:
+    if versionedHashes.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        " expect blobVersionedHashes but got none")
+
+  let
+    requestsHash = calcRequestsHash(executionRequests)
+    blk =
+      try:
+        ethBlock(payload, beaconRoot, requestsHash)
+      except RlpError as e:
+        warn "Failed to decode payload",
+          error = e.msg
+        return toWeb3(invalidStatus(Opt.none(Hash32),
+          "Failed to decode block in payload: " & e.msg))
+    blockAccessList =
+      try:
+        blockAccessList(payload)
+      except RlpError as e:
+        warn "Failed to decode payload",
+          error = e.msg
+        raise invalidParams("Failed to decode BAL in payload: " & e.msg)
+
+  toWeb3(await processNewPayload(ben, apiFork, blk, blockAccessList,
+    payload.blockHash, versionedHashes, executionRequests))
+
+proc newPayload*(ben: BeaconEngineRef,
+                    fork: EngineFork,
+                    payload: ForkyExecutionPayload,
+                    blockAccessList: Opt[BlockAccessListRef],
+                    beaconRoot: Opt[Hash32],
+                    executionRequests: Opt[seq[seq[byte]]]):
+                      Future[PayloadStatus]
+                        {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
+  let
+    requestsHash = calcRequestsHash(executionRequests)
+    blk = ethBlock(payload, beaconRoot, requestsHash)
+    blockHash = toHash32(payload.block_hash)
+  await processNewPayload(ben, fork, blk, blockAccessList,
+    blockHash, Opt.none(seq[Hash32]), executionRequests)

@@ -16,9 +16,13 @@ import
   json_rpc/errors,
   chronicles,
   ../../core/tx_pool,
+  ../../rpc/engine_ssz_types,
   ../beacon_engine,
+  ../ssz_eth_conv,
   ../web3_eth_conv,
   ./api_utils
+
+from ../../rpc/engine_ssz_conv import toWeb3, toForkedPayloadAttributes
 
 {.push gcsafe, raises:[].}
 
@@ -30,14 +34,14 @@ template validateVersion(attr, com, apiVersion) =
     version   = attr.version
     timestamp = ethTime(attr.timestamp)
 
-  if apiVersion == Version.V4:
+  if apiVersion == execution_types.Version.V4:
     if version != apiVersion:
       raise invalidAttr("forkChoiceUpdatedV4 expect PayloadAttributesV4" &
       " but got PayloadAttributes" & $version)
     if not com.isAmsterdamOrLater(timestamp):
       raise unsupportedFork(
         "forkchoiceUpdatedV4 get invalid payloadAttributes timestamp")
-  elif apiVersion == Version.V3:
+  elif apiVersion == execution_types.Version.V3:
     if version != apiVersion:
       raise invalidAttr("forkChoiceUpdatedV3 expect PayloadAttributesV3" &
       " but got PayloadAttributes" & $version)
@@ -46,57 +50,71 @@ template validateVersion(attr, com, apiVersion) =
         "forkchoiceUpdatedV3 get invalid payloadAttributes timestamp")
   else:
     if com.isCancunOrLater(timestamp):
-      if version < Version.V3:
+      if version < execution_types.Version.V3:
         raise unsupportedFork("forkChoiceUpdated" & $apiVersion &
           " doesn't support payloadAttributes" & $version)
-      if version > Version.V3:
+      if version > execution_types.Version.V3:
         raise invalidAttr("forkChoiceUpdated" & $apiVersion &
           " doesn't support PayloadAttributes" & $version)
       # ForkchoiceUpdatedV2 after Cancun with beacon root field must return INVALID_PAYLOAD_ATTRIBUTES
-      if apiVersion == Version.V2 and attr.parentBeaconBlockRoot.isSome:
+      if apiVersion == execution_types.Version.V2 and attr.parentBeaconBlockRoot.isSome:
         raise invalidAttr("forkChoiceUpdatedV2 with beacon root field is invalid after Cancun")
     elif com.isShanghaiOrLater(timestamp):
-      if version < Version.V2:
+      if version < execution_types.Version.V2:
         raise invalidParams("forkChoiceUpdated" & $apiVersion &
           " doesn't support payloadAttributesV1 when Shanghai is activated")
-      if version > Version.V2:
+      if version > execution_types.Version.V2:
         raise invalidAttr("if timestamp is Shanghai or later," &
           " payloadAttributes must be PayloadAttributesV2")
     else:
-      if version != Version.V1:
+      if version != execution_types.Version.V1:
         raise invalidParams("if timestamp is earlier than Shanghai," &
           " payloadAttributes must be PayloadAttributesV1")
 
-template validateHeaderTimestamp(header, com, apiVersion) =
+template validateAttributes(fork, com, timestamp) =
+  case fork
+  of EngineFork.Amsterdam:
+    if not com.isAmsterdamOrLater(timestamp):
+      raise invalidAttr("forkchoiceUpdated: payloadAttributes timestamp is not yet Amsterdam")
+  of EngineFork.Cancun, EngineFork.Prague, EngineFork.Osaka:
+    if not com.isCancunOrLater(timestamp):
+      raise invalidAttr("forkchoiceUpdated: payloadAttributes timestamp is not yet Cancun")
+  of EngineFork.Shanghai:
+    if com.isCancunOrLater(timestamp):
+      raise invalidAttr("forkchoiceUpdated: Shanghai payloadAttributes is invalid after Cancun")
+    elif not com.isShanghaiOrLater(timestamp):
+      raise invalidAttr("forkchoiceUpdated: payloadAttributes timestamp is not yet Shanghai")
+  of EngineFork.Paris:
+    if com.isShanghaiOrLater(timestamp):
+      raise invalidAttr("forkchoiceUpdated: Paris payloadAttributes is invalid on/after Shanghai")
+
+template validateHeaderTimestamp(header, com, isParis) =
   # See fCUV3 specification No.2 bullet iii
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/cancun.md#specification-1
   #  No additional restrictions on the timestamp of the head block
   # See fCUV2 specification No.2 bullet 1
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-1
-  if com.isShanghaiOrLater(header.timestamp):
-    if apiVersion < Version.V2:
-      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-          " doesn't support head block with Shanghai timestamp")
+  if isParis and com.isShanghaiOrLater(header.timestamp):
+    raise invalidAttr("forkchoiceUpdated: Paris (V1) is invalid for a head block at or after Shanghai")
 
-proc forkchoiceUpdated*(ben: BeaconEngineRef,
-                        apiVersion: Version,
-                        update: ForkchoiceStateV1,
-                        attrsOpt: Opt[PayloadAttributes]):
-                          Future[ForkchoiceUpdatedResponse]
+proc processForkchoiceUpdate(ben: BeaconEngineRef,
+                        isParis: bool,
+                        headHash, safeBlockHash, finalizedBlockHash: Hash32,
+                        attrsOpt: Opt[ForkedPayloadAttributes]):
+                          Future[engine_ssz_types.ForkchoiceUpdateResponse]
                             {.async: (raises: [CancelledError, ApplicationError]).} =
   let
     com   = ben.com
     chain = ben.chain
-    headHash = update.headBlockHash
 
   if headHash == zeroHash32:
     warn "Forkchoice requested update to zero hash"
-    return simpleFCU(PayloadExecutionStatus.invalid)
+    return simpleFCU(PayloadStatusCode.INVALID)
 
   # Try updateing the finalised header argument by hash. If unsuccessful,
   # the hash will be stored in `pendingFCU`. Otherwise, hash and block
   # number will have been stored in `latestFinalized`.
-  com.resolveFinHash(update.finalizedBlockHash)
+  com.resolveFinHash(finalizedBlockHash)
 
   # Check whether we have the block yet in our database or not. If not, we'll
   # need to either trigger a sync, or to reject this forkchoice update for a
@@ -114,37 +132,37 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     let header = chain.quarantine.getHeader(headHash).valueOr:
       info "Forkchoice requested sync to unknown head",
         hash = headHash.short,
-        finHash = update.finalizedBlockHash.short,
-        safe = update.safeBlockHash.short,
+        finHash = finalizedBlockHash.short,
+        safe = safeBlockHash.short,
         base = chain.baseNumber,
         pendingFCU = chain.pendingFCU.short
-      com.headerTargetRequest(headHash, update.finalizedBlockHash)
-      return simpleFCU(PayloadExecutionStatus.syncing)
+      com.headerTargetRequest(headHash, finalizedBlockHash)
+      return simpleFCU(PayloadStatusCode.SYNCING)
 
     # Header advertised via a past newPayload request. Start syncing to it.
     info "Forkchoice requested sync to new head",
       number = header.number,
       hash   = headHash.short,
       base   = chain.baseNumber,
-      finHash= update.finalizedBlockHash.short,
-      safe   = update.safeBlockHash.short,
+      finHash= finalizedBlockHash.short,
+      safe   = safeBlockHash.short,
       pendingFCU = chain.pendingFCU.short,
       resolvedFinNum = chain.resolvedFinNumber,
       resolvedFinHash = chain.resolvedFinHash.short
 
     # Inform the header chain cache (used by the syncer)
-    com.headerChainUpdate(header, update.finalizedBlockHash)
+    com.headerChainUpdate(header, finalizedBlockHash)
 
-    return simpleFCU(PayloadExecutionStatus.syncing)
+    return simpleFCU(PayloadStatusCode.SYNCING)
 
-  validateHeaderTimestamp(header, com, apiVersion)
+  validateHeaderTimestamp(header, com, isParis)
 
   # Block is known locally, just sanity check that the beacon client does not
   # attempt to push us back to before the merge.
   #
   # Disable terminal PoW block conditions validation for fCUV2 and later.
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-1
-  if apiVersion == Version.V1:
+  if isParis:
     let blockNumber = header.number
     if header.difficulty > 0.u256 or blockNumber ==  0'u64:
       let
@@ -160,7 +178,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
           td = td,
           parent = header.parentHash.short,
           ptd = ptd
-        return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TTD check")
+        return simpleFCU(PayloadStatusCode.INVALID, "TDs unavailable for TTD check")
 
       if td.value < ttd or (blockNumber > 0'u64 and ptd.value > ttd):
         notice "Refusing beacon update to pre-merge",
@@ -176,7 +194,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # probably resyncing. Ignore the update.
   # See point 2 of fCUV1 specification
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.7/src/engine/paris.md#specification-1
-  if chain.isCanonicalAndFinalizedAncestor(header.number, headHash, update.finalizedBlockHash):
+  if chain.isCanonicalAndFinalizedAncestor(header.number, headHash, finalizedBlockHash):
     notice "Ignoring beacon update to old head",
       headHash   = headHash.short,
       headNumber = header.number,
@@ -188,7 +206,6 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.
-  let finalizedBlockHash = update.finalizedBlockHash
   if finalizedBlockHash != zeroHash32:
     if not chain.equalOrAncestorOf(finalizedBlockHash, headHash):
       warn "Final block not in canonical tree",
@@ -196,7 +213,6 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       raise invalidForkChoiceState("finalized block not in canonical tree")
     # similar to headHash, finalizedBlockHash is saved by FC module
 
-  let safeBlockHash = update.safeBlockHash
   if safeBlockHash != zeroHash32:
     if not chain.equalOrAncestorOf(safeBlockHash, headHash):
       warn "Safe block not in canonical tree",
@@ -211,22 +227,21 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # sealed by the beacon client. The payload will be requested later, and we
   # might replace it arbitrarilly many times in between.
   if attrsOpt.isSome:
-    let attrs = attrsOpt.value
-    validateVersion(attrs, com, apiVersion)
-
-    let bundle = ben.generateExecutionBundle(headHash, attrs).valueOr:
-      error "Failed to create sealing payload", err = error
-      raise invalidAttr(error)
+    let
+      attrs = attrsOpt.value
+      bundle = ben.generateExecutionBundle(headHash, attrs).valueOr:
+        error "Failed to create sealing payload", err = error
+        raise invalidAttr(error)
 
     let id = computePayloadId(headHash, attrs)
     ben.putPayloadBundle(id, bundle)
 
     info "Created payload for block proposal",
-      number = bundle.payload.blockNumber,
-      hash = bundle.payload.blockHash.short,
-      txs = bundle.payload.transactions.len,
-      gasUsed = bundle.payload.gasUsed,
-      blobGasUsed = bundle.payload.blobGasUsed.get(Quantity(0)),
+      number = bundle.blk.header.number,
+      hash = bundle.blk.header.computeRlpHash.short,
+      txs = bundle.blk.transactions.len,
+      gasUsed = bundle.blk.header.gasUsed,
+      blobGasUsed = bundle.blk.header.blobGasUsed.get(0'u64),
       id = id.toHex,
       txPoolLen = ben.txPool.len,
       attrs = attrs
@@ -244,3 +259,32 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     resolvedFinHash = chain.resolvedFinHash.short
 
   return validFCU(Opt.none(Bytes8), headHash)
+
+# REMOVE WHEN DROPPING JSON-RPC
+proc forkchoiceUpdated*(ben: BeaconEngineRef,
+                        apiVersion: execution_types.Version,
+                        update: ForkchoiceStateV1,
+                        attrsOpt: Opt[PayloadAttributes]):
+                          Future[ForkchoiceUpdatedResponse]
+                            {.async: (raises: [CancelledError, ApplicationError]).} =
+  var forkedAttrsOpt = Opt.none(ForkedPayloadAttributes)
+  if attrsOpt.isSome:
+    let attrs = attrsOpt.value
+    validateVersion(attrs, ben.com, apiVersion)
+    forkedAttrsOpt = Opt.some(toForkedPayloadAttributes(attrs))
+
+  toWeb3(await processForkchoiceUpdate(ben, apiVersion == execution_types.Version.V1,
+    update.headBlockHash, update.safeBlockHash, update.finalizedBlockHash, forkedAttrsOpt))
+
+proc forkchoiceUpdated*(ben: BeaconEngineRef,
+                        fork: EngineFork,
+                        fcState: engine_ssz_types.ForkchoiceState,
+                        attrsOpt: Opt[ForkedPayloadAttributes]):
+                          Future[engine_ssz_types.ForkchoiceUpdateResponse]
+                            {.async: (raises: [CancelledError, ApplicationError]).} =
+  if attrsOpt.isSome:
+    validateAttributes(fork, ben.com, EthTime(attrsOpt.value.timestamp))
+
+  await processForkchoiceUpdate(ben, fork == EngineFork.Paris,
+    toHash32(fcState.head_block_hash), toHash32(fcState.safe_block_hash),
+    toHash32(fcState.finalized_block_hash), attrsOpt)

@@ -128,8 +128,8 @@ export
 # contains(xp: TxPoolRef, id: Hash32): bool
 # removeTx(xp: TxPoolRef, id: Hash32)
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)
-# getBlobAndProofV1(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1]
-# getBlobAndProofV2(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2]
+# getBlobAndProofV1(xp: TxPoolRef, v: VersionedHash): Opt[engine_ssz_types.BlobAndProofV1]
+# getBlobAndProofV2(xp: TxPoolRef, v: VersionedHash): Opt[engine_ssz_types.BlobAndProofV2]
 
 proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
   let fromHash = if optHash.isSome: optHash.get
