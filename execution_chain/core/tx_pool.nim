@@ -131,7 +131,8 @@ export
   removeExpiredTxs,
   getBlobAndProofV1,
   getBlobAndProofV2,
-  getBlobCellAndProofV1
+  getBlobCellAndProofV1,
+  getInclusionListV1
 
 # addTx(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError]
 # addTx(xp: TxPoolRef, tx: Transaction): Result[void, TxError]
@@ -143,6 +144,7 @@ export
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)
 # getBlobAndProofV1(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1]
 # getBlobAndProofV2(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2]
+# getInclusionListV1(xp: TxPoolRef): InclusionList
 
 proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
   let fromHash = if optHash.isSome: optHash.get
@@ -298,7 +300,8 @@ export
   prevRandao,
   withdrawals,
   parentBeaconBlockRoot,
-  slotNumber
+  slotNumber,
+  focil
 
 # feeRecipient(xp: TxPoolRef): Address
 # timestamp(xp: TxPoolRef): EthTime
@@ -306,6 +309,7 @@ export
 # withdrawals(xp: TxPoolRef): seq[Withdrawal]
 # parentBeaconBlockRoot(xp: TxPoolRef): Hash32
 # slotNumber(xp: TxPoolRef): uint64
+# focil(xp: TxPoolRef): Focil
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes setters
@@ -318,7 +322,8 @@ export
   `withdrawals=`,
   `parentBeaconBlockRoot=`,
   `slotNumber=`,
-  `targetGasLimit=`
+  `targetGasLimit=`,
+  `focil=`
 
 # `feeRecipient=`(xp: TxPoolRef, val: Address)
 # `timestamp=`(xp: TxPoolRef, val: EthTime)
@@ -327,3 +332,4 @@ export
 # `parentBeaconBlockRoot=`(xp: TxPoolRef, val: Hash32)
 # `slotNumber=`(xp: TxPoolRef, val: uint64)
 # `targetGasLimit=`(xp: TxPoolRef, val: Opt[uint64])
+# `focil=`(xp: TxPoolRef, val: Focil)
