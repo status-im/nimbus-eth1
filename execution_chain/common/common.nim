@@ -137,6 +137,11 @@ type
       ## Execute the transactions of a block in parallel on background threads
       ## using the supplied block access list.
 
+    balReadFeasibilityCheck*: bool
+      ## Reject a block during validation as soon as the storage reads declared
+      ## in the supplied block access list can no longer be paid for by the
+      ## remaining block gas, as described by EIP-7928.
+
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
@@ -214,6 +219,7 @@ proc init(com         : CommonRef,
           balStatePrefetch: bool,
           balStatePrefetchWorkers: int,
           balParallelExecution: bool,
+          balReadFeasibilityCheck: bool,
           parallelSenderRecovery: bool) =
 
 
@@ -257,6 +263,7 @@ proc init(com         : CommonRef,
   com.balStatePrefetch = balStatePrefetch
   com.balStatePrefetchWorkers = balStatePrefetchWorkers
   com.balParallelExecution = balParallelExecution
+  com.balReadFeasibilityCheck = balReadFeasibilityCheck
   com.parallelSenderRecovery = parallelSenderRecovery
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
@@ -285,6 +292,7 @@ proc new*(
     balStatePrefetch = false;
     balStatePrefetchWorkers = 0;
     balParallelExecution = false;
+    balReadFeasibilityCheck = false;
     parallelSenderRecovery = false;
       ): CommonRef =
 
@@ -303,6 +311,7 @@ proc new*(
     balStatePrefetch,
     balStatePrefetchWorkers,
     balParallelExecution,
+    balReadFeasibilityCheck,
     parallelSenderRecovery)
 
 proc new*(
@@ -317,6 +326,7 @@ proc new*(
     balStatePrefetch = false;
     balStatePrefetchWorkers = 0;
     balParallelExecution = false;
+    balReadFeasibilityCheck = false;
     parallelSenderRecovery = false;
       ): CommonRef =
 
@@ -335,6 +345,7 @@ proc new*(
     balStatePrefetch,
     balStatePrefetchWorkers,
     balParallelExecution,
+    balReadFeasibilityCheck,
     parallelSenderRecovery)
 
 # ------------------------------------------------------------------------------
@@ -484,6 +495,13 @@ func balStatePrefetchEnabled*(
       false
   else:
     false
+
+func balReadFeasibilityCheckEnabled*(
+    com: CommonRef,
+    timestamp: EthTime,
+    blockAccessList: Opt[BlockAccessListRef]): bool =
+  com.balReadFeasibilityCheck and
+    com.balStatePrefetchEnabled(timestamp, blockAccessList)
 
 func balParallelExecutionEnabled*(
     com: CommonRef,

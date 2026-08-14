@@ -147,6 +147,17 @@ proc addCodeChange*(
     (address, SharedBytes.init(newCode))
   )
 
+iterator storageAccesses*(
+    builder: var BlockAccessListBuilder, blockAccessIndex: int
+): (Address, UInt256) =
+  assert blockAccessIndex < builder.perIndex.len
+
+  let d = addr builder.perIndex[blockAccessIndex]
+  for r in d[].storageReads.items():
+    yield (r.address, r.slot)
+  for w in d[].storageChanges.items():
+    yield (w.address, w.slot)
+
 type
   FlatStorageChange =
     tuple[address: Address, slot: UInt256, index: BlockAccessIndex, value: UInt256]
