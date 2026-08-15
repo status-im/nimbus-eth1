@@ -58,6 +58,7 @@ const
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
   defaultBalParallelExecution* = false
+  defaultBalPruning* = true
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -396,6 +397,13 @@ type
       desc: "Execute block transactions in parallel on background threads " &
         "using the supplied block access list"
       name: "debug-bal-parallel-execution".}: bool
+
+    balPruning* {.
+      hidden
+      defaultValue: defaultBalPruning
+      desc: "Prune block access lists which have fallen outside of the " &
+        "retention period defined by EIP-7928"
+      name: "debug-bal-pruning".}: bool
 
     eagerStateRootCheck* {.
       hidden
