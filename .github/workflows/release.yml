@@ -529,7 +529,7 @@ jobs:
 
   cleanup:
     name: Remove artefacts
-    needs: [prepare-release, run-binary, deploy-wasm, publish-npm]
+    needs: [prepare-release, run-binary, deploy-wasm, publish-npm, docker-release]
     if: always()
     runs-on: ubuntu-latest
     steps:
