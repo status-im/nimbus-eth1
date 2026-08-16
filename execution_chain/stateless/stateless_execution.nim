@@ -36,9 +36,9 @@ export witness_types, stateless_types, common, headers, blocks, results
 func toExecutionWitness*(w: ExecutionWitnessWithKeys): ExecutionWitness =
   var res: ExecutionWitness
   for node in w.state:
-    discard res.state.add(ByteList[MAX_BYTES_PER_WITNESS_NODE].init(node))
+    res.state.add(ByteList[MAX_BYTES_PER_WITNESS_NODE].init(node))
   for code in w.codes:
-    discard res.codes.add(ByteList[MAX_BYTES_PER_CODE].init(code))
+    res.codes.add(ByteList[MAX_BYTES_PER_CODE].init(code))
   for header in w.headers:
     discard res.headers.add(ByteList[MAX_BYTES_PER_HEADER].init(header))
   res

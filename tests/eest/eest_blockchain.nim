@@ -39,11 +39,9 @@ from ../../execution_chain/rpc/debug import getExecutionWitness
 proc fromJson(T: type ExecutionWitness, n: JsonNode): ExecutionWitness =
   var res: ExecutionWitness
   for item in n["state"]:
-    discard res.state.add(
-      ByteList[MAX_BYTES_PER_WITNESS_NODE].init(hexToSeqByte(item.getStr))
-    )
+    res.state.add(ByteList[MAX_BYTES_PER_WITNESS_NODE].init(hexToSeqByte(item.getStr)))
   for item in n["codes"]:
-    discard res.codes.add(ByteList[MAX_BYTES_PER_CODE].init(hexToSeqByte(item.getStr)))
+    res.codes.add(ByteList[MAX_BYTES_PER_CODE].init(hexToSeqByte(item.getStr)))
   if "headers" in n:
     for item in n["headers"]:
       discard

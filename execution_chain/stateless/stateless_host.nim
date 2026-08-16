@@ -99,7 +99,7 @@ func build_stateless_input*(
   # versioned hashes.
   var
     transactions = newSeqOfCap[gloas.Transaction](blk.transactions.len)
-    public_keys: List[ByteVector[PUBLIC_KEY_BYTES], MAX_PUBLIC_KEYS]
+    public_keys: seq[ByteVector[PUBLIC_KEY_BYTES]]
     versioned_hashes: seq[Digest]
   for tx in blk.transactions:
     transactions.add(gloas.Transaction.init(rlp.encode(tx)))
@@ -110,8 +110,7 @@ func build_stateless_input*(
       # decode. However, our block already holds the decoded transaction objects,
       # so invalid signature is the only failure that can occur here still.
       continue
-    if not public_keys.add(public_key):
-      return err("Too many public keys for the stateless input")
+    public_keys.add(public_key)
 
     if tx.txType == TxEip4844:
       for versioned_hash in tx.versionedHashes:

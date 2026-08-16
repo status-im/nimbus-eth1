@@ -20,19 +20,16 @@ export ssz_serialization, ssz_codec
 # ---------------------------------------------------------------------------
 
 # As per spec:
-# https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless_ssz.py#L42
+# https://github.com/ethereum/execution-specs/blob/57d9170a27a3a7558e67d05d1418a178e6a8a31e/src/ethereum/forks/amsterdam/stateless_ssz.py#L42
 #
 # Not all consts are defined here as we get some of the types from beacon_chain datatypes
 
 const
-  MAX_WITNESS_NODES* = 1 shl 22 # 2^22
-  MAX_WITNESS_CODES* = 1 shl 18 # 2^18
   MAX_WITNESS_HEADERS* = 256
   MAX_BYTES_PER_CODE* = 1 shl 16 # 2^16
   MAX_BYTES_PER_HEADER* = 1 shl 10 # 2^10
   MAX_BYTES_PER_WITNESS_NODE* = 1 shl 10 # 2^10
   MAX_OPTIONAL_FORK_ACTIVATION_VALUES* = 1
-  MAX_PUBLIC_KEYS* = 1 shl 15 # 2^15
   PUBLIC_KEY_BYTES* = 65
 
   # We should be using the HardFork enum value for Amsterdam from hardforks.nim
@@ -53,7 +50,7 @@ const
 # ---------------------------------------------------------------------------
 
 # As per spec:
-# https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless_ssz.py#L93
+# https://github.com/ethereum/execution-specs/blob/57d9170a27a3a7558e67d05d1418a178e6a8a31e/src/ethereum/forks/amsterdam/stateless_ssz.py#L74
 #
 # Not all types are defined here as we get some of the types from beacon_chain datatypes
 
@@ -65,15 +62,15 @@ type
     executionRequests*: ExecutionRequests
 
   ExecutionWitness* = object
-    state*: List[ByteList[MAX_BYTES_PER_WITNESS_NODE], MAX_WITNESS_NODES]
-    codes*: List[ByteList[MAX_BYTES_PER_CODE], MAX_WITNESS_CODES]
+    state*: seq[ByteList[MAX_BYTES_PER_WITNESS_NODE]]
+    codes*: seq[ByteList[MAX_BYTES_PER_CODE]]
     headers*: List[ByteList[MAX_BYTES_PER_HEADER], MAX_WITNESS_HEADERS]
 
   StatelessInput* = object
     new_payload_request*: NewPayloadRequest
     witness*: ExecutionWitness
     chain_id*: uint64
-    public_keys*: List[ByteVector[PUBLIC_KEY_BYTES], MAX_PUBLIC_KEYS]
+    public_keys*: seq[ByteVector[PUBLIC_KEY_BYTES]]
 
   StatelessValidationResult* = object
     new_payload_request_root*: Digest
