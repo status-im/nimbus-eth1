@@ -228,7 +228,8 @@ proc runTest(
       # longer up to date regarding `gloas.ExecutionPayload` usage of progressive
       # lists (EIP-7688).
       if output.successful_validation != expectedOutput.successful_validation or
-          output.chain_config != expectedOutput.chain_config:
+          output.chain_id != expectedOutput.chain_id or
+          output.schema_id != expectedOutput.schema_id:
         return err(
           "Stateless guest: validation result mismatch, got: " & $output & " expected: " &
             $expectedOutput
@@ -301,8 +302,8 @@ proc runTest(
         #
         # if input.new_payload_request != fixtureInput.new_payload_request:
         #   return err("Host-built new payload request does not match the test vector")
-        if input.chain_config != fixtureInput.chain_config:
-          return err("Host-built chain config does not match the test vector")
+        if input.chain_id != fixtureInput.chain_id:
+          return err("Host-built chain ID does not match the test vector")
         if input.public_keys != fixtureInput.public_keys:
           return err("Host-built public keys do not match the test vector")
         # The generated witness must be identical to the test vector witness,
@@ -319,8 +320,10 @@ proc runTest(
         #   return err("Guest output for the host-built input does not match the test vector")
         if output.successful_validation != expectedOutput.successful_validation:
           return err("Guest validation result does not match the test vector")
-        if output.chain_config != expectedOutput.chain_config:
-          return err("Guest chain config echo does not match the test vector")
+        if output.chain_id != expectedOutput.chain_id:
+          return err("Guest chain ID echo does not match the test vector")
+        if output.schema_id != expectedOutput.schema_id:
+          return err("Guest schema ID echo does not match the test vector")
       else:
         # Pre-Amsterdam blocks (guest only supports Amsterdam) and blocks without
         # a stateless input expected to validate: run the generated witness through
