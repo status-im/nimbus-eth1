@@ -27,6 +27,9 @@ logScope:
 template failedToFetch(info, what: static[string]): auto =
   info & ": Failed to fetch " & what & " from cache"
 
+template failedUpdating(info, what: static[string]): auto =
+  info & ": Failed updaing " & what & " on cache"
+
 # ------------------------------------------------------------------------------
 # Public cache DB wrappers
 # ------------------------------------------------------------------------------
@@ -40,6 +43,17 @@ proc getHeader*(
     error info.failedToFetch "Header", number, `error`=error
     return err()
 
+proc putHeader*(
+    db: CacheDbRef;
+    header: Header;
+    info: static[string];
+      ): Opt[void] =
+  db.putHeader(header).isOkOr:
+    error info.failedUpdating "header", number=header.number, `error`=error
+    return err()
+  ok()
+
+
 proc getBal*(
     db: CacheDbRef;
     number: BlockNumber;
@@ -48,6 +62,17 @@ proc getBal*(
   db.getBal(number).valueOr:
     error info.failedToFetch "BAL", number, `error`=error
     return err()
+
+proc putBal*(
+    db: CacheDbRef;
+    number: BlockNumber;
+    bal: BlockAccessListRef;
+    info: static[string];
+      ): Opt[void] =
+  db.putBal(number, bal).isOkOr:
+    error info.failedUpdating "BAL", number, nBal=bal[].len, `error`=error
+    return err()
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

@@ -27,9 +27,7 @@ proc storeCachedHeaders(
   var count = 0
   for header in ctx.hdrCache.incrFrom():
     if leastBn <= header.number:
-      ctx.pool.cacheDB.putHeader(header).isOkOr:
-        error info & ": Unable to register cached headers",
-          blockNumber=header.number, syncState=($ctx.syncState), `error`=error
+      ctx.pool.cacheDB.putHeader(header, info).isOkOr:
         return
       count.inc
   trace info & ": Registered headers",

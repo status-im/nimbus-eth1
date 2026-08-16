@@ -120,8 +120,7 @@ template fetchCodes*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.cdeFetchRegisterError()
-        of ENoDataAvailable, EMissingEthContext, ETrieError, ELockError,
-           ECacheError, ECompleted:
+        of EUnusedForFetch:
           # Not allowed here -- internal error
           raiseAssert "Unexpected error " & $rc.error.excp
 
