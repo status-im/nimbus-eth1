@@ -171,6 +171,54 @@ func toBlock(
     withdrawals: Opt.some(wds),
   )
 
+# https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/execution_engine/new_payload.py#L50
+func is_valid_versioned_hashes(
+    expected: openArray[Digest], blk: Block
+): Result[void, string] =
+  ## Return ok if and only if the versioned hashes computed by blob
+  ## transactions in `new_payload_request.execution_payload` match
+  ## `new_payload_request.versioned_hashes`.
+  var versionedHashes: seq[VersionedHash]
+  for tx in blk.transactions:
+    if tx.txType == TxEip4844:
+      versionedHashes.add(tx.versionedHashes)
+
+  if versionedHashes.len != expected.len:
+    return err("Versioned hashes count does not match the payload")
+
+  for i, x in expected:
+    if x.data != versionedHashes[i].data:
+      return err("Versioned hash at index " & $i & " does not match the payload")
+
+  ok()
+
+func chainConfigForStateless(chainId: uint64): ChainConfig =
+  # Normally `chainConfigForNetwork` would be used, but the stateless tests run
+  # the guest fork from genesis, so every fork up to it is activated at zero.
+  # TODO: Might have to change this system once the fork gets scheduled.
+  const lastFork = HardFork.Amsterdam
+
+  var transitions: ForkTransitionTable
+  for f in low(HardFork) .. lastPurelyBlockNumberBasedFork:
+    transitions.blockNumberThresholds[f] = Opt.some(0.BlockNumber)
+  transitions.mergeForkTransitionThreshold.number = Opt.some(0.BlockNumber)
+  transitions.mergeForkTransitionThreshold.ttd = Opt.some(0.u256)
+  for f in firstTimeBasedFork .. lastFork:
+    transitions.timeThresholds[f] = Opt.some(0.EthTime)
+
+  let
+    networkId = NetworkId(chainId.u256)
+    config = ChainConfig(
+      chainId: networkId,
+      blobSchedule: defaultBlobSchedule(),
+      # Inherit deposit contract address from the known network config
+      # TODO: Separate out the deposit contract address code.
+      depositContractAddress: chainConfigForNetwork(networkId).depositContractAddress,
+    )
+  config.populateFromForkTransitionTable(transitions)
+
+  config
+
 # Encode execution requests into EL format:
 # https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/execution_engine/requests.py#L108
 func encodeDeposits(deposits: seq[DepositRequest]): seq[byte] =
@@ -240,10 +288,12 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
 
     com = CommonRef.new(
       db = nil,
-      config = chainConfigForNetwork(NetworkId(input.chain_id.u256)),
+      config = chainConfigForStateless(input.chain_id),
       networkId = NetworkId(input.chain_id.u256),
       initializeDb = false,
     )
+
+  ?is_valid_versioned_hashes(input.new_payload_request.versionedHashes, blk)
 
   # Early validation of the input BAL before execution, just like is done for the
   # stateful path. Rejects invalid BALs early without paying the cost of block execution.
