@@ -11,7 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/strformat,
+  std/[atomics, strformat],
   chronicles,
   results,
   eth/common/hashes_rlp,
@@ -30,8 +30,17 @@ type
     tasksCompleted*: int
     tasksTotal*: int
 
-  ConcurrentHashKeyQueue* = ConcurrentQueue[3, (RootedVertexID, HashKey, int)]
   ConcurrentVertexBufQueue* = ConcurrentQueue[3, (RootedVertexID, VertexBuf)]
+
+  ComputedKey = (RootedVertexID, HashKey, int)
+
+  KeyWriteBuf* = object
+    ## Keys computed by a single task, kept on the shared heap and merged into
+    ## the layers by the spawning thread once all tasks have finished. Nothing
+    ## reads a key computed during a run before then, so neither the buffer nor
+    ## the layers need any locking while the tasks are hashing.
+    data: ptr UncheckedArray[ComputedKey]
+    len, cap: int
 
 proc `=copy`(
     dest: var WriteBatch, src: WriteBatch
@@ -136,23 +145,13 @@ proc putKeyAtLevel(
   ok()
 
 func layersGetKeyOrVtx*(
-    db: AristoTxRef, rvid: RootedVertexID, parallel: static bool
+    db: AristoTxRef, rvid: RootedVertexID
 ): Opt[((HashKey, VertexRef), int)] =
   for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
-      when parallel:
-        w.lock.lockRead()
-        defer:
-          w.lock.unlockRead()
-
       w.snapshot.vtx.withValue(rvid, item):
         return Opt.some(((item[][1], item[][0]), item[][2]))
       break
-
-    when parallel:
-      w.lock.lockRead()
-      defer:
-        w.lock.unlockRead()
 
     w.kMap.withValue(rvid, item):
       return ok(((item[], nil), w.level))
@@ -174,7 +173,7 @@ proc getKey(
       {}
 
   when not skipLayers:
-    let keyVtxRes = txRef.layersGetKeyOrVtx(rvid, parallel)
+    let keyVtxRes = txRef.layersGetKeyOrVtx(rvid)
     if keyVtxRes.isSome():
       return ok(keyVtxRes[])
 
@@ -205,19 +204,64 @@ proc computeKeyImpl(
     skipLayers: static bool,
     spawnTpTasks: static bool,
     parallel: static bool,
-    keyQueue: ptr ConcurrentHashKeyQueue,
+    keyBuf: ptr KeyWriteBuf,
     vtxBufQueue: ptr ConcurrentVertexBufQueue,
 ): Result[(HashKey, int), AristoError]
 
 when compileOption("threads"):
-  proc mergeKeyAtLevel(
-      txRef: AristoTxRef, rvid: RootedVertexID, key: HashKey, level: int
-  ) =
-    doAssert level >= txRef.db.baseTxFrame().level
+  proc add(buf: var KeyWriteBuf, item: ComputedKey) =
+    if buf.len == buf.cap:
+      buf.cap = max(2 * buf.cap, 1024)
+      let size = buf.cap * sizeof(ComputedKey)
+      buf.data = cast[ptr UncheckedArray[ComputedKey]](
+        if buf.data == nil:
+          allocShared(size)
+        else:
+          reallocShared(buf.data, size)
+      )
+    buf.data[buf.len] = item
+    inc buf.len
 
-    let frame = txRef.deltaAtLevel(level)
-    withWriteLock(frame.lock):
-      frame.layersMergeKey(rvid, key)
+  proc dispose(buf: var KeyWriteBuf) =
+    if buf.data != nil:
+      deallocShared(buf.data)
+    buf.reset()
+
+  proc mergeKeys(txRef: AristoTxRef, bufs: openArray[KeyWriteBuf]) =
+    ## Merge the tasks' keys into the layers they belong to. Frames are indexed
+    ## by level up front because a `deltaAtLevel` walk per key is what dominates
+    ## the merge when keys are spread across many frames, and each frame's key
+    ## table is pre-sized so that the bulk insert does not grow it repeatedly.
+    let baseLevel = txRef.db.baseTxFrame().level
+    var
+      frames = newSeq[AristoTxRef](txRef.level - baseLevel + 1)
+      counts = newSeq[int](frames.len)
+
+    block:
+      var frame = txRef
+      while not frame.isNil and frame.level >= baseLevel:
+        frames[frame.level - baseLevel] = frame
+        frame = frame.parent
+
+    for buf in bufs:
+      for i in 0 ..< buf.len:
+        let level = buf.data[i][2]
+
+        doAssert level >= baseLevel and level <= txRef.level,
+          "Cannot write keys at level < baseTxFrame level. Found level = " &
+            $level & ", baseTxFrame level = " & $baseLevel
+
+        inc counts[level - baseLevel]
+
+    for i, count in counts:
+      if count > 0:
+        frames[i].layersReserveKeys(count)
+
+    for buf in bufs:
+      for i in 0 ..< buf.len:
+        frames[buf.data[i][2] - baseLevel].layersMergeKey(
+          buf.data[i][0], buf.data[i][1]
+        )
 
   proc putVtxBlob(
       batch: var WriteBatch, db: AristoDbRef, rvid: RootedVertexID, vtx: openArray[byte]
@@ -238,7 +282,7 @@ when compileOption("threads"):
       vtx: ptr VertexRef,
       level: int,
       skipLayers: bool,
-      keyQueue: ptr ConcurrentHashKeyQueue,
+      keyBuf: ptr KeyWriteBuf,
       vtxBufQueue: ptr ConcurrentVertexBufQueue,
   ): Result[(HashKey, int), AristoError] =
     if skipLayers:
@@ -250,7 +294,7 @@ when compileOption("threads"):
         skipLayers = true,
         spawnTpTasks = false,
         parallel = true,
-        keyQueue,
+        keyBuf,
         vtxBufQueue,
       )
     else:
@@ -262,7 +306,7 @@ when compileOption("threads"):
         skipLayers = false,
         spawnTpTasks = false,
         parallel = true,
-        keyQueue,
+        keyBuf,
         vtxBufQueue,
       )
 
@@ -275,7 +319,7 @@ proc computeKeyImpl(
     skipLayers: static bool,
     spawnTpTasks: static bool,
     parallel: static bool,
-    keyQueue: ptr ConcurrentHashKeyQueue,
+    keyBuf: ptr KeyWriteBuf,
     vtxBufQueue: ptr ConcurrentVertexBufQueue,
 ): Result[(HashKey, int), AristoError] =
   # The bloom filter available used only when creating the key cache from an
@@ -305,7 +349,7 @@ proc computeKeyImpl(
                   skipLayers = skipLayers,
                   spawnTpTasks = false,
                   parallel,
-                  keyQueue,
+                  keyBuf,
                   vtxBufQueue,
                 )
           level = max(level, sl)
@@ -333,8 +377,12 @@ proc computeKeyImpl(
       when spawnTpTasks:
         var
           futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
-          keyQueues: array[16, ConcurrentHashKeyQueue]
+          keyBufs: array[16, KeyWriteBuf]
           vtxBufQueues: array[16, ConcurrentVertexBufQueue]
+
+        defer:
+          for buf in keyBufs.mitems:
+            buf.dispose()
 
       # Make sure we have keys computed for each hash
       block keysComputed:
@@ -370,7 +418,7 @@ proc computeKeyImpl(
                 skipLayers = skipLayers,
                 spawnTpTasks = false,
                 parallel,
-                keyQueue,
+                keyBuf,
                 vtxBufQueue,
               )
               n += 1
@@ -390,7 +438,6 @@ proc computeKeyImpl(
               vtxPtr = keyvtxs[minIdx][0][1].addr
               level = keyvtxs[minIdx][1]
 
-            keyQueues[minIdx].init()
             vtxBufQueues[minIdx].init()
             futs[minIdx] = txRef.db.taskpool.spawn computeKeyImplTask(
               txRef.addr,
@@ -399,7 +446,7 @@ proc computeKeyImpl(
               vtxPtr,
               level,
               skipLayers,
-              keyQueues[minIdx].addr,
+              keyBufs[minIdx].addr,
               vtxBufQueues[minIdx].addr,
             )
             inc batch.tasksTotal
@@ -414,7 +461,7 @@ proc computeKeyImpl(
               skipLayers,
               spawnTpTasks = false,
               parallel,
-              keyQueue,
+              keyBuf,
               vtxBufQueue,
             )
             when not parallel:
@@ -435,12 +482,6 @@ proc computeKeyImpl(
               inc batch.tasksCompleted
               continue
 
-            when not skipLayers:
-              if not keyQueues[i].isEmpty():
-                var k: (RootedVertexID, HashKey, int)
-                if keyQueues[i].tryPop(k):
-                  txRef.mergeKeyAtLevel(k[0], k[1], k[2])
-
             if not vtxBufQueues[i].isEmpty():
               var v: (RootedVertexID, VertexBuf)
               if vtxBufQueues[i].tryPop(v):
@@ -449,24 +490,21 @@ proc computeKeyImpl(
           for i in indexesToRemove:
             runningFutsIndexes.excl(i)
 
+          cpuRelax()
+
         # At this point all futures have finished running.
-        # Now we process any remaining data in the queues.
+        # Now we process any remaining data in the queues and buffers.
         for i, f in futs:
           if f.isSpawned():
-            when not skipLayers:
-              if not keyQueues[i].isEmpty():
-                var k: (RootedVertexID, HashKey, int)
-                while keyQueues[i].tryPop(k):
-                  txRef.mergeKeyAtLevel(k[0], k[1], k[2])
-
             if not vtxBufQueues[i].isEmpty():
               var v: (RootedVertexID, VertexBuf)
               while vtxBufQueues[i].tryPop(v):
                 ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
 
             (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
-            keyQueues[i].dispose()
             vtxBufQueues[i].dispose()
+
+        txRef.mergeKeys(keyBufs)
 
       template branchSubKey(): untyped =
         if subvid.isValid:
@@ -491,7 +529,7 @@ proc computeKeyImpl(
   if vtx.vType in Branches:
     when parallel and not spawnTpTasks:
       if level >= txRef.db.baseTxFrame().level:
-        keyQueue[].push((rvid, key, level))
+        keyBuf[].add((rvid, key, level))
       elif level == dbLevel:
         var vtxBuf: VertexBuf
         vtx.blobifyTo(key, vtxBuf)
