@@ -74,7 +74,7 @@ proc headerDownloadTrigger*(
   # Ignoring a beacon header fetch cycle unless there are enough headers
   # available to fetch.
   let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
-  if consHeadNum < firstNum + nConsHeadcachedDeltaMax - 1 and
+  if consHeadNum < firstNum + nConsHeadCachedDeltaMax - 1 and
      not ctx.pool.beaconTarget:                     # maybe manual target set?
     let now = Moment.now()
     if ctx.pool.lastNoHdrsLog + noHeadersLogWaitInterval < now:

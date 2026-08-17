@@ -16,10 +16,14 @@ import
 type
   SnapState* = enum
     SnapIdle = 0
-    SnapReady                      ## Wait for download state
     SnapResume                     ## Resume from previous session
-    SnapDownload                   ## Downloading and caching data
+    SnapClear                      ## Reset and prepare for brand new start
+    SnapReady                      ## Wait for download state
+    SnapDownload                   ## Download and cache initial state data
     SnapDownloadFinish             ## Wait for sync before proceeding
+    SnapBalsFetch                  ## Bring state forward using BALs
+    SnapBalsFetchFinish            ## Wait for sync before proceeding
+    SnapStateForward               ## Apply BALs and advance state
     # ..                           ## TBD ..
     SnapStop                       ## TBD ..
 
@@ -27,6 +31,7 @@ type
     ## For `FetchError` return code object/tuple
     EGeneric = 0                   ## Not further specified error
     EAlreadyTriedAndFailed         ## The same action failed before
+    EMissingEthContext             ## Cannot retrieve `eth` peer descriptor
     EPeerDisconnected              ## Exception
     ECatchableError                ## Exception
     ECancelledError                ## Exception
@@ -34,11 +39,12 @@ type
     # The following symbols are not used in fetch functions (see below
     # the symbol set `EUnusedForFetch`.)
     ENoDataAvailable               ## Out of scope, unsuuported state
-    EMissingEthContext             ## Cannot retrieve `eth` peer descriptor
     ELockError                     ## Locked by some other peer
     ETrieError                     ## Trie/mpt database error
+    EValidationError               ## Sub-MPT validation failed
     ECacheError                    ## Database cache error
     ECompleted                     ## Nothing to do, here
+    ERlpError                      ## Decoding problem
     EArgumentError                 ## Inconsistent function arguments
     EMissingBalSupport             ## Chain before `Amsterdam`
     EHeadersMissing                ## Need to fetch more headers
@@ -71,8 +77,19 @@ const
     ## state when the the FCU modue hash provides a finalised header and there
     ## are eth/xx download peers available.
 
+  daemonWaitClearInterval* = chronos.seconds(10)
+    ## Ditto for setup.
+
   daemonWaitElseInterval* = chronos.seconds(10)
     ## Ditto for other states.
+
+  daemonWaitDownloadInterval* = chronos.seconds(10)
+    ## Some waiting time at the end of the daemon task which always lingers
+    ## in the background. This one is for `SnapDownload` state.
+
+  daemonWaitDownloadFinishInterval* = chronos.seconds(5)
+    ## Poll waiting for all downloading peers to have stopped
+
 
   peerWaitDownloadInterval* = chronos.seconds(5)
     ## Some waiting time at the end of the daemon task which always lingers
@@ -82,6 +99,20 @@ const
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for non-`SnapDownload` states.
 
+  peerWaitExhaustedInterval* = chronos.milliseconds(1200)
+    ## Suspend peer until the download state has been forwarded. This timeout
+    ## will be regularly polled for the updated state.
+
+  peerWaitBalsLockedInterval* = chronos.milliseconds(300)
+    ## Only one peer can download BALs. This constatnt is the polling timr
+    ## for the waiting peers.
+
+  peerWaitHeadersInterval* = chronos.milliseconds(300)
+    ## Suspend peer waiting for new headers. Then check again.
+
+  peerWaitNoEthPeersInterval* = chronos.milliseconds(500)
+    ## Waithing for eth peers supporting BAL
+
   # ----------------------
 
   unprocAccountsRangeMax* = (1.u256 shl 240) # ~65k intervals
@@ -90,12 +121,18 @@ const
     ## these intervals are sparsely filled and there will be returned not
     ## more than ~1k accounts.
 
-  # -----------
+  consHeadSupportWindowSize* = 144
+    ## This might be a bit more than the supported download states window,
+    ## which is 128. If the FCU update header is more than that distance
+    ## apart form the pivot state block number, a BAL download and forward
+    ## cycle will be triggerd.
 
-  nConsHeadcachedDeltaMax* = 128
+  nConsHeadCachedDeltaMax* = 128
     ## If the block number difference between FCU update header and cached
     ## header is larger than this contant, a beacon header fetch cycle is
     ## triggered to fill up the cache.
+
+  # -----------
 
   nFetchHeaderPeersMax* = 5
     ## Try at most this many `eth` peers for fetching a header
@@ -198,5 +235,8 @@ const
 
   nProcBalDefaultBatchMax* = 1000
     ## Default maximum number of BALs for a single auto downloading session.
+
+static:
+  doAssert 0 < nConsHeadCachedDeltaMax
 
 # End

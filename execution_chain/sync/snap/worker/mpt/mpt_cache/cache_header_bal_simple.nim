@@ -43,6 +43,33 @@ proc getHeader*(
     error info.failedToFetch "Header", number, `error`=error
     return err()
 
+proc getBlockHash*(
+    db: CacheDbRef;
+    number: BlockNumber;
+    info: static[string];
+      ): Opt[Hash32] =
+  db.getBlockHash(number).valueOr:
+    error info.failedToFetch "block hash", number, `error`=error
+    return err()
+
+proc lastHeader*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[Header] =
+  db.lastHeader().valueOr:
+    let estr = if 0 < error.len: error else: "no headers yet"
+    error info.failedToFetch "last Header", `error`=estr
+    return err()
+
+proc lastHeaderNumber*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[BlockNumber] =
+  db.lastHeaderNumber().valueOr:
+    let estr = if 0 < error.len: error else: "no headers yet"
+    error info.failedToFetch "last Header number", `error`=estr
+    return err()
+
 proc putHeader*(
     db: CacheDbRef;
     header: Header;
@@ -61,6 +88,15 @@ proc getBal*(
       ): Opt[BlockAccessListRef] =
   db.getBal(number).valueOr:
     error info.failedToFetch "BAL", number, `error`=error
+    return err()
+
+proc lastBalNumber*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[BlockNumber] =
+  db.lastBalNumber().valueOr:
+    let estr = if 0 < error.len: error else: "no BALs yet"
+    error info.failedToFetch "last BAL number", `error`=estr
     return err()
 
 proc putBal*(

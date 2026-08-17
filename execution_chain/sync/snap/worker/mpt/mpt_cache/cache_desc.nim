@@ -31,6 +31,9 @@ type
   OptHeaderResult* = Result[Opt[Header],string]
     ## Shortcut
 
+  OptNumberResult* = Result[Opt[BlockNumber],string]
+    ## Shortcut
+
   OptBalResult* = Result[Opt[BlockAccessListRef],string]
     ## Shortcut
 

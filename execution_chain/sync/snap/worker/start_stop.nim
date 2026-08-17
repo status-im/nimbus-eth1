@@ -15,7 +15,7 @@ import
   pkg/[chronicles, metrics, minilru],
   ../../../networking/p2p,
   ../../wire_protocol,
-  ./[mpt, state_db, worker_desc]
+  ./[mpt, download, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -38,6 +38,12 @@ template setLastPeerSeen(ctx: SnapCtxRef) =
 
 proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ## Helper for `setup()`: Enable external call-back based services
+
+  # Initialise account range accounting
+  ctx.accUnproc.init ItemKeyRangeMax
+
+  # Set up accounts download metrics
+  ctx.accountDownloadMetricsReset()
 
   # Set up assembly DB
   ctx.pool.cacheDB = CacheDbRef.init(ctx.pool.baseDir,info).valueOr:

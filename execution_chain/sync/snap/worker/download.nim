@@ -11,17 +11,69 @@
 {.push raises: [].}
 
 import
-  ./download/header,
-  ./worker_desc
+  std/bitops,
+  pkg/[chronicles, chronos, stew/interval_set],
+  ./download/[account, bals, code, header, storage],
+  ./[helpers, mpt, state_db, worker_desc]
+
+logScope:
+  topics = "snap sync"
 
 export
-  header
+  account, header
+
+# ------------------------------------------------------------------------------
+# Private function
+# ------------------------------------------------------------------------------
+
+proc getStateRoot(
+    buddy: SnapPeerRef;
+    info: static[string];
+      ): Opt[(StateRoot,BlockNumber)] =
+  let
+    adb = buddy.ctx.pool.cacheDB
+    accState = ?adb.getAccMissingIntv(info)
+    stateHdr = ?adb.getHeader(accState.number, info)
+  ok((StateRoot stateHdr.stateRoot, accState.number))
+
+proc getLastBalNum(ctx: SnapCtxRef): BlockNumber =
+  let maybe = ctx.pool.cacheDB.lastBalNumber().valueOr:
+    return BlockNumber(0)
+  if maybe.isSome():
+    return maybe.unsafeGet()
+  # BlockNumber(0)
 
 # ------------------------------------------------------------------------------
 # Public function(s)
 # ------------------------------------------------------------------------------
 
-template downloadAccountsAndStorage*(
+proc downloadInit*(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Opt[void] =
+  if not ctx.accUnproc.synced():
+    let adb = ctx.pool.cacheDB
+
+    if ?adb.hasAccMissingIntv(info):                # have an account state?
+      let accState = ?adb.getAccMissingIntv(info)
+      ctx.accUnproc.unprocessed = accState.ranges   # copy reference (!)
+      ctx.pool.pivotNum = accState.number           # set pivot
+    else:
+      let
+        number = ?adb.lastHeaderNumber(info)
+        accRng = ItemKeyRangeSet.init ItemKeyRangeMax
+      ?adb.putAccMissingIntv(number, accRng, info)  # new state
+      ctx.accUnproc.init ItemKeyRangeMax
+      ctx.pool.pivotNum = number                    # set pivot
+
+    # Update state number that can be advanced to
+    ctx.pool.forwardNum = ctx.getLastBalNum()       # can forward to that state
+
+    ctx.accountDownloadMetricsUpdate()
+    ctx.accUnproc.synced = true
+  ok()
+
+template downloadState*(
     buddy: SnapPeerRef;
     info: static[string];
       ): auto =
@@ -37,11 +89,96 @@ template downloadAccountsAndStorage*(
   ##   + not older than the first two states (if any),
   ##   + and no more than `nWorkingStateRoots`
   ##
-  var blockRc = Opt[void].err()
+  var bodyRc = Result[void,ErrorType].ok()
   block body:
-    discard
+    let
+      ctx = buddy.ctx
 
-  blockRc                                           # return value
+      (stateRoot, number {.inject.}) = buddy.getStateRoot(info).valueOr:
+        trace info & ": Not ready yet for downloading", peer,
+          syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
+        bodyRc = typeof(bodyRc).err(EGeneric)
+        break body
+
+      peer {.inject,used.} = $buddy.peer            # logging only
+      root {.inject,used.} = stateRoot.toStr        # logging only
+
+    trace info & ": Start downloading", peer, syncState=($buddy.syncState),
+      nSyncPeers=ctx.nSyncPeers()
+
+    # Run through different download entities as long as they are available.
+    # Non-availability might also mean tat they are temporarily blocked and
+    # might be available later.
+    #
+    # bitmask doEntity:
+    # * bit 0: do accounts
+    # * bit 1: do storages
+    # * bit 2: do contract codes
+    #
+    var doEntity = toMask[int](0..2)
+    while buddy.ctrl.running and doEntity != 0:
+
+      if doEntity.testBit(0):
+        buddy.accountDownload(stateRoot, number, info).isOkOr:
+          if error == ECompleted:
+            doEntity.clearBit(0)                    # done with accounts
+            continue                                # verify buddy is running
+          bodyRc = typeof(bodyRc).err(error)
+          break
+        doEntity.setBit(1)                          # activate storages & codes
+        doEntity.setBit(2)
+
+      if doEntity.testBit(1):
+        if buddy.ctrl.stopped:
+          break
+        buddy.storageDownload(stateRoot, number, info).isOkOr:
+          if error == ECompleted:
+            doEntity.clearBit(1)                    # done with storage so far
+            continue
+          bodyRc = typeof(bodyRc).err(error)
+          break
+
+      if doEntity.testBit(2):
+        if buddy.ctrl.stopped:
+          break
+        buddy.codeDownload(stateRoot, number, info).isOkOr:
+          if error == ECompleted:
+            doEntity.clearBit(2)                    # done with storage so far
+            continue
+          bodyRc = typeof(bodyRc).err(error)
+          break
+
+    trace info & ": downloaded data", peer, syncState=($buddy.syncState),
+      nSyncPeers=ctx.nSyncPeers()
+
+  bodyRc                                            # return value
+
+template downloadBals*(
+    buddy: SnapPeerRef;
+    info: static[string];
+      ): auto =
+  var bodyRc = Result[void,ErrorType].err(EGeneric)
+  block body:
+    let
+      ctx = buddy.ctx
+      peer {.inject,used.} = $buddy.peer            # logging only
+
+    if not ctx.pool.balsLocked.isNil:               # already downloading?
+      bodyRc = typeof(bodyRc).err(ELockError)
+      break body
+
+    ctx.pool.balsLocked = buddy                     # unique access
+    let rc = buddy.balsDownloadAppend(info)
+    ctx.pool.balsLocked = SnapPeerRef(nil)
+
+    if rc.isErr:
+      bodyRc = typeof(bodyRc).err(rc.error)
+      break body
+
+    ctx.pool.forwardNum = ctx.getLastBalNum()
+    bodyRc = typeof(bodyRc).ok()
+
+  bodyRc
 
 # ------------------------------------------------------------------------------
 # End

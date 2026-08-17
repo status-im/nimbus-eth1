@@ -225,6 +225,7 @@ proc init*[T: NodeTrieRef](
   let limit = maxPath.to(ItemKey)
 
   # Select sub-roots, links within min/max bounds
+  db.atRightEnd = true                              # to be falsified
   for (key,stopNode) in tmpLinks.pairs:
     let path = ItemKey.fromNibbles(stopNode.path, padMin)
     if start <= path and path <= limit:
@@ -233,6 +234,8 @@ proc init*[T: NodeTrieRef](
       # Remove stop node from parent
       BranchNodeRef(stopNode.parent).brLinks[stopNode.inx] = nil
       db.dangling.add (key,stopNode)                # register dangling keys
+      if limit < path:
+        db.atRightEnd = false
 
   db
 

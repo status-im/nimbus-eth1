@@ -17,8 +17,9 @@ import
 
 type
   UnprocItemKeys* = object
-    unprocessed*: ItemKeyRangeSet    ## `ItemKey` processing requested
-    borrowed*: ItemKeyRangeSet       ## In-process/locked ranges
+    unprocessed*: ItemKeyRangeSet    # `ItemKey` processing requested
+    borrowed*: ItemKeyRangeSet       # In-process/locked ranges
+    syncedOk: bool                   # no need to re-initialise
 
 # ------------------------------------------------------------------------------
 # Public constructor & friends
@@ -32,11 +33,18 @@ proc init*(udb: var UnprocItemKeys; initRange: ItemKeyRange) =
   udb.init()
   discard udb.unprocessed.merge initRange
 
-
 proc clear*(udb: var UnprocItemKeys) =
   ## Reset argument range sets empty.
-  udb.unprocessed.clear
-  udb.borrowed.clear
+  udb.unprocessed.clear()
+  udb.borrowed.clear()
+
+proc synced*(udb: UnprocItemKeys): bool =
+  ## Getter
+  udb.syncedOk
+
+proc `synced=`*(udb: var UnprocItemKeys, value: bool) =
+  # Setter
+  udb.syncedOk = value
 
 # ------------------------------------------------------------------------------
 # Public functions

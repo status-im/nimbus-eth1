@@ -12,7 +12,7 @@
 
 import
   pkg/chronicles,
-  ./[worker_const, worker_desc]
+  ./[mpt, state_db, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -23,29 +23,82 @@ logScope:
 
 proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  SnapIdle
-
-proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
-  ## State transition handler
-  SnapReady
+  if ctx.pool.contPrevSession:
+    return SnapResume
+  SnapClear
 
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  SnapResume
+  let haveData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr:
+    return SnapStop                                 # DB problem, failure
 
-func downloadNext(ctx: SnapCtxRef; info: static[string]): SnapState =
+  if haveData and ctx.accUnproc.synced():
+    info info & ": Resuming previous session"
+    return SnapBalsFetch
+
+  info info & ": No previous session available"
+  SnapClear
+
+proc clearNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  SnapDownload                                      # otherwise stay
+  let haveData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr:
+    return SnapStop                                 # DB problem, failure
+  if haveData:
+    return SnapClear
+  SnapReady
 
-proc downloadFinishNext(ctx: SnapCtxRef; info: static[string]): SnapState =
+proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
+  ## State transition handler
+  # Wait until initial headers are downloaded and available. Then check
+  # whether snap syncer book keeping has been set up.
+  # is inialised
+  if not ctx.pool.headersSynced:
+    return SnapReady
+  if not ctx.accUnproc.synced():
+    return SnapReady
+  SnapDownload
+
+# -------------------------
+
+func downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
+  ## State transition handler
+  # Check whether one should forward the downloaded partial state
+  let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
+  if ctx.pool.pivotNum + consHeadSupportWindowSize < consHeadNum:
+    ctx.poolMode = true
+    return SnapDownloadFinish
+  SnapDownload                                      # keep downloading
+
+proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
     return SnapDownloadFinish
-  SnapStop
+  SnapBalsFetch
+
+proc balsFetchNext(ctx: SnapCtxRef, info: static[string]): SnapState =
+  ## State transition handler
+  if ctx.pool.pivotNum < ctx.pool.forwardNum:       # can bring forward state?
+    ctx.poolMode = true
+    return SnapBalsFetchFinish
+  SnapBalsFetch
+
+proc balsFetchFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
+  ## State transition handler
+  if ctx.poolMode:                                  # wait for peers to sync
+    return SnapBalsFetchFinish
+  SnapStateForward
+
+proc stateForwardNext(ctx: SnapCtxRef, info: static[string]): SnapState =
+  ## State transition handler
+  if ctx.pool.pivotNum < ctx.pool.forwardNum:       # must bring forward state
+    return SnapStateForward
+  if true:                                          # FIXME, must change
+    return SnapDownload
+  SnapStop                                          # FIXME, must change
 
 # TBD ..
 
-func stopNext(ctx: SnapCtxRef; info: static[string]): SnapState =
+func stopNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   SnapStop
 
 # ------------------------------------------------------------------------------
@@ -58,35 +111,55 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   #
   # State machine
   # ::
-  #                  idle
-  #                    |
-  #                    v
-  #      resume <--- ready
-  #         |          |
-  #         |          v
-  #         |      download
-  #         |          |
-  #         |          v
-  #         |    downloadFinish
-  #         |          |
-  #         v          v
-  #       [...]      [...]
-  #                    |
-  #                    v
-  #                  stop
+  #                         idle ---------.
+  #                           |           |
+  #                           v           v
+  #                        resume ----> clear
+  #                           |           |
+  #                           v           v
+  #                .----> balsFetch     ready
+  #                |          |           |
+  #                |          v           |
+  #                |    balsFetchFinish   |
+  #                |          |           |
+  #                |          v           |
+  #                |     stateForward     |
+  #                |          |           |
+  #                |          v           |
+  #                |       download <-----'
+  #                |          |
+  #                |          v
+  #                `--- downloadFinish
+  #                           |
+  #                           v
+  #                         [...]
+  #                           |
+  #                           v
+  #                         stop
   #
   let newState =
     case ctx.pool.syncState:
     of SnapIdle:
       ctx.idleNext info
-    of SnapReady:
-      ctx.readyNext info
+    of SnapClear:
+      ctx.clearNext info
     of SnapResume:
       ctx.resumeNext info
+    of SnapReady:
+      ctx.readyNext info
     of SnapDownload:
       ctx.downloadNext info
     of SnapDownloadFinish:
       ctx.downloadFinishNext info
+    of SnapBalsFetch:
+      ctx.balsFetchNext info
+    of SnapBalsFetchFinish:
+      ctx.balsFetchFinishNext info
+    of SnapStateForward:
+      ctx.stateForwardNext info
+
+    # [..]
+
     of SnapStop:
       ctx.stopNext info
 
@@ -95,17 +168,18 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
 
   let prevState = ctx.pool.syncState
   ctx.pool.syncState = newState
+
   case newState:
-  of SnapDownload, SnapDownloadFinish:
+  of SnapReady, SnapDownload, SnapDownloadFinish:
+    chronicles.info info & ": State changed", prevState, newState,
+      pivot=ctx.pool.pivotNum, nSyncPeers=ctx.nSyncPeers()
+  of SnapBalsFetch, SnapBalsFetchFinish, SnapStateForward:
+    chronicles.info info & ": State changed", prevState, newState,
+      pivot=ctx.pool.pivotNum, forward=ctx.pool.forwardNum,
+      nSyncPeers=ctx.nSyncPeers()
+  of SnapIdle, SnapResume, SnapClear, SnapStop:
     chronicles.info info & ": State changed", prevState, newState,
       nSyncPeers=ctx.nSyncPeers()
-  of SnapStop:
-    chronicles.info info & ": State changed", prevState, newState,
-      nSyncPeers=ctx.nSyncPeers()
-  of SnapResume:
-    debug info & ": State changed", prevState, newState
-  of SnapReady, SnapIdle:
-    debug info & ": State changed", prevState, newState
 
   newState
 
