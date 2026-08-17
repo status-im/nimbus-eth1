@@ -33,11 +33,13 @@ proc storeCachedHeaders(
   trace info & ": Registered headers",
     count, head=ctx.hdrCache.head.number, syncState=($ctx.syncState)
 
-proc minStateNum(
-    ctx: SnapCtxRef;
-    info: static[string];
-      ): BlockNumber =
-  BlockNumber(0)
+proc stateNum(ctx: SnapCtxRef): BlockNumber =
+  # Get block number from saved state (if any)
+  let maybe = ctx.pool.cacheDB.getAccMissingIntv().valueOr:
+    return BlockNumber(0)
+  if maybe.isSome():
+    return maybe.unsafeGet.number
+  # BlockNumber(0)
 
 proc getLastHeaderOrGenesis(ctx: SnapCtxRef): Header =
   ## Ignore errors
@@ -54,18 +56,12 @@ proc getLastHeaderOrGenesis(ctx: SnapCtxRef): Header =
 proc headerDownloadTrigger*(
     ctx: SnapCtxRef;
     info: static[string];
-    reducedNoise = false;
       ): Result[void,TriggerRunError] =
   ## Tell beacon syncer to download headers and collect the result
   ## afterwards.
   let
     bcSync = ctx.pool.beaconSync
-    header = ctx.getLastHeaderOrGenesis()
-    lastCached = header.number                      # top header already cached
-    leastBn = if 0 < lastCached: lastCached + 1     # discard smaller ones
-              else: ctx.minStateNum(info)           # ..
-    latestNum = ctx.chain.latestNumber()            # head from `FC` module
-    consHeadNum = ctx.hdrCache.latestConsHeadNumber()
+    firstNum = ctx.stateNum() + 1                   # discard smaller ones
 
   # Check whether there is an ongoing header download, already.
   if ctx.beaconState in
@@ -75,48 +71,46 @@ proc headerDownloadTrigger*(
     #       clean up.
     return ok()                                     # nothing to do
 
-  if consHeadNum == 0:                              # no FCU request from CL?
-    if latestNum < lastCached:                      # maybe manual target set
-      if not reducedNoise:
-        trace info & ": Cached enough headers already",
-          lastCached, head=latestNum, syncState=($ctx.syncState)
-      ctx.pool.headersSynced = true                 # mark it synnced (for now)
-      return ok()
-
-  # Ignoring a beacon header fetch cycle if there are not too many headers
+  # Ignoring a beacon header fetch cycle unless there are enough headers
   # available to fetch.
-  if latestNum < consHeadNum and
-     lastCached + nConsHeadcachedDeltaMax < consHeadNum:
-    if not reducedNoise:
-      trace info & ": Not enough headers to download yet",
-        consHeadNum, lastCached, syncState=($ctx.syncState)
+  let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
+  if consHeadNum < firstNum + nConsHeadcachedDeltaMax - 1 and
+     not ctx.pool.beaconTarget:                     # maybe manual target set?
+    let now = Moment.now()
+    if ctx.pool.lastNoHdrsLog + noHeadersLogWaitInterval < now:
+      ctx.pool.lastNoHdrsLog = now
+      trace info & ": Not enough headers to download yet", firstNum,
+        consHeadNum, syncState=($ctx.syncState)
     return ok()
 
   # Define event handler to complete beacon syncer download
   proc storeTopHeaderCB(ok: bool) =
     if ok:
-      ctx.storeCachedHeaders(leastBn, info)
+      ctx.storeCachedHeaders(firstNum, info)
     bcSync.singleReset().isOkOr:
       error info & ": Unable to reset header download", `error`=error
-    ctx.pool.headersSynced = true
+    ctx.pool.headersSynced = true                   # mark header update done
+    ctx.pool.beaconTarget = false                   # exhausted now (if any)
 
   # Trigger beacon syncer
+  let header = ctx.getLastHeaderOrGenesis()
   bcSync.singleRun(header, storeTopHeaderCB).isOkOr:
     if ctx.nEthPeers() == 0:
       chronicles.info info & ": Waiting for eth/xx peers",
         syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers()
     elif ctx.hdrCache.latestConsHeadNumber() == 0:
-      chronicles.info info & ": Waiting for CL to send updates",
-        syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
-        nEthPeers=ctx.nEthPeers()
+      if not ctx.pool.beaconTarget:
+        chronicles.info info & ": Waiting for CL to send updates",
+          syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
+          nEthPeers=ctx.nEthPeers()
     elif ctx.pool.headersSynced:                    # otherwise ongoing download
       chronicles.error info & ": Unable to trigger ref headers download",
         syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
         nEthPeers=ctx.nEthPeers(), `error`=error
     return err(error)
 
-  ctx.pool.headersSynced = false                    # reset download flag
-  trace info & ": Triggered headers downloading", `from`=leastBn,
+  ctx.pool.headersSynced = false                    # mark ongoing header update
+  trace info & ": Triggered headers downloading", firstNum,
     syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
     nEthPeers=ctx.nEthPeers()
   ok()

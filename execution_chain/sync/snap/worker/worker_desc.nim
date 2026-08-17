@@ -131,7 +131,8 @@ type
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
     lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
-    lastSyncUpdLog*: chronos.Moment  ## Control update messages
+    lastNoHdrsLog*: chronos.Moment   ## Control update messages
+    lastMaxHdrsLog*: chronos.Moment  ## Control update messages
     ticker*: Ticker                  ## Ticker function to run in background
 
 # ------------------------------------------------------------------------------

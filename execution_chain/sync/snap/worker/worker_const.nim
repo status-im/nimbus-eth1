@@ -56,6 +56,16 @@ const
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
+  noPeersLogWaitInterval* = chronos.seconds(50)
+    ## Reduce logging noise
+
+  noHeadersLogWaitInterval* = chronos.seconds(50)
+    ## Reduce logging noise
+
+  maxHeadersLogWaitInterval* = chronos.seconds(30)
+    ## Reduce logging noise
+
+
   daemonWaitReadyInterval* = chronos.seconds(47)
     ## Some polling interval time waiting until the system gets into download
     ## state when the the FCU modue hash provides a finalised header and there
@@ -110,6 +120,9 @@ const
 
   # -----------
 
+  fetchStorageBatchMax* = 1024
+    ## Maximal batch size for storage slots
+
   fetchStorageSnapTimeout* = chronos.seconds(120)
     ## Similar to `fetchAccountSnapTimeout`
 
@@ -126,6 +139,9 @@ const
     ## Maximal size of storage slots downloaded in a single message.
 
   # -----------
+
+  fetchCodeBatchMax* = 1024
+    ## Maximal batch size for contract codes
 
   daemonWaitCodesInterval* = chronos.seconds(10)
     ## Poll waiting for peers to process contract codes

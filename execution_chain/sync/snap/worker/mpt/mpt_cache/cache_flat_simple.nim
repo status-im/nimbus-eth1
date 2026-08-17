@@ -102,11 +102,10 @@ proc getFlatAcc*(
     db: CacheDbRef;
     accPath: Hash32;
     info: static[string];
-      ): Opt[Opt[CacheFlatAccData]] =
-  var data = db.getFlatAcc(accPath).valueOr:
+      ): Opt[CacheFlatAccData] =
+  db.getFlatAcc(accPath).valueOr:
     error info.failedToFetch "account", accPath=accPath.toStr, `error`=error
     return err()
-  ok(move data)
 
 proc putFlatAcc*(
     db: CacheDbRef;
@@ -215,12 +214,11 @@ proc getFlatSlot*(
     accPath: Hash32;
     slotKey: Hash32;
     info: static[string];
-      ): Opt[Opt[UInt256]] =
-  var data = db.getFlatSlot(accPath, slotKey).valueOr:
+      ): Opt[UInt256] =
+  db.getFlatSlot(accPath, slotKey).valueOr:
     error info.failedToFetch "storage slot", accPath=accPath.toStr,
       stoKey=slotKey.toStr, `error`=error
     return err()
-  ok(move data)
 
 proc putFlatSlot*(
     db: CacheDbRef;
@@ -304,6 +302,17 @@ proc putMissingBlob*(
       ): Opt[void] =
   db.putMissingBlob(accPath).isOkOr:
     error info.failedUpdating "missing contract code", accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc delMissingBlob*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.delMissingBlob(accPath).isOkOr:
+    error info.failedDeleting "missing contract code", accPath=accPath.toStr,
       `error`=error
     return err()
   ok()

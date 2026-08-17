@@ -97,7 +97,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapDownload:
       # Download headers. The request will be silently ignored if the
       # distance to the CL head is too small.
-      discard ctx.headerDownloadTrigger(info, reducedNoise=true)
+      discard ctx.headerDownloadTrigger(info)
 
     of SnapDownloadFinish:
       raiseAssert "not here, state=" & $ctx.syncState
