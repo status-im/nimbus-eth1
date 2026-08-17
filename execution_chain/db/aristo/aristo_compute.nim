@@ -11,7 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[atomics, strformat],
+  std/[algorithm, atomics, strformat],
   chronicles,
   results,
   eth/common/hashes_rlp,
@@ -19,7 +19,7 @@ import
   ./aristo_desc/desc_backend,
   ../../concurrency/[queue, shared_types]
 
-export aristo_desc, chronicles, hashes_rlp, shared_types
+export aristo_desc, atomics, chronicles, hashes_rlp, shared_types
 
 type
   WriteBatch* = object
@@ -33,6 +33,13 @@ type
   ConcurrentVertexBufQueue* = ConcurrentQueue[3, (RootedVertexID, VertexBuf)]
 
   KeyWriteBuf* = SharedSeq[(RootedVertexID, HashKey, int)]
+
+  KeyVtxLevel = ((HashKey, VertexRef), int)
+
+  WorkItem* = object
+    rvid: RootedVertexID
+    slot: ptr KeyVtxLevel
+    sortVid: VertexID
 
 proc `=copy`(
     dest: var WriteBatch, src: WriteBatch
@@ -187,6 +194,22 @@ template childVid(vp: VertexRef): VertexID =
   of BoundaryNode, StoLeaf:
     default(VertexID)
 
+proc branchKeyFrom(
+    vtx: BranchRef, keyvtxs: var array[16, KeyVtxLevel], level: var int
+): HashKey =
+  template subKeyForN(): untyped =
+    if subvid.isValid:
+      level = max(level, keyvtxs[n][1])
+      keyvtxs[n][0][0]
+    else:
+      VOID_HASH_KEY
+
+  if vtx.vType == ExtBranch:
+    let brKey = rlpEncodeBranch(vtx, subKeyForN()).digestTo(HashKey)
+    rlpEncodeExt(ExtBranchRef(vtx).pfx, brKey).digestTo(HashKey)
+  else:
+    rlpEncodeBranch(vtx, subKeyForN()).digestTo(HashKey)
+
 proc computeKeyImpl(
     txRef: AristoTxRef,
     rvid: RootedVertexID,
@@ -256,40 +279,57 @@ when compileOption("threads"):
 
     ok()
 
-  proc computeKeyImplTask(
+  func itemCmp(a, b: WorkItem): int =
+    cmp(a.sortVid.uint64, b.sortVid.uint64)
+
+  proc computeItemsTask(
       txRef: ptr AristoTxRef,
-      rvid: RootedVertexID,
-      batch: ptr WriteBatch,
-      vtx: ptr VertexRef,
-      level: int,
+      items: ptr UncheckedArray[WorkItem],
+      numItems: int,
+      nextItem: ptr Atomic[int],
       skipLayers: bool,
       keyBuf: ptr KeyWriteBuf,
       vtxBufQueue: ptr ConcurrentVertexBufQueue,
-  ): Result[(HashKey, int), AristoError] =
-    if skipLayers:
-      txRef[].computeKeyImpl(
-        rvid,
-        batch[],
-        vtx[],
-        level,
-        skipLayers = true,
-        spawnTpTasks = false,
-        parallel = true,
-        keyBuf,
-        vtxBufQueue,
-      )
-    else:
-      txRef[].computeKeyImpl(
-        rvid,
-        batch[],
-        vtx[],
-        level,
-        skipLayers = false,
-        spawnTpTasks = false,
-        parallel = true,
-        keyBuf,
-        vtxBufQueue,
-      )
+  ): Result[void, AristoError] =
+    var batch: WriteBatch
+
+    while true:
+      let idx = nextItem[].fetchAdd(1)
+      if idx >= numItems:
+        return ok()
+
+      let item = items[idx]
+      let res =
+        if skipLayers:
+          txRef[].computeKeyImpl(
+            item.rvid,
+            batch,
+            item.slot[][0][1],
+            item.slot[][1],
+            skipLayers = true,
+            spawnTpTasks = false,
+            parallel = true,
+            keyBuf,
+            vtxBufQueue,
+          )
+        else:
+          txRef[].computeKeyImpl(
+            item.rvid,
+            batch,
+            item.slot[][0][1],
+            item.slot[][1],
+            skipLayers = false,
+            spawnTpTasks = false,
+            parallel = true,
+            keyBuf,
+            vtxBufQueue,
+          )
+
+      if res.isErr():
+        return err(res.error())
+
+      item.slot[][0][0] = res[][0]
+      item.slot[][1] = res[][1]
 
 proc computeKeyImpl(
     txRef: AristoTxRef,
@@ -356,82 +396,103 @@ proc computeKeyImpl(
         keyvtxs[n] = ?txRef.getKey((rvid.root, subvid), skipLayers, parallel)
 
       when spawnTpTasks:
+        const maxTasks = 32
+
         var
-          futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
-          keyBufs: array[16, KeyWriteBuf]
-          vtxBufQueues: array[16, ConcurrentVertexBufQueue]
+          gkeyvtxs: array[16, array[16, KeyVtxLevel]]
+          expanded: set[uint8]
+          items: seq[WorkItem]
+
+        for n, subvid in vtx.pairs:
+          if keyvtxs[n][0][0].isValid:
+            continue
+
+          let cvtx = keyvtxs[n][0][1]
+          if cvtx.vType in Branches:
+            expanded.incl(n)
+            for g, gsubvid in BranchRef(cvtx).pairs:
+              gkeyvtxs[n][g] = ?txRef.getKey((rvid.root, gsubvid), skipLayers, parallel)
+              if not gkeyvtxs[n][g][0][0].isValid:
+                items.add WorkItem(
+                  rvid: (rvid.root, gsubvid),
+                  slot: gkeyvtxs[n][g].addr,
+                  sortVid: gkeyvtxs[n][g][0][1].childVid,
+                )
+          else:
+            items.add WorkItem(
+              rvid: (rvid.root, subvid), slot: keyvtxs[n].addr, sortVid: cvtx.childVid
+            )
+
+        items.sort(itemCmp)
+
+        var
+          futs: array[maxTasks, Flowvar[Result[void, AristoError]]]
+          keyBufs: array[maxTasks, KeyWriteBuf]
+          vtxBufQueues: array[maxTasks, ConcurrentVertexBufQueue]
+          nextItem: Atomic[int]
 
         defer:
           for buf in keyBufs.mitems:
             buf.dispose()
 
-      # Make sure we have keys computed for each hash
-      block keysComputed:
-        while true:
-          # Compute missing keys in the order of the child vid that we have to
-          # recurse into, again exploiting on-disk order - this more than
-          # doubles computeKey speed on a fresh database!
-          var
-            minVid = default(VertexID)
-            minIdx = keyvtxs.len + 1 # index where the minvid can be found
-            n = 0'u8 # number of already-processed keys, for the progress bar
+        let numTasks = min(items.len, min(txRef.db.taskpool.numThreads, maxTasks))
+        if numTasks > 0:
+          let itemsPtr = cast[ptr UncheckedArray[WorkItem]](items[0].addr)
+          for t in 0 ..< numTasks:
+            vtxBufQueues[t].init()
+            futs[t] = txRef.db.taskpool.spawn computeItemsTask(
+              txRef.addr,
+              itemsPtr,
+              items.len,
+              nextItem.addr,
+              skipLayers,
+              keyBufs[t].addr,
+              vtxBufQueues[t].addr,
+            )
+            inc batch.tasksTotal
+      else:
+        # Make sure we have keys computed for each hash
+        block keysComputed:
+          while true:
+            # Compute missing keys in the order of the child vid that we have to
+            # recurse into, again exploiting on-disk order - this more than
+            # doubles computeKey speed on a fresh database!
+            var
+              minVid = default(VertexID)
+              minIdx = keyvtxs.len + 1 # index where the minvid can be found
+              n = 0'u8 # number of already-processed keys, for the progress bar
 
-          # The O(n^2) sort/search here is fine given the small size of the list
-          for nibble, keyvtx in keyvtxs.mpairs:
-            when spawnTpTasks:
-              if futs[nibble].isSpawned():
+            # The O(n^2) sort/search here is fine given the small size of the list
+            for nibble, keyvtx in keyvtxs.mpairs:
+              let subvid = vtx.bVid(uint8 nibble)
+              if (not subvid.isValid) or keyvtx[0][0].isValid:
                 n += 1 # no need to compute key
                 continue
 
-            let subvid = vtx.bVid(uint8 nibble)
-            if (not subvid.isValid) or keyvtx[0][0].isValid:
-              n += 1 # no need to compute key
-              continue
+              let childVid = keyvtx[0][1].childVid
+              if not childVid.isValid:
+                # leaf vertex without storage ID - we can compute the key trivially
+                (keyvtx[0][0], keyvtx[1]) = ?txRef.computeKeyImpl(
+                  (rvid.root, subvid),
+                  batch,
+                  keyvtx[0][1],
+                  keyvtx[1],
+                  skipLayers = skipLayers,
+                  spawnTpTasks = false,
+                  parallel,
+                  keyBuf,
+                  vtxBufQueue,
+                )
+                n += 1
+                continue
 
-            let childVid = keyvtx[0][1].childVid
-            if not childVid.isValid:
-              # leaf vertex without storage ID - we can compute the key trivially
-              (keyvtx[0][0], keyvtx[1]) = ?txRef.computeKeyImpl(
-                (rvid.root, subvid),
-                batch,
-                keyvtx[0][1],
-                keyvtx[1],
-                skipLayers = skipLayers,
-                spawnTpTasks = false,
-                parallel,
-                keyBuf,
-                vtxBufQueue,
-              )
-              n += 1
-              continue
+              if minIdx == keyvtxs.len + 1 or childVid < minVid:
+                minIdx = nibble
+                minVid = childVid
 
-            if minIdx == keyvtxs.len + 1 or childVid < minVid:
-              minIdx = nibble
-              minVid = childVid
+            if minIdx == keyvtxs.len + 1: # no uncomputed key found!
+              break keysComputed
 
-          if minIdx == keyvtxs.len + 1: # no uncomputed key found!
-            break keysComputed
-
-          when spawnTpTasks:
-            let
-              vid = (rvid.root, vtx.bVid(uint8 minIdx))
-              batchPtr: ptr WriteBatch = batch.addr
-              vtxPtr = keyvtxs[minIdx][0][1].addr
-              level = keyvtxs[minIdx][1]
-
-            vtxBufQueues[minIdx].init()
-            futs[minIdx] = txRef.db.taskpool.spawn computeKeyImplTask(
-              txRef.addr,
-              vid,
-              batchPtr,
-              vtxPtr,
-              level,
-              skipLayers,
-              keyBufs[minIdx].addr,
-              vtxBufQueues[minIdx].addr,
-            )
-            inc batch.tasksTotal
-          else:
             when not parallel:
               batch.enter(n)
             (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) = ?txRef.computeKeyImpl(
@@ -493,23 +554,21 @@ proc computeKeyImpl(
               while vtxBufQueues[i].tryPop(v):
                 ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
 
-            (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
+            ?sync(f)
             vtxBufQueues[i].dispose()
 
         txRef.mergeKeys(keyBufs)
 
-      template branchSubKey(): untyped =
-        if subvid.isValid:
-          level = max(level, keyvtxs[n][1])
-          keyvtxs[n][0][0]
-        else:
-          VOID_HASH_KEY
+        for n in expanded:
+          var clevel = keyvtxs[n][1]
+          let cbr = BranchRef(keyvtxs[n][0][1])
+          keyvtxs[n][0][0] = cbr.branchKeyFrom(gkeyvtxs[n], clevel)
+          keyvtxs[n][1] = clevel
+          ?txRef.putKeyAtLevel(
+            (rvid.root, vtx.bVid(n)), cbr, keyvtxs[n][0][0], clevel, batch
+          )
 
-      if vtx.vType == ExtBranch:
-        let brKey = rlpEncodeBranch(vtx, branchSubKey()).digestTo(HashKey)
-        rlpEncodeExt(ExtBranchRef(vtx).pfx, brKey).digestTo(HashKey)
-      else:
-        rlpEncodeBranch(vtx, branchSubKey()).digestTo(HashKey)
+      vtx.branchKeyFrom(keyvtxs, level)
 
   # Cache the hash into the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
