@@ -122,7 +122,6 @@ type
     contPrevSession*: bool           ## Request resuming previous session
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
     beaconTarget*: bool              ## inital beacon target if `true`
-    stateDB*: StateDbRef             ## Incomplete states DB
     baseDir*: string                 ## Path for assembly database
     cacheDB*: CacheDbRef             ## Downloas and assembly cache database
     pivot*: Opt[StateRoot]           ## Pivot root for analysys, healing, etc.

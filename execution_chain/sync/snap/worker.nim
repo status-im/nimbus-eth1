@@ -13,8 +13,7 @@
 import
   #std/os,
   pkg/[chronicles, chronos, minilru, results],
-  ./worker/[download, helpers, mpt, session, start_stop, state_db, update,
-            worker_desc]
+  ./worker/[download, helpers, start_stop, state_db, update, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -93,40 +92,15 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         bodyRc = daemonWaitReadyInterval            # take a nap
 
     of SnapResume:
-      # If there is a pivot, then there is an assembled partial MPT. In that
-      # case, there no point resuming a downloading session.
-      if ctx.sessionPivotActivateCached(info) < PivotOnTrie:
-        # Import/reconstruct in-memory state DB from persistent cache DB.
-        ctx.sessionResume(info).isOkOr:
-           break body                               # shutdown?
+      raiseAssert "not here, state=" & $ctx.syncState
 
     of SnapDownload:
       # Download headers. The request will be silently ignored if the
       # distance to the CL head is too small.
       discard ctx.headerDownloadTrigger(info, reducedNoise=true)
 
-      bodyRc = daemonWaitDownloadInterval           # snap dwnld handled by peer
     of SnapDownloadFinish:
-      bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
-
-    of SnapMkTrie:
-      ctx.pool.stateDB.flush info                   # flush into persist. cache
-
-      let ela {.used.} = ctx.sessionMkTrie(info).valueOr:
-        break body                                  # shutdown?
-
-      debug info & ": Partial MPT assembled",
-        ela=ela.toStr, syncState=($ctx.syncState)
-
-    of SnapAnalyse:
-      let stats {.used.} = ctx.sessionAnalyseFullTrie(info).valueOr:
-        break body                                  # shutdown?
-
-      # Update pivot state record on DB cache
-      discard ctx.sessionPivotTagUpdate(PivotMptAnalysed, info)
-
-      debug info & ": Partial MPT analysed",
-        ela=stats.ela.toStr, syncState=($ctx.syncState)
+      raiseAssert "not here, state=" & $ctx.syncState
 
     # of TBD ..
 

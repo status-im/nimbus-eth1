@@ -37,16 +37,7 @@ proc minStateNum(
     ctx: SnapCtxRef;
     info: static[string];
       ): BlockNumber =
-  let haveData = ctx.pool.cacheDB.hasStateData().valueOr:
-    chronicles.error info & ": Failed to check exisitence of state data",
-      `error`=error
-    return BlockNumber(0)
-  if haveData:
-    result = BlockNumber high(uint64)
-    for w in ctx.pool.cacheDB.walkStateData():
-      if w.error.len == 0 and w.data.number < result:
-        result = w.data.number
-  # BlockNumber(0)
+  BlockNumber(0)
 
 proc getLastHeaderOrGenesis(ctx: SnapCtxRef): Header =
   ## Ignore errors

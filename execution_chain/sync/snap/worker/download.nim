@@ -11,12 +11,11 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos],
-  ./download/[account, bals, code, header, storage],
-  ./[helpers, state_db, update, worker_desc]
+  ./download/header,
+  ./worker_desc
 
 export
-  account, bals, code, header, storage
+  header
 
 # ------------------------------------------------------------------------------
 # Public function(s)
@@ -38,86 +37,9 @@ template downloadAccountsAndStorage*(
   ##   + not older than the first two states (if any),
   ##   + and no more than `nWorkingStateRoots`
   ##
-  var blockRc = Opt[void].ok()
+  var blockRc = Opt[void].err()
   block body:
-    # Make sure that this sync peer is not banned from processing, already.
-    if nProcAccountErrThreshold < buddy.nErrors.apply.acc:
-      buddy.ctrl.zombie = true
-      blockRc = Opt[void].err()
-      break body                                    # return err()
-
-    let
-      ctx = buddy.ctx
-      sdb = ctx.pool.stateDB
-      peer {.inject,used.} = $buddy.peer            # logging only
-
-    buddy.updateFcuRoot info                        # FCU header => state
-
-    let pivot = sdb.pivot.valueOr:
-      if buddy.only.lastMsgLog + noStateRecordsMsgDelay <= Moment.now():
-        trace info & ": no state records", peer
-        buddy.only.lastMsgLog = Moment.now()
-      blockRc = Opt[void].err()
-      break body                                    # return err()
-
-    # Fetch for state DB items, start with pivot root
-    var theseFirst = @[pivot.stateRoot]
-    buddy.only.finRoot.isErrOr:
-      theseFirst.add value                          # add finalised state root
-
-    trace info & ": start downloading", peer,
-      notAvailMax=buddy.only.notAvailMax,
-      syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
-
-    # Run `download()` for available states, the order of which is
-    # determined by the following criteria with deacening priority
-    #
-    # * the pivot state for this `peer`
-    # * the best state for this peer (sort of)
-    # * other states with decreasing rank
-    #
-    var
-      nStatesOk {.inject.} = 0
-      nStatesIdle {.inject.} = 0
-    block downloadLoop:
-      for state in sdb.items(startWith=theseFirst,
-                             ignoreLe=buddy.only.notAvailMax):
-        var didSomething = false
-        let state {.inject.} = state                # logging only, sub-template
-        while true:
-          if buddy.ctrl.stopped:                    # stop, nothing more to do
-            break downloadLoop
-          let
-            rc = buddy.accountDownload(state, info)
-            acc = if rc.isOk:
-                    rc.value
-                  elif rc.error == ECompleted:
-                    @[]                             # try left over storage/code
-                  else:
-                    break                           # done this state, try next
-          buddy.storageDownload(state, acc, info)   # fetch storage slots
-          buddy.downloadCodeCache(state, acc, info) # fetch byte codes
-          if not state.isOperable():                # proceed unless evicted
-            break
-          didSomething = true                       # continue with this one
-          # End `while` single state download
-
-        if didSomething:
-          nStatesOk.inc
-        else:
-          nStatesIdle.inc
-        # End `for` a list of state
-
-    # Abandon peer if useless
-    if buddy.ctrl.running and
-       0 < ctx.nSyncPeers() and
-       nStatesOk == 0 and 0 < nStatesIdle:
-      buddy.ctrl.stopped = true
-      blockRc = Opt[void].err()
-
-    trace info & ": downloaded states", peer,
-      notAvailMax=buddy.only.notAvailMax, syncState=($buddy.syncState),
-      nStatesOk, nStatesIdle, nSyncPeers=ctx.nSyncPeers()
+    discard
 
   blockRc                                           # return value
 

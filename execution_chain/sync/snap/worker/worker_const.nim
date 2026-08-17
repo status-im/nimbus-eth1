@@ -20,8 +20,6 @@ type
     SnapResume                     ## Resume from previous session
     SnapDownload                   ## Downloading and caching data
     SnapDownloadFinish             ## Wait for sync before proceeding
-    SnapMkTrie                     ## Assembling downloaded data
-    SnapAnalyse                    ## Analyse for missing MPT nodes
     # ..                           ## TBD ..
     SnapStop                       ## TBD ..
 
@@ -63,9 +61,6 @@ const
     ## state when the the FCU modue hash provides a finalised header and there
     ## are eth/xx download peers available.
 
-  daemonWaitHeaderInterval* = chronos.seconds(30)
-    ## Ditto for header download.
-
   daemonWaitElseInterval* = chronos.seconds(10)
     ## Ditto for other states.
 
@@ -77,26 +72,6 @@ const
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for non-`SnapDownload` states.
 
-  threadLogTimeLimit* = chronos.seconds(45)
-    ## Print intermediate messages when running a time consuming task
-
-  threadSwitchRunLimit* = chronos.seconds(25)
-    ## Force a thread switch after that time running continuously. This
-    ## applies mainly for DB building and analysing sessions.
-
-  accuAccountsCovMin* = 1.01
-    ## In absence of a completed pivot state, the syncer will stop downloading
-    ## if all accounts are covered at least by this factor. Then trie-assembly
-    ## and healing can take place.
-
-  stateIdleTimeBeforeEviction* = chronos.minutes(30)
-    ## Minimum time a state is cached before eviction unless other criteria
-    ## apply (e.g. fully unprocessed account range.)
-
-  noStateRecordsMsgDelay* = chronos.seconds(20)
-    ## After logging a `no state records` message, subsequent similar messages
-    ## are suppressed for a while.
-
   # ----------------------
 
   unprocAccountsRangeMax* = (1.u256 shl 240) # ~65k intervals
@@ -104,20 +79,6 @@ const
     ## so that different peers can start with different intervals. Typically,
     ## these intervals are sparsely filled and there will be returned not
     ## more than ~1k accounts.
-
-  stateDbCapacity* = 8
-    ## Maximal numbers of simultanously incomplete states. Note that the
-    ## protocol suggests a single peer to provide a download window of 128
-    ## state roots corresponding to consecutibe block numbers.
-    ##
-    ## Note that there are about 400k accounts on `mainnet` (as of early 2026.)
-
-  daemonWaitDownloadInterval* = chronos.seconds(10)
-    ## Some waiting time at the end of the daemon task which always lingers
-    ## in the background. This one is for `SnapDownload` state.
-
-  daemonWaitDownloadFinishInterval* = chronos.seconds(5)
-    ## Poll waiting for all downloading peers to have stopped
 
   # -----------
 
