@@ -11,7 +11,7 @@
 {.used.}
 
 import
-  std/[algorithm, sets, times],
+  std/[cpuinfo, algorithm, sets, times],
   unittest2,
   ../../execution_chain/db/aristo/[
     aristo_check,
@@ -76,7 +76,7 @@ suite "Aristo compute":
         txFrame = db.txRef
         root = STATE_ROOT_VID
       db.parallelStateRootComputation = false
-      
+
       for (k, v, r) in sample:
         checkpoint("k = " & k.toHex & ", v = " & $v)
 
@@ -116,7 +116,7 @@ suite "Aristo compute":
         root = STATE_ROOT_VID
       db.parallelStateRootComputation = true
       db.taskpool = Taskpool.new(numThreads = 4)
-      
+
       for (k, v, r) in sample:
         checkpoint("k = " & k.toHex & ", v = " & $v)
 
@@ -193,7 +193,7 @@ suite "Aristo compute":
 
     let w = txFrame.computeKey((root, root)).value.to(Hash32)
     check w == samples[^1][^1][2]
-  
+
   test "Max size RLP encoding of all MPT node types":
     ## This test exercises the RlpArrayBufWriter stack-allocated buffer paths in
     ## aristo_compute.nim by constructing a trie that produces the largest
@@ -292,7 +292,7 @@ suite "Aristo compute":
       hash32"ABCDEF0123456789000000000000000000000000000000000000000000000001"
     let extPath2 =
       hash32"ABCDEF0123456789000000000000000000000000000000000000000000000002"
-    
+
     check txFrame.mergeAccount(extPath1, extAcc) == Result[bool, AristoError].ok(true)
     check txFrame.mergeAccount(extPath2, extAcc) == Result[bool, AristoError].ok(true)
 
@@ -317,10 +317,11 @@ suite "Aristo compute":
 
 
 suite "Aristo compute short benchmark":
-  const 
-    NUM_THREADS = 4
-    NUM_FRAMES = 1000
-    NUM_ACCOUNTS_PER_FRAME = 100
+  const
+    NUM_FRAMES = 130
+    NUM_ACCOUNTS_PER_FRAME = 2000
+
+  let NUM_THREADS = countProcessors()
 
   setup:
     let db = AristoDbRef.init()
@@ -331,29 +332,29 @@ suite "Aristo compute short benchmark":
     for i in 0 ..< NUM_ACCOUNTS_PER_FRAME:
       check:
         txFrame.mergeAccount(
-          cast[Hash32](i), 
+          cast[Hash32](i),
           AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
     txFrame.checkpoint(1, skipSnapshot = true)
 
     let batch = db.putBegFn()[]
     db.persist(batch, txFrame)
     check db.putEndFn(batch).isOk()
-    
+
     txFrame = db.baseTxFrame()
-    
+
     for n in 1 .. NUM_FRAMES:
       txFrame = db.txFrameBegin(txFrame)
 
-      let 
+      let
         startIdx = NUM_ACCOUNTS_PER_FRAME * n
         endIdx = startIdx + NUM_ACCOUNTS_PER_FRAME
 
       for i in startIdx ..< endIdx:
         check:
           txFrame.mergeAccount(
-            cast[Hash32](i * i), 
+            cast[Hash32](i * i),
             AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
-      
+
       txFrame.checkpoint(1, skipSnapshot = false)
 
   test "Serial benchmark - skipLayers = false":
@@ -363,7 +364,7 @@ suite "Aristo compute short benchmark":
     let before = cpuTime()
     check txFrame.computeStateRoot(skipLayers = false).isOk()
     let elapsed = cpuTime() - before
-    
+
     debugEcho "Serial benchmark (skipLayers = false) cpu time: ", elapsed
 
   test "Parallel benchmark - skipLayers = false":
@@ -373,5 +374,5 @@ suite "Aristo compute short benchmark":
     let before = cpuTime()
     check txFrame.computeStateRoot(skipLayers = false).isOk()
     let elapsed = cpuTime() - before
-    
+
     debugEcho "Parallel benchmark (skipLayers = false) cpu time: ", elapsed

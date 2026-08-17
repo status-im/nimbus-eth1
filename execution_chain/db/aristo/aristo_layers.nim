@@ -160,8 +160,6 @@ func layersPutKey*(
     db.snapshot.vtx[rvid] = (VertexRef(vtx), key, db.level)
 
 func layersReserveKeys*(db: AristoTxRef, extra: int) =
-  ## Make room for `extra` upcoming `layersMergeKey` inserts so that a bulk
-  ## insert does not grow the table repeatedly along the way.
   if extra > db.kMap.len:
     var tab = initTable[RootedVertexID, HashKey](db.kMap.len + extra)
     for k, v in db.kMap:

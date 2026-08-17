@@ -17,9 +17,9 @@ import
   eth/common/hashes_rlp,
   ./[aristo_desc, aristo_get, aristo_layers, aristo_blobify, aristo_serialise],
   ./aristo_desc/desc_backend,
-  ../../concurrency/queue
+  ../../concurrency/[queue, shared_types]
 
-export aristo_desc, chronicles, hashes_rlp
+export aristo_desc, chronicles, hashes_rlp, shared_types
 
 type
   WriteBatch* = object
@@ -32,15 +32,7 @@ type
 
   ConcurrentVertexBufQueue* = ConcurrentQueue[3, (RootedVertexID, VertexBuf)]
 
-  ComputedKey = (RootedVertexID, HashKey, int)
-
-  KeyWriteBuf* = object
-    ## Keys computed by a single task, kept on the shared heap and merged into
-    ## the layers by the spawning thread once all tasks have finished. Nothing
-    ## reads a key computed during a run before then, so neither the buffer nor
-    ## the layers need any locking while the tasks are hashing.
-    data: ptr UncheckedArray[ComputedKey]
-    len, cap: int
+  KeyWriteBuf* = SharedSeq[(RootedVertexID, HashKey, int)]
 
 proc `=copy`(
     dest: var WriteBatch, src: WriteBatch
@@ -209,29 +201,7 @@ proc computeKeyImpl(
 ): Result[(HashKey, int), AristoError]
 
 when compileOption("threads"):
-  proc add(buf: var KeyWriteBuf, item: ComputedKey) =
-    if buf.len == buf.cap:
-      buf.cap = max(2 * buf.cap, 1024)
-      let size = buf.cap * sizeof(ComputedKey)
-      buf.data = cast[ptr UncheckedArray[ComputedKey]](
-        if buf.data == nil:
-          allocShared(size)
-        else:
-          reallocShared(buf.data, size)
-      )
-    buf.data[buf.len] = item
-    inc buf.len
-
-  proc dispose(buf: var KeyWriteBuf) =
-    if buf.data != nil:
-      deallocShared(buf.data)
-    buf.reset()
-
   proc mergeKeys(txRef: AristoTxRef, bufs: openArray[KeyWriteBuf]) =
-    ## Merge the tasks' keys into the layers they belong to. Frames are indexed
-    ## by level up front because a `deltaAtLevel` walk per key is what dominates
-    ## the merge when keys are spread across many frames, and each frame's key
-    ## table is pre-sized so that the bulk insert does not grow it repeatedly.
     let baseLevel = txRef.db.baseTxFrame().level
     var
       frames = newSeq[AristoTxRef](txRef.level - baseLevel + 1)
@@ -244,8 +214,8 @@ when compileOption("threads"):
         frame = frame.parent
 
     for buf in bufs:
-      for i in 0 ..< buf.len:
-        let level = buf.data[i][2]
+      for item in buf:
+        let level = item[2]
 
         doAssert level >= baseLevel and level <= txRef.level,
           "Cannot write keys at level < baseTxFrame level. Found level = " &
@@ -258,10 +228,8 @@ when compileOption("threads"):
         frames[i].layersReserveKeys(count)
 
     for buf in bufs:
-      for i in 0 ..< buf.len:
-        frames[buf.data[i][2] - baseLevel].layersMergeKey(
-          buf.data[i][0], buf.data[i][1]
-        )
+      for item in buf:
+        frames[item[2] - baseLevel].layersMergeKey(item[0], item[1])
 
   proc putVtxBlob(
       batch: var WriteBatch, db: AristoDbRef, rvid: RootedVertexID, vtx: openArray[byte]
@@ -493,7 +461,7 @@ proc computeKeyImpl(
           cpuRelax()
 
         # At this point all futures have finished running.
-        # Now we process any remaining data in the queues and buffers.
+        # Now we process any remaining data in the queues.
         for i, f in futs:
           if f.isSpawned():
             if not vtxBufQueues[i].isEmpty():
