@@ -201,6 +201,19 @@ proc computeKeyImpl(
 ): Result[(HashKey, int), AristoError]
 
 when compileOption("threads"):
+  when defined(windows):
+    import std/os
+
+    proc idleSleep() =
+      sleep(1)
+
+  else:
+    import std/posix
+
+    proc idleSleep() =
+      var req = Timespec(tv_sec: posix.Time(0), tv_nsec: 100_000)
+      discard nanosleep(req, req)
+
   proc mergeKeys(txRef: AristoTxRef, bufs: openArray[KeyWriteBuf]) =
     let baseLevel = txRef.db.baseTxFrame().level
     var
@@ -441,24 +454,35 @@ proc computeKeyImpl(
           if f.isSpawned() and not f.isReady():
             runningFutsIndexes.incl(i.uint8)
 
+        var idleRounds = 0
         while runningFutsIndexes.len() > 0:
-          var indexesToRemove: seq[uint8]
+          var
+            indexesToRemove: seq[uint8]
+            progressed = false
 
           for i in runningFutsIndexes:
             if futs[i].isReady():
               indexesToRemove.add(i)
               inc batch.tasksCompleted
+              progressed = true
               continue
 
             if not vtxBufQueues[i].isEmpty():
               var v: (RootedVertexID, VertexBuf)
               if vtxBufQueues[i].tryPop(v):
+                progressed = true
                 ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
 
           for i in indexesToRemove:
             runningFutsIndexes.excl(i)
 
-          cpuRelax()
+          if progressed:
+            idleRounds = 0
+          elif idleRounds < 64:
+            inc idleRounds
+            cpuRelax()
+          else:
+            idleSleep()
 
         # At this point all futures have finished running.
         # Now we process any remaining data in the queues.

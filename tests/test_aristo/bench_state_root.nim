@@ -64,30 +64,37 @@ proc ms(d: Duration): float =
 
 # Steady-state import: root computed for every block, snapshot per block as in
 # forked_chain live import. Reports mean root time over the last 100 blocks.
-proc scenarioSteady(parallel: bool): (float, Hash32) =
+# `mainCpu` is the cpu time of the calling thread alone (`cpuTime` is
+# thread-scoped on Linux), i.e. how busy the main thread is kept while the
+# workers hash.
+proc scenarioSteady(parallel: bool): (float, float, Hash32) =
   let (db, base) = newDb(100_000)
   db.parallelStateRootComputation = parallel
   var
     txFrame = base
-    times: seq[float]
+    times, cpuTimes: seq[float]
     root: Hash32
   for blk in 1 .. 130:
     txFrame = db.txFrameBegin(txFrame)
     txFrame.addAccounts(2000)
-    let t0 = getMonoTime()
+    let
+      c0 = cpuTime()
+      t0 = getMonoTime()
     let res = txFrame.computeStateRoot(skipLayers = false)
     times.add ms(getMonoTime() - t0)
+    cpuTimes.add (cpuTime() - c0) * 1e3
     doAssert res.isOk()
     root = res[].to(Hash32)
     txFrame.checkpoint(uint64(blk + 1), skipSnapshot = false)
-  var s = 0.0
+  var s, c = 0.0
   for i in 30 ..< times.len:
     s += times[i]
-  (s / float(times.len - 30), root)
+    c += cpuTimes[i]
+  (s / float(times.len - 30), c / float(times.len - 30), root)
 
 # Batch catch-up: 130 blocks imported without root computation, then one deep
 # root over all of them (keys span all 130 levels).
-proc scenarioCatchup(parallel: bool): (float, Hash32) =
+proc scenarioCatchup(parallel: bool): (float, float, Hash32) =
   let (db, base) = newDb(100_000)
   db.parallelStateRootComputation = parallel
   var txFrame = base
@@ -95,44 +102,52 @@ proc scenarioCatchup(parallel: bool): (float, Hash32) =
     txFrame = db.txFrameBegin(txFrame)
     txFrame.addAccounts(2000)
     txFrame.checkpoint(uint64(blk + 1), skipSnapshot = true)
-  let t0 = getMonoTime()
+  let
+    c0 = cpuTime()
+    t0 = getMonoTime()
   let res = txFrame.computeStateRoot(skipLayers = false)
   let elapsed = ms(getMonoTime() - t0)
+  let mainCpu = (cpuTime() - c0) * 1e3
   doAssert res.isOk()
-  (elapsed, res[].to(Hash32))
+  (elapsed, mainCpu, res[].to(Hash32))
 
 # Flat bulk import: one large frame on top of the base.
-proc scenarioFlat(parallel: bool): (float, Hash32) =
+proc scenarioFlat(parallel: bool): (float, float, Hash32) =
   let (db, base) = newDb(100_000)
   db.parallelStateRootComputation = parallel
   var txFrame = db.txFrameBegin(base)
   txFrame.addAccounts(500_000)
-  let t0 = getMonoTime()
+  let
+    c0 = cpuTime()
+    t0 = getMonoTime()
   let res = txFrame.computeStateRoot(skipLayers = false)
   let elapsed = ms(getMonoTime() - t0)
+  let mainCpu = (cpuTime() - c0) * 1e3
   doAssert res.isOk()
-  (elapsed, res[].to(Hash32))
+  (elapsed, mainCpu, res[].to(Hash32))
 
 proc median(xs: var seq[float]): float =
   xs.sort()
   xs[xs.len div 2]
 
 proc run(
-    name: string, scenario: proc(parallel: bool): (float, Hash32), repeats: int
+    name: string, scenario: proc(parallel: bool): (float, float, Hash32), repeats: int
 ) =
   var
-    serialTimes, parTimes: seq[float]
+    serialTimes, parTimes, parCpuTimes: seq[float]
     serialRoot, parRoot: Hash32
   for _ in 0 ..< repeats:
-    let (t, r) = scenario(false)
+    let (t, _, r) = scenario(false)
     serialTimes.add t
     serialRoot = r
   for _ in 0 ..< repeats:
-    let (t, r) = scenario(true)
+    let (t, c, r) = scenario(true)
     parTimes.add t
+    parCpuTimes.add c
     parRoot = r
   doAssert serialRoot == parRoot, "serial and parallel roots differ!"
-  echo &"{name}: serial {median(serialTimes):8.2f} ms | parallel {median(parTimes):8.2f} ms"
+  echo &"{name}: serial {median(serialTimes):8.2f} ms | parallel {median(parTimes):8.2f} ms" &
+    &" (mainCpu {median(parCpuTimes):8.2f} ms)"
 
 echo &"threads: {numThreads}"
 run("steady-state (mean/root, 100 blocks)", scenarioSteady, 1)
