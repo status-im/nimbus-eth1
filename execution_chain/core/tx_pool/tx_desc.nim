@@ -31,9 +31,10 @@ import
   ../eip7594,
   ../validate,
   ../pooled_txs,
-  ../../rpc/engine_ssz_types,
   ./tx_tabs,
   ./tx_item
+
+import beacon_chain/spec/engine_types as engine_ssz_types
 
 from eth/common/eth_types_rlp import rlpHash
 

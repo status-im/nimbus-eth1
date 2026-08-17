@@ -15,7 +15,7 @@ import
   web3/engine_api_types,
   ../execution_chain/core/pooled_txs,
   ../execution_chain/beacon/ssz_eth_conv,
-  ../execution_chain/rpc/engine_ssz_types,
+  beacon_chain/spec/engine_types as engine_ssz_types,
   ../execution_chain/rpc/engine_ssz_conv
 
 func digestOf(b: byte): Digest =

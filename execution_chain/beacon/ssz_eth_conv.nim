@@ -18,7 +18,7 @@ import
   ./payload_conv,
   ../core/pooled_txs
 
-from ../rpc/engine_ssz_types import
+from beacon_chain/spec/engine_types as engine_ssz_types import
   BlobsBundleV1, BlobsBundleV2, ExecutionRequests, MAX_BYTES_PER_EXECUTION_REQUEST,
   ExecutionPayloadBodyParis, ExecutionPayloadBodyShanghai, ExecutionPayloadBodyAmsterdam,
   ExecutionPayloadParis, ExecutionPayloadShanghai, ExecutionPayloadCancun,

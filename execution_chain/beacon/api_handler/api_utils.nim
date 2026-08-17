@@ -21,7 +21,7 @@ import
   ../../core/chain,
   ../web3_eth_conv
 
-from ../../rpc/engine_ssz_types import
+from beacon_chain/spec/engine_types import
   EngineFork, PayloadStatus, ForkchoiceUpdateResponse, PayloadStatusCode,
   StringSsz, toStringSsz, optSome, optNone, ByteVector, Digest,
   ForkedPayloadAttributes, withForkedAttributes, asSeq

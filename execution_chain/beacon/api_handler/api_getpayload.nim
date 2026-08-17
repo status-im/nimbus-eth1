@@ -16,7 +16,7 @@ import
   ./api_utils,
   chronicles
 
-from ../../rpc/engine_ssz_types import EngineFork
+from beacon_chain/spec/engine_types import EngineFork
 
 {.push gcsafe, raises:[CatchableError].}
 

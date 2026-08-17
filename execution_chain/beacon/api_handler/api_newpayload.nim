@@ -20,7 +20,7 @@ import
   ../payload_conv,
   ./api_utils
 
-from ../../rpc/engine_ssz_types import EngineFork, PayloadStatus
+from beacon_chain/spec/engine_types import EngineFork, PayloadStatus
 from ../../rpc/engine_ssz_conv import toSsz, toWeb3
 from beacon_chain/spec/forks import ForkyExecutionPayload
 from ../ssz_eth_conv import ethBlock, toHash32
@@ -193,9 +193,6 @@ proc processNewPayload(ben: BeaconEngineRef,
     if not validateVersionedHashed(blk.transactions, versionedHashes.value):
       return invalidStatus(header.parentHash, "invalid blob versionedHashes")
 
-  # validateBlockHash still returns the web3 PayloadStatusV1 shape (it needs
-  # PayloadExecutionStatus.invalid_block_hash, which the SSZ PayloadStatusCode
-  # has no equivalent for)
   header.validateBlockHash(blockHash, fork).isOkOr:
     return toSsz(error)
 
@@ -348,5 +345,11 @@ proc newPayload*(ben: BeaconEngineRef,
     requestsHash = calcRequestsHash(executionRequests)
     blk = ethBlock(payload, beaconRoot, requestsHash)
     blockHash = toHash32(payload.block_hash)
-  await processNewPayload(ben, fork, blk, blockAccessList,
+  var res = await processNewPayload(ben, fork, blk, blockAccessList,
     blockHash, Opt.none(seq[Hash32]), executionRequests)
+
+  # REMOVE WHEN DROPPING JSON-RPC
+  if res.status == uint8(PayloadStatusCode.INVALID_BLOCK_HASH):
+    res.status = uint8(PayloadStatusCode.INVALID)
+
+  res

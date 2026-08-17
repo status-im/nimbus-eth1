@@ -15,8 +15,9 @@ import
   beacon_chain/spec/datatypes/gloas,
   web3/execution_types as web3et,
   web3/engine_api_types as web3eat,
-  ../beacon/ssz_eth_conv,
-  ./engine_ssz_types
+  ../beacon/ssz_eth_conv
+
+import beacon_chain/spec/engine_types as engine_ssz_types
 
 export ssz_eth_conv.toHash32, ssz_eth_conv.toDigest
 
@@ -25,13 +26,12 @@ export ssz_eth_conv.toHash32, ssz_eth_conv.toDigest
 func toSszStatus(status: PayloadExecutionStatus): uint8 =
   case status
   of PayloadExecutionStatus.valid: uint8(PayloadStatusCode.VALID)
-  of PayloadExecutionStatus.invalid, PayloadExecutionStatus.invalid_block_hash:
-    uint8(PayloadStatusCode.INVALID)
+  of PayloadExecutionStatus.invalid: uint8(PayloadStatusCode.INVALID)
+  of PayloadExecutionStatus.invalid_block_hash:
+    uint8(PayloadStatusCode.INVALID_BLOCK_HASH)
   of PayloadExecutionStatus.syncing: uint8(PayloadStatusCode.SYNCING)
   of PayloadExecutionStatus.accepted: uint8(PayloadStatusCode.ACCEPTED)
 
-# used only for validateBlockHash in api_newpayload because PayloadStatus(SSZ)
-# doesn't support INVALID_BLOCK_HASH
 func toSsz*(status: PayloadStatusV1): engine_ssz_types.PayloadStatus =
   engine_ssz_types.PayloadStatus(
     status: toSszStatus(status.status),
@@ -48,6 +48,8 @@ func toWeb3Status(status: uint8): PayloadExecutionStatus =
   of PayloadStatusCode.INVALID: PayloadExecutionStatus.invalid
   of PayloadStatusCode.SYNCING: PayloadExecutionStatus.syncing
   of PayloadStatusCode.ACCEPTED: PayloadExecutionStatus.accepted
+  of PayloadStatusCode.INVALID_BLOCK_HASH:
+    PayloadExecutionStatus.invalid_block_hash
 
 func toWeb3*(status: engine_ssz_types.PayloadStatus): PayloadStatusV1 =
   PayloadStatusV1(

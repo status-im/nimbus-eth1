@@ -23,7 +23,7 @@ import
   ../execution_chain/core/tx_pool,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/beacon/beacon_engine,
-  ../execution_chain/rpc/engine_ssz_types,
+  beacon_chain/spec/engine_types,
   ../execution_chain/rpc/rpc_server,
   ../execution_chain/rpc/engine_rest_api
 

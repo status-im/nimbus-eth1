@@ -16,12 +16,12 @@ import
   json_rpc/errors,
   chronicles,
   ../../core/tx_pool,
-  ../../rpc/engine_ssz_types,
   ../beacon_engine,
   ../ssz_eth_conv,
   ../web3_eth_conv,
   ./api_utils
 
+import beacon_chain/spec/engine_types as engine_ssz_types
 from ../../rpc/engine_ssz_conv import toWeb3, toForkedPayloadAttributes
 
 {.push gcsafe, raises:[].}

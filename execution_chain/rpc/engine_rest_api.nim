@@ -30,9 +30,9 @@ import
   ../beacon/api_handler/api_getblobs,
   ./jwt_auth,
   ./rpc_server,
-  ./engine_ssz_types,
   ./engine_ssz_conv
 
+import beacon_chain/spec/engine_types as engine_ssz_types
 import beacon_chain/spec/datatypes/gloas except PayloadStatus
 
 export presto, jwt_auth

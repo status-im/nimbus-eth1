@@ -14,9 +14,9 @@ import
   web3/engine_api_types,
   ../../core/tx_pool,
   ../beacon_engine,
-  ../../rpc/engine_ssz_types,
   ./api_utils
 
+import beacon_chain/spec/engine_types as engine_ssz_types
 from ../../rpc/engine_ssz_conv import toWeb3
 
 {.push gcsafe, raises:[ApplicationError].}

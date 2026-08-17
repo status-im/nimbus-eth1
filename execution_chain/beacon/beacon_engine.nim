@@ -20,7 +20,7 @@ import
   ../core/chain/forked_chain,
   ../core/chain/forked_chain/block_quarantine
 
-from ../rpc/engine_ssz_types import
+from beacon_chain/spec/engine_types import
   PayloadStatus, PayloadStatusCode, EngineFork, ForkedPayloadAttributes,
   withForkedAttributes, asSeq
 from ./ssz_eth_conv import toHash32, ethWithdrawal

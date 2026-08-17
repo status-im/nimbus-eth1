@@ -17,7 +17,7 @@ import
   ./api_utils
 
 from ../../db/payload_body_db import toPayloadBodyV1, toPayloadBodyV2
-from ../../rpc/engine_ssz_types import MAX_BODIES_REQUEST
+from beacon_chain/spec/engine_types import MAX_BODIES_REQUEST
 
 {.push gcsafe, raises: [CatchableError].}
 

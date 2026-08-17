@@ -10,7 +10,7 @@
 
 import
   unittest2,
-  ../execution_chain/rpc/engine_ssz_types
+  beacon_chain/spec/engine_types as engine_ssz_types
 
 func digestOf(b: byte): Digest =
   var d: Digest
