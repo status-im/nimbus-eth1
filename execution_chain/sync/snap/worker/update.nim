@@ -72,7 +72,7 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
     # to proceed to the next state if there are locally cached headers already,
     # available with recovery mode.
     if not haveConsHead and                         # no FCU request from CL?
-       ctx.chain.latestNumber() < ctx.pool.cacheDB.lastNumber():
+       ctx.chain.latestNumber() < ctx.pool.cacheDB.lastHeaderNumber():
       break stayReady                               # advance to next state
 
     return SnapReady

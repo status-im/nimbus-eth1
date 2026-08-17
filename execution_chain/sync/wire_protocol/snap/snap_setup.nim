@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -24,6 +24,7 @@ proc addSnapHandlerCapability*(
       ): SnapWireStateRef =
   ## Install wire prototcol handler.
   let wire = SnapWireStateRef.new(node)
+  node.addCapability(snap2, wire)
   node.addCapability(snap1, wire)
   wire
 
