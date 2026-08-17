@@ -1326,3 +1326,52 @@ suite "TxPool validation state follows chain head":
 
     # The add re-anchored the pool on the live head.
     check xp.baseFee == probe.baseFee
+
+suite "TxPool blob retention":
+  ## A superseded blob tx must leave no reference behind. `blobTab` is not
+  ## covered by MAX_POOL_SIZE or the expiry sweep, so a stale entry there
+  ## pins the whole BlobsBundle for good.
+
+  test "superseded blob tx is not retained by the blob lookup table":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      acc = mx.getAccount(24)
+      params = MakeTxParams(chainId: mx.chainId, key: acc.key, nonce: 0)
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+
+    let tc = BlobTx(
+      recipient: Opt.some(recipient),
+      gasLimit: 100000.GasInt,
+      gasTip: GasInt(10 ^ 9),
+      gasFee: GasInt(10 ^ 9),
+      blobGasFee: u256(1),
+      blobCount: 1,
+      blobID: 700.BlobID,
+    )
+    let
+      ptx = makeTx(params, tc)
+      oldHash = ptx.tx.versionedHashes[0]
+    xp.checkAddTx(ptx)
+    check xp.getBlobAndProofV1(oldHash).isSome
+
+    # Same sender/nonce, different blob, fees bumped past the 10% threshold
+    var tc2 = tc
+    tc2.gasTip = GasInt(10 ^ 9) * 2
+    tc2.gasFee = GasInt(10 ^ 9) * 2
+    tc2.blobGasFee = u256(2)
+    tc2.blobID = 701.BlobID
+    let
+      ptx2 = makeTx(params, tc2)
+      newHash = ptx2.tx.versionedHashes[0]
+    xp.checkAddTxSupersede(ptx2)
+
+    check newHash != oldHash
+    check xp.getBlobAndProofV1(newHash).isSome
+
+    # Old blob still served => the replaced item is still alive in blobTab.
+    check xp.getBlobAndProofV1(oldHash).isNone
