@@ -166,6 +166,11 @@ func layersReserveKeys*(db: AristoTxRef, extra: int) =
       tab[k] = v
     db.kMap = move(tab)
 
+func layersMergeKeyInSnapshot*(db: AristoTxRef; rvid: RootedVertexID; key: HashKey) =
+  if db.snapshot.level.isSome():
+    db.snapshot.vtx.withValue(rvid, value):
+      value[1] = key
+
 func layersMergeKey*(
     db: AristoTxRef;
     rvid: RootedVertexID;
@@ -175,10 +180,7 @@ func layersMergeKey*(
   ## for leaves since these are trivial to compute
   # Precondition: the vertex for the given rvid should exist
   db.kMap[rvid] = key
-
-  if db.snapshot.level.isSome():
-    db.snapshot.vtx.withValue(rvid, value):
-      value[1] = key
+  db.layersMergeKeyInSnapshot(rvid, key)
 
 func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: BranchRef) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)` which resets the hash

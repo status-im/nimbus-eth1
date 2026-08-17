@@ -122,8 +122,17 @@ proc putKeyAtLevel(
   ## corresponding hash!)
 
   if level >= txRef.db.baseTxFrame().level:
-    let frame = txRef.deltaAtLevel(level)
+    var
+      frame = txRef
+      snapFrame: AristoTxRef
+    while frame.level > level:
+      if snapFrame.isNil and frame.snapshot.level.isSome():
+        snapFrame = frame
+      frame = frame.parent
+
     frame.layersMergeKey(rvid, key)
+    if not snapFrame.isNil:
+      snapFrame.layersMergeKeyInSnapshot(rvid, key)
   elif level == dbLevel:
     ?batch.putVtx(txRef.db, rvid, vtx, key)
   else: # level > dbLevel but less than baseTxFrame level
@@ -219,10 +228,13 @@ when compileOption("threads"):
     var
       frames = newSeq[AristoTxRef](txRef.level - baseLevel + 1)
       counts = newSeq[int](frames.len)
+      snapFrame: AristoTxRef
 
     block:
       var frame = txRef
       while not frame.isNil and frame.level >= baseLevel:
+        if snapFrame.isNil and frame.snapshot.level.isSome():
+          snapFrame = frame
         frames[frame.level - baseLevel] = frame
         frame = frame.parent
 
@@ -243,6 +255,8 @@ when compileOption("threads"):
     for buf in bufs:
       for item in buf:
         frames[item[2] - baseLevel].layersMergeKey(item[0], item[1])
+        if not snapFrame.isNil and item[2] < snapFrame.level:
+          snapFrame.layersMergeKeyInSnapshot(item[0], item[1])
 
   proc putVtxBlob(
       batch: var WriteBatch, db: AristoDbRef, rvid: RootedVertexID, vtx: openArray[byte]
