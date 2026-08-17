@@ -176,8 +176,10 @@ func insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
 
   # Replace current item,
   # insertion to idTab will be handled by addTx.
+  # Drop `current`, not `item`: a leftover blobTab entry pins the replaced
+  # item's blobs (128KiB each) forever - no other table can reach it.
   xp.idTab.del(current.id)
-  xp.blobTab.removeLookup(item)
+  xp.blobTab.removeLookup(current)
   sn.insertOrReplace(item)
   ok()
 
