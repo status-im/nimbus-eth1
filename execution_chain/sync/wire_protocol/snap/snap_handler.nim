@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -79,6 +79,16 @@ proc getTrieNodes*(
                   else: "[#" & $req.paths[0].len & ",..]"),
       nPaths   = req.paths.len,
       bytes    = req.bytes
+  err()
+
+proc getBlockAccessLists*(
+    ctx: SnapWireStateRef;
+    req: BlockAccessListsRequest;
+      ): Opt[BlockAccessListsPacket] =
+  ## Note that there is a working version for BALs at `../eth/eth_handler`
+  when trEthTraceHandlerOk:
+    trace "getBlockAccessLists: not implemented",
+      nReq=req.blockHashes.len
   err()
 
 # ------------------------------------------------------------------------------

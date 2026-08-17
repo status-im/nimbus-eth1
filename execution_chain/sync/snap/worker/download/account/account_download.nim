@@ -23,7 +23,7 @@ template accountDownload*(
     buddy: SnapPeerRef;                             # Snap peer
     state: StateDataRef;                            # Current state
     info: static[string];                           # Log message prefix
-      ): Result[seq[SnapAccount],ErrorType] =
+      ): auto =
   ## Async/template
   ##
   ## On success, the template returns a list of accounts for storage and

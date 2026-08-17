@@ -63,16 +63,23 @@ const
   trSnapRecvReceivedTrieNodes* =
     trSnapRecvReceived & " trieNodes"
 
+  trSnapSendSendingGetBals* =
+    trSnapSendSending & " getBlockAccessLists (0x06)" # same as `GetTrieNodes`
+  trSnapSendReplyingBals* =
+    trSnapSendReplying & " blockAccessLists (0x07)"   # same as `trieNodes`
+  trSnapRecvReceivedBals* =
+    trSnapRecvReceived & " blockAccessLists"
+
 # ---------
 
-proc getAccountRangeUserHandler(
+proc getAccountRangeUserHandler[PROTO](
     response: Responder;
     request: AccountRangeRequest;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
   let
     peer = response.peer
-    ctx = peer.networkState(snap1)
+    ctx = peer.networkState(PROTO)
 
   when trSnapTraceGossipOk:
     trace trSnapSendSendingGetAccountRange, peer,
@@ -94,15 +101,14 @@ proc getAccountRangeUserHandler(
 
   await response.accountRange(data.accounts, data.proof)
 
-
-proc getStorageRangesUserHandler(
+proc getStorageRangesUserHandler[PROTO](
     response: Responder;
     request: StorageRangesRequest;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
   let
     peer = response.peer
-    ctx = peer.networkState(snap1)
+    ctx = peer.networkState(PROTO)
 
   when trSnapTraceGossipOk:
     trace trSnapSendSendingGetStorageRanges, peer,
@@ -127,15 +133,14 @@ proc getStorageRangesUserHandler(
 
   await response.storageRanges(data.slots, data.proof)
 
-
-proc getByteCodesUserHandler(
+proc getByteCodesUserHandler[PROTO](
     response: Responder;
     request: ByteCodesRequest;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
   let
     peer = response.peer
-    ctx = peer.networkState(snap1)
+    ctx = peer.networkState(PROTO)
 
   when trSnapTraceGossipOk:
     trace trSnapSendSendingGetByteCodes, peer,
@@ -161,6 +166,7 @@ proc getTrieNodesUserHandler(
     request: TrieNodesRequest;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
+  ## Supported by `snap1` only
   let
     peer = response.peer
     ctx = peer.networkState(snap1)
@@ -185,61 +191,87 @@ proc getTrieNodesUserHandler(
 
   await response.trieNodes(data.nodes)
 
+
+proc getBlockAccessListsUserHandler[PROTO](
+    response: Responder;
+    req: BlockAccessListsRequest;
+      ) {.async: (raises: [CancelledError, EthP2PError]).} =
+  let
+    peer = response.peer
+    ctx = peer.networkState(PROTO)
+
+  when trSnapTraceGossipOk:
+    trace trSnapSendSendingGetBals, peer, nHashes=req.blockHashes.len
+
+  var data: BlockAccessListsPacket
+  block getData:
+    data = ctx.getBlockAccessLists(req).valueOr:
+      trace trSnapSendReplyingBals & " failed", peer
+      break getData
+
+    trace trSnapSendReplyingBals, peer, nBals=data.accessLists.len
+
+  await blockAccessLists(response, data)
+
 # ---------
 
-proc getAccountRangeThunk(
+proc getAccountRangeThunk[PROTO](
     peer: Peer;
     data: Rlp;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
-  snap1.rlpxWithPacketResponder(AccountRangeRequest, peer, data):
-    await getAccountRangeUserHandler(response, packet)
+  PROTO.rlpxWithPacketResponder(AccountRangeRequest, peer, data):
+    await getAccountRangeUserHandler[PROTO](response, packet)
 
-proc accountRangeThunk(
+proc accountRangeThunk[PROTO](
     peer: Peer;
     data: Rlp;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
-  snap1.rlpxWithFutureHandler(AccountRangePacket, AccountRangeMsg,
+  PROTO.rlpxWithFutureHandler(AccountRangePacket, AccountRangeMsg,
     peer, data, [accounts, proof])
 
-proc getStorageRangesThunk(
-    peer: Peer;
-    data: Rlp;
-      ): Future[void]
-      {.async: (raises: [CancelledError, EthP2PError]).} =
-  snap1.rlpxWithPacketResponder(StorageRangesRequest, peer, data):
-    await getStorageRangesUserHandler(response, packet)
 
-proc storageRangesThunk(
+proc getStorageRangesThunk[PROTO](
     peer: Peer;
     data: Rlp;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
-  snap1.rlpxWithFutureHandler(StorageRangesPacket, StorageRangesMsg,
+  PROTO.rlpxWithPacketResponder(StorageRangesRequest, peer, data):
+    await getStorageRangesUserHandler[PROTO](response, packet)
+
+proc storageRangesThunk[PROTO](
+    peer: Peer;
+    data: Rlp;
+      ): Future[void]
+      {.async: (raises: [CancelledError, EthP2PError]).} =
+  PROTO.rlpxWithFutureHandler(StorageRangesPacket, StorageRangesMsg,
     peer, data, [slots, proof])
 
-proc getByteCodesThunk(
-    peer: Peer;
-    data: Rlp;
-      ): Future[void]
-      {.async: (raises: [CancelledError, EthP2PError]).} =
-  snap1.rlpxWithPacketResponder(ByteCodesRequest, peer, data):
-    await getByteCodesUserHandler(response, packet)
 
-proc byteCodesThunk(
+proc getByteCodesThunk[PROTO](
     peer: Peer;
     data: Rlp;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
-  snap1.rlpxWithFutureHandler(ByteCodesPacket, ByteCodesMsg,
+  PROTO.rlpxWithPacketResponder(ByteCodesRequest, peer, data):
+    await getByteCodesUserHandler[PROTO](response, packet)
+
+proc byteCodesThunk[PROTO](
+    peer: Peer;
+    data: Rlp;
+      ): Future[void]
+      {.async: (raises: [CancelledError, EthP2PError]).} =
+  PROTO.rlpxWithFutureHandler(ByteCodesPacket, ByteCodesMsg,
     peer, data, [codes])
+
 
 proc getTrieNodesThunk(
     peer: Peer;
     data: Rlp;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
+  ## Supported by `snap1` only
   snap1.rlpxWithPacketResponder(TrieNodesRequest, peer, data):
     await getTrieNodesUserHandler(response, packet)
 
@@ -248,28 +280,49 @@ proc trieNodesThunk(
     data: Rlp;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
+  ## Supported by `snap1` only
   snap1.rlpxWithFutureHandler(TrieNodesPacket, TrieNodesMsg,
     peer, data, [nodes])
 
+
+proc getBlockAccessListsThunk[PROTO](
+    peer: Peer;
+    data: Rlp;
+      ) {.async: (raises: [CancelledError, EthP2PError]).} =
+  PROTO.rlpxWithPacketResponder(seq[Hash32], peer, data):
+    await getBlockAccessListsUserHandler[PROTO](response,
+      BlockAccessListsRequest(blockHashes: packet))
+
+proc blockAccessListsThunk[PROTO](
+    peer: Peer;
+    data: Rlp;
+      ) {.async: (raises: [CancelledError, EthP2PError]).} =
+  PROTO.rlpxWithFutureHandler(BlockAccessListsPacket, BlockAccessListsMsg,
+    peer, data, [accessLists])
+
 # ---------
+
+template registerCommonThunk(protocol: ProtocolInfo, PROTO: type) =
+  registerMsg(protocol, GetAccountRangeMsg, "getAccountRange",
+    getAccountRangeThunk[PROTO], AccountRangeRequest)
+  registerMsg(protocol, AccountRangeMsg, "accountRange",
+    accountRangeThunk[PROTO], AccountRangePacket)
+
+  registerMsg(protocol, GetStorageRangesMsg, "getStorageRanges",
+    getStorageRangesThunk[PROTO], StorageRangesRequest)
+  registerMsg(protocol, StorageRangesMsg, "storageRanges",
+    storageRangesThunk[PROTO], StorageRangesPacket)
+
+  registerMsg(protocol, GetByteCodesMsg, "getByteCodes",
+    getByteCodesThunk[PROTO], ByteCodesRequest)
+  registerMsg(protocol, ByteCodesMsg, "byteCodes",
+    byteCodesThunk[PROTO], ByteCodesPacket)
+
 
 proc snap1Registration() =
   let protocol = snap1.initProtocol()
 
-  registerMsg(protocol, GetAccountRangeMsg, "getAccountRange",
-    getAccountRangeThunk, AccountRangeRequest)
-  registerMsg(protocol, AccountRangeMsg, "accountRange",
-    accountRangeThunk, AccountRangePacket)
-
-  registerMsg(protocol, GetStorageRangesMsg, "getStorageRanges",
-    getStorageRangesThunk, StorageRangesRequest)
-  registerMsg(protocol, StorageRangesMsg, "storageRanges",
-    storageRangesThunk, StorageRangesPacket)
-
-  registerMsg(protocol, GetByteCodesMsg, "getByteCodes",
-    getByteCodesThunk, ByteCodesRequest)
-  registerMsg(protocol, ByteCodesMsg, "byteCodes",
-    byteCodesThunk, ByteCodesPacket)
+  registerCommonThunk(protocol, PROTO=snap1)
 
   registerMsg(protocol, GetTrieNodesMsg, "getTrieNodes",
     getTrieNodesThunk, TrieNodesRequest)
@@ -278,6 +331,20 @@ proc snap1Registration() =
 
   registerProtocol(protocol)
 
+proc snap2Registration() =
+  let protocol = snap2.initProtocol()
+
+  registerCommonThunk(protocol, snap2)
+
+  registerMsg(protocol, GetBlockAccessListsMsg, "getBlockAccessLists",
+    getBlockAccessListsThunk[snap2], BlockAccessListsRequest)
+  registerMsg(protocol, BlockAccessListsMsg, "blockAccessLists",
+    blockAccessListsThunk[snap2], BlockAccessListsPacket)
+
+  registerProtocol(protocol)
+
+
 snap1Registration()
+snap2Registration()
 
 # End

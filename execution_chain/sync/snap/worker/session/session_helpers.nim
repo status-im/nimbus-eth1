@@ -16,6 +16,7 @@ import
 
 type
   SessionTicker* = object of RootObj
+    ctx*: SnapCtxRef
     msgAt*: Moment                                  # message while looping
     napAt*: Moment                                  # allow for thread switch
 
@@ -55,7 +56,7 @@ template sessionTicker*(
         break body
 
       # Check for scheduler shutdown after thread switch
-      if not ctx.daemon:
+      if not status.ctx.daemon:
         chronicles.error info & ": Daemon session terminated"
         bodyRc = Opt.some(ECancelledError)
         break body

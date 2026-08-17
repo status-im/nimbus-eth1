@@ -43,8 +43,8 @@ type
     ## structure is used as a self-cleaning hash set. The data argument is
     ## unused.
 
-  AccPathSet* = LruCache[seq[byte],uint8]
-    ## Ditto for account paths as used in the healing protocol.
+  EthBalHashSet* = LruCache[Hash,Hash32]
+    ## Eth peer list of failed block access lists
 
   # -------------------
 
@@ -55,9 +55,13 @@ type
     msg: string
     elapsed: Duration
 
-  FetchHeadersData* = tuple
-    packet: BlockHeadersPacket
+  SnapErrorEx* = tuple
+    ## Extended `SnapError` for `eth` peer tracking with BALs
+    excp: ErrorType
+    name: string
+    msg: string
     elapsed: Duration
+    peerID: Hash
 
   FetchAccountsData* = tuple
     packet: AccountRangePacket
@@ -67,19 +71,20 @@ type
     packet: StorageRangesPacket
     elapsed: Duration
 
+  FetchCodesData* = tuple
+    packet: ByteCodesPacket
+    elapsed: Duration
+
+  FetchBalData* = tuple
+    packet: BlockAccessListsPacket
+    elapsed: Duration
+    peerID: Hash                                    # remote peer (if any)
+
   StorageRangesData* = tuple
     ## Derived from `StorageRangesPacket`
     slots: seq[seq[StorageItem]]                    # Slots without proof
     slot: seq[StorageItem]                          # Incomplete slot with proof
     proof: seq[ProofNode]                           # Prof for `slot`
-
-  FetchCodesData* = tuple
-    packet: ByteCodesPacket
-    elapsed: Duration
-
-  FetchTrieNodesData* = tuple
-    packet: TrieNodesPacket
-    elapsed: Duration
 
   Ticker* =
     proc(ctx: SnapCtxRef) {.gcsafe, raises: [].}
@@ -90,18 +95,20 @@ type
   PeerErrors* = object
     ## Count fetching and processing errors
     fetch*: tuple[
-      acc, sto, cde, tri: uint8]     ## Accounts, storage, code, trie nodes
+      acc, sto, cde, bal: uint8]
     apply*: tuple[
-      acc, sto, cde, tri: uint8]
+      acc, sto, cde, bal: uint8]
 
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
     stateRoot*: StateRootSet         ## Accounts fetch (per state root)
-    accPath*: AccPathSet             ## Trie nodes fetch (per account path)
+    balHash*: Hash32                 ## Last failed BAL
+    ethBalHash*: EthBalHashSet       ## Ditto for eth peers
 
   SnapPeerData* = object
     ## Local descriptor data extension
+    supportsBal*: bool               ## Peer supports BAL (snap2 and later)
     finRoot*: Opt[StateRoot]         ## Some finalised state root (if any)
     notAvailMax*: BlockNumber        ## Max block number of rejected states
     nErrors*: PeerErrors             ## Error register

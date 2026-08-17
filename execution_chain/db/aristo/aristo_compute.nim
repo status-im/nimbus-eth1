@@ -41,7 +41,7 @@ proc `=copy`(
 # Keep write batch size _around_ 1mb, give or take some overhead - this is a
 # tradeoff between efficiency and memory usage with diminishing returns the
 # larger it is..
-const batchSize = 1024 * 1024 div (sizeof(RootedVertexID) + sizeof(HashKey))
+const batchSize = 32 * 1024 * 1024 div (sizeof(RootedVertexID) + sizeof(VertexBuf))
 
 func progress(batch: WriteBatch, parallel: static bool): string =
   when parallel:
@@ -76,14 +76,14 @@ template flushCheck(
     ?batch.flush(db)
 
     when parallel:
-      if batch.count mod (batchSize * 100) == 0:
+      if batch.count mod (batchSize * 10) == 0:
         info "Writing computeKey cache",
           keys = batch.count, tasksCompleted = batch.progress(parallel)
       else:
         debug "Writing computeKey cache",
           keys = batch.count, tasksCompleted = batch.progress(parallel)
     else:
-      if batch.count mod (batchSize * 100) == 0:
+      if batch.count mod (batchSize * 10) == 0:
         info "Writing computeKey cache",
           keys = batch.count, accounts = batch.progress(parallel)
       else:
@@ -532,14 +532,14 @@ proc computeKeyImpl(
 
     if batch.count > 0:
       when parallel:
-        if batch.count >= batchSize * 100:
+        if batch.count >= batchSize * 10:
           info "Wrote computeKey cache",
             keys = batch.count, tasksCompleted = batch.progress(parallel)
         else:
           debug "Wrote computeKey cache",
             keys = batch.count, tasksCompleted = batch.progress(parallel)
       else:
-        if batch.count >= batchSize * 100:
+        if batch.count >= batchSize * 10:
           info "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
         else:
           debug "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"

@@ -22,7 +22,6 @@ logScope:
 
 type
   ResumeSession = object of SessionTicker
-    ctx: SnapCtxRef
     db: CacheDbRef
     nStates: int                                    # total of available states
     stateInx: int                                   # index of current state

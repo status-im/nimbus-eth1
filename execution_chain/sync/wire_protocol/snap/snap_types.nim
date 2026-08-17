@@ -15,6 +15,19 @@ import
   pkg/[chronicles, eth/common],
   ../../../constants
 
+# Borrow from eth71 and later
+from ../eth/eth_types import
+  BlockAccessListsRequest,
+  RawBlockAccessList,
+  BlockAccessListsPacket,
+  append, read
+
+export
+  BlockAccessListsRequest,
+  RawBlockAccessList,
+  BlockAccessListsPacket,
+  append, read
+
 logScope:
   topics = "snap-wire"
 
