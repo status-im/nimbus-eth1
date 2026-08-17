@@ -71,6 +71,8 @@ const
   maxHeadersLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 
+  lockedBalsLogWaitInterval* = chronos.seconds(30)
+    ## Reduce logging noise
 
   daemonWaitReadyInterval* = chronos.seconds(47)
     ## Some polling interval time waiting until the system gets into download
@@ -131,14 +133,6 @@ const
     ## If the block number difference between FCU update header and cached
     ## header is larger than this contant, a beacon header fetch cycle is
     ## triggered to fill up the cache.
-
-  # -----------
-
-  nFetchHeaderPeersMax* = 5
-    ## Try at most this many `eth` peers for fetching a header
-
-  fetchHeaderRlpxTimeout* = chronos.seconds(30)
-    ## Timeout cap for the `RLPX` handler when fetching header. This value
 
   # -----------
 

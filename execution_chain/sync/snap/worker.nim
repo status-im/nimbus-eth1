@@ -126,10 +126,10 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
 
     of SnapBalsFetch:
-      bodyRc = daemonWaitElseInterval 
+      bodyRc = daemonWaitElseInterval               # parallel peer action
 
     of SnapBalsFetchFinish:
-      bodyRc = daemonWaitElseInterval
+      bodyRc = daemonWaitElseInterval               # wait for sync
 
     of SnapStateForward:
       ctx.sessionForward(info).isOkOr:
@@ -210,9 +210,12 @@ template runPeer*(
     of SnapBalsFetch:
       buddy.downloadBals(info).isOkOr:
         if error == ELockError:
-          trace info & ": BALs downloading locked", peer,
-            pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
-            nSyncPeers=ctx.nSyncPeers()
+          let now = Moment.now                      # reduce logging noise
+          if ctx.pool.lockedBalsLog + lockedBalsLogWaitInterval < now:
+            ctx.pool.lockedBalsLog = now
+            trace info & ": BALs downloading locked", peer,
+              pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
+              nSyncPeers=ctx.nSyncPeers()
           bodyRc = peerWaitBalsLockedInterval
           break body
 

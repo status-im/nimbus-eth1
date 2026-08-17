@@ -187,9 +187,9 @@ proc getEthPeer*(buddy: SnapPeerRef): Opt[BeaconPeerRef] =
     return err()
   ok(ethPeer)
 
-proc getEthPeers*(buddy: SnapPeerRef): seq[BeaconPeerRef] =
+proc getEthPeers*(ctx: SnapCtxRef): seq[BeaconPeerRef] =
   ##  Get all `eth` peer contexts available at the current time
-  buddy.ctx.pool.beaconSync.ctx.getSyncPeers()
+  ctx.pool.beaconSync.ctx.getSyncPeers()
 
 proc nEthPeers*(ctx: SnapCtxRef): int =
   ## Shortcut for `buddy.getSyncPeers().len`
