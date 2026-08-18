@@ -28,26 +28,26 @@ from ../../execution_chain/common/chain_config import GenesisAlloc, GenesisStora
 # Common Type Definitions
 type
   GenesisHeader* = object
-    parentHash: Hash32
+    parentHash*: Hash32
     uncleHash: Hash32
-    coinbase: Address
+    coinbase*: Address
     stateRoot*: Hash32
     transactionsTrie: Hash32
     receiptTrie: Hash32
     bloom: Bytes256
-    difficulty: UInt256
-    number: Quantity
-    gasLimit: Quantity
-    gasUsed: Quantity
-    timestamp: Quantity
-    extraData: HistoricExtraData
-    mixHash: Bytes32
-    nonce: Bytes8
-    baseFeePerGas: Opt[UInt256]
+    difficulty*: UInt256
+    number*: Quantity
+    gasLimit*: Quantity
+    gasUsed*: Quantity
+    timestamp*: Quantity
+    extraData*: HistoricExtraData
+    mixHash*: Bytes32
+    nonce*: Bytes8
+    baseFeePerGas*: Opt[UInt256]
     withdrawalsRoot: Opt[Hash32]
-    blobGasUsed: Opt[Quantity]
-    excessBlobGas: Opt[Quantity]
-    parentBeaconBlockRoot: Opt[Hash32]
+    blobGasUsed*: Opt[Quantity]
+    excessBlobGas*: Opt[Quantity]
+    parentBeaconBlockRoot*: Opt[Hash32]
     requestsHash: Opt[Hash32]
     blockAccessListHash: Opt[Hash32]
     slotNumber*: Opt[Quantity]
