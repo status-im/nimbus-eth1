@@ -1,0 +1,121 @@
+# Nimbus
+# Copyright (c) 2026 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+# The only place that pushes to Docker Hub.
+#
+# release.yml builds the images and parks them as artefacts without pushing, so
+# a tagged release reaches Docker Hub only once its draft is published. A
+# nightly has no draft to review, so release.yml calls this workflow at the end
+# of its own run - the same path, which is what keeps it tested.
+
+name: Publish Docker images
+
+on:
+  release:
+    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Image tag to publish'
+        required: true
+        type: string
+
+env:
+  TARGET_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+  # Only a reviewed release moves ":latest".
+  MOVE_LATEST: ${{ github.event_name == 'release' }}
+
+jobs:
+  push:
+    # Never let a published nightly draft move the release tags.
+    if: github.event.release.tag_name != 'nightly'
+    name: 'docker-linux-${{ matrix.cpu }}'
+    runs-on: ubuntu-latest
+
+    permissions:
+      actions: read # to read artefacts from another workflow run
+
+    strategy:
+      fail-fast: false
+      matrix:
+        cpu: [amd64, arm64]
+
+    steps:
+      - name: Find the build run for this tag
+        # Release mode only: the images were built by an earlier tag-push run.
+        # GITHUB_SHA on a release event is the tagged commit, which is that
+        # run's head SHA.
+        if: github.event_name == 'release'
+        id: build_run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_ID=$(gh run list --repo "${GITHUB_REPOSITORY}" \
+            --workflow release.yml --event push --status success --limit 50 \
+            --json databaseId,headSha \
+            --jq "[.[] | select(.headSha == \"${GITHUB_SHA}\")][0].databaseId")
+
+          if [[ -z "${RUN_ID}" || "${RUN_ID}" == "null" ]]; then
+            echo "No successful release.yml run found for ${GITHUB_SHA}." >&2
+            echo "The image artefacts may have expired (30 day retention)." >&2
+            exit 1
+          fi
+          echo "id=${RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Download image artefact
+        uses: actions/download-artifact@v8
+        with:
+          name: docker-image-linux-${{ matrix.cpu }}
+          # Nightly mode skips the step above, so this falls back to the
+          # calling run - the one that built the image.
+          run-id: ${{ steps.build_run.outputs.id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Load and push
+        run: |
+          # docker load restores the image under the tag it was saved with.
+          docker load < docker-image.tar.gz
+
+          IMG=statusim/nimbus-eth1:linux-${{ matrix.cpu }}
+          docker push ${IMG}-${TARGET_TAG}
+
+          if [[ "${MOVE_LATEST}" == "true" ]]; then
+            docker tag ${IMG}-${TARGET_TAG} ${IMG}-latest
+            docker push ${IMG}-latest
+          fi
+
+  manifest:
+    name: Create multi-arch Docker manifest
+    needs: push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifests
+        run: |
+          docker buildx imagetools create -t statusim/nimbus-eth1:${TARGET_TAG} \
+            statusim/nimbus-eth1:linux-amd64-${TARGET_TAG} \
+            statusim/nimbus-eth1:linux-arm64-${TARGET_TAG}
+
+          if [[ "${MOVE_LATEST}" == "true" ]]; then
+            docker buildx imagetools create -t statusim/nimbus-eth1:latest \
+              statusim/nimbus-eth1:linux-amd64-latest \
+              statusim/nimbus-eth1:linux-arm64-latest
+          fi
