@@ -237,17 +237,17 @@ eest_benchmark:
 
 # builds and runs the nimbus test suite
 test: | build deps rocksdb eest
-	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) $(NIMC) test $(NIM_PARAMS) nimbus.nims
 
 test_import: nimbus_execution_client
-	$(ENV_SCRIPT) nim test_import $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) $(NIMC) test_import $(NIM_PARAMS) nimbus.nims
 
 # builds and runs an EVM-related subset of the nimbus test suite
 test-evm: | build deps rocksdb
-	$(ENV_SCRIPT) nim test_evm $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) $(NIMC) test_evm $(NIM_PARAMS) nimbus.nims
 
 build_fuzzers:
-	$(ENV_SCRIPT) nim build_fuzzers $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) $(NIMC) build_fuzzers $(NIM_PARAMS) nimbus.nims
 
 # Primitive reproducibility test.
 #
@@ -380,7 +380,7 @@ nimbus_verified_proxy_go_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 nimbus_verified_proxy_wasm: | build deps
 	@mkdir -p $(CURDIR)/build/$@
 	+ echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c \
+		$(ENV_SCRIPT) $(NIMC) c \
 		-d:emscripten \
 		-d:release \
 		-d:disable_libbacktrace \
@@ -471,42 +471,32 @@ eest_tool_test: | build deps eest
 		echo -e $(BUILD_END_MSG) "build/$@"
 	build/$@
 
+# Some tools below don't use `compile_nim_program` since they don't go into the
+# `build` folder - moving them is likely a good idea but requires changing their
+# lookup logic
 # builds transition tool
 t8n: | build deps
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tools/t8n/$@.nim" $(NIM_PARAMS) $(T8N_PARAMS) && \
-		echo -e $(BUILD_END_MSG) "build/$@"
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) $(T8N_PARAMS) "tools/t8n/$@.nim"
 
 # builds and runs transition tool test suite
 t8n_test: | build deps t8n
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tools/t8n/$@.nim" $(NIM_PARAMS) -d:chronicles_default_output_device=stderr && \
-		echo -e $(BUILD_END_MSG) "build/$@"
-	build/$@
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) -d:chronicles_default_output_device=stderr "tools/t8n/$@.nim"
 
 # builds evm state test tool
 evmstate: | build deps rocksdb
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tools/evmstate/$@.nim" $(NIM_PARAMS) && \
-		echo -e $(BUILD_END_MSG) "build/$@"
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) "tools/evmstate/$@.nim"
 
 # builds and runs evm state tool test suite
 evmstate_test: | build deps evmstate
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tools/evmstate/$@.nim" $(NIM_PARAMS) && \
-		echo -e $(BUILD_END_MSG) "build/$@"
-	build/$@
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) "tools/evmstate/$@.nim"
 
 # builds txparse tool
 txparse: | build deps
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tools/txparse/$@.nim" $(NIM_PARAMS) && \
-		echo -e $(BUILD_END_MSG) "build/$@"
+	$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) "tools/txparse/$@.nim"
 
 # usual cleaning
 clean: | clean-common
