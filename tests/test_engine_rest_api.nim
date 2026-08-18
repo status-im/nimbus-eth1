@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/[times, typetraits, json],
   chronos,
@@ -56,7 +58,8 @@ proc setupBeaconEngine(): BeaconEngineRef =
   BeaconEngineRef.new(TxPoolRef.new(chain))
 
 proc fetchFull(request: HttpClientRequestRef):
-    tuple[status: int, contentType: string, data: seq[byte]] =
+    tuple[status: int, contentType: string, data: seq[byte]]
+      {.raises: [CancelledError, HttpError].} =
   # `.fetch()` only surfaces (status, data) -- this pulls the Content-Type
   # header in too, for tests that need to assert on it (e.g. the JSON vs.
   # SSZ split from the spec's Content-Type/Accept matrix).

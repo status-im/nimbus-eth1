@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[CatchableError].}
+
 import
   std/[typetraits],
   ../web3_eth_conv,
@@ -17,8 +19,6 @@ import
   chronicles
 
 from beacon_chain/spec/engine_types import EngineFork
-
-{.push gcsafe, raises:[CatchableError].}
 
 # REMOVE WHEN DROPPING JSON-RPC
 func versionToFork(version: Version): EngineFork =

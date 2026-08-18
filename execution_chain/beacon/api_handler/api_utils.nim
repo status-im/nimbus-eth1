@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[].}
+
 import
   std/[typetraits],
   web3/execution_types,
@@ -26,8 +28,6 @@ from beacon_chain/spec/engine_types import
   StringSsz, toStringSsz, optSome, optNone, ByteVector, Digest,
   ForkedPayloadAttributes, withForkedAttributes, asSeq
 from ../ssz_eth_conv import toDigest, toHash32, ethWithdrawal
-
-{.push gcsafe, raises:[].}
 
 const
   engineApiTooDeepReorg* = -38006

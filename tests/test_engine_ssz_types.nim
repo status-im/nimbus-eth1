@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   unittest2,
   beacon_chain/spec/engine_types as engine_ssz_types

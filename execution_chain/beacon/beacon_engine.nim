@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[].}
+
 import
   std/[tables, sequtils],
   eth/common/[hashes, headers],
@@ -66,8 +68,6 @@ type
     invalidBlocksHits: Table[Hash32, int]
     # Ephemeral cache to track invalid tipsets and their bad ancestor
     invalidTipsets   : Table[Hash32, Header]
-
-{.push gcsafe, raises:[].}
 
 const
   # invalidBlockHitEviction is the number of times an invalid block can be

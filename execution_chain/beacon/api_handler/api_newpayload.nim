@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[].}
+
 import
   results,
   chronicles,
@@ -24,8 +26,6 @@ from beacon_chain/spec/engine_types import EngineFork, PayloadStatus
 from ../../rpc/engine_ssz_conv import toSsz, toWeb3
 from beacon_chain/spec/forks import ForkyExecutionPayload
 from ../ssz_eth_conv import ethBlock, toHash32
-
-{.push gcsafe, raises:[].}
 
 logScope:
   topics = "beacon engine"

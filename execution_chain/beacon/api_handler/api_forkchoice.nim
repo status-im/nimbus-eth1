@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[].}
+
 import
   std/[typetraits],
   results,
@@ -23,8 +25,6 @@ import
 
 import beacon_chain/spec/engine_types as engine_ssz_types
 from ../../rpc/engine_ssz_conv import toWeb3, toForkedPayloadAttributes
-
-{.push gcsafe, raises:[].}
 
 logScope:
   topics = "beacon engine"

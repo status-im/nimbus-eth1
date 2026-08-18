@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises: [CatchableError].}
+
 import
   std/sequtils,
   eth/common/blocks,
@@ -18,8 +20,6 @@ import
 
 from ../../db/payload_body_db import toPayloadBodyV1, toPayloadBodyV2
 from beacon_chain/spec/engine_types import MAX_BODIES_REQUEST
-
-{.push gcsafe, raises: [CatchableError].}
 
 proc getPayloadBodiesByHash*(
     ben: BeaconEngineRef, hashes: seq[Hash32], withBlockAccessList: bool
