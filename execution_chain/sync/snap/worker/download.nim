@@ -12,11 +12,11 @@
 
 import
   pkg/[chronicles, chronos],
-  ./download/[account, code, header, storage],
+  ./download/[account, bals, code, header, storage],
   ./[helpers, state_db, update, worker_desc]
 
 export
-  account, code, header, storage
+  account, bals, code, header, storage
 
 # ------------------------------------------------------------------------------
 # Public function(s)

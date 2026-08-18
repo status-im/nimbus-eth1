@@ -830,12 +830,18 @@ proc forkChoice*(c: ForkedChainRef,
   let
     # Find the unique branch where `headHash` is a member of.
     head = ?c.findHeadPos(headHash)
+
+  # Head maybe moved backward or moved to other branch.
+  c.updateHead(head)
+  if finalizedHash == zeroHash32:
+    # Do nothing else if there is no request to new finality.
+    return ok()
+
+  let
     # Finalized block must be parent or on the new canonical chain which is
     # represented by `head`.
     finalized = ?c.findFinalizedPos(finalizedHash, head)
 
-  # Head maybe moved backward or moved to other branch.
-  c.updateHead(head)
   c.updateFinalized(finalized, head)
 
   let base = c.calculateNewBase(finalized.number, head)
