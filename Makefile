@@ -474,7 +474,7 @@ eest_tool_test: | build deps eest
 # builds transition tool
 t8n: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
 		$@ "tools/t8n/$@.nim" $(NIM_PARAMS) $(T8N_PARAMS) && \
 		echo -e $(BUILD_END_MSG) "build/$@"
 
