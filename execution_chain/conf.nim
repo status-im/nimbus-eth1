@@ -504,6 +504,13 @@ type
         defaultValue: false
         name: "engine-api-ws" .}: bool
 
+      engineApiRestEnabled* {.
+        desc: "Enable the experimental REST+SSZ Engine API " &
+          "Runs alongside the JSON-RPC Engine API on the same port " &
+          "(requires --engine-api), not in place of it."
+        defaultValue: false
+        name: "engine-api-rest" .}: bool
+
       allowedOrigins* {.
         desc: "Comma-separated list of domains from which to accept cross origin requests"
         defaultValue: @[]

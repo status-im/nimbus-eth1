@@ -16,7 +16,7 @@ import
   results,
   chronos,
   ../../common,
-  ../../db/[core_db, fcu_db, payload_body_db],
+  ../../db/[core_db, fcu_db],
   ../../evm/types,
   ../../evm/state,
   ../validate,
@@ -29,7 +29,6 @@ import
 
 from std/sequtils import mapIt
 from std/heapqueue import len
-from web3/engine_api_types import ExecutionPayloadBodyV1, ExecutionPayloadBodyV2
 
 logScope:
   topics = "forked chain"
@@ -1133,91 +1132,18 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
 
   ok(EthBlock.init(move(header), move(blockBody)))
 
-proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV1, string] =
-  c.hashToBlock.withValue(blockHash, loc):
-    let blk = ?loc[].txFrame.getEthBlock(loc[].hash)
-    return ok(toPayloadBodyV1(blk))
+proc payloadBodyByHash*(c: ForkedChainRef, blockHash: Hash32, withBlockAccessList: bool):
+    Result[(Block, Opt[BlockAccessListRef]), string] =
+  let blk = ?c.blockByHash(blockHash)
 
-  var header = ?c.baseTxFrame.getBlockHeader(blockHash)
-  var blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
+  var bal = Opt.none(BlockAccessListRef)
+  if withBlockAccessList:
+    c.hashToBlock.withValue(blockHash, loc):
+      bal = ?loc[].txFrame.getBlockAccessList(blockHash)
+      return ok((blk, bal))
+    bal = ?c.baseTxFrame.getBlockAccessList(blockHash)
 
-  if blk.isErr:
-    # Serve portal data if block not found in db
-    if c.isPortalActive:
-      var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
-      # Same as above
-      return ok(toPayloadBodyV1(EthBlock.init(move(header), move(blockBodyPortal))))
-
-  move(blk)
-
-proc payloadBodyV2ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV2, string] =
-  c.hashToBlock.withValue(blockHash, loc):
-    let blk = ?loc[].txFrame.getEthBlock(loc[].hash)
-    return ok(toPayloadBodyV2(blk, ?loc[].txFrame.getBlockAccessList(loc[].hash)))
-
-  var header = ?c.baseTxFrame.getBlockHeader(blockHash)
-  var blk = c.baseTxFrame.getExecutionPayloadBodyV2(header)
-
-  if blk.isErr:
-    # Serve portal data if block not found in db
-    if c.isPortalActive:
-      var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
-      # Same as above
-      return ok(toPayloadBodyV2(
-        EthBlock.init(move(header), move(blockBodyPortal)),
-          ?c.baseTxFrame.getBlockAccessList(header.computeRlpHash())))
-
-  move(blk)
-
-proc payloadBodyV1ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[ExecutionPayloadBodyV1, string] =
-  if number > c.latest.number:
-    return err("Requested block number not exists: " & $number)
-
-  if number <= c.base.number:
-    var header = ?c.baseTxFrame.getBlockHeader(number)
-    let blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
-
-    if blk.isErr:
-      # Serve portal data if block not found in db
-      if c.isPortalActive:
-        var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
-        # same as above
-        return ok(toPayloadBodyV1(EthBlock.init(move(header), move(blockBodyPortal))))
-
-    return blk
-
-  for it in ancestors(c.latest):
-    if number >= it.number:
-      let blk = ?it.txFrame.getEthBlock(it.hash)
-      return ok(toPayloadBodyV1(blk))
-
-  err("Block not found, number = " & $number)
-
-proc payloadBodyV2ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[ExecutionPayloadBodyV2, string] =
-  if number > c.latest.number:
-    return err("Requested block number not exists: " & $number)
-
-  if number <= c.base.number:
-    var header = ?c.baseTxFrame.getBlockHeader(number)
-    let blk = c.baseTxFrame.getExecutionPayloadBodyV2(header)
-
-    if blk.isErr:
-      # Serve portal data if block not found in db
-      if c.isPortalActive:
-        var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
-        # same as above
-        return ok(toPayloadBodyV2(
-          EthBlock.init(move(header), move(blockBodyPortal)),
-            ?c.baseTxFrame.getBlockAccessList(header.computeRlpHash())))
-
-    return blk
-
-  for it in ancestors(c.latest):
-    if number >= it.number:
-      let blk = ?it.txFrame.getEthBlock(it.hash)
-      return ok(toPayloadBodyV2(blk, ?it.txFrame.getBlockAccessList(it.hash)))
-
-  err("Block not found, number = " & $number)
+  ok((blk, bal))
 
 proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, string] =
   if number > c.latest.number:
@@ -1240,6 +1166,22 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
       return it.txFrame.getEthBlock(it.hash)
 
   err("Block not found, number = " & $number)
+
+proc payloadBodyByNumber*(c: ForkedChainRef, number: BlockNumber, withBlockAccessList: bool):
+    Result[(Block, Opt[BlockAccessListRef]), string] =
+  let blk = ?c.blockByNumber(number)
+
+  var bal = Opt.none(BlockAccessListRef)
+  if withBlockAccessList:
+    if number <= c.base.number:
+      bal = ?c.baseTxFrame.getBlockAccessList(blk.header.computeRlpHash())
+    else:
+      for it in ancestors(c.latest):
+        if number >= it.number:
+          bal = ?it.txFrame.getBlockAccessList(it.hash)
+          break
+
+  ok((blk, bal))
 
 proc blockHeader*(c: ForkedChainRef, blk: BlockHashOrNumber): Result[Header, string] =
   if blk.isHash:
@@ -1278,10 +1220,11 @@ proc txByBlockHashAndIndex*(c: ForkedChainRef, blockHash: Hash32, index: uint64)
 
   c.baseTxFrame.getTransactionByIndex(header.txRoot, index.uint16)
 
-proc payloadBodyV1InMemory*(c: ForkedChainRef,
-                            first: BlockNumber,
-                            last: BlockNumber,
-                            list: var seq[Opt[ExecutionPayloadBodyV1]]) =
+proc payloadBodyInMemory*(c: ForkedChainRef,
+                          first: BlockNumber,
+                          last: BlockNumber,
+                          withBlockAccessList: bool,
+                          list: var seq[Opt[(Block, Opt[BlockAccessListRef])]]) =
   var
     blocks = newSeqOfCap[BlockRef](last-first+1)
 
@@ -1292,23 +1235,10 @@ proc payloadBodyV1InMemory*(c: ForkedChainRef,
   for i in countdown(blocks.len-1, 0):
     let y = blocks[i]
     let blk = y.txFrame.getEthBlock(y.hash).valueOr: continue
-    list.add Opt.some(toPayloadBodyV1(blk))
-
-proc payloadBodyV2InMemory*(c: ForkedChainRef,
-                            first: BlockNumber,
-                            last: BlockNumber,
-                            list: var seq[Opt[ExecutionPayloadBodyV2]]) =
-  var
-    blocks = newSeqOfCap[BlockRef](last-first+1)
-
-  for it in ancestors(c.latest):
-    if it.number >= first and it.number <= last:
-      blocks.add(it)
-
-  for i in countdown(blocks.len-1, 0):
-    let y = blocks[i]
-    let blk = y.txFrame.getEthBlock(y.hash).valueOr: continue
-    list.add Opt.some(toPayloadBodyV2(blk, y.txFrame.getBlockAccessList(y.hash).expect("ok")))
+    let bal =
+      if withBlockAccessList: y.txFrame.getBlockAccessList(y.hash).expect("ok")
+      else: Opt.none(BlockAccessListRef)
+    list.add Opt.some((blk, bal))
 
 func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, headHash: Hash32): bool =
   if blockHash == headHash:

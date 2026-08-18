@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[].}
+
 import
   std/[typetraits],
   web3/execution_types,
@@ -21,40 +23,49 @@ import
   ../../core/chain,
   ../web3_eth_conv
 
-{.push gcsafe, raises:[].}
+from beacon_chain/spec/engine_types import
+  EngineFork, PayloadStatus, ForkchoiceUpdateResponse, PayloadStatusCode,
+  StringSsz, toStringSsz, optSome, optNone, ByteVector, Digest,
+  ForkedPayloadAttributes, withForkedAttributes, asSeq
+from ../ssz_eth_conv import toDigest, toHash32, ethWithdrawal
 
-func update(ctx: var sha256, wd: WithdrawalV1) =
-  ctx.update(toBytesBE distinctBase wd.index)
-  ctx.update(toBytesBE distinctBase wd.validatorIndex)
+const
+  engineApiTooDeepReorg* = -38006
+
+proc update(ctx: var sha256, wd: common.Withdrawal) =
+  ctx.update(toBytesBE wd.index)
+  ctx.update(toBytesBE wd.validatorIndex)
   ctx.update(distinctBase wd.address)
-  ctx.update(toBytesBE distinctBase wd.amount)
+  ctx.update(toBytesBE wd.amount)
 
-func computePayloadId*(blockHash: common.Hash32,
-                       params: PayloadAttributes): Bytes8 =
+proc computePayloadId*(blockHash: common.Hash32,
+                       params: ForkedPayloadAttributes): Bytes8 =
   var dest: common.Hash32
   var ctx: sha256
   ctx.init()
   ctx.update(blockHash.data)
-  ctx.update(toBytesBE distinctBase params.timestamp)
-  ctx.update(distinctBase params.prevRandao)
-  ctx.update(distinctBase params.suggestedFeeRecipient)
-  if params.withdrawals.isSome:
-    for wd in params.withdrawals.value:
-      ctx.update(wd)
-  if params.parentBeaconBlockRoot.isSome:
-    ctx.update(distinctBase params.parentBeaconBlockRoot.value)
-  if params.slotNumber.isSome:
-    ctx.update(toBytesBE distinctBase params.slotNumber.get)
+  withForkedAttributes(params):
+    ctx.update(toBytesBE attrs.timestamp)
+    ctx.update(distinctBase toHash32(attrs.prev_randao))
+    ctx.update(distinctBase attrs.suggested_fee_recipient)
+    when fork >= EngineFork.Shanghai:
+      for wd in asSeq(attrs.withdrawals):
+        ctx.update(ethWithdrawal(wd))
+    when fork >= EngineFork.Cancun:
+      ctx.update(distinctBase toHash32(attrs.parent_beacon_block_root))
+    when fork == EngineFork.Amsterdam:
+      ctx.update(toBytesBE attrs.slot_number)
   ctx.finish dest.data
   ctx.clear()
   (distinctBase result)[0..7] = dest.data[0..7]
 
 func validateBlockHash*(header: common.Header,
                         wantHash: common.Hash32,
-                        version: Version): Result[void, PayloadStatusV1] =
+                        fork: EngineFork): Result[void, PayloadStatusV1]
+                          {.gcsafe.} =
   let gotHash = header.computeBlockHash
   if wantHash != gotHash:
-    let status = if version == Version.V1:
+    let status = if fork == EngineFork.Paris:
                    PayloadExecutionStatus.invalid_block_hash
                  else:
                    PayloadExecutionStatus.invalid
@@ -68,77 +79,77 @@ func validateBlockHash*(header: common.Header,
 
   return ok()
 
-template toValidHash*(x: common.Hash32): Opt[Hash32] =
-  Opt.some(x)
+proc simpleFCU*(status: PayloadStatus): ForkchoiceUpdateResponse =
+  ForkchoiceUpdateResponse(payload_status: status)
 
-func simpleFCU*(status: PayloadStatusV1): ForkchoiceUpdatedResponse =
-  ForkchoiceUpdatedResponse(payloadStatus: status)
+proc simpleFCU*(status: PayloadStatusCode): ForkchoiceUpdateResponse =
+  ForkchoiceUpdateResponse(payload_status: PayloadStatus(status: uint8(status)))
 
-func simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
-  ForkchoiceUpdatedResponse(payloadStatus: PayloadStatusV1(status: status))
-
-func simpleFCU*(status: PayloadExecutionStatus,
-                msg: string): ForkchoiceUpdatedResponse =
-  ForkchoiceUpdatedResponse(
-    payloadStatus: PayloadStatusV1(
-      status: status,
-      validationError: Opt.some(msg)
+proc simpleFCU*(status: PayloadStatusCode,
+                msg: string): ForkchoiceUpdateResponse =
+  ForkchoiceUpdateResponse(
+    payload_status: PayloadStatus(
+      status: uint8(status),
+      validation_error: optSome(toStringSsz(msg))
     )
   )
 
 func invalidFCU*(
     validationError: string,
-    hash = default(common.Hash32)): ForkchoiceUpdatedResponse =
-  ForkchoiceUpdatedResponse(payloadStatus:
-    PayloadStatusV1(
-      status: PayloadExecutionStatus.invalid,
-      latestValidHash: toValidHash(hash),
-      validationError: Opt.some validationError
+    hash = default(common.Hash32)): ForkchoiceUpdateResponse =
+  ForkchoiceUpdateResponse(payload_status:
+    PayloadStatus(
+      status: uint8(PayloadStatusCode.INVALID),
+      latest_valid_hash: optSome(hash.toDigest()),
+      validation_error: optSome(toStringSsz(validationError))
     )
   )
 
-func validFCU*(id: Opt[Bytes8],
-               validHash: common.Hash32): ForkchoiceUpdatedResponse =
-  ForkchoiceUpdatedResponse(
-    payloadStatus: PayloadStatusV1(
-      status: PayloadExecutionStatus.valid,
-      latestValidHash: toValidHash(validHash)
+proc validFCU*(id: Opt[Bytes8],
+               validHash: common.Hash32): ForkchoiceUpdateResponse =
+  ForkchoiceUpdateResponse(
+    payload_status: PayloadStatus(
+      status: uint8(PayloadStatusCode.VALID),
+      latest_valid_hash: optSome(validHash.toDigest())
     ),
-    payloadId: id
+    payload_id:
+      if id.isSome: optSome(ByteVector[8](distinctBase(id.get)))
+      else: optNone(ByteVector[8])
   )
 
-func invalidStatus*(
-    validHash: Opt[common.Hash32], msg: string): PayloadStatusV1 =
-  PayloadStatusV1(
-    status: PayloadExecutionStatus.invalid,
-    latestValidHash: validHash,
-    validationError: Opt.some(msg)
+proc invalidStatus*(validHash: Opt[common.Hash32], msg: string): PayloadStatus =
+  PayloadStatus(
+    status: uint8(PayloadStatusCode.INVALID),
+    latest_valid_hash:
+      if validHash.isSome: optSome(validHash.get.toDigest())
+      else: optNone(Digest),
+    validation_error: optSome(toStringSsz(msg))
   )
 
-func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatusV1 =
+proc invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatus =
   invalidStatus(Opt.some(validHash), msg)
 
-func invalidStatus*(validHash = default(common.Hash32)): PayloadStatusV1 =
-  PayloadStatusV1(
-    status: PayloadExecutionStatus.invalid,
-    latestValidHash: toValidHash(validHash)
+proc invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
+  PayloadStatus(
+    status: uint8(PayloadStatusCode.INVALID),
+    latest_valid_hash: optSome(validHash.toDigest())
   )
 
-func acceptedStatus*(validHash: common.Hash32): PayloadStatusV1 =
-  PayloadStatusV1(
-    status: PayloadExecutionStatus.accepted,
-    latestValidHash: toValidHash(validHash)
+proc acceptedStatus*(validHash: common.Hash32): PayloadStatus =
+  PayloadStatus(
+    status: uint8(PayloadStatusCode.ACCEPTED),
+    latest_valid_hash: optSome(validHash.toDigest())
   )
 
-func acceptedStatus*(): PayloadStatusV1 =
-  PayloadStatusV1(
-    status: PayloadExecutionStatus.accepted
+proc acceptedStatus*(): PayloadStatus =
+  PayloadStatus(
+    status: uint8(PayloadStatusCode.ACCEPTED)
   )
 
-func validStatus*(validHash: common.Hash32): PayloadStatusV1 =
-  PayloadStatusV1(
-    status: PayloadExecutionStatus.valid,
-    latestValidHash: toValidHash(validHash)
+proc validStatus*(validHash: common.Hash32): PayloadStatus =
+  PayloadStatus(
+    status: uint8(PayloadStatusCode.VALID),
+    latest_valid_hash: optSome(validHash.toDigest())
   )
 
 func invalidParams*(msg: string): ref ApplicationError =
@@ -177,6 +188,12 @@ func tooLargeRequest*(msg: string): ref ApplicationError =
     msg: msg
   )
 
+proc tooDeepReorg*(msg: string): ref ApplicationError =
+  (ref ApplicationError)(
+    code: engineApiTooDeepReorg,
+    msg: msg
+  )
+
 func parseError*(msg: string): ref ApplicationError =
   (ref ApplicationError)(
     code: engineApiParseError,
@@ -199,7 +216,7 @@ proc latestValidHash*(txFrame: CoreDbTxRef,
 
 proc invalidFCU*(validationError: string,
                  chain: ForkedChainRef,
-                 header: Header): ForkchoiceUpdatedResponse =
+                 header: Header): ForkchoiceUpdateResponse =
   let parent = chain.headerByHash(header.parentHash).valueOr:
     return invalidFCU(validationError)
 
