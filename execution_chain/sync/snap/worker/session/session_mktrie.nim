@@ -27,7 +27,6 @@ type
     AllAssembled
 
   MkTrieSession = object of SessionTicker
-    ctx: SnapCtxRef
     db: CacheDbRef
 
     nStates: int                                    # total of available states
