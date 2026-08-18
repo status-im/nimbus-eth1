@@ -57,14 +57,14 @@ template validateVersion(attr, com, apiVersion) =
         raise invalidAttr("forkChoiceUpdatedV2 with beacon root field is invalid after Cancun")
     elif com.isShanghaiOrLater(timestamp):
       if version < Version.V2:
-        raise invalidParams("forkChoiceUpdated" & $apiVersion &
+        raise invalidAttr("forkChoiceUpdated" & $apiVersion &
           " doesn't support payloadAttributesV1 when Shanghai is activated")
       if version > Version.V2:
         raise invalidAttr("if timestamp is Shanghai or later," &
           " payloadAttributes must be PayloadAttributesV2")
     else:
       if version != Version.V1:
-        raise invalidParams("if timestamp is earlier than Shanghai," &
+        raise invalidAttr("if timestamp is earlier than Shanghai," &
           " payloadAttributes must be PayloadAttributesV1")
 
 template validateHeaderTimestamp(header, com, apiVersion) =
