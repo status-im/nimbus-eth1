@@ -166,10 +166,10 @@ func layersReserveKeys*(db: AristoTxRef, extra: int) =
       tab[k] = v
     db.kMap = move(tab)
 
-func layersMergeKeyInSnapshot*(db: AristoTxRef; rvid: RootedVertexID; key: HashKey) =
+template layersMergeKeyInSnapshot*(db: AristoTxRef; rvid: RootedVertexID; key: HashKey) =
   if db.snapshot.level.isSome():
-    db.snapshot.vtx.withValue(rvid, value):
-      value[1] = key
+    db.snapshot.vtx.withValue(rvid, entry):
+      entry[1] = key
 
 func layersMergeKey*(
     db: AristoTxRef;
