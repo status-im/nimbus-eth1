@@ -219,18 +219,8 @@ proc computeKeyImpl(
 ): Result[(HashKey, int), AristoError]
 
 when compileOption("threads"):
-  when defined(windows):
-    import std/os
-
-    proc idleSleep() =
-      sleep(1)
-
-  else:
+  when not defined(windows):
     import std/posix
-
-    proc idleSleep() =
-      var req = Timespec(tv_sec: posix.Time(0), tv_nsec: 100_000)
-      discard nanosleep(req, req)
 
   proc putVtxBlob(
       batch: var WriteBatch, db: AristoDbRef, rvid: RootedVertexID, vtx: openArray[byte]
@@ -466,11 +456,16 @@ proc computeKeyImpl(
 
           if progressed:
             idleRounds = 0
-          elif idleRounds < 64:
-            inc idleRounds
-            cpuRelax()
           else:
-            idleSleep()
+            when defined(windows):
+              cpuRelax()
+            else:
+              if idleRounds < 64:
+                inc idleRounds
+                cpuRelax()
+              else:
+                var req = Timespec(tv_sec: posix.Time(0), tv_nsec: 100_000)
+                discard nanosleep(req, req)
 
         # At this point all futures have finished running.
         # Now we process any remaining data in the queues.

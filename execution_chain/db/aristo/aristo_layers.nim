@@ -160,11 +160,8 @@ func layersPutKey*(
     db.snapshot.vtx[rvid] = (VertexRef(vtx), key, db.level)
 
 func layersReserveKeys*(db: AristoTxRef, extra: int) =
-  if extra > db.kMap.len:
-    var tab = initTable[RootedVertexID, HashKey](db.kMap.len + extra)
-    for k, v in db.kMap:
-      tab[k] = v
-    db.kMap = move(tab)
+  if db.kMap.len == 0 and extra > 0:
+    db.kMap = initTable[RootedVertexID, HashKey](extra)
 
 template layersMergeKeyInSnapshot*(db: AristoTxRef; rvid: RootedVertexID; key: HashKey) =
   if db.snapshot.level.isSome():
