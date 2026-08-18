@@ -305,6 +305,20 @@ suite "Engine SSZ API REST transport: business logic":
     let status = SSZ.decode(resp[1], PayloadStatus)
     check status.status == uint8(PayloadStatusCode.VALID)
 
+  test "POST /payloads with a mismatched block_hash should return 200 INVALID (folded from INVALID_BLOCK_HASH)":
+    var corrupted = builtPayload
+    corrupted.block_hash = fakeDigest(0xbb)
+    let body = SSZ.encode(ExecutionPayloadEnvelopeParis(payload: corrupted))
+    let resp = waitFor HttpClientRequestRef.post(session, base & "/engine/v1/payloads",
+      headers = @[
+        ("Eth-Execution-Version", "paris"),
+        ("Content-Type", "application/octet-stream")],
+      body = body).get().fetch()
+    check resp[0] == 200
+    let status = SSZ.decode(resp[1], PayloadStatus)
+    check status.status == uint8(PayloadStatusCode.INVALID)
+    check status.status != uint8(PayloadStatusCode.INVALID_BLOCK_HASH)
+
   test "POST /forkchoice with an inconsistent forkchoice state should return 409 invalid-forkchoice":
     # The block imported above is known to the chain but is not (yet) the
     # canonical head, so referencing it as for the FCU while pointing

@@ -47,6 +47,20 @@ suite "Engine SSZ API to web3 conversions":
     check sszStatus.validation_error.isSome
     check sszStatus.validation_error.get.toString == "bad state root"
 
+  test "PayloadStatusV1 to PayloadStatus: INVALID_BLOCK_HASH is not folded into INVALID":
+    let status = PayloadStatusV1(
+      status: PayloadExecutionStatus.invalid_block_hash,
+      validationError: Opt.some("blockhash mismatch"))
+    let sszStatus = toSsz(status)
+    check sszStatus.status == uint8(PayloadStatusCode.INVALID_BLOCK_HASH)
+    check sszStatus.status != uint8(PayloadStatusCode.INVALID)
+
+  test "PayloadStatus INVALID_BLOCK_HASH round trips back through toWeb3":
+    let sszStatus = engine_ssz_types.PayloadStatus(
+      status: uint8(PayloadStatusCode.INVALID_BLOCK_HASH))
+    let web3Status = toWeb3(sszStatus)
+    check web3Status.status == PayloadExecutionStatus.invalid_block_hash
+
   test "WithdrawalV1 to Withdrawal":
     let w = WithdrawalV1(index: Quantity(1'u64), validatorIndex: Quantity(2'u64),
       amount: Quantity(3'u64))
