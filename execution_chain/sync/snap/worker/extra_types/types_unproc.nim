@@ -12,8 +12,7 @@
 
 import
   pkg/[stint, stew/interval_set],
-  ../helpers,
-  ./state_item_key
+  ./types_range
 
 type
   UnprocItemKeys* = object

@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos, metrics, stew/interval_set],
-  ../../[helpers, mpt, state_db, worker_desc],
+  ../../[extra_types, helpers, mpt, worker_desc],
   ./account_fetch
 
 declareGauge nec_snap_accounts_coverage, "" &

@@ -14,7 +14,7 @@ import
   std/bitops,
   pkg/[chronicles, chronos, stew/interval_set],
   ./download/[account, bals, code, header, storage],
-  ./[helpers, mpt, state_db, worker_desc]
+  ./[helpers, mpt, worker_desc]
 
 logScope:
   topics = "snap sync"

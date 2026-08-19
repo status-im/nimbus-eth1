@@ -19,7 +19,7 @@ import
   ../../../networking/p2p,
   ../../../utils/[prettify, utils],
   ../../sync_desc,
-  ./worker_const
+  ./[extra_types, worker_const]
 
 export
   prettify, short, `$`
@@ -37,46 +37,13 @@ func toStr*(h: Hash32): string =
 func toStr*(h: Opt[Hash32]): string =
   if h.isNone: "n/a" else: h.unsafeGet.toStr
 
+func toStr*(w: DistinctHash32): string = w.Hash32.toStr
+
+func toStr*(w: Opt[DistinctHash32]): string =
+  if w.isNone: Opt.none(Hash32).toStr
+  else: Opt.some(w.unsafeGet.Hash32).toStr
+
 # --------------
-
-func to*(w: UInt256; _: type float): float =
-  ## Lossy conversion to `float`
-  ##
-  when sizeof(float) != sizeof(uint):
-    {.error: "Expected float having the same size as uint".}
-  let mantissa = 256 - w.leadingZeros
-  if mantissa <= mantissaDigits(float):             # `<= 53` on a 64 bit system
-    return w.truncate(uint).float
-  # Calculate `w / 2^exp * 2^exp` = `w`
-  let exp = mantissa - mantissaDigits(float)        # is positive
-  (w shr exp).truncate(uint).float * 2f.pow(exp.float)
-
-
-func per256*(w: UInt256): float =
-  ## Represents the quotiont `w / 2^256` as `float` value. Note that the
-  ## result is non-negaive and always smaller than `1f`.
-  ##
-  when sizeof(float) != sizeof(uint):
-    {.error: "Expected float having the same size as uint".}
-  if w.isZero:
-    return 0f
-  let mantissa = 256 - w.leadingZeros
-  if mantissa <= mantissaDigits(float):             # `<= 53` on a 64 bit system
-    return w.truncate(uint).float / 2f.pow(256.float)
-  # Calculate `total / 2^exp / 2^(256-exp)` = `total / 2^256`
-  let exp = mantissa - mantissaDigits(float)        # is positive
-  (w shr exp).truncate(uint).float / 2f.pow((256 - exp).float)
-
-func per256*(w: Opt[UInt256]): float =
-  ## Variant of `per256()` where the argument `w` covers the full scalar
-  ## range with `Opt.none()` repesenting `0` and `Opt.some(0)` representing
-  ## `2^255` (where the latter is not in the scalar range for `UInt256`,
-  ## anymore.)
-  ##
-  if w.isNone: 0f
-  elif w.value.isZero: 1f
-  else: w.value.per256()
-
 
 func toStr*(w: float, precision: static[int] = 7): string =
   if w == 0f:
@@ -133,6 +100,30 @@ func flStr*(w: (UInt256,UInt256), precision: static[int] = 4): string =
   else:
     "n/a"
 
+func flStr*(w: ItemKey): string =
+  w.to(UInt256).flStr
+
+func flStr*(w: (ItemKey,ItemKey)): string =
+  (w[0].to(UInt256),w[1].to(UInt256)).flStr
+
+func flStr*(w: ItemKeyRange): string =
+  (w.minPt,w.maxPt).flStr
+
+func flStr*(ikrs: ItemKeyRangeSet, maxIvs = 2): string =
+  result = "{"
+  var count = 0
+  for iv in ikrs.increasing:
+    if maxIvs <= count:
+      break
+    count.inc
+    result &= iv.flStr & ","
+  if count <= 0:
+    result &= "}"
+  elif count <= maxIvs:
+    result[^1] = '}'
+  else:
+    result &= "..[" & $ikrs.chunks & "]..}"
+
 func lenStr*(w: (UInt256,UInt256)): string =
   if w[0].isZero and w[1] == high(UInt256):
     "2^256"
@@ -144,6 +135,12 @@ func lenStr*(w: (UInt256,UInt256)): string =
       z.to(float).toStr
   else:
     "?"
+
+func lenStr*(w: (ItemKey,ItemKey)): string =
+  (w[0].to(UInt256),w[1].to(UInt256)).lenStr
+
+func lenStr*(w: ItemKeyRange): string =
+  (w.minPt,w.maxPt).lenStr
 
 # --------------
 
@@ -166,5 +163,8 @@ func `$`*(w: (string,SyncPeerRunState,SnapState,bool)): string =
   if 0 < w[0].len:
     result = w[0] & "/"
   result &= $w[1] & ":" & $(w[2],w[3])
+
+func `$`*(w: ItemKey|ItemKeyRange): string =
+  w.flStr
 
 # End

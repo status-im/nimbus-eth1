@@ -62,7 +62,6 @@
 
 import
   pkg/[eth/common, results, stew/interval_set],
-  ../../state_db,
   ./[cache_api1, cache_api33, cache_api65,
      cache_const, cache_desc, cache_iter, cache_rlp]
 

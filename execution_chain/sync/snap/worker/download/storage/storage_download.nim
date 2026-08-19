@@ -13,7 +13,7 @@
 import
   #std/[sequtils],
   pkg/[chronicles, chronos, stew/interval_set],
-  ../../[helpers, mpt, state_db, worker_desc],
+  ../../[helpers, mpt, worker_desc],
   ./storage_fetch
 
 const

@@ -15,7 +15,7 @@
 
 import
   pkg/[chronicles, eth/common, stew/interval_set],
-  ../../[helpers, state_db, worker_desc],
+  ../../[helpers, worker_desc],
   ./[cache_desc, cache_flat]
 
 logScope:
