@@ -707,6 +707,26 @@ suite "SharedSeq growth Tests":
       t.capacity == 4096
     t.dispose()
 
+  test "large buffers grow by 1.5x instead of doubling":
+    # threshold is 128 KiB; for int that is 16384 elements
+    var s: SharedSeq[int]
+    for i in 0 ..< 20_000:
+      s.add(i)
+    check:
+      s.len == 20_000
+      s.capacity == 16_384 + 8_192 # one 1.5x step past the threshold, not 32768
+    for i in 0 ..< 20_000:
+      check s[i] == i
+    s.dispose()
+
+    # a one-shot large setLen allocates exactly, not the next power of two
+    var t: SharedSeq[int]
+    t.setLen(100_000, zeroed = true)
+    check:
+      t.len == 100_000
+      t.capacity == 100_000
+    t.dispose()
+
   test "setLen with exact sizes capacity exactly, no power-of-two rounding":
     var s: SharedSeq[int]
     s.setLen(2050, zeroed = true, exact = true)

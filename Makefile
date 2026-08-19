@@ -10,8 +10,6 @@ SHELL := bash # the shell used internally by "make"
 # used inside the included makefiles
 BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 
-LINK_PCRE := 0
-
 EXCLUDED_NIM_PACKAGES := $(wildcard vendor/nimbus-eth2/vendor/*)
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
