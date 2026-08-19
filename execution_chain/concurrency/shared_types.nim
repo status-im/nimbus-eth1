@@ -93,10 +93,13 @@ proc `[]`*[E](s: var SharedSeq[E], i: int): var E =
 template len*[E](s: SharedSeq[E]): int =
   s.count
 
-
+const seqGrowThresholdBytes = 128 * 1024
 
 proc grow[E](s: var SharedSeq[E], minCap: int) =
-  s.reallocTo(nextPowerOfTwo(max(minCap, seqInitialCapacity)))
+  if max(s.cap, minCap) * sizeof(E) >= seqGrowThresholdBytes:
+    s.reallocTo(max(minCap, s.cap + (s.cap div 2)))
+  else:
+    s.reallocTo(nextPowerOfTwo(max(minCap, seqInitialCapacity)))
 
 proc setLen*[E](s: var SharedSeq[E], newLen: int, zeroed = true, exact = false) =
   if newLen > s.cap:

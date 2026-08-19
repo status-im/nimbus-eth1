@@ -109,7 +109,7 @@ template validatePayload(apiVersion, payloadVersion, payload) =
         "blockAccessList is expected from execution payload")
 
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
-func validateExecutionRequest(blockHash: Hash32,
+func validateExecutionRequest(
             requests: openArray[seq[byte]], apiVersion: Version):
               Opt[PayloadStatusV1] {.raises: [ApplicationError].} =
   var previousRequestType = -1
@@ -134,14 +134,14 @@ func validateExecutionRequest(blockHash: Hash32,
         CONSOLIDATION_REQUEST_TYPE,
         BUILDER_DEPOSIT_REQUEST_TYPE,
         BUILDER_EXIT_REQUEST_TYPE]:
-        return Opt.some(invalidStatus(blockHash,
+        return Opt.some(invalidStatus(Opt.none(Hash32),
           "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
     else:
       if requestType notin [
         DEPOSIT_REQUEST_TYPE,
         WITHDRAWAL_REQUEST_TYPE,
         CONSOLIDATION_REQUEST_TYPE]:
-        return Opt.some(invalidStatus(blockHash,
+        return Opt.some(invalidStatus(Opt.none(Hash32),
           "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
 
     previousRequestType = requestType.int
@@ -169,7 +169,7 @@ proc newPayload*(ben: BeaconEngineRef,
       raise invalidParams("newPayload" & $apiVersion &
         ": executionRequests is expected from execution payload")
 
-    let res = validateExecutionRequest(payload.blockHash, executionRequests.value, apiVersion)
+    let res = validateExecutionRequest(executionRequests.value, apiVersion)
     if res.isSome:
       return res.value
 
@@ -207,7 +207,7 @@ proc newPayload*(ben: BeaconEngineRef,
       raise invalidParams("newPayload" & $apiVersion &
         " expect blobVersionedHashes but got none")
     if not validateVersionedHashed(payload, versionedHashes.value):
-      return invalidStatus(header.parentHash, "invalid blob versionedHashes")
+      return invalidStatus(Opt.none(Hash32), "invalid blob versionedHashes")
 
   let blockHash = payload.blockHash
   header.validateBlockHash(blockHash, version).isOkOr:

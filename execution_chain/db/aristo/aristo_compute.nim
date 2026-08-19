@@ -32,7 +32,7 @@ type
 
   ConcurrentVertexBufQueue* = ConcurrentQueue[3, (RootedVertexID, VertexBuf)]
 
-  KeyWriteBuf* = SharedSeq[(RootedVertexID, HashKey, int)]
+  KeyWriteBuf* = SharedSeq[(RootedVertexID, HashKey, uint32)]
 
   KeyVtxLevel = ((HashKey, VertexRef), int)
 
@@ -122,6 +122,7 @@ proc putKeyAtLevel(
     key: HashKey,
     level: int,
     batch: var WriteBatch,
+    snapshotFrame: AristoTxRef,
 ): Result[void, AristoError] =
   ## Store a hash key in the given layer or directly to the underlying database
   ## which helps ensure that memory usage is proportional to the pending change
@@ -129,8 +130,16 @@ proc putKeyAtLevel(
   ## corresponding hash!)
 
   if level >= txRef.db.baseTxFrame().level:
-    let frame = txRef.deltaAtLevel(level)
+    var frame = txRef
+    while frame.level > level:
+      frame = frame.parent
+
     frame.layersMergeKey(rvid, key)
+    # A snapshot frame at or below the merge level must not be patched - the
+    # equal-level case is already covered by layersMergeKey updating its own
+    # frame's snapshot.
+    if not snapshotFrame.isNil and level < snapshotFrame.level:
+      snapshotFrame.layersMergeKeyInSnapshot(rvid, key)
   elif level == dbLevel:
     ?batch.putVtx(txRef.db, rvid, vtx, key)
   else: # level > dbLevel but less than baseTxFrame level
@@ -219,25 +228,29 @@ proc computeKeyImpl(
     skipLayers: static bool,
     spawnTpTasks: static bool,
     parallel: static bool,
+    snapshotFrame: AristoTxRef,
     keyBuf: ptr KeyWriteBuf,
     vtxBufQueue: ptr ConcurrentVertexBufQueue,
 ): Result[(HashKey, int), AristoError]
 
 when compileOption("threads"):
-  when defined(windows):
-    import std/os
-
-    proc idleSleep() =
-      sleep(1)
-
-  else:
+  when not defined(windows):
     import std/posix
 
-    proc idleSleep() =
-      var req = Timespec(tv_sec: posix.Time(0), tv_nsec: 100_000)
-      discard nanosleep(req, req)
+  proc mergeKeys(
+      txRef: AristoTxRef, bufs: openArray[KeyWriteBuf], snapshotFrame: AristoTxRef
+  ) =
+    ## Merge buffered hash keys into the layer that each key was computed against
+    ## which helps ensure that memory usage is proportional to the pending change
+    ## set (vertex data may have been committed to disk without computing the
+    ## corresponding hash!)
+    var total = 0
+    for buf in bufs:
+      total += buf.len
 
-  proc mergeKeys(txRef: AristoTxRef, bufs: openArray[KeyWriteBuf]) =
+    if total == 0:
+      return
+
     let baseLevel = txRef.db.baseTxFrame().level
     var
       frames = newSeq[AristoTxRef](txRef.level - baseLevel + 1)
@@ -251,11 +264,11 @@ when compileOption("threads"):
 
     for buf in bufs:
       for item in buf:
-        let level = item[2]
+        let level = item[2].int
 
         doAssert level >= baseLevel and level <= txRef.level,
-          "Cannot write keys at level < baseTxFrame level. Found level = " &
-            $level & ", baseTxFrame level = " & $baseLevel
+          "Cannot write keys at level < baseTxFrame level. Found level = " & $level &
+            ", baseTxFrame level = " & $baseLevel
 
         inc counts[level - baseLevel]
 
@@ -265,7 +278,9 @@ when compileOption("threads"):
 
     for buf in bufs:
       for item in buf:
-        frames[item[2] - baseLevel].layersMergeKey(item[0], item[1])
+        frames[item[2].int - baseLevel].layersMergeKey(item[0], item[1])
+        if not snapshotFrame.isNil and item[2].int < snapshotFrame.level:
+          snapshotFrame.layersMergeKeyInSnapshot(item[0], item[1])
 
   proc putVtxBlob(
       batch: var WriteBatch, db: AristoDbRef, rvid: RootedVertexID, vtx: openArray[byte]
@@ -309,6 +324,7 @@ when compileOption("threads"):
             skipLayers = true,
             spawnTpTasks = false,
             parallel = true,
+            snapshotFrame = nil,
             keyBuf,
             vtxBufQueue,
           )
@@ -321,6 +337,7 @@ when compileOption("threads"):
             skipLayers = false,
             spawnTpTasks = false,
             parallel = true,
+            snapshotFrame = nil,
             keyBuf,
             vtxBufQueue,
           )
@@ -340,6 +357,7 @@ proc computeKeyImpl(
     skipLayers: static bool,
     spawnTpTasks: static bool,
     parallel: static bool,
+    snapshotFrame: AristoTxRef,
     keyBuf: ptr KeyWriteBuf,
     vtxBufQueue: ptr ConcurrentVertexBufQueue,
 ): Result[(HashKey, int), AristoError] =
@@ -370,6 +388,7 @@ proc computeKeyImpl(
                   skipLayers = skipLayers,
                   spawnTpTasks = false,
                   parallel,
+                  snapshotFrame,
                   keyBuf,
                   vtxBufQueue,
                 )
@@ -480,6 +499,7 @@ proc computeKeyImpl(
                   skipLayers = skipLayers,
                   spawnTpTasks = false,
                   parallel,
+                  snapshotFrame,
                   keyBuf,
                   vtxBufQueue,
                 )
@@ -503,6 +523,7 @@ proc computeKeyImpl(
               skipLayers,
               spawnTpTasks = false,
               parallel,
+              snapshotFrame,
               keyBuf,
               vtxBufQueue,
             )
@@ -539,11 +560,16 @@ proc computeKeyImpl(
 
           if progressed:
             idleRounds = 0
-          elif idleRounds < 64:
-            inc idleRounds
-            cpuRelax()
           else:
-            idleSleep()
+            when defined(windows):
+              cpuRelax()
+            else:
+              if idleRounds < 64:
+                inc idleRounds
+                cpuRelax()
+              else:
+                var req = Timespec(tv_sec: posix.Time(0), tv_nsec: 100_000)
+                discard nanosleep(req, req)
 
         # At this point all futures have finished running.
         # Now we process any remaining data in the queues.
@@ -557,7 +583,7 @@ proc computeKeyImpl(
             ?sync(f)
             vtxBufQueues[i].dispose()
 
-        txRef.mergeKeys(keyBufs)
+        txRef.mergeKeys(keyBufs, snapshotFrame)
 
         for n in expanded:
           var clevel = keyvtxs[n][1]
@@ -565,7 +591,7 @@ proc computeKeyImpl(
           keyvtxs[n][0][0] = cbr.branchKeyFrom(gkeyvtxs[n], clevel)
           keyvtxs[n][1] = clevel
           ?txRef.putKeyAtLevel(
-            (rvid.root, vtx.bVid(n)), cbr, keyvtxs[n][0][0], clevel, batch
+            (rvid.root, vtx.bVid(n)), cbr, keyvtxs[n][0][0], clevel, batch, snapshotFrame
           )
 
       vtx.branchKeyFrom(keyvtxs, level)
@@ -580,7 +606,7 @@ proc computeKeyImpl(
   if vtx.vType in Branches:
     when parallel and not spawnTpTasks:
       if level >= txRef.db.baseTxFrame().level:
-        keyBuf[].add((rvid, key, level))
+        keyBuf[].add((rvid, key, level.uint32))
       elif level == dbLevel:
         var vtxBuf: VertexBuf
         vtx.blobifyTo(key, vtxBuf)
@@ -591,7 +617,7 @@ proc computeKeyImpl(
             ", baseTxFrame level = " & $txRef.db.baseTxFrame().level
         )
     else:
-      ?txRef.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch)
+      ?txRef.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch, snapshotFrame)
 
   ok (key, level)
 
@@ -612,8 +638,18 @@ proc computeKeyImpl(
     return ok(keyvtx[0])
 
   var batch: WriteBatch
+
+  # Find the topmost frame holding a snapshot, if any, so that key writes can
+  # patch it directly instead of searching the frame stack for every key.
+  var snapshotFrame: AristoTxRef
+  for frame in txRef.rstack(stopAtSnapshot = true):
+    if frame.snapshot.level.isSome():
+      snapshotFrame = frame
+      break
+
   let res = computeKeyImpl(
-    txRef, rvid, batch, keyvtx[1], level, skipLayers, spawnTpTasks, parallel, nil, nil
+    txRef, rvid, batch, keyvtx[1], level, skipLayers, spawnTpTasks, parallel,
+    snapshotFrame, nil, nil,
   )
 
   if res.isOk:

@@ -160,11 +160,13 @@ func layersPutKey*(
     db.snapshot.vtx[rvid] = (VertexRef(vtx), key, db.level)
 
 func layersReserveKeys*(db: AristoTxRef, extra: int) =
-  if extra > db.kMap.len:
-    var tab = initTable[RootedVertexID, HashKey](db.kMap.len + extra)
-    for k, v in db.kMap:
-      tab[k] = v
-    db.kMap = move(tab)
+  if db.kMap.len == 0 and extra > 0:
+    db.kMap = initTable[RootedVertexID, HashKey](extra)
+
+template layersMergeKeyInSnapshot*(db: AristoTxRef; rvid: RootedVertexID; key: HashKey) =
+  if db.snapshot.level.isSome():
+    db.snapshot.vtx.withValue(rvid, entry):
+      entry[1] = key
 
 func layersMergeKey*(
     db: AristoTxRef;
@@ -175,10 +177,7 @@ func layersMergeKey*(
   ## for leaves since these are trivial to compute
   # Precondition: the vertex for the given rvid should exist
   db.kMap[rvid] = key
-
-  if db.snapshot.level.isSome():
-    db.snapshot.vtx.withValue(rvid, value):
-      value[1] = key
+  db.layersMergeKeyInSnapshot(rvid, key)
 
 func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: BranchRef) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)` which resets the hash

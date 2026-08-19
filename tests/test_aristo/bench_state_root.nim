@@ -43,12 +43,13 @@ proc addAccounts(txFrame: AristoTxRef, n: int) =
       p, AristoAccount(balance: pathCounter.u256(), codeHash: EMPTY_CODE_HASH)
     ).isOk()
 
-proc newDb(baseAccounts: int): (AristoDbRef, AristoTxRef) =
+proc newDb(baseAccounts: int, parallel: bool): (AristoDbRef, AristoTxRef) =
   # Base state with computed keys, persisted to the (memory) backend so the
   # per-block scenarios start from a warm, realistic baseline.
   pathCounter = 0
   let db = AristoDbRef.init()
-  db.taskpool = Taskpool.new(numThreads = numThreads)
+  if parallel:
+    db.taskpool = Taskpool.new(numThreads = numThreads)
   db.parallelStateRootComputation = false
   var txFrame = db.txRef
   txFrame.addAccounts(baseAccounts)
@@ -62,13 +63,19 @@ proc newDb(baseAccounts: int): (AristoDbRef, AristoTxRef) =
 proc ms(d: Duration): float =
   d.inNanoseconds.float / 1e6
 
+proc release(db: AristoDbRef) =
+  # Without this every scenario invocation leaks a full set of worker threads,
+  # whose wakeups then land inside the measurement window of later scenarios.
+  if not db.taskpool.isNil():
+    db.taskpool.shutdown()
+
 # Steady-state import: root computed for every block, snapshot per block as in
 # forked_chain live import. Reports mean root time over the last 100 blocks.
 # `mainCpu` is the cpu time of the calling thread alone (`cpuTime` is
 # thread-scoped on Linux), i.e. how busy the main thread is kept while the
 # workers hash.
 proc scenarioSteady(parallel: bool): (float, float, Hash32) =
-  let (db, base) = newDb(100_000)
+  let (db, base) = newDb(100_000, parallel)
   db.parallelStateRootComputation = parallel
   var
     txFrame = base
@@ -90,12 +97,13 @@ proc scenarioSteady(parallel: bool): (float, float, Hash32) =
   for i in 30 ..< times.len:
     s += times[i]
     c += cpuTimes[i]
+  db.release()
   (s / float(times.len - 30), c / float(times.len - 30), root)
 
 # Batch catch-up: 130 blocks imported without root computation, then one deep
 # root over all of them (keys span all 130 levels).
 proc scenarioCatchup(parallel: bool): (float, float, Hash32) =
-  let (db, base) = newDb(100_000)
+  let (db, base) = newDb(100_000, parallel)
   db.parallelStateRootComputation = parallel
   var txFrame = base
   for blk in 1 .. 130:
@@ -109,11 +117,12 @@ proc scenarioCatchup(parallel: bool): (float, float, Hash32) =
   let elapsed = ms(getMonoTime() - t0)
   let mainCpu = (cpuTime() - c0) * 1e3
   doAssert res.isOk()
+  db.release()
   (elapsed, mainCpu, res[].to(Hash32))
 
 # Flat bulk import: one large frame on top of the base.
 proc scenarioFlat(parallel: bool): (float, float, Hash32) =
-  let (db, base) = newDb(100_000)
+  let (db, base) = newDb(100_000, parallel)
   db.parallelStateRootComputation = parallel
   var txFrame = db.txFrameBegin(base)
   txFrame.addAccounts(500_000)
@@ -124,6 +133,7 @@ proc scenarioFlat(parallel: bool): (float, float, Hash32) =
   let elapsed = ms(getMonoTime() - t0)
   let mainCpu = (cpuTime() - c0) * 1e3
   doAssert res.isOk()
+  db.release()
   (elapsed, mainCpu, res[].to(Hash32))
 
 proc median(xs: var seq[float]): float =
