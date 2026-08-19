@@ -106,27 +106,28 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
 
     proc engine_getPayloadV1(payloadId: Bytes8): ExecutionPayloadV1 {.async: (raises: [CancelledError, ApplicationError]).} =
       apiTiming("engine_getPayloadV1"):
-        return (await engine.getPayload(Version.V1, payloadId)).executionPayload.V1
+        let bundle = await engine.getPayload(Version.V1, payloadId)
+        bundle.executionPayload.V1
 
     proc engine_getPayloadV2(payloadId: Bytes8): GetPayloadV2Response {.async: (raises: [CancelledError, ApplicationError]).} =
       apiTiming("engine_getPayloadV2"):
-        return await engine.getPayload(Version.V2, payloadId)
+        await engine.getPayload(Version.V2, payloadId)
 
     proc engine_getPayloadV3(payloadId: Bytes8): GetPayloadV3Response {.async: (raises: [CancelledError, ApplicationError]).} =
       apiTiming("engine_getPayloadV3"):
-        return await engine.getPayloadV3(payloadId)
+        await engine.getPayloadV3(payloadId)
 
     proc engine_getPayloadV4(payloadId: Bytes8): GetPayloadV4Response {.async: (raises: [CancelledError, ApplicationError]).} =
       apiTiming("engine_getPayloadV4"):
-        return await engine.getPayloadV4(payloadId)
+        await engine.getPayloadV4(payloadId)
 
     proc engine_getPayloadV5(payloadId: Bytes8): GetPayloadV5Response {.async: (raises: [CancelledError, ApplicationError]).} =
       apiTiming("engine_getPayloadV5"):
-        return await engine.getPayloadV5(payloadId)
+        await engine.getPayloadV5(payloadId)
 
     proc engine_getPayloadV6(payloadId: Bytes8): GetPayloadV6Response {.async: (raises: [CancelledError, ApplicationError]).} =
       apiTiming("engine_getPayloadV6"):
-        return await engine.getPayloadV6(payloadId)
+        await engine.getPayloadV6(payloadId)
 
     proc engine_forkchoiceUpdatedV1(update: ForkchoiceStateV1,
                       attrs: Opt[PayloadAttributesV1]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
