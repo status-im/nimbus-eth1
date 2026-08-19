@@ -60,6 +60,10 @@ proc validate*[T: SnapAccount|StorageItem](
       return ok(db)
   err()
 
+proc rightMost*(db: NodeTrieRef): bool =
+  ## Returns `true` if there can be no more leafs to the right
+  db.atRightEnd
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

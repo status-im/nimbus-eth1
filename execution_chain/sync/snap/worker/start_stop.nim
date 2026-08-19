@@ -15,7 +15,7 @@ import
   pkg/[chronicles, metrics, minilru],
   ../../../networking/p2p,
   ../../wire_protocol,
-  ./[mpt, state_db, session, worker_desc]
+  ./[mpt, download, state_db, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -39,12 +39,18 @@ template setLastPeerSeen(ctx: SnapCtxRef) =
 proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ## Helper for `setup()`: Enable external call-back based services
 
-  # Set up accouning DB
-  ctx.pool.stateDB = StateDbRef.init()
+  # Initialise account range accounting
+  ctx.accUnproc.init ItemKeyRangeMax
+
+  # Set up accounts download metrics
+  ctx.accountDownloadMetricsReset()
 
   # Set up assembly DB
   ctx.pool.cacheDB = CacheDbRef.init(ctx.pool.baseDir,info).valueOr:
     return false
+
+  # Manage BAL fetching from eth peer
+  ctx.pool.failedEthBalId = EthBalHashSet.init ethBalFetchCapacity
 
   # Set up manual beacon target request. If set, there is no point in
   # waiting for inital CL to sed updates.
@@ -53,9 +59,6 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   # Set up ticker, disabled by default
   if ctx.pool.ticker.isNil:
     ctx.pool.ticker = proc(ctx: SnapCtxRef) = discard
-
-  # Initalise MPT bulder
-  ctx.sessionMkTrieInit()
 
   ctx.daemon = true                                 # disabled by default
   true
@@ -76,9 +79,6 @@ proc startSyncPeer*(buddy: SnapPeerRef): bool =
 
   # Initialise peer data
   buddy.only.peerType = buddy.peer.clientId.split('/',1)[0]
-  buddy.only.failedReq = PeerFirstFetchReq(
-    stateRoot:  StateRootSet.init stateDbCapacity,
-    ethBalHash: EthBalHashSet.init ethBalFetchCapacity)
 
   # Reset global register for fall-back peer
   ctx.pool.lastSlowPeer = Opt.none(Hash)

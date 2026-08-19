@@ -49,8 +49,7 @@ proc hasAccMissingIntv*(
     error info.failedToFetch "missing accounts state", `error`=error
     return err()
   if data.isNone():
-    error info & ": Missing accounts state, not on cache DB"
-    return err()
+    return ok(false)
   ok(0 < data.value.ranges.chunks)
 
 proc getAccMissingIntv*(
@@ -102,11 +101,10 @@ proc getFlatAcc*(
     db: CacheDbRef;
     accPath: Hash32;
     info: static[string];
-      ): Opt[Opt[CacheFlatAccData]] =
-  var data = db.getFlatAcc(accPath).valueOr:
+      ): Opt[CacheFlatAccData] =
+  db.getFlatAcc(accPath).valueOr:
     error info.failedToFetch "account", accPath=accPath.toStr, `error`=error
     return err()
-  ok(move data)
 
 proc putFlatAcc*(
     db: CacheDbRef;
@@ -121,6 +119,20 @@ proc putFlatAcc*(
   ok()
 
 proc putFlatAcc*(
+  db: CacheDbRef;
+  accPath: Hash32;
+  dirtyStorage: bool;
+  dirtyCode: bool;
+  account: Account;
+   info: static[string];
+    ): Opt[void] =
+  db.putFlatAcc(accPath, dirtyStorage, dirtyCode, account).isOkOr:
+    error info.failedUpdating "account", accPath=accPath.toStr,
+      dirtyStorage, dirtyCode, `error`=error
+    return err()
+  ok()
+
+proc putFlatAcc*(
     db: CacheDbRef;
     accPath: Hash32;
     dirtyStorage: bool;
@@ -130,7 +142,7 @@ proc putFlatAcc*(
       ): Opt[void] =
   db.putFlatAcc(accPath, dirtyStorage, dirtyCode, payload).isOkOr:
     error info.failedUpdating "account", accPath=accPath.toStr,
-      accPath=accPath.toStr, dirtyStorage, dirtyCode, `error`=error
+      dirtyStorage, dirtyCode, `error`=error
     return err()
   ok()
 
@@ -140,7 +152,7 @@ proc delFlatAcc*(
     info: static[string];
       ): Opt[void] =
   db.delFlatAcc(accPath).isOkOr:
-    error info.failedUpdating "account", accPath=accPath.toStr, `error`=error
+    error info.failedDeleting "account", accPath=accPath.toStr, `error`=error
     return err()
   ok()
 
@@ -209,18 +221,27 @@ proc putStoMissingIntv*(
     return err()
   ok()
 
+proc delStoMissingIntv*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.delStoMissingIntv(accPath).isOkOr:
+    error info.failedDeleting "storage slot", `error`=error
+    return err()
+  ok()
+
 
 proc getFlatSlot*(
     db: CacheDbRef;
     accPath: Hash32;
     slotKey: Hash32;
     info: static[string];
-      ): Opt[Opt[UInt256]] =
-  var data = db.getFlatSlot(accPath, slotKey).valueOr:
+      ): Opt[UInt256] =
+  db.getFlatSlot(accPath, slotKey).valueOr:
     error info.failedToFetch "storage slot", accPath=accPath.toStr,
       stoKey=slotKey.toStr, `error`=error
     return err()
-  ok(move data)
 
 proc putFlatSlot*(
     db: CacheDbRef;
@@ -304,6 +325,17 @@ proc putMissingBlob*(
       ): Opt[void] =
   db.putMissingBlob(accPath).isOkOr:
     error info.failedUpdating "missing contract code", accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc delMissingBlob*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.delMissingBlob(accPath).isOkOr:
+    error info.failedDeleting "missing contract code", accPath=accPath.toStr,
       `error`=error
     return err()
   ok()

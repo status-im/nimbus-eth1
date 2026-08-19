@@ -70,12 +70,12 @@ proc lastHeader*(db: CacheDbRef): OptHeaderResult =
     return err("")
   db.getHeader uint64.fromBytesBE data
 
-proc lastHeaderNumber*(db: CacheDbRef): BlockNumber =
+proc lastHeaderNumber*(db: CacheDbRef): OptNumberResult =
   let data = db.get9(cHeader, 0u64).valueOr:
-    return BlockNumber(0)
+    return err(error)
   if data.len != 8:
-    return BlockNumber(0)
-  uint64.fromBytesBE data
+    return ok(Opt.none(BlockNumber))
+  ok(Opt.some(uint64.fromBytesBE data))
 
 proc putHeader*(db: CacheDbRef, header: Header): PutResult =
   db.put9(cHeader, header.number, header.encodeHeader()).isOkOr:
@@ -124,12 +124,12 @@ proc getBal*(db: CacheDbRef, number: BlockNumber): OptBalResult =
     return err(error)
   ok(Opt.some(bal))
 
-proc lastBalNumber*(db: CacheDbRef): BlockNumber =
+proc lastBalNumber*(db: CacheDbRef): OptNumberResult =
   let data = db.get9(cBal, 0u64).valueOr:
-    return BlockNumber(0)
+    return err(error)
   if data.len != 8:
-    return BlockNumber(0)
-  uint64.fromBytesBE data
+    return ok(Opt.none(BlockNumber))
+  ok(Opt.some(uint64.fromBytesBE data))
 
 proc putBal*(
     db: CacheDbRef;

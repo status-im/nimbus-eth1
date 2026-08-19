@@ -38,11 +38,6 @@ type
   SnapCtxRef* = CtxRef[SnapCtxData,SnapPeerData]
     ## Extended global descriptor
 
-  StateRootSet* = LruCache[StateRoot,uint8]
-    ## Used for avoiding sending the same failed request twice. This data
-    ## structure is used as a self-cleaning hash set. The data argument is
-    ## unused.
-
   EthBalHashSet* = LruCache[Hash,Hash32]
     ## Eth peer list of failed block access lists
 
@@ -102,9 +97,8 @@ type
   PeerFirstFetchReq* = object
     ## Register fetch request. This is intended to avoid sending the same (or
     ## similar) fetch request again from the same peer that sent it previously.
-    stateRoot*: StateRootSet         ## Accounts fetch (per state root)
+    stateRoot*: StateRoot            ## Accounts fetch (per state root)
     balHash*: Hash32                 ## Last failed BAL
-    ethBalHash*: EthBalHashSet       ## Ditto for eth peers
 
   SnapPeerData* = object
     ## Local descriptor data extension
@@ -115,6 +109,7 @@ type
     peerType*: string                ## Self declared peer type
     failedReq*: PeerFirstFetchReq    ## Don't send the same failed request twice
     lastMsgLog*: Moment              ## Helps reducing logging noise
+    stateExhausted*: BlockNumber     ## Wait until state is forwarded
 
   SnapCtxData* = object
     ## Globally shared data extension
@@ -122,17 +117,22 @@ type
     contPrevSession*: bool           ## Request resuming previous session
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
     beaconTarget*: bool              ## inital beacon target if `true`
-    stateDB*: StateDbRef             ## Incomplete states DB
+    accUnproc*: UnprocItemKeys       ## Account download sync
     baseDir*: string                 ## Path for assembly database
     cacheDB*: CacheDbRef             ## Downloas and assembly cache database
-    pivot*: Opt[StateRoot]           ## Pivot root for analysys, healing, etc.
     headersSynced*: bool             ## beacon sync headers
+    pivotNum*: BlockNumber           ## Current appl;icable state block number
+    forwardNum*: BlockNumber         ## Max possible BALs forward
+    balsLocked*: SnapPeerRef         ## Only one peer can download BALs
+    failedEthBalId*: EthBalHashSet   ## Ditto for eth peers
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
     lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
-    lastSyncUpdLog*: chronos.Moment  ## Control update messages
+    lastNoHdrsLog*: chronos.Moment   ## Control update messages
+    lastMaxHdrsLog*: chronos.Moment  ## Control update messages
+    lockedBalsLog*: chronos.Moment   ## Control messages about missing peers
     ticker*: Ticker                  ## Ticker function to run in background
 
 # ------------------------------------------------------------------------------
@@ -146,6 +146,10 @@ func chain*(ctx: SnapCtxRef): ForkedChainRef =
 func hdrCache*(ctx: SnapCtxRef): HeaderChainRef =
   ## Getter
   ctx.pool.beaconSync.ctx.pool.hdrCache
+
+func accUnproc*(ctx: SnapCtxRef): var UnprocItemKeys =
+  ## Getter
+  ctx.pool.accUnproc
 
 func beaconInitTarget*(ctx: SnapCtxRef): bool =
   ## Getter
@@ -175,14 +179,17 @@ proc getSnapPeer*(buddy: SnapPeerRef; peerID: Hash): SnapPeerRef =
   ## Getter, retrieve syncer peer (aka buddy) by `peerID` argument.
   if buddy.peerID == peerID: buddy else: buddy.ctx.getSyncPeer peerID
 
-proc getEthPeer*(buddy: SnapPeerRef): BeaconPeerRef =
+proc getEthPeer*(buddy: SnapPeerRef): Opt[BeaconPeerRef] =
   ## Get the `eth` peer context for the current peer. This context is needed
   ## for running `eth` protocol requests.
-  buddy.ctx.pool.beaconSync.ctx.getSyncPeer buddy.peerID
+  let ethPeer = buddy.ctx.pool.beaconSync.ctx.getSyncPeer buddy.peerID
+  if ethPeer.isNil:
+    return err()
+  ok(ethPeer)
 
-proc getEthPeers*(buddy: SnapPeerRef): seq[BeaconPeerRef] =
+proc getEthPeers*(ctx: SnapCtxRef): seq[BeaconPeerRef] =
   ##  Get all `eth` peer contexts available at the current time
-  buddy.ctx.pool.beaconSync.ctx.getSyncPeers()
+  ctx.pool.beaconSync.ctx.getSyncPeers()
 
 proc nEthPeers*(ctx: SnapCtxRef): int =
   ## Shortcut for `buddy.getSyncPeers().len`
