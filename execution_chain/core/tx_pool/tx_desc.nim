@@ -13,10 +13,10 @@
 import
   chronicles,
   metrics,
-  std/[times, tables],
+  std/[times, tables, typetraits],
   eth/eip1559,
   eth/common/transaction_utils,
-  stew/sorted_set,
+  stew/[sorted_set, bitseqs],
   web3/engine_api_types,
   ../../common/common,
   ../../evm/state,
@@ -525,6 +525,43 @@ func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2] =
         proofs: getProofs(np.proofs, val.blobIndex)))
 
   Opt.none(BlobAndProofV2)
+
+proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: BitArray[128]): Opt[BlobCellsAndProofsV1] =
+  type
+    KzgProof = engine_api_types.KzgProof
+    KzgCells = eip4844.KzgCells
+
+  func getCellsAndProofs(indices: BitArray[128],
+                         cells: KzgCells,
+                         list: openArray[KzgProof],
+                         index: int,
+                         output: var BlobCellsAndProofsV1) =
+    let
+      startIndex = index * CELLS_PER_EXT_BLOB
+      endIndex   = startIndex + CELLS_PER_EXT_BLOB
+    doAssert(list.len >= endIndex)
+
+    for i in 0..<indices.len:
+      if indices[i]:
+        output.proofs[i] = Opt.some(list[startIndex + i])
+        output.cells[i] = Opt.some(@(cells[i].bytes))
+
+  xp.blobTab.withValue(v, val):
+    let
+      np = val.item.pooledTx.blobsBundle
+      blob = cast[ptr eip4844.KzgBlob](np.blobs[val.blobIndex].addr)
+      cells = computeCells(blob[]).valueOr:
+        return Opt.none(BlobCellsAndProofsV1)
+    if np.wrapperVersion == WrapperVersionEIP7594:
+      var res = Opt.some(BlobCellsAndProofsV1())
+      indicesBitarray.getCellsAndProofs(
+        cells, np.proofs,
+        val.blobIndex,
+        res.value
+      )
+      return res
+
+  Opt.none(BlobCellsAndProofsV1)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters
