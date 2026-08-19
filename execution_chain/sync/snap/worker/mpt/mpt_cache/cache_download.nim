@@ -54,7 +54,7 @@ import
   pkg/[eth/common, results],
   ../../../../wire_protocol/snap/snap_types,
   ../../state_db,
-  ../mpt_desc,
+  ../mpt_build/build_desc,
   ./[cache_api1, cache_api65, cache_api97,
      cache_const, cache_desc, cache_iter, cache_rlp]
 

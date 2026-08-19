@@ -267,11 +267,12 @@ func blockNumber*(vmState: BaseVMState): BlockNumber =
   vmState.parent.number + 1
 
 proc proofOfStake*(vmState: BaseVMState): bool =
-  vmState.com.proofOfStake(Header(
-    number: vmState.blockNumber,
-    parentHash: vmState.blockCtx.parentHash,
-    difficulty: vmState.blockCtx.difficulty,
-  ), vmState.ledger.txFrame)
+  vmState.fork >= FkShanghai or
+    vmState.com.proofOfStake(Header(
+      number: vmState.blockNumber,
+      parentHash: vmState.blockCtx.parentHash,
+      difficulty: vmState.blockCtx.difficulty,
+    ), vmState.ledger.txFrame)
 
 proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
   if vmState.proofOfStake():
@@ -286,6 +287,9 @@ method getAncestorHash*(
 
 proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
   ReadOnlyLedger(vmState.ledger)
+
+func collectWitness*(vmState: BaseVMState): bool =
+  vmState.ledger.collectWitness
 
 template mutateLedger*(vmState: BaseVMState, body: untyped): untyped =
   block:

@@ -39,13 +39,13 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc hasHeader*(db: CacheDbRef, bn = BlockNumber(0)): BoolResult =
-  let data = db.get9(cHeader, bn).valueOr:
+proc hasHeader*(db: CacheDbRef, number = BlockNumber(0)): BoolResult =
+  let data = db.get9(cHeader, number).valueOr:
     return err(error)
   ok(0 < data.len)
 
-proc getHeader*(db: CacheDbRef, bn: BlockNumber): OptHeaderResult =
-  let data = db.get9(cHeader, bn).valueOr:
+proc getHeader*(db: CacheDbRef, number: BlockNumber): OptHeaderResult =
+  let data = db.get9(cHeader, number).valueOr:
     return err(error)
   if data.len == 0:
     return ok(Opt.none(Header))
@@ -53,11 +53,11 @@ proc getHeader*(db: CacheDbRef, bn: BlockNumber): OptHeaderResult =
     return err(error)
   ok Opt.some(hdr)
 
-proc getBlockHash*(db: CacheDbRef, bn: BlockNumber): OptHashResult =
-  db.getHeader(bn + 1).isErrOr:
+proc getBlockHash*(db: CacheDbRef, number: BlockNumber): OptHashResult =
+  db.getHeader(number + 1).isErrOr:
     if value.isSome():
       return ok Opt.some(value.unsafeGet.parentHash)
-  let hdr = db.getHeader(bn).valueOr:
+  let hdr = db.getHeader(number).valueOr:
     return err(error)
   if hdr.isNone():
     return ok Opt.none(Hash32)
@@ -70,7 +70,7 @@ proc lastHeader*(db: CacheDbRef): OptHeaderResult =
     return err("")
   db.getHeader uint64.fromBytesBE data
 
-proc lastNumber*(db: CacheDbRef): BlockNumber =
+proc lastHeaderNumber*(db: CacheDbRef): BlockNumber =
   let data = db.get9(cHeader, 0u64).valueOr:
     return BlockNumber(0)
   if data.len != 8:
@@ -105,6 +105,7 @@ iterator walkHeader*(db: CacheDbRef): WalkHeader =
       oops.error = error
       yield oops
       continue
+    doAssert key == header.number                   # FIXME, will go away
     yield (header,"")
 
 # -------------
@@ -114,8 +115,8 @@ proc hasBal*(db: CacheDbRef, bn = BlockNumber(0)): BoolResult =
     return err(error)
   ok(0 < data.len)
 
-proc getBal*(db: CacheDbRef, bn: BlockNumber): OptBalResult =
-  let data = db.get9(cBal, bn).valueOr:
+proc getBal*(db: CacheDbRef, number: BlockNumber): OptBalResult =
+  let data = db.get9(cBal, number).valueOr:
     return err(error)
   if data.len == 0:
     return ok(Opt.none(BlockAccessListRef))
@@ -123,12 +124,21 @@ proc getBal*(db: CacheDbRef, bn: BlockNumber): OptBalResult =
     return err(error)
   ok(Opt.some(bal))
 
+proc lastBalNumber*(db: CacheDbRef): BlockNumber =
+  let data = db.get9(cBal, 0u64).valueOr:
+    return BlockNumber(0)
+  if data.len != 8:
+    return BlockNumber(0)
+  uint64.fromBytesBE data
+
 proc putBal*(
     db: CacheDbRef;
-    bn: BlockNumber;
+    number: BlockNumber;
     bal: BlockAccessListRef;
       ): PutResult =
-  db.put9(cBal, bn, bal.encodeBal()).isOkOr:
+  db.put9(cBal, number, bal.encodeBal()).isOkOr:
+    return err(error)
+  db.put9(cBal, 0u64, uint64(number).toBytesBE()).isOkOr:
     return err(error)
   ok()
 

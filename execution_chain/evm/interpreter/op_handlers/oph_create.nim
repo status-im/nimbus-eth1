@@ -38,40 +38,72 @@ import
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc postExecutionCreate(c: Computation, child: Computation, newAccountCharged: bool) =
+  if child.shouldBurnGas:
+    c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed + child.gasMeter.gasRemaining)
+  else:
+    c.gasMeter.returnGas(child.gasMeter.gasRemaining)
+    c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
+
+  if child.isSuccess:
+    if c.fork >= FkAmsterdam:
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+      c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
+      c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
+    c.merge(child)
+    c.stack.lsTop child.msg.contractAddress
+  else:
+    if c.fork >= FkAmsterdam:
+      c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
+      if newAccountCharged:
+        c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
+
+    if not child.error.burnsGas: # Means return was `REVERT`.
+      # From create, only use `outputData` if child returned with `REVERT`.
+      c.returnData = move(child.output)
+
 proc execSubCreate(c: Computation; childMsg: Message;
-                   code: CodeBytesRef) =
+                   code: CodeBytesRef): EvmResultVoid =
   ## Create new VM -- helper for `Create`-like operations
 
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
   var
     child = newComputation(c.vmState, keepStack = false, childMsg, code)
+    newAccountCharged = false
+
+  if not child.incrementNonce():
+    postExecutionCreate(c, child, newAccountCharged)
+    child.dispose()
+    return ok()
+
+  if c.fork >= FkAmsterdam:
+    newAccountCharged = not c.accountExists(child.msg.contractAddress)
+    if newAccountCharged:
+      c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "Create op new account").isOkOr:
+        child.dispose()
+        return err(error)
+
+  var createMsgGas = c.gasMeter.gasRemaining
+  if c.fork >= FkTangerine:
+    createMsgGas -= createMsgGas div 64
+  c.gasMeter.gasRemaining -= createMsgGas
+  child.msg.gas = createMsgGas
+  child.gasMeter.gasRemaining = createMsgGas
+
+  if not child.accountDeployable():
+    postExecutionCreate(c, child, newAccountCharged)
+    child.dispose()
+    return ok()
+
+  child.msg.stateGasReservoir = c.gasMeter.stateGasLeft
+  child.gasMeter.stateGasLeft = c.gasMeter.stateGasLeft
+  c.gasMeter.stateGasLeft = 0.GasInt
 
   c.chainTo(child):
-    if child.shouldBurnGas:
-      c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed + child.gasMeter.gasRemaining)
-    else:
-      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-      c.gasMeter.appendRegularGasUsed(child.gasMeter.regularGasUsed)
-
-    if child.isSuccess:
-      if c.fork >= FkAmsterdam:
-        c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
-        c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
-        c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
-        if MsgFlags.TargetAlive in child.msg.flags:
-          c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
-      c.merge(child)
-      c.stack.lsTop child.msg.contractAddress
-    else:
-      if c.fork >= FkAmsterdam:
-        c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
-        # https://github.com/ethereum/execution-specs/pull/2733/changes
-        c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
-
-      if not child.error.burnsGas: # Means return was `REVERT`.
-        # From create, only use `outputData` if child returned with `REVERT`.
-        c.returnData = move(child.output)
+    postExecutionCreate(c, child, newAccountCharged)
     ok()
+
+  ok()
 
 
 # ------------------------------------------------------------------------------
@@ -115,11 +147,6 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
       if memLen > EIP7954_MAX_INITCODE_SIZE:
         trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
         return err(opErr(InvalidInitCode))
-
-      # Charge state gas after initcode size validation
-      # https://github.com/ethereum/execution-specs/commit/b9f0afa931a773cdb764310035d0ff383ebecf9e
-      ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
-        reason = "CREATE: State gas new account")
     elif memLen > EIP3860_MAX_INITCODE_SIZE:
       # EIP-3860
       trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
@@ -133,9 +160,6 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
       reason = "Stack too deep",
       maxDepth = MaxCallDepth,
       depth = cpt.msg.depth
-    # https://github.com/ethereum/execution-specs/pull/2733/changes
-    if cpt.fork >= FkAmsterdam:
-      cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     return ok()
 
   if endowment.isZero.not:
@@ -145,33 +169,20 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
         reason = "Insufficient funds available to transfer",
         required = endowment,
         balance = senderBalance
-      # https://github.com/ethereum/execution-specs/pull/2733/changes
-      if cpt.fork >= FkAmsterdam:
-        cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
       return ok()
 
-  var createMsgGas = cpt.gasMeter.gasRemaining
-  if cpt.fork >= FkTangerine:
-    createMsgGas -= createMsgGas div 64
-  cpt.gasMeter.gasRemaining -= createMsgGas
-
-  let stateGas = cpt.gasMeter.stateGasLeft
-  cpt.gasMeter.stateGasLeft = 0.GasInt
-
   var
-    childMsg = Message(
-      kind:   CallKind.Create,
-      depth:  cpt.msg.depth + 1,
-      gas:    createMsgGas,
-      stateGas: stateGas,
-      sender: cpt.msg.contractAddress,
-      contractAddress: generateContractAddress(
-        cpt.vmState,
-        cpt.msg.contractAddress),
-      value:  endowment)
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
+    childMsg = Message(
+      kind:              CallKind.Create,
+      depth:             cpt.msg.depth + 1,
+      sender:            cpt.msg.contractAddress,
+      value:             endowment,
+      contractAddress:   generateContractAddress(
+                           cpt.vmState,
+                           cpt.msg.contractAddress),
+      )
   cpt.execSubCreate(childMsg, code)
-  ok()
 
 # ---------------------
 
@@ -215,11 +226,6 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       if memLen > EIP7954_MAX_INITCODE_SIZE:
         trace "Initcode size exceeds EIP-7954 maximum", initcodeSize = memLen
         return err(opErr(InvalidInitCode))
-
-      # Charge state gas after initcode size validation
-      # https://github.com/ethereum/execution-specs/commit/b9f0afa931a773cdb764310035d0ff383ebecf9e
-      ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
-        reason = "CREATE2: State gas new account")
     elif memLen > EIP3860_MAX_INITCODE_SIZE:
       # EIP-3860
       trace "Initcode size exceeds EIP-3860 maximum", initcodeSize = memLen
@@ -233,9 +239,6 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       reason = "Stack too deep",
       maxDepth = MaxCallDepth,
       depth = cpt.msg.depth
-    # https://github.com/ethereum/execution-specs/pull/2733/changes
-    if cpt.fork >= FkAmsterdam:
-      cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     return ok()
 
   if endowment.isZero.not:
@@ -245,34 +248,21 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
         reason = "Insufficient funds available to transfer",
         required = endowment,
         balance = senderBalance
-      # https://github.com/ethereum/execution-specs/pull/2733/changes
-      if cpt.fork >= FkAmsterdam:
-        cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
       return ok()
-
-  var createMsgGas = cpt.gasMeter.gasRemaining
-  if cpt.fork >= FkTangerine:
-    createMsgGas -= createMsgGas div 64
-  cpt.gasMeter.gasRemaining -= createMsgGas
-
-  let stateGas = cpt.gasMeter.stateGasLeft
-  cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
     childMsg = Message(
-      kind:   CallKind.Create2,
-      depth:  cpt.msg.depth + 1,
-      gas:    createMsgGas,
-      stateGas: stateGas,
-      sender: cpt.msg.contractAddress,
-      contractAddress: generateSafeAddress(
-        cpt.msg.contractAddress,
-        salt,
-        code.bytes),
-      value:  endowment)
+      kind:              CallKind.Create2,
+      depth:             cpt.msg.depth + 1,
+      sender:            cpt.msg.contractAddress,
+      value:             endowment,
+      contractAddress:   generateSafeAddress(
+                           cpt.msg.contractAddress,
+                           salt,
+                           code.bytes),
+      )
   cpt.execSubCreate(childMsg, code)
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

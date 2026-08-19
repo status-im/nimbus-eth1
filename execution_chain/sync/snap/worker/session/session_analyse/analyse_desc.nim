@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, chronos, eth/common],
+  pkg/[chronicles, chronos, eth/common, eth/trie/nibbles],
   pkg/stew/[byteutils, interval_set],
   ../../[mpt, helpers, state_db, worker_desc]
 
@@ -29,6 +29,7 @@ type
     ENoRoot                                         # dangling root key
     ENoBranch                                       # missing branches
     ENoPivot                                        # no pivot state
+    ENoPivotNum                                     # ..
     ECancelled                                      # shutdown?
     EGetError                                       # serious database problem?
     EClearError                                     # ..
@@ -36,20 +37,6 @@ type
     EAristoError                                    # incomplete import?
     EPartialMpt
     EOtherError                                     # any other error
-
-  OnDanglingCB* = proc(
-      base: Hash32; key, path: openArray[byte]) {.gcsafe, raises:[].}
-    ## Closure function to perform bespoke actions when a dangling link or
-    ## a completely missing sub-MPT is found.
-
-  TravNotifyCB* = proc(
-      att: AttType, base: Hash32, path: NibblesBuf, key, data: openArray[byte],
-      depth: int) {.gcsafe, raises: [].}
-    ## Internal closure function used as call back when analysing an MPT.
-    ## This function is involved whenever there is something *interesting*
-    ## found (e.g. dangling link, leaf node.)
-    ##
-    ## Intended for debugging, mainly
 
   # ----------
 
@@ -97,24 +84,13 @@ template toKey*(rlp: Rlp): seq[byte] =
   ## Convert to hask key or node data if it is a list (=> length smaller 32)
   if rlp.isList: @(rlp.rawData) else: rlp.toBytes
 
-proc nMissAccRanges*(trd: TravDescRef, info: static[string]): (UInt256,int) =
-  let
-    maybe = trd.db.getAccMissingIntv().valueOr:
-      error info & ": Error retrieving account ranges", `error`=error
-      return (0.u256,-1)
-    (_,rng) = maybe.valueOr:
-      return (0.u256,0)
-  (rng.total(),rng.chunks())
-
 proc putAccMissingIntv*(
     trd: TravDescRef;
-    stateRoot: StateRoot;
+    number: BlockNumber;
     ranges: ItemKeyRangeSet;
     info: static[string];
       ) =
-  trd.db.putAccMissingIntv(stateRoot, ranges).isOkOr:
-    error info & ": Error caching storage account ranges",
-      stateRoot=stateRoot.toStr, ranges=ranges.total.per256.pcStr, `error`=error
+  trd.db.putAccMissingIntv(number, ranges, info).isOkOr:
     trd.cacheErr.inc
 
 proc putStoMissingIntv*(
@@ -123,9 +99,7 @@ proc putStoMissingIntv*(
     ranges: ItemKeyRangeSet;
     info: static[string];
       ) =
-  trd.db.putStoMissingIntv(accPath, ranges).isOkOr:
-    error info & ": Error caching missing storage slot ranges",
-      accPath=accPath.toStr, ranges=ranges.total.per256.pcStr, `error`=error
+  trd.db.putStoMissingIntv(accPath, ranges, info).isOkOr:
     trd.cacheErr.inc
 
 proc putMissingBlob*(
@@ -133,21 +107,19 @@ proc putMissingBlob*(
     accPath: Hash32;
     info: static[string];
       ) =
-  trd.db.putMissingBlob(accPath).isOkOr:
-    error info & ": Error caching missing contract closde",
-      accPath=accPath.toStr, `error`=error
+  trd.db.putMissingBlob(accPath, info).isOkOr:
     trd.cacheErr.inc
 
 
 proc putFlatAcc*(
     trd: TravDescRef;
     accPath: Hash32;
+    dirtyStorage: bool;
+    dirtyCode: bool;
     payload: openArray[byte];
     info: static[string];
       ) =
-  trd.db.putFlatAcc(accPath, payload).isOkOr:
-    error info & ": Error caching account data",
-      accPath=accPath.toStr, payload=payload.toHex, `error`=error
+  trd.db.putFlatAcc(accPath, dirtyStorage, dirtyCode, payload, info).isOkOr:
     trd.cacheErr.inc
 
 proc putFlatSlot*(
@@ -157,10 +129,7 @@ proc putFlatSlot*(
     payload: openArray[byte];
     info: static[string];
       ) =
-  trd.db.putFlatSlot(accPath, slotKey, payload).isOkOr:
-    error info & ": Error caching flat storage slot data",
-      accPath=accPath.toStr, slotKey=slotKey.toStr, payload=payload.toHex,
-      `error`=error
+  trd.db.putFlatSlot(accPath, slotKey, payload, info).isOkOr:
     trd.cacheErr.inc
 
 proc putFlatCode*(
@@ -169,9 +138,7 @@ proc putFlatCode*(
     data: openArray[byte];
     info: static[string];
       ) =
-  trd.db.putFlatCode(accPath, data).isOkOr:
-    error info & ": Error caching contract code data",
-      accPath=accPath.toStr, codeData=data.toHex, `error`=error
+  trd.db.putFlatCode(accPath, data, info).isOkOr:
     trd.cacheErr.inc
 
 # ------------------------------------------------------------------------------
@@ -190,7 +157,7 @@ template traversingStorageMsg*(
     stats: WalkStats;
     info: static[string];
       ): untyped =
-  trace info & ": Collecting storage slots..",
+  trace info & ": While collecting storage slots..",
     nMissing=stats.nStoMissing, nDangl=stats.nStoDangl, nSlots=stats.nStoLeaf,
     nDepth=stats.nStoDepth, nErr=stats.nStoErr
 
@@ -198,14 +165,14 @@ template traversingCodeMsg*(
     stats: WalkStats;
     info: static[string];
       ): untyped =
-  trace info & ": Collecting codes..",
+  trace info & ": While collecting codes..",
     nMissing=stats.nCodeMissing, nCodes=stats.nAccCode
 
 template traversingAccountsMsg*(
     stats: WalkStats;
     info: static[string];
       ): untyped =
-  trace info & ": Collecting accounts..",
+  trace info & ": While collecting accounts..",
     nDangl=stats.nAccDangl, nAccount=stats.nAccLeaf, nDepth=stats.nAccDepth,
     nStorage=stats.nAccSto, nCode=stats.nAccCode, nErr=stats.nAccErr
 

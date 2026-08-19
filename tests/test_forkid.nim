@@ -96,7 +96,7 @@ template runComputeForkIdTest(network: untyped, name: string) =
   test name & " Compute ForkId test":
     var
       params = networkParams(network)
-      com    = CommonRef.new(newCoreDbRef DefaultDbMemory, network, params)
+      com    = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
 
     for x in `network IDs`:
       let computedId = com.forkId(x.number, x.time)
@@ -329,7 +329,7 @@ proc runCompatibleForkIdTest() =
     for testcase in ValidationTests:
       var
         params = networkParams(testcase.config)
-        com = CommonRef.new(newCoreDbRef DefaultDbMemory, testcase.config, params)
+        com = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
 
       let fid = ForkId(hash: testcase.id.hash.to(Bytes4), next: testcase.id.next)
       let compatible = com.compatibleForkId(fid, BlockNumber(testcase.head), EthTime(testcase.time))

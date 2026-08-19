@@ -36,6 +36,9 @@ import
   ./op/op_frontend,
   ../execution_chain/version_info
 
+logScope:
+  topics = "vp_main"
+
 # error object to translate results to error
 # NOTE: all results are translated to errors only in this file
 # to allow effective usage of verified proxy code in other projects
@@ -57,15 +60,16 @@ proc startExecutionBackends(
 
   for url in urls:
     let client = JsonRpcClient.init(url).valueOr:
-      error "Error initializing backend client", error = error.errMsg
+      error "Error initializing backend client", err = error.errMsg
       continue
 
     let startRes = await client.start()
     if startRes.isErr():
-      error "Error connecting to backend", url = url, error = startRes.error.errMsg
+      error "Error connecting to backend", url = url, err = startRes.error.errMsg
       continue
 
     engine.registerBackend(client.getExecutionApiBackend(), caps)
+    info "Connected to execution backend", url
     clients.add(client)
 
   if clients.len == 0:
@@ -79,19 +83,20 @@ proc startPrivateTxBackends(
   var clients: seq[JsonRpcClient] = @[]
   for url in urls:
     let client = JsonRpcClient.init(url).valueOr:
-      error "Error initializing private tx client", error = error.errMsg
+      error "Error initializing private tx client", err = error.errMsg
       continue
 
     let startRes = await client.start()
 
     if startRes.isErr():
       error "Error connecting to private tx backend",
-        url = url, error = startRes.error.errMsg
+        url = url, err = startRes.error.errMsg
       continue
 
     engine.registerBackend(
       client.getExecutionApiBackend(), BackendCapabilities({SendRawTransaction})
     )
+    info "Connected to private tx backend", url
     clients.add(client)
 
   if clients.len == 0:
@@ -107,10 +112,11 @@ proc startBeaconBackends(
 
     let startRes = client.start()
     if startRes.isErr():
-      error "Error connecting to backend", url = url, error = startRes.error.errMsg
+      error "Error connecting to backend", url = url, err = startRes.error.errMsg
       continue
 
     engine.registerBackend(client.getBeaconApiBackend(), fullBeaconCapabilities)
+    info "Connected to beacon backend", url
     clients.add(client)
 
   if clients.len == 0:
@@ -157,7 +163,7 @@ proc startFrontends(
 
   for url in urls:
     let server = JsonRpcServer.init(url).valueOr:
-      error "Error initializing frontend server", error = error.errMsg
+      error "Error initializing frontend server", err = error.errMsg
       continue
 
     # inject frontend
@@ -165,9 +171,10 @@ proc startFrontends(
 
     let status = server.start()
     if status.isErr():
-      error "Error starting frontend server", error = status.error.errMsg
+      error "Error starting frontend server", err = status.error.errMsg
       continue
 
+    info "JSON-RPC frontend serving", url
     servers.add(server)
 
   if servers.len == 0:
@@ -209,6 +216,7 @@ proc run(
       chainId: l1ChainId,
       eth2Network: some(l1NetworkName),
       maxBlockWalk: config.maxBlockWalk,
+      maxWindowJumps: config.maxWindowJumps,
       headerStoreLen: config.headerStoreLen,
       accountCacheLen: config.accountCacheLen,
       codeCacheLen: config.codeCacheLen,
@@ -228,13 +236,15 @@ proc run(
   if (config.beaconApiUrls.len <= 0) and (not config.p2pEnabled):
     raise newException(ProxyError, "Need atleast one beacon url or p2p enabled")
 
-  let usePrivateTx = config.privateTxUrls.len > 0
+  let
+    usePrivateTx = config.privateTxUrls.len > 0
+    useArchive = config.archiveUrls.len > 0
 
-  let regularCaps =
-    if usePrivateTx:
-      fullExecutionCapabilities - {SendRawTransaction}
-    else:
-      fullExecutionCapabilities
+  var regularCaps = fullExecutionCapabilities
+  if usePrivateTx:
+    regularCaps.excl(SendRawTransaction)
+  if useArchive:
+    regularCaps.excl(GetProof)
 
   let privateTxClients =
     if usePrivateTx:
@@ -242,8 +252,16 @@ proc run(
     else:
       @[]
 
+  let archiveClients =
+    if useArchive:
+      await startExecutionBackends(engine, config.archiveUrls, {GetProof})
+    else:
+      @[]
+
   let execBackendClients =
     await startExecutionBackends(engine, config.executionApiUrls, regularCaps)
+
+  engine.state = EngineState(archive: useArchive)
   let beaconBackendClients =
     if config.beaconApiUrls.len > 0:
       await startBeaconBackends(engine, config.beaconApiUrls)
@@ -282,6 +300,7 @@ proc run(
       chainId = value.l2ChainId,
       networkId = l2NetworkId,
       maxBlockWalk = config.maxBlockWalk,
+      maxWindowJumps = config.maxWindowJumps,
       parallelBlockDownloads = config.parallelBlockDownloads,
       headerStoreLen = config.headerStoreLen,
       accountCacheLen = config.accountCacheLen,
@@ -290,6 +309,8 @@ proc run(
       anchor = blockId("safe"),
     ).valueOr:
       raise newException(ProxyError, "Couldn't initialize OP verification engine")
+
+    l2Engine.eip2935ForkTime = value.eip2935ForkTime
 
     opExecBackendClients = await startExecutionBackends(
       l2Engine, config.opExecutionApiUrls, fullExecutionCapabilities
@@ -304,12 +325,12 @@ proc run(
 
       let syncRes = await engine.syncOnce()
       if syncRes.isErr():
-        error "LC sync failed", error = syncRes.error.errMsg
+        error "LC sync failed", err = syncRes.error.errMsg
 
       opParams.isErrOr:
         let opRes = await l2Engine.opSyncOnce(engine)
         if opRes.isErr():
-          error "OP sync failed", error = opRes.error.errMsg
+          error "OP sync failed", err = opRes.error.errMsg
   except CancelledError as e:
     debug "proxy loop cancelled"
     for s in frontendServers:
@@ -323,6 +344,8 @@ proc run(
     for c in beaconBackendClients:
       await c.stop()
     for c in privateTxClients:
+      await c.stop()
+    for c in archiveClients:
       await c.stop()
     if p2pBackend.isSome():
       await p2pBackend.get().stop()
@@ -360,8 +383,8 @@ when isMainModule:
   except CancelledError:
     notice "Shutdown complete"
   except ProxyError as e:
-    fatal "Proxy error", error = e.msg
+    fatal "Proxy error", err = e.msg
     quit QuitFailure
   except CatchableError as e:
-    fatal "Unexpected error", error = e.msg
+    fatal "Unexpected error", err = e.msg
     quit QuitFailure

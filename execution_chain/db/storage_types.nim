@@ -23,7 +23,7 @@ type
     canonicalHeadHash = 4
     slotHashToSlot = 5
     contractHash = 6
-    dataDirId = 7
+    dataDirId = 7 # Deprecated - keep to avoid reuse which might breaking existing databases
     fcuNumAndHash = 8
     fcState = 9
     beaconHeader = 10
@@ -33,6 +33,7 @@ type
     tail = 14
     prunerState = 15
     txFrame = 16
+    balTail = 17
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -66,16 +67,16 @@ func canonicalHeadHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(canonicalHeadHash)
   result.dataEndPos = 1
 
-func dataDirIdKey*(): DbKey {.inline.} =
-  result.data[0] = byte ord(dataDirId)
-  result.dataEndPos = 1
-
 func tailIdKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(tail)
   result.dataEndPos = 1
 
 func prunerStateKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(prunerState)
+  result.dataEndPos = 1
+
+func balTailKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(balTail)
   result.dataEndPos = 1
 
 func txFrameKey*(h: Hash32): DbKey {.inline.} =

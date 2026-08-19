@@ -254,6 +254,8 @@ proc generateVMProxy(masm: MacroAssembler): VMProxy =
     vmProxyProc = quote do:
       proc `vmProxySym`(): bool =
         let `vmState` = initVMEnv(`fork`)
+        defer:
+          `vmState`.dispose()
         `setup`
         let boa = `body`
         runVM(`vmState`, boa)
@@ -279,7 +281,7 @@ const
 
 proc initVMEnv*(network: string): BaseVMState =
   let
-    conf = getChainConfig(network)
+    conf = getChainConfig(network).expect("ok")
     cdb = DefaultDbMemory.newCoreDbRef()
     com = CommonRef.new(
       cdb,

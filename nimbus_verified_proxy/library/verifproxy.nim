@@ -7,6 +7,7 @@
 
 import
   chronos,
+  chronicles,
   std/[json, options, strutils],
   stint,
   web3/eth_api_types,
@@ -32,6 +33,9 @@ import
 
 import ./c_frontend
 export c_frontend
+
+logScope:
+  topics = "vp_main"
 
 {.pragma: exported, cdecl, exportc, dynlib, raises: [].}
 
@@ -112,6 +116,17 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         raise newException(
           ProxyError, "Couldn't parse `privateTxUrls` from JSON config: " & e.msg
         )
+    archiveUrls =
+      try:
+        let rawUrls = jsonNode.getOrDefault("archiveUrls").getStr("")
+        if rawUrls.len == 0:
+          UrlList(@[])
+        else:
+          parseCmdArg(UrlList, rawUrls)
+      except ValueError as e:
+        raise newException(
+          ProxyError, "Couldn't parse `archiveUrls` from JSON config: " & e.msg
+        )
     opExecutionApiUrls =
       try:
         let rawUrls = jsonNode.getOrDefault("opExecutionApiUrls").getStr("")
@@ -132,6 +147,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       of "Auto": StdoutLogKind.Auto
       else: StdoutLogKind.None
     maxBlockWalk = jsonNode.getOrDefault("maxBlockWalk").getBiggestInt(1000)
+    maxWindowJumps = jsonNode.getOrDefault("maxWindowJumps").getBiggestInt(500)
     prllBlkDwnlds = jsonNode.getOrDefault("parallelBlockDownloads").getBiggestInt(10)
     maxLcUpdates = jsonNode.getOrDefault("maxLightClientUpdates").getBiggestInt(128)
     headerStoreLen = jsonNode.getOrDefault("headerStoreLen").getInt(256)
@@ -158,6 +174,11 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
         uint64(0)
       else:
         uint64(maxBlockWalk),
+    maxWindowJumps:
+      if maxWindowJumps < 0:
+        uint64(0)
+      else:
+        uint64(maxWindowJumps),
     headerStoreLen: headerStoreLen,
     storageCacheLen: storageCacheLen,
     codeCacheLen: codeCacheLen,
@@ -173,6 +194,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
       else:
         uint64(maxLcUpdates),
     privateTxUrls: privateTxUrls,
+    archiveUrls: archiveUrls,
     opExecutionApiUrls: opExecutionApiUrls,
     syncHeaderStore: syncHeaderStore,
     freezeAtSlot: freezeAtSlot,
@@ -209,6 +231,7 @@ proc run*(
       chainId: l1ChainId,
       eth2Network: some(l1NetworkName),
       maxBlockWalk: config.maxBlockWalk,
+      maxWindowJumps: config.maxWindowJumps,
       headerStoreLen: config.headerStoreLen,
       accountCacheLen: config.accountCacheLen,
       codeCacheLen: config.codeCacheLen,
@@ -224,12 +247,13 @@ proc run*(
       raise newException(ProxyError, error.errMsg)
 
     usePrivateTx = config.privateTxUrls.len > 0
+    useArchive = config.archiveUrls.len > 0
 
-    regularCaps =
-      if usePrivateTx:
-        fullExecutionCapabilities - {SendRawTransaction}
-      else:
-        fullExecutionCapabilities
+  var regularCaps = fullExecutionCapabilities
+  if usePrivateTx:
+    regularCaps.excl(SendRawTransaction)
+  if useArchive:
+    regularCaps.excl(GetProof)
 
   for url in config.beaconApiUrls:
     if beaconTransportProc != nil:
@@ -240,10 +264,11 @@ proc run*(
       let client = BeaconApiRestClient.init(engine.cfg, engine.forkDigests, url)
       let startRes = client.start()
       if startRes.isErr():
-        warn "Error connecting to beacon backend",
-          url = url, error = startRes.error.errMsg
+        warn "Retrying beacon backend connection",
+          url = url, err = startRes.error.errMsg
         continue
       engine.registerBackend(client.getBeaconApiBackend(), fullBeaconCapabilities)
+      info "Connected to beacon backend", url
 
   for url in config.executionApiUrls:
     if executionTransportProc != nil:
@@ -252,13 +277,14 @@ proc run*(
       )
     else:
       let client = JsonRpcClient.init(url).valueOr:
-        error "Error initializing backend client", error = error.errMsg
+        error "Error initializing backend client", err = error.errMsg
         continue
       let startRes = await client.start()
       if startRes.isErr():
-        error "Error connecting to backend", url = url, error = startRes.error.errMsg
+        error "Error connecting to backend", url = url, err = startRes.error.errMsg
         continue
       engine.registerBackend(client.getExecutionApiBackend(), regularCaps)
+      info "Connected to execution backend", url
 
   if usePrivateTx:
     for url in config.privateTxUrls:
@@ -269,15 +295,38 @@ proc run*(
         )
       else:
         let client = JsonRpcClient.init(url).valueOr:
-          error "Error initializing backend client", error = error.errMsg
+          error "Error initializing backend client", err = error.errMsg
           continue
         let startRes = await client.start()
         if startRes.isErr():
-          error "Error connecting to backend", url = url, error = startRes.error.errMsg
+          error "Error connecting to backend", url = url, err = startRes.error.errMsg
           continue
         engine.registerBackend(
           client.getExecutionApiBackend(), BackendCapabilities({SendRawTransaction})
         )
+        info "Connected to private tx backend", url
+
+  if useArchive:
+    for url in config.archiveUrls:
+      if executionTransportProc != nil:
+        engine.registerBackend(
+          getExecutionApiBackend(ctx, url, executionTransportProc),
+          BackendCapabilities({GetProof}),
+        )
+      else:
+        let client = JsonRpcClient.init(url).valueOr:
+          error "Error initializing backend client", err = error.errMsg
+          continue
+        let startRes = await client.start()
+        if startRes.isErr():
+          error "Error connecting to backend", url = url, err = startRes.error.errMsg
+          continue
+        engine.registerBackend(
+          client.getExecutionApiBackend(), BackendCapabilities({GetProof})
+        )
+        info "Connected to archive backend", url
+
+  engine.state = EngineState(archive: useArchive)
 
   ctx.frontend = engine.getExecutionApiFrontend()
 
@@ -291,6 +340,7 @@ proc run*(
       chainId = value.l2ChainId,
       networkId = l2NetworkId,
       maxBlockWalk = config.maxBlockWalk,
+      maxWindowJumps = config.maxWindowJumps,
       parallelBlockDownloads = config.parallelBlockDownloads,
       headerStoreLen = config.headerStoreLen,
       accountCacheLen = config.accountCacheLen,
@@ -300,6 +350,8 @@ proc run*(
     ).valueOr:
       raise newException(ProxyError, "Couldn't initialize OP verification engine")
 
+    l2Engine.eip2935ForkTime = value.eip2935ForkTime
+
     for url in config.opExecutionApiUrls:
       if executionTransportProc != nil:
         l2Engine.registerBackend(
@@ -308,16 +360,16 @@ proc run*(
         )
       else:
         let client = JsonRpcClient.init(url).valueOr:
-          error "Error initializing L2 backend client", error = error.errMsg
+          error "Error initializing L2 backend client", err = error.errMsg
           continue
         let startRes = await client.start()
         if startRes.isErr():
-          error "Error connecting to L2 backend",
-            url = url, error = startRes.error.errMsg
+          error "Error connecting to L2 backend", url = url, err = startRes.error.errMsg
           continue
         l2Engine.registerBackend(
           client.getExecutionApiBackend(), fullExecutionCapabilities
         )
+        info "Connected to L2 execution backend", url
 
     ctx.opFrontend = getExecutionApiFrontend(l2Engine, engine)
 

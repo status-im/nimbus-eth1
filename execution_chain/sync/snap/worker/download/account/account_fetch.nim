@@ -16,6 +16,9 @@ import
   ../../[helpers, state_db, worker_desc],
   ./account_helpers
 
+logScope:
+  topics = "snap sync"
+
 type
   FetchAccountsResult* = Result[AccountRangePacket,ErrorType]
     ## Shortcut
@@ -50,8 +53,8 @@ proc getAccounts(
 
   var resp: AccountRangePacket
   try:
-    resp = (await buddy.peer.getAccountRange(
-                    req, fetchAccountSnapTimeout)).valueOr:
+    resp = (await snap.getAccountRange(
+                    buddy.peer, req, fetchAccountSnapTimeout)).valueOr:
         return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
@@ -126,8 +129,7 @@ template fetchAccounts*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.accFetchRegisterError()
-        of ENoDataAvailable, EMissingEthContext, ETrieError, ELockError,
-           ECacheError, ECompleted:
+        of EUnusedForFetch:
           # Not allowed here -- internal error
           raiseAssert "Unexpected error " & $rc.error.excp
 

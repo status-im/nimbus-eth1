@@ -57,14 +57,14 @@ template validateVersion(attr, com, apiVersion) =
         raise invalidAttr("forkChoiceUpdatedV2 with beacon root field is invalid after Cancun")
     elif com.isShanghaiOrLater(timestamp):
       if version < Version.V2:
-        raise invalidParams("forkChoiceUpdated" & $apiVersion &
+        raise invalidAttr("forkChoiceUpdated" & $apiVersion &
           " doesn't support payloadAttributesV1 when Shanghai is activated")
       if version > Version.V2:
         raise invalidAttr("if timestamp is Shanghai or later," &
           " payloadAttributes must be PayloadAttributesV2")
     else:
       if version != Version.V1:
-        raise invalidParams("if timestamp is earlier than Shanghai," &
+        raise invalidAttr("if timestamp is earlier than Shanghai," &
           " payloadAttributes must be PayloadAttributesV1")
 
 template validateHeaderTimestamp(header, com, apiVersion) =
@@ -175,8 +175,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # If the head block is already in our canonical chain, the beacon client is
   # probably resyncing. Ignore the update.
   # See point 2 of fCUV1 specification
-  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/paris.md#specification-1
-  if chain.isCanonicalAncestor(header.number, headHash):
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.7/src/engine/paris.md#specification-1
+  if chain.isCanonicalAndFinalizedAncestor(header.number, headHash, update.finalizedBlockHash):
     notice "Ignoring beacon update to old head",
       headHash   = headHash.short,
       headNumber = header.number,

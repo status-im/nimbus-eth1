@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -43,10 +43,10 @@ proc sha3Op(cpt: VmCpt): EvmResultVoid =
 
   cpt.memory.extend(pos, len)
 
-  let endRange = min(pos + len, cpt.memory.len) - 1
-  if endRange == -1 or pos >= cpt.memory.len:
+  if len == 0:
     cpt.stack.lsTop(EMPTY_SHA3)
   else:
+    let endRange = min(pos + len, cpt.memory.len) - 1
     cpt.stack.lsTop keccak256 cpt.memory.bytes.toOpenArray(pos, endRange)
   ok()
 

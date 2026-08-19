@@ -1,3 +1,84 @@
+2026-07-29 v0.4.0
+=================
+
+The Nimbus Ethereum client `0.4.0` beta, along with the Nimbus verified proxy, are `medium-urgency` releases which improves performance, stability, and observability, as well as expanding verified proxy Web3 API coverage. This release marks the transition for the unified and execution clients from alpha to beta, reflecting increased suitability for testing and deployment.
+
+### Improvements
+
+- Propagate mempool transactions:
+  https://github.com/status-im/nimbus-eth1/pull/4487
+
+- Add verified proxy `eth_chainId` Web3 API support:
+  https://github.com/status-im/nimbus-eth1/pull/4501
+
+- Add verified proxy `eth_syncing` Web3 API support:
+  https://github.com/status-im/nimbus-eth1/pull/4375
+
+- Enable unified client custom network support:
+  https://github.com/status-im/nimbus-eth1/pull/4449
+
+- Add engine API and transaction pool metrics:
+  https://github.com/status-im/nimbus-eth1/pull/4183
+  https://github.com/status-im/nimbus-eth1/pull/4418
+
+- Use EIP-2935 to allow verified proxy to serve wider block range:
+  https://github.com/status-im/nimbus-eth1/pull/4530
+
+- Simplify peer discovery configuration:
+  https://github.com/status-im/nimbus-eth1/pull/4454
+
+- Make transaction pool churn more consistent:
+  https://github.com/status-im/nimbus-eth1/pull/4460
+
+- Detect and fix certain database corruption:
+  https://github.com/status-im/nimbus-eth1/pull/4581
+
+- Optimize `MODEXP` precompile:
+  https://github.com/status-im/nimbus-eth1/pull/4519
+  https://github.com/status-im/nimbus-eth1/pull/4522
+  https://github.com/status-im/nimbus-eth1/pull/4562
+
+- Optimize `P256VERIFY` precompile:
+  https://github.com/status-im/nimbus-eth1/pull/4521
+
+- Optimize EIP-2537 precompiles:
+  https://github.com/status-im/nimbus-eth1/pull/4547
+  https://github.com/status-im/nimbus-eth1/pull/4577
+
+- Optimize EIP-197 alt_bn128 pairing check precompile:
+  https://github.com/status-im/nimbus-eth1/pull/4564
+
+- Optimize arithmetic EVM opcodes:
+  https://github.com/status-im/nimbus-eth1/pull/4549
+  https://github.com/status-im/nimbus-eth1/pull/4560
+  https://github.com/status-im/nimbus-eth1/pull/4572
+
+- Optimize `PREVRANDAO` EVM opcode:
+  https://github.com/status-im/nimbus-eth1/pull/4538
+
+- Optimize EIP-152 `BLAKE2f` compression function precompile:
+  https://github.com/status-im/nimbus-eth1/pull/4576
+
+### Fixes
+
+- Fix Discovery v5 ENR RLP encoding:
+  https://github.com/status-im/nimbus-eth1/pull/4575
+
+- Skip malformed bootstrap nodes:
+  https://github.com/status-im/nimbus-eth1/pull/4515
+
+- Avoid syncer stalls with concurrent block importing:
+  https://github.com/status-im/nimbus-eth1/issues/4537
+
+- Fix `eth_estimateGas` in presence of `CREATE2`:
+  https://github.com/status-im/nimbus-eth1/pull/4475
+
+- Fix crash in scenario with multiple unfinalized heads:
+  https://github.com/status-im/nimbus-eth1/pull/4334
+
+- Fix transaction pool-related crash:
+  https://github.com/status-im/nimbus-eth1/pull/4413
+
 2026-06-15 v0.3.1
 =================
 

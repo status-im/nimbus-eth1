@@ -37,6 +37,7 @@ import
     test_op_misc,
     test_precompiles,
     test_rpc,
+    test_sender_recovery_cache,
     test_snap,
     test_transaction_json,
     test_transactions_receipts_storage,
@@ -47,5 +48,6 @@ import
     test_stateless,
     test_block_access_list,
     test_pruner,
+    test_bal_pruner,
   ],
   ./blockproofs/all_blockproofs_tests

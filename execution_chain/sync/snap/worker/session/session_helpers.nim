@@ -12,27 +12,13 @@
 
 import
   pkg/[chronicles, chronos, stew/byteutils],
-  ../[mpt, state_db, worker_desc]
+  ../[state_db, worker_desc]
 
 type
   SessionTicker* = object of RootObj
+    ctx*: SnapCtxRef
     msgAt*: Moment                                  # message while looping
     napAt*: Moment                                  # allow for thread switch
-
-# ------------------------------------------------------------------------------
-# Private helper(s)
-# ------------------------------------------------------------------------------
-
-proc getPivotData(
-    ctx: SnapCtxRef,
-    info: static[string];
-      ): Opt[(StateRoot,CacheStateData)] =
-  let root = ctx.pool.pivot.valueOr:
-    return err()
-  var data = ctx.pool.cacheDB.getStateData(root).valueOr:
-    error info & ": Cached pivot inaccessible", root=root.toStr, `error`=error
-    return err()
-  ok((root, move data))
 
 # ------------------------------------------------------------------------------
 # Public helpers, session ticker related
@@ -70,7 +56,7 @@ template sessionTicker*(
         break body
 
       # Check for scheduler shutdown after thread switch
-      if not ctx.daemon:
+      if not status.ctx.daemon:
         chronicles.error info & ": Daemon session terminated"
         bodyRc = Opt.some(ECancelledError)
         break body
@@ -78,30 +64,6 @@ template sessionTicker*(
       status.napAt = Moment.now() + threadSwitchRunLimit
 
   bodyRc
-
-# ----------------
-
-proc getPivotTag*(
-    ctx: SnapCtxRef;
-    info: static[string];
-      ): Opt[StateDataTag] =
-  ctx.getPivotData(info).isErrOr:
-    return ok(value[1].tag)
-  err()
-
-proc setPivotTag*(
-    ctx: SnapCtxRef;
-    tag: StateDataTag;
-    info: static[string];
-      ): Opt[void] =
-  var (root,pivot) = ctx.getPivotData(info).valueOr:
-    return err()
-  pivot.tag = tag
-  ctx.pool.cacheDB.putStateData(root,pivot).isOkOr:
-    error info & ": Error updating cached pivot",
-      root=root.Hash32.short, `error`=error
-    return err()
-  ok()
 
 # ----------------
 

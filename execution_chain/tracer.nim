@@ -138,6 +138,9 @@ proc traceTransactionImpl(
     vmState = BaseVMState.new(parent, header, com, txFrame, storeSlotHash = true)
     ledger = vmState.ledger
 
+  defer:
+    vmState.dispose()
+
   doAssert(transactions.calcTxRoot == header.txRoot)
   doAssert(transactions.len != 0)
 
@@ -152,7 +155,7 @@ proc traceTransactionImpl(
     miner = vmState.coinbase()
 
   for idx, tx in transactions:
-    let sender = tx.recoverSender().expect("valid signature")
+    let sender = tx.recoverSenderCached().expect("valid signature")
     let recipient = tx.getRecipient(sender)
 
     if idx.uint64 == txIndex:
@@ -211,13 +214,16 @@ proc dumpBlockStateImpl(
     vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
     miner = vmState.coinbase()
 
+  defer:
+    vmState.dispose()
+
   var
     before = newJArray()
     after = newJArray()
     stateBefore = LedgerRef.init(com.ledger.baseTxFrame(), storeSlotHash = true)
 
   for idx, tx in blk.transactions:
-    let sender = tx.recoverSender().expect("valid signature")
+    let sender = tx.recoverSenderCached().expect("valid signature")
     let recipient = tx.getRecipient(sender)
     before.captureAccount(stateBefore, sender, senderName & $idx)
     before.captureAccount(stateBefore, recipient, recipientName & $idx)
@@ -232,7 +238,7 @@ proc dumpBlockStateImpl(
   var stateAfter = vmState.ledger
 
   for idx, tx in blk.transactions:
-    let sender = tx.recoverSender().expect("valid signature")
+    let sender = tx.recoverSenderCached().expect("valid signature")
     let recipient = tx.getRecipient(sender)
     after.captureAccount(stateAfter, sender, senderName & $idx)
     after.captureAccount(stateAfter, recipient, recipientName & $idx)
@@ -270,6 +276,9 @@ proc traceBlockImpl(
       return newJNull()
     vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
 
+  defer:
+    vmState.dispose()
+
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(blk.transactions.calcTxRoot == header.txRoot)
   doAssert(blk.transactions.len != 0)
@@ -278,7 +287,7 @@ proc traceBlockImpl(
 
   for tx in blk.transactions:
     let
-      sender = tx.recoverSender().expect("valid signature")
+      sender = tx.recoverSenderCached().expect("valid signature")
       rc = vmState.processTransaction(tx, sender)
     if rc.isOk:
       gasUsed = gasUsed + rc.value.gasUsed

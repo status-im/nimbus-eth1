@@ -51,8 +51,8 @@ proc getStorage(
 
   var resp: StorageRangesPacket
   try:
-    resp = (await buddy.peer.getStorageRanges(
-                    req, fetchStorageSnapTimeout)).valueOr:
+    resp = (await snap.getStorageRanges(
+                      buddy.peer, req, fetchStorageSnapTimeout)).valueOr:
         return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
@@ -140,8 +140,7 @@ template fetchStorage*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.stoFetchRegisterError()
-        of ENoDataAvailable, EMissingEthContext, ETrieError, ELockError,
-           ECacheError, ECompleted:
+        of EUnusedForFetch:
           # Not allowed here -- internal error
           raiseAssert "Unexpected error " & $rc.error.excp
 

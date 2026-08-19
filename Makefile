@@ -10,56 +10,7 @@ SHELL := bash # the shell used internally by "make"
 # used inside the included makefiles
 BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 
-LINK_PCRE := 0
-
-EXCLUDED_NIM_PACKAGES := 	\
-  vendor/nimbus-eth2/vendor/nim-bearssl               \
-  vendor/nimbus-eth2/vendor/nim-blscurve              \
-  vendor/nimbus-eth2/vendor/nim-bearssl               \
-  vendor/nimbus-eth2/vendor/nim-blscurve              \
-  vendor/nimbus-eth2/vendor/nim-boringssl             \
-  vendor/nimbus-eth2/vendor/nimbus-build-system       \
-  vendor/nimbus-eth2/vendor/nim-chronicles            \
-  vendor/nimbus-eth2/vendor/nim-chronos               \
-  vendor/nimbus-eth2/vendor/nim-confutils             \
-  vendor/nimbus-eth2/vendor/nimcrypto                 \
-  vendor/nimbus-eth2/vendor/nim-eth                   \
-  vendor/nimbus-eth2/vendor/nim-faststreams           \
-  vendor/nimbus-eth2/vendor/nim-http-utils            \
-  vendor/nimbus-eth2/vendor/nim-ngtcp2                \
-  vendor/nimbus-eth2/vendor/nim-quic                  \
-  vendor/nimbus-eth2/vendor/nim-intops                \
-  vendor/nimbus-eth2/vendor/nim-json-rpc              \
-  vendor/nimbus-eth2/vendor/nim-json-serialization    \
-  vendor/nimbus-eth2/vendor/nim-libbacktrace          \
-  vendor/nimbus-eth2/vendor/nim-metrics               \
-  vendor/nimbus-eth2/vendor/nim-nat-traversal         \
-  vendor/nimbus-eth2/vendor/nim-lsquic                \
-  vendor/nimbus-eth2/vendor/nim-results               \
-  vendor/nimbus-eth2/vendor/nim-secp256k1             \
-  vendor/nimbus-eth2/vendor/nim-serialization         \
-  vendor/nimbus-eth2/vendor/nim-snappy                \
-  vendor/nimbus-eth2/vendor/nim-sqlite3-abi           \
-  vendor/nimbus-eth2/vendor/nim-ssz-serialization     \
-  vendor/nimbus-eth2/vendor/nim-stew                  \
-  vendor/nimbus-eth2/vendor/nim-stint                 \
-  vendor/nimbus-eth2/vendor/nim-testutils             \
-  vendor/nimbus-eth2/vendor/nim-toml-serialization    \
-  vendor/nimbus-eth2/vendor/nim-unittest2             \
-  vendor/nimbus-eth2/vendor/nim-web3                  \
-  vendor/nimbus-eth2/vendor/nim-websock               \
-  vendor/nimbus-eth2/vendor/nim-zlib                  \
-  vendor/nimbus-eth2/vendor/nim-taskpools             \
-  vendor/nimbus-eth2/vendor/nim-normalize             \
-  vendor/nimbus-eth2/vendor/nim-unicodedb             \
-  vendor/nimbus-eth2/vendor/nim-libp2p                \
-  vendor/nimbus-eth2/vendor/nim-presto                \
-  vendor/nimbus-eth2/vendor/nim-zxcvbn                \
-  vendor/nimbus-eth2/vendor/nim-kzg4844               \
-  vendor/nimbus-eth2/vendor/nim-minilru               \
-  vendor/nimbus-eth2/vendor/nimbus-security-resources \
-  vendor/nimbus-eth2/vendor/nim-protobuf-serialization \
-  vendor/nimbus-eth2/vendor/NimYAML
+EXCLUDED_NIM_PACKAGES := $(wildcard vendor/nimbus-eth2/vendor/*)
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
@@ -97,7 +48,7 @@ OS_PLATFORM = $(shell $(CC) -dumpmachine)
 VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 ifneq (, $(findstring darwin, $(OS_PLATFORM)))
   VERIFPROXY_LDFLAGS = -lc++ -framework Security
-else ifneq (, $(findstring mingw, $(OS_PLATFORM)))
+else ifneq (, $(findstring windows, $(OS_PLATFORM)))
   VERIFPROXY_LDFLAGS = -lc++ -lbcrypt -lpthread -lws2_32
 else
   VERIFPROXY_LDFLAGS = -lstdc++ -lm
@@ -142,6 +93,8 @@ endif
 	eest_txpool_test \
 	eest_full_test \
 	eest_tool_test \
+	eest_benchmark \
+	eest_benchmark_test \
 	t8n \
 	t8n_test \
 	evmstate \
@@ -265,6 +218,9 @@ endif
 eest:
 	scripts/eest_ci_cache.sh
 
+eest_benchmark:
+	scripts/eest_ci_cache.sh benchmark
+
 # builds and runs the nimbus test suite
 test: | build deps rocksdb eest
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
@@ -360,7 +316,7 @@ portal_bridge: | build deps
 
 nimbus_verified_proxy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c -o:build/$@ $(NIM_PARAMS) nimbus_verified_proxy/nimbus_verified_proxy.nim
+		$(ENV_SCRIPT) nim c -o:build/$@ $(NIM_PARAMS) -d:chronicles_log_level=TRACE nimbus_verified_proxy/nimbus_verified_proxy.nim
 
 nimbus_verified_proxy_test: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
@@ -423,8 +379,8 @@ nimbus_verified_proxy_wasm_debug: | build deps
 
 # Stateless related targets
 
-stateless_execution_baremetal: | build deps
-	$(ENV_SCRIPT) nim c --hints:off --cpu:riscv64 --os:any --mm:arc -d:useMalloc -d:chronicles_enabled:off -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace --compileOnly --genScript "execution_chain/stateless/stateless_execution.nim"
+stateless_guest_baremetal: | build deps
+	$(ENV_SCRIPT) nim c --hints:off --cpu:riscv64 --os:any --mm:arc -d:useMalloc -d:chronicles_enabled:off -d:keccakCacheEnabled:false -d:senderCacheEnabled:false -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace --compileOnly --genScript "execution_chain/stateless/stateless_guest.nim"
 
 stateless_execution_test: | build deps
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
@@ -432,32 +388,35 @@ stateless_execution_test: | build deps
 
 # EEST standalone targets - binary to run individual test vector files
 eest_engine: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_blockchain: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 # EEST test suite targets - to run the whole test suite for each category
 eest_engine_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_txpool_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_blockchain_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_stateless_execution_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
+
+eest_benchmark_test: | build deps eest_benchmark
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/$@.nim"
 
 eest_full_test: | build deps eest
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/all_eest_tests.nim"
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/all_eest_tests.nim"
 	build/$@
 
 eest_tool_test: | build deps eest
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_tool_tests.nim"
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=FATAL -o:build/$@ "tests/eest/eest_tool_tests.nim"
 	build/$@
 
 # builds transition tool

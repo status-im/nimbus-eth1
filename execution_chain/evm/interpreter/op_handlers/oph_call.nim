@@ -108,6 +108,9 @@ proc gasCallDelegate(c: Computation, codeAddress: Address, flags: set[MsgFlags])
       if c.balTrackerEnabled:
         c.vmState.balTracker.trackAddressAccess(codeAddress)
 
+      # Clear delegated flags inherited from parent
+      c.msg.flags.excl MsgFlags.Delegated
+
       # Code does not need to be loaded for precompile addresses because the
       # precompile doesn't exist in the state trie and can never be a 7702
       # delegation, so resolving the delegation target is a no-op.
@@ -200,20 +203,29 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
   res.updateStackAndParams(c)
   ok()
 
-proc getCallCode(c: Computation, childMsg: Message): CodeBytesRef =
-  # Avoid accessing ledger if it's a precompile address
-  if MsgFlags.Precompile in childMsg.flags:
+proc loadCallCode(c: Computation, flags: set[MsgFlags]): CodeBytesRef =
+  ## Load the (delegated) execution code for a call child frame. Must run
+  ## after the opcode gas charge but before the depth/balance early exits,
+  ## so the read hits the witness even when the call fails early (spec order).
+  ##
+  ## Precompiles execute natively and don't need their account, but the spec's
+  ## `call()` does `get_account(code_address)` before precompile dispatch, so the
+  ## account access must appear in the witness. Replicate that read only when a
+  ## witness is being collected, keeping normal precompile calls on the fast path.
+  if MsgFlags.Precompile in flags:
+    if c.vmState.collectWitness:
+      discard c.vmState.readOnlyLedger.getCode(c.msg.delegateTo)
     return CodeBytesRef(nil)
 
   c.vmState.readOnlyLedger.getCode(c.msg.delegateTo)
 
-proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int, newAccountCharged = false) =
+proc execSubCall(c: Computation; childMsg: Message; code: CodeBytesRef;
+                 memPos, memLen: int, newAccountCharged = false) =
   ## Call new VM -- helper for `Call`-like operations
 
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
   # <memPos> and <memLen> are provided by value and need not be captured
   var
-    code = c.getCallCode(childMsg)
     child = newComputation(
       c.vmState, keepStack = false, childMsg, code)
 
@@ -304,6 +316,8 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.returnData.setLen(0)
 
+  let code = cpt.loadCallCode(p.flags)
+
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
       reason = "Stack too deep",
@@ -325,24 +339,25 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
     return ok()
 
   # Pass full reservoir to child (no 63/64 rule for state gas)
-  let stateGas = cpt.gasMeter.stateGasLeft
+  let stateGasReservoir = cpt.gasMeter.stateGasLeft
   cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
-    kind:            CallKind.Call,
-    depth:           cpt.msg.depth + 1,
-    gas:             childGasLimit,
-    stateGas:        stateGas,
-    sender:          p.sender,
-    contractAddress: p.contractAddress,
-    codeAddress:     p.codeAddress,
-    value:           p.value,
-    flags:           p.flags)
+    kind:              CallKind.Call,
+    depth:             cpt.msg.depth + 1,
+    gas:               childGasLimit,
+    stateGasReservoir: stateGasReservoir,
+    sender:            p.sender,
+    contractAddress:   p.contractAddress,
+    codeAddress:       p.codeAddress,
+    value:             p.value,
+    flags:             p.flags)
   assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,
     childMsg = childMsg,
+    code = code,
     newAccountCharged = newAccountCharged)
   ok()
 
@@ -383,6 +398,8 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.returnData.setLen(0)
 
+  let code = cpt.loadCallCode(p.flags)
+
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
       reason = "Stack too deep",
@@ -400,24 +417,25 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
     return ok()
 
   # Pass full reservoir to child (no 63/64 rule for state gas)
-  let stateGas = cpt.gasMeter.stateGasLeft
+  let stateGasReservoir = cpt.gasMeter.stateGasLeft
   cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
-    kind:            CallKind.CallCode,
-    depth:           cpt.msg.depth + 1,
-    gas:             childGasLimit,
-    stateGas:        stateGas,
-    sender:          p.sender,
-    contractAddress: p.contractAddress,
-    codeAddress:     p.codeAddress,
-    value:           p.value,
-    flags:           p.flags)
+    kind:              CallKind.CallCode,
+    depth:             cpt.msg.depth + 1,
+    gas:               childGasLimit,
+    stateGasReservoir: stateGasReservoir,
+    sender:            p.sender,
+    contractAddress:   p.contractAddress,
+    codeAddress:       p.codeAddress,
+    value:             p.value,
+    flags:             p.flags)
   assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,
-    childMsg = childMsg)
+    childMsg = childMsg,
+    code = code)
   ok()
 
 # ---------------------
@@ -456,6 +474,9 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
     cpt.vmState.balTracker.trackAddressAccess(cpt.msg.delegateTo)
 
   cpt.returnData.setLen(0)
+
+  let code = cpt.loadCallCode(p.flags)
+
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
       reason = "Stack too deep",
@@ -468,24 +489,25 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(p.memOutPos, p.memOutLen)
 
   # Pass full reservoir to child (no 63/64 rule for state gas)
-  let stateGas = cpt.gasMeter.stateGasLeft
+  let stateGasReservoir = cpt.gasMeter.stateGasLeft
   cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
-    kind:            CallKind.DelegateCall,
-    depth:           cpt.msg.depth + 1,
-    gas:             childGasLimit,
-    stateGas:        stateGas,
-    sender:          p.sender,
-    contractAddress: p.contractAddress,
-    codeAddress:     p.codeAddress,
-    value:           p.value,
-    flags:           p.flags)
+    kind:              CallKind.DelegateCall,
+    depth:             cpt.msg.depth + 1,
+    gas:               childGasLimit,
+    stateGasReservoir: stateGasReservoir,
+    sender:            p.sender,
+    contractAddress:   p.contractAddress,
+    codeAddress:       p.codeAddress,
+    value:             p.value,
+    flags:             p.flags)
   assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,
-    childMsg = childMsg)
+    childMsg = childMsg,
+    code = code)
   ok()
 
 # ---------------------
@@ -524,6 +546,8 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.returnData.setLen(0)
 
+  let code = cpt.loadCallCode(p.flags)
+
   if cpt.msg.depth >= MaxCallDepth:
     debug "Computation Failure",
       reason = "Stack too deep",
@@ -536,24 +560,25 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(p.memOutPos, p.memOutLen)
 
   # Pass full reservoir to child (no 63/64 rule for state gas)
-  let stateGas = cpt.gasMeter.stateGasLeft
+  let stateGasReservoir = cpt.gasMeter.stateGasLeft
   cpt.gasMeter.stateGasLeft = 0.GasInt
 
   var childMsg = Message(
-    kind:            CallKind.Call,
-    depth:           cpt.msg.depth + 1,
-    gas:             childGasLimit,
-    stateGas:        stateGas,
-    sender:          p.sender,
-    contractAddress: p.contractAddress,
-    codeAddress:     p.codeAddress,
-    value:           p.value,
-    flags:           p.flags)
+    kind:              CallKind.Call,
+    depth:             cpt.msg.depth + 1,
+    gas:               childGasLimit,
+    stateGasReservoir: stateGasReservoir,
+    sender:            p.sender,
+    contractAddress:   p.contractAddress,
+    codeAddress:       p.codeAddress,
+    value:             p.value,
+    flags:             p.flags)
   assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,
-    childMsg = childMsg)
+    childMsg = childMsg,
+    code = code)
   ok()
 
 # ------------------------------------------------------------------------------

@@ -380,6 +380,14 @@ func executionRequests*(pst: var TxPacker): seq[seq[byte]] =
   result.append(WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs)
   result.append(CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
 
+  # EIP-8282: must mirror `assembleHeader`, which folds these into
+  # `requestsHash`. Omitting them here yields a payload whose recomputed
+  # requestsHash disagrees with the committed header, i.e. a block hash
+  # mismatch on every `engine_newPayload` receiver -- including ourselves.
+  if pst.vmState.fork >= FkAmsterdam:
+    result.append(BUILDER_DEPOSIT_REQUEST_TYPE, pst.builderDepositReqs)
+    result.append(BUILDER_EXIT_REQUEST_TYPE, pst.builderExitReqs)
+
 iterator packedTxs*(pst: TxPacker): TxItemRef =
   for item in pst.packedTxs:
     yield item

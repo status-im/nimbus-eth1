@@ -47,8 +47,8 @@ proc getCodes(
 
   var resp: ByteCodesPacket
   try:
-    resp = (await buddy.peer.getByteCodes(
-                    req, fetchCodesSnapTimeout)).valueOr:
+    resp = (await snap.getByteCodes(
+                    buddy.peer, req, fetchCodesSnapTimeout)).valueOr:
         return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
@@ -120,8 +120,7 @@ template fetchCodes*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.cdeFetchRegisterError()
-        of ENoDataAvailable, EMissingEthContext, ETrieError, ELockError,
-           ECacheError, ECompleted:
+        of EUnusedForFetch:
           # Not allowed here -- internal error
           raiseAssert "Unexpected error " & $rc.error.excp
 

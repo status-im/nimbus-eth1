@@ -27,6 +27,7 @@ import
   ./networking/bootnodes,
   ./[constants, compile_info, version_info],
   ./common/chain_config,
+  ./common/chain_config_loader,
   ./db/opts
 
 export net, defs, jsdefs, jsnet, nat_toml, nimbus_binary_common, options
@@ -57,6 +58,7 @@ const
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
   defaultBalParallelExecution* = false
+  defaultBalPruning* = true
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -151,24 +153,6 @@ type
       defaultValueDesc: "mainnet(1)"
       abbr: "i"
       name: "network" .}: seq[string]
-
-    customNetwork {.
-      ignore
-      desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
-      defaultValueDesc: ""
-      abbr: "c"
-      name: "custom-network" .}: Option[NetworkParams]
-
-    networkId* {.
-      ignore # this field is not processed by confutils
-      defaultValue: MainNet # the defaultValue value is set by `makeConfig`
-      defaultValueDesc: "MainNet"
-      name: "network-id" .}: NetworkId
-
-    networkParams* {.
-      ignore # this field is not processed by confutils
-      defaultValue: NetworkParams() # the defaultValue value is set by `makeConfig`
-      name: "network-params" .}: NetworkParams
 
     logLevel* {.
       separator: "\pLOGGING AND DEBUGGING OPTIONS:"
@@ -366,7 +350,7 @@ type
 
     rewriteDatadirId* {.
       hidden
-      desc: "Rewrite selected network config hash to database"
+      desc: "Skip checking that the genesis block matches the selected network"
       name: "debug-rewrite-datadir-id".}: bool
 
     aristoDbMaxSnapshots* {.
@@ -413,6 +397,13 @@ type
       desc: "Execute block transactions in parallel on background threads " &
         "using the supplied block access list"
       name: "debug-bal-parallel-execution".}: bool
+
+    balPruning* {.
+      hidden
+      defaultValue: defaultBalPruning
+      desc: "Prune block access lists which have fallen outside of the " &
+        "retention period defined by EIP-7928"
+      name: "debug-bal-pruning".}: bool
 
     eagerStateRootCheck* {.
       hidden
@@ -654,19 +645,15 @@ func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
   else:
     parse(p, UInt256, 10)
 
-proc dataDir*(config: ExecutionClientConf): string =
-  # TODO load network name from directory, when using custom network?
-  string config.dataDirFlag.get(OutDir defaultDataDir("", config.networkId.name()))
+func getName*(params: NetworkParams): string =
+  params.networkId.name().valueOr:
+    "custom-" & $params.networkId
 
-proc keyStoreDir*(config: ExecutionClientConf): string =
-  string config.keyStoreDirFlag.get(OutDir config.dataDir() / "keystore")
+proc dataDir*(config: ExecutionClientConf, params: NetworkParams): string =
+  string config.dataDirFlag.get(OutDir defaultDataDir("", params.getName()))
 
-func parseCmdArg(T: type NetworkId, p: string): T
-    {.gcsafe, raises: [ValueError].} =
-  parseHexOrDec256(p)
-
-func completeCmdArg(T: type NetworkId, val: string): seq[string] =
-  return @[]
+proc keyStoreDir*(config: ExecutionClientConf, params: NetworkParams): string =
+  string config.keyStoreDirFlag.get(OutDir config.dataDir(params) / "keystore")
 
 func processList(v: string, o: var seq[string])
     =
@@ -675,17 +662,6 @@ func processList(v: string, o: var seq[string])
     for n in v.split({' ', ','}):
       if len(n) > 0:
         o.add(n)
-
-proc parseCmdArg(T: type NetworkParams, p: string): T
-    {.gcsafe, raises: [ValueError].} =
-  try:
-    if not loadNetworkParams(p, result):
-      raise newException(ValueError, "failed to load customNetwork")
-  except CatchableError:
-    raise newException(ValueError, "failed to load customNetwork")
-
-func completeCmdArg(T: type NetworkParams, val: string): seq[string] =
-  return @[]
 
 iterator repeatingList(listOfList: openArray[string]): string =
   for strList in listOfList:
@@ -715,29 +691,28 @@ proc parseNetworkId(network: string): NetworkId =
     error "Failed to parse network id", id=network
     quit QuitFailure
 
-proc parseNetworkParams(network: string): (NetworkParams, bool) =
+proc parseNetworkParams(network: string): NetworkParams =
   case toLowerAscii(network)
-  of "mainnet": (networkParams(MainNet), false)
-  of "sepolia": (networkParams(SepoliaNet), false)
-  of "hoodi"  : (networkParams(HoodiNet), false)
+  of "mainnet": networkParams(MainNet)
+  of "sepolia": networkParams(SepoliaNet)
+  of "hoodi"  : networkParams(HoodiNet)
   else:
     var params: NetworkParams
     if not loadNetworkParams(network, params):
       # `loadNetworkParams` have it's own error log
       quit QuitFailure
-    (params, true)
+    params.custom = true
+    params.networkId = params.config.chainId
+    params
 
-proc processNetworkParamsAndNetworkId(config: var ExecutionClientConf) =
-  if config.network.len == 0 and config.customNetwork.isNone:
+proc computeNetworkParams*(config: ExecutionClientConf): NetworkParams =
+  if config.network.len == 0:
     # Default value if none is set
-    config.networkId = MainNet
-    config.networkParams = networkParams(MainNet)
-    return
+    return networkParams(MainNet)
 
   var
     params: Opt[NetworkParams]
     id: Opt[NetworkId]
-    simulatedCustomNetwork = false
 
   for network in config.network:
     if decOrHex(network):
@@ -749,37 +724,27 @@ proc processNetworkParamsAndNetworkId(config: var ExecutionClientConf) =
       if params.isSome:
         warn "Network configuration already set, ignore new value", network
         continue
-      let (parsedParams, custom) = parseNetworkParams(network)
-      params = Opt.some parsedParams
-      # Simulate --custom-network while it is still not disabled.
-      if custom:
-        config.customNetwork = some parsedParams
-        simulatedCustomNetwork = true
+      params = Opt.some parseNetworkParams(network)
 
-  if config.customNetwork.isSome:
-    if params.isNone:
-      warn "`--custom-network` is deprecated, please use `--network`"
-    elif not simulatedCustomNetwork:
-      warn "Network configuration already set by `--network`, `--custom-network` override it"
-    params = if config.customNetwork.isSome: Opt.some config.customNetwork.get
-             else: Opt.none(NetworkParams)
-    if id.isNone:
-      # WARNING: networkId and chainId are two distinct things
-      # their usage should not be mixed in other places.
-      # We only set networkId to chainId if networkId not set in cli and
-      # --custom-network is set.
-      # If chainId is not defined in config file, it's ok because
-      # zero means CustomNet
-      id = Opt.some NetworkId(params.value.config.chainId)
-
-  if id.isNone and params.isSome:
+  # WARNING: networkId and chainId are two distinct things
+  # their usage should not be mixed in other places.
+  # We only set networkId to chainId if networkId not set in cli and
+  # network config is loaded from file.
+  # If chainId is not defined in config file, it's ok because
+  # zero means CustomNet
+  if id.isNone and params.isNone:
+    # Default value if none is set
+    return networkParams(MainNet)
+  elif id.isNone and params.isSome:
     id = Opt.some NetworkId(params.value.config.chainId)
-
-  if config.customNetwork.isNone and params.isNone:
+  elif id.isSome and params.isNone:
     params = Opt.some networkParams(id.value)
+  else:
+    # Both id and params isSome
+    params.value.config.chainId = id.value
+    params.value.networkId = id.value
 
-  config.networkParams = params.expect("Network params exists")
-  config.networkId = id.expect("Network ID exists")
+  params.expect("Network params exists")
 
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
   if api.len == 0:
@@ -800,14 +765,14 @@ proc getRpcFlags*(config: ExecutionClientConf): set[RpcFlag] =
 proc getWsFlags*(config: ExecutionClientConf): set[RpcFlag] =
   getRpcFlags(config.wsApi)
 
-proc getBootstrapNodes*(config: ExecutionClientConf): BootstrapNodes =
-  # Ignore standard bootnodes if customNetwork is loaded
-  if config.customNetwork.isNone:
-    if config.networkId == MainNet:
+proc getBootstrapNodes*(config: ExecutionClientConf, params: NetworkParams): BootstrapNodes =
+  # Ignore builtin bootnodes if network is not builtin
+  if not params.custom:
+    if params.networkId == MainNet:
       getBootstrapNodes("mainnet", result).expect("no error")
-    elif config.networkId == SepoliaNet:
+    elif params.networkId == SepoliaNet:
       getBootstrapNodes("sepolia", result).expect("no error")
-    elif config.networkId == HoodiNet:
+    elif params.networkId == HoodiNet:
       getBootstrapNodes("hoodi", result).expect("no error")
 
   var list = breakRepeatingList(config.bootstrapNodes)
@@ -848,14 +813,14 @@ func shareServerWithEngineApi*(config: ExecutionClientConf): bool =
 func httpServerEnabled*(config: ExecutionClientConf): bool =
   config.wsEnabled or config.rpcEnabled
 
-proc era1Dir*(config: ExecutionClientConf): string =
-  string config.era1DirFlag.get(OutDir config.dataDir / "era1")
+proc era1Dir*(config: ExecutionClientConf, params: NetworkParams): string =
+  string config.era1DirFlag.get(OutDir config.dataDir(params) / "era1")
 
-proc eraDir*(config: ExecutionClientConf): string =
-  string config.eraDirFlag.get(OutDir config.dataDir / "era")
+proc eraDir*(config: ExecutionClientConf, params: NetworkParams): string =
+  string config.eraDirFlag.get(OutDir config.dataDir(params) / "era")
 
-proc ereDir*(config: ExecutionClientConf): string =
-  string config.ereDirFlag.get(OutDir config.dataDir / "ere")
+proc ereDir*(config: ExecutionClientConf, params: NetworkParams): string =
+  string config.ereDirFlag.get(OutDir config.dataDir(params) / "ere")
 
 func udpPort*(config: ExecutionClientConf): Port =
   config.udpPortFlag.get(config.tcpPort)
@@ -926,8 +891,6 @@ proc makeConfig*(cmdLine = commandLineParams(), ignoreUnknown = false): Executio
   ).valueOr:
     writePanicLine error # Logging not yet set up
     quit QuitFailure
-
-  processNetworkParamsAndNetworkId(result)
 
 when isMainModule:
   # for testing purpose

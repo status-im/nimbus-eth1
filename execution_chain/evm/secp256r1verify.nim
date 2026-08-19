@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,57 +8,34 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import
-  bearssl/secp256r1_verify as ec,
-  stew/assign2,
-  stint
+{.push raises: [].}
 
-type
-  EcPublicKey* = object
-    buf: array[65, byte]
-    pk: ec.EcPublicKey
+import boringssl
 
-proc isInfinityByte(data: openArray[byte]): bool =
-  ## Check if all values in ``data`` are zero.
-  for b in data:
-    if b != 0:
-      return false
-  return true
-
-func checkPublicKey(key: openArray[byte]): bool =
-  ## Return ``true`` if public key ``key`` is on curve.
-  let
-    x = [byte 0x00, 0x01]
-    impl = ecGetDefault()
-  impl.mul(key[0].addr, key.len.uint, x[0].addr, x.len.uint, EC_secp256r1) != 0
-
-func initRaw*(pk: var EcPublicKey, data: openArray[byte]): bool =
-  # bearSSL have no infinity check for public key
-  if data.isInfinityByte:
+proc verifyRaw*(
+    sig: openArray[byte], hash: openArray[byte], pubkey: openArray[byte]
+): bool =
+  if sig.len != 64 or hash.len != 32 or pubkey.len != 64:
     return false
 
-  # bearSSL have no range check for public key
-  const
-    P = UInt256.fromHex("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff")
+  let key = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1)
+  if key.isNil:
+    return false
+  defer:
+    EC_KEY_free(key)
 
   let
-    x = UInt256.fromBytesBE(data.toOpenArray(0, 31))
-    y = UInt256.fromBytesBE(data.toOpenArray(32, 63))
+    x = BN_bin2bn(pubkey[0].addr, 32, nil)
+    y = BN_bin2bn(pubkey[32].addr, 32, nil)
+  defer:
+    BN_free(x)
+    BN_free(y)
 
-  if x >= P or y >= P:
+  if x.isNil or y.isNil:
     return false
 
-  pk.buf[0] = 4.byte
-  assign(pk.buf.toOpenArray(1, 64), data)
-  pk.pk.curve = EC_secp256r1
-  pk.pk.q = pk.buf[0].addr
-  pk.pk.qlen = 65
-  checkPublicKey(pk.buf)
+  if EC_KEY_set_public_key_affine_coordinates(key, x, y) != 1:
+    return false
 
-func verifyRaw*(sig: openArray[byte], hash: openArray[byte], pk: EcPublicKey): bool =
-  secp256r1_i31_vrfy_raw(
-    hash[0].addr,
-    hash.len.uint,
-    pk.pk.addr,
-    sig[0].addr,
-    sig.len.uint) == 1
+  ECDSA_verify_p1363(
+    hash[0].addr, csize_t(hash.len), sig[0].addr, csize_t(sig.len), key) == 1

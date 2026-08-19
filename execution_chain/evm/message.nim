@@ -27,7 +27,7 @@ proc generateContractAddress*(vmState: BaseVMState,
   let creationNonce = vmState.readOnlyLedger().getNonce(sender)
   generateAddress(sender, creationNonce)
 
-proc getCallCode*(vmState: BaseVMState, msg: Message): CodeBytesRef =
+proc getRecipientCode*(vmState: BaseVMState, msg: Message): CodeBytesRef =
   # Avoid accessing ledger if it's a precompile address
   if isPrecompile(vmState.fork, msg.codeAddress):
     if vmState.balTrackerEnabled:
@@ -50,10 +50,9 @@ proc getCallCode*(vmState: BaseVMState, msg: Message): CodeBytesRef =
   let delegateTo = parseDelegationAddress(code).valueOr:
     return code
 
-  # If the `call.to` has a delegation, also warm its target.
+  # If the `call.to` has a delegation, mark it and let the caller load the
+  # target code: from Amsterdam the delegated account access must be charged
+  # before its code is read.
   msg.flags.incl MsgFlags.Delegated
   msg.delegateTo = delegateTo
-  vmState.ledger.accessList(delegateTo)
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.trackAddressAccess(delegateTo)
-  vmState.readOnlyLedger.getCode(delegateTo)
+  code

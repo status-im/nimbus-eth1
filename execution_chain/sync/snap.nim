@@ -30,6 +30,22 @@ logScope:
   topics = "snap sync"
 
 # ------------------------------------------------------------------------------
+# Private helper
+# ------------------------------------------------------------------------------
+
+proc addSnapSyncProtocol(desc: SnapSyncRef; PROTO: type) =
+  ## Add protocol and call back filter & init functions for ethXX
+  proc initWorker(worker: SyncPeerRef[SnapCtxData,SnapPeerData]) =
+    when PROTO is snap1:
+      discard
+    elif PROTO is snap2:
+      worker.only.supportsBal = true
+    else:
+      {.error: "Unsupported snap/?? version".}
+
+  desc.addSyncProtocol(PROTO, initWorker=initWorker)
+
+# ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
 
@@ -85,7 +101,13 @@ proc config*(
   ##
   doAssert desc.ctx.isNil                           # This can only run once
   desc.initSync(ethNode, maxPeers)
-  desc.addSyncProtocol snap1
+
+  # The registration order for protocols is largely irrelevant, yet the first
+  # will always be compared with the activated protocol which is likely to be
+  # expected the latest version of the `snap` protocol family.
+  desc.addSnapSyncProtocol(snap2)
+  desc.addSnapSyncProtocol(snap1)
+
   desc.ctx.pool.baseDir = dataDir
 
   if not desc.lazyConfigHook.isNil:

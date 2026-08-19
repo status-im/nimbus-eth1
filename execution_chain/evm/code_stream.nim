@@ -37,10 +37,26 @@ template read*(c: var CodeStream, size: int): openArray[byte] =
     c.pc = c.bytes.len
     c.code.bytes.toOpenArray(pos, c.bytes.high)
 
-func readVmWord*(c: var CodeStream, n: static int): UInt256 {.inline, noinit.} =
+template readVmWord*(c: var CodeStream, n: static int): UInt256 =
   ## Reads `n` bytes from the code stream and pads
   ## the remaining bytes with zeros.
-  UInt256.fromBytesBE(c.read(n))
+  when n <= 8:
+    # Values of up to 8 bytes fit a single limb - folding the bytes directly
+    # avoids the generic openArray conversion on this hot path (PUSH1..PUSH8)
+    block:
+      let
+        pos = c.pc
+        bytes {.cursor.} = c.code.bytes
+        last = min(pos + n, bytes.len)
+      var v = 0'u64
+      {.push checks: off.}
+      for i in pos ..< last:
+        v = (v shl 8) or uint64(bytes[i])
+      {.pop.}
+      c.pc = last
+      v.u256
+  else:
+    UInt256.fromBytesBE(c.read(n))
 
 func len*(c: CodeStream): int =
   len(c.code)

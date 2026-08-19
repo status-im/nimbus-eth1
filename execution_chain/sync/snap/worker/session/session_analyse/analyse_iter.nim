@@ -21,9 +21,10 @@
 
 import
   std/tables,
-  pkg/[chronicles, chronos, eth/common, stew/interval_set],
+  pkg/[chronicles, chronos, eth/common, eth/trie/nibbles, stew/interval_set],
+  ../../../../../db/aristo,
   ../../[helpers, mpt, worker_desc],
-  ../[session_clear, session_helpers],
+  ../[session_clear, session_helpers, session_pivot],
   ./analyse_desc
 
 export
@@ -130,13 +131,13 @@ template runErrand(
 # Private functions, MPT traversal core function
 # ------------------------------------------------------------------------------
 
-template getAccKvtWrap(
+template getAccPartMptWrap(
     db: CacheDbRef;
     _: Hash32;
     key: openArray[byte];
       ): BlobResult =
   ## Ignore state root for `get()` on accounts KVT
-  db.getAccKvt key
+  db.getAccPartMpt key
 
 template traverseMpt(
     trd: TravDescRef;                               # traversal descriptor
@@ -307,12 +308,14 @@ template accAndStoNotify(
 
     when att == AttLeaf:
       stats.nAccLeaf.inc
-      let base = Hash32.fromBytes accPath.getBytes()
-      trd.putFlatAcc(base, payload, info)           # flat accounts table
-
-      let acc = payload.decodeAccount(info).valueOr:
-        stats.nAccErr.inc
-        break body
+      let
+        base = Hash32.fromBytes accPath.getBytes()
+        acc = payload.decodeAccount(info).valueOr:
+          stats.nAccErr.inc
+          break body
+      var
+        dirtyStorage = false
+        dirtyCode = false
 
       if acc.storageRoot != EMPTY_ROOT_HASH:
         stats.nAccSto.inc
@@ -325,7 +328,7 @@ template accAndStoNotify(
         let
           start = Moment.now()
           rc = traverseMpt(
-            trd, base, acc.storageRoot.data, getStoKvt, stoNotify, info):
+            trd, base, acc.storageRoot.data, getStoPartMpt, stoNotify, info):
               traversingStorageMsg(stats, info)     # keep alive message
 
         if rc.isErr and rc.error != ENoRoot:
@@ -335,6 +338,7 @@ template accAndStoNotify(
         # Save sub-ranges and re-install accout ranges
         if 0 < trd.ranges.chunks:
           trd.putStoMissingIntv(base, trd.ranges, info)
+          dirtyStorage = true
         trd.ranges = stash
 
         stats.nStoNodes += stats.nNodes             # collect storage stats
@@ -346,18 +350,23 @@ template accAndStoNotify(
 
         block handleCode:
           # Check whether the code has an entry on the database
-          let code = trd.db.getCodeKvt(acc.codeHash).valueOr:
+          let code = trd.db.getCodePartMpt(acc.codeHash).valueOr:
             debug info & ": Failed accessing byte code",
               root=acc.codeHash.toStr, nErr=stats.nStoErr, `error`=error
             trd.cacheErr.inc
             stats.nCodeMissing.inc
+            dirtyCode = true
             break handleCode
 
           if 0 < code.len:
             trd.putFlatCode(base, code, info)       # contract codes table
           else:
             stats.nCodeMissing.inc
+            dirtyCode = true
             trd.putMissingBlob(base, info)          # missing contracts table
+
+      trd.putFlatAcc(                               # flat accounts table
+        base, dirtyStorage, dirtyCode, payload, info)
 
     elif att == AttDangling:
       stats.nAccDangl.inc
@@ -397,6 +406,10 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
         bodyRc = typeof(bodyRc).err(ENoPivot)
         break body
 
+      pivotNum = cty.sessionPivotNum(info).valueOr:
+        bodyRc = typeof(bodyRc).err(ENoPivotNum)
+        break body
+
     template stats(): auto = trd.stats
 
     startTraversingMsg(info)
@@ -406,16 +419,16 @@ template sessionAnalyseTrieIter*(cty: SnapCtxRef, info: static[string]): auto =
       bodyRc = typeof(bodyRc).err(EClearError)
       break body
 
-    trace info & ": Analysing partion MPTs.."
+    trace info & ": Analysing partial MPTs.."
     let
       start = Moment.now()
       rc = traverseMpt(
         trd, zeroHash32, pivot.Hash32.data,
-        getAccKvtWrap, accAndStoNotify, info):
+        getAccPartMptWrap, accAndStoNotify, info):
           traversingAccountsMsg(stats, info)
 
     # Alsways store even without ranges, so the state root gets registered
-    trd.putAccMissingIntv(pivot, trd.ranges, info)
+    trd.putAccMissingIntv(pivotNum, trd.ranges, info)
 
     if 0 < trd.cacheErr:
       bodyRc = typeof(bodyRc).err(EPutError)

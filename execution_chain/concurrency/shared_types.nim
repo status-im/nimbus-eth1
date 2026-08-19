@@ -16,7 +16,7 @@
 
 {.push raises: [], gcsafe.}
 
-import std/[hashes, math, typetraits], results
+import std/[hashes, math, typetraits], results, ./type_traits
 from system/ansi_c import c_realloc, c_free
 
 export hashes, results
@@ -93,10 +93,13 @@ proc `[]`*[E](s: var SharedSeq[E], i: int): var E =
 template len*[E](s: SharedSeq[E]): int =
   s.count
 
-
+const seqGrowThresholdBytes = 128 * 1024
 
 proc grow[E](s: var SharedSeq[E], minCap: int) =
-  s.reallocTo(nextPowerOfTwo(max(minCap, seqInitialCapacity)))
+  if max(s.cap, minCap) * sizeof(E) >= seqGrowThresholdBytes:
+    s.reallocTo(max(minCap, s.cap + (s.cap div 2)))
+  else:
+    s.reallocTo(nextPowerOfTwo(max(minCap, seqInitialCapacity)))
 
 proc setLen*[E](s: var SharedSeq[E], newLen: int, zeroed = true, exact = false) =
   if newLen > s.cap:
@@ -108,10 +111,13 @@ proc setLen*[E](s: var SharedSeq[E], newLen: int, zeroed = true, exact = false) 
     zeroMem(addr s.data[s.count], (newLen - s.count) * sizeof(E))
   s.count = newLen
 
-proc add*[E](s: var SharedSeq[E], value: sink E) =
+proc add*[E](s: var SharedSeq[E], value: E) =
+  # Not `sink`: E is always a `supportsCopyMem` type here, and the compiler
+  # passes a `sink` parameter of such a type by value - an extra copy of the
+  # element before the one this makes into the buffer.
   if s.count == s.cap:
     s.grow(s.count + 1)
-  copyMem(addr s.data[s.count], addr value, sizeof(E))
+  copyMem(addr s.data[s.count], unsafeAddr value, sizeof(E))
   inc s.count
 
 iterator items*[E](s: SharedSeq[E]): lent E =
@@ -206,7 +212,9 @@ func findEntry[K, V](s: SharedTable[K, V], sh: uint32, key: K): Opt[uint32] =
     dist += 1
 
 proc placeEntry[K, V](
-    s: var SharedTable[K, V], entry: sink SharedTableEntry[K, V], bucket, dist: uint32
+    s: var SharedTable[K, V],
+    entry: var SharedTableEntry[K, V],
+    bucket, dist: uint32,
 ) =
   ## Robin-hood placement: store `entry` (a key not already present), beginning
   ## the probe at `bucket` with probe distance `dist` and displacing any richer
@@ -214,7 +222,7 @@ proc placeEntry[K, V](
   ## slot exists (i.e. the fill ratio is respected).
   let mask = uint32(s.allocated - 1)
   var
-    cur = move(entry)
+    cur = consume(entry)
     i = bucket
     d = dist
 
@@ -232,9 +240,10 @@ proc placeEntry[K, V](
     i = (i + 1) and mask
     d += 1
 
-proc rawInsert[K, V](s: var SharedTable[K, V], sh: uint32, key: K, value: sink V) =
+proc rawInsert[K, V](s: var SharedTable[K, V], sh: uint32, key: K, value: var V) =
   ## Insert a key/value pair known not to be present.
-  s.placeEntry((sh, true, key, value), sh and uint32(s.allocated - 1), 0)
+  var entry = (sh, true, key, consume(value))
+  s.placeEntry(entry, sh and uint32(s.allocated - 1), 0)
 
 proc grow[K, V](s: var SharedTable[K, V], newAllocated: int) =
   let
@@ -249,7 +258,7 @@ proc grow[K, V](s: var SharedTable[K, V], newAllocated: int) =
 
   for i in 0 ..< oldAllocated:
     if old[i].used:
-      s.rawInsert(old[i].subhash, old[i].key, move(old[i].value))
+      s.rawInsert(old[i].subhash, old[i].key, old[i].value)
 
   if oldAllocated > 0:
     deallocShared(old)
@@ -259,9 +268,7 @@ proc init*[K, V](T: type SharedTable[K, V], initialSize: int = 0): T =
   ## to hold that many entries without growing.
   static:
     doAssert supportsCopyMem(K), "K must be a non-GC type"
-    # V is intentionally not required to be `supportsCopyMem` so that move-only,
-    # non-GC value types (e.g. SharedBytes or a nested SharedTable) are allowed.
-    # V must still not contain any GC managed memory.
+    doAssert supportsSharedMem(V), "V must be a non-GC type"
 
   if initialSize > 0:
     let allocated =
@@ -329,13 +336,7 @@ func getOrDefault*[K, V](s: SharedTable[K, V], key: K, default: V): V =
   else:
     default
 
-proc put*[K, V](s: var SharedTable[K, V], key: K, value: sink V) =
-  ## Insert or update `key` with `value`, growing the table if needed.
-  ##
-  ## When `key` is already present its previous value is overwritten in place.
-  ## If V owns manually allocated memory (e.g. SharedBytes or a nested
-  ## SharedTable), the overwritten value is abandoned and leaked, so dispose the
-  ## existing value first (e.g. via `withValue`) before updating an owning value.
+proc putImpl[K, V](s: var SharedTable[K, V], key: K, value: var V) =
   let sh = subhash(key)
 
   if s.allocated == 0:
@@ -359,7 +360,7 @@ proc put*[K, V](s: var SharedTable[K, V], key: K, value: sink V) =
     if e[].subhash == sh and e[].key == key:
       # Key already present: update in place. No new slot is consumed, so an
       # update never grows the table.
-      e[].value = move(value)
+      e[].value = consume(value)
       return
 
     i = (i + 1) and mask
@@ -372,8 +373,21 @@ proc put*[K, V](s: var SharedTable[K, V], key: K, value: sink V) =
     s.grow(s.allocated * 2)
     s.rawInsert(sh, key, value)
   else:
-    s.placeEntry((sh, true, key, value), i, dist)
+    var entry = (sh, true, key, consume(value))
+    s.placeEntry(entry, i, dist)
   s.used += 1
+
+template put*[K, V](s: var SharedTable[K, V], key: K, value: V) =
+  ## Insert or update `key` with `value`, growing the table if needed.
+  ##
+  ## When `key` is already present its previous value is overwritten in place.
+  ## If V owns manually allocated memory (e.g. SharedBytes or a nested
+  ## SharedTable), the overwritten value is abandoned and leaked, so dispose the
+  ## existing value first (e.g. via `withValue`) before updating an owning value.
+  # A template rather than a proc taking `sink V` - see `consume`.
+  bind putImpl, withMutable
+  withMutable(value, v):
+    s.putImpl(key, v)
 
 template `[]=`*(s: var SharedTable, key, value: untyped) =
   s.put(key, value)

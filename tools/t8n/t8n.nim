@@ -8,29 +8,18 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
-  chronicles,
-  "."/[config, transition]
+  results,
+  ./[config, transition]
 
 # we are using chronicles LogLevel
 # instead of our LogLevel
 import types except LogLevel
 
-template wrapException(body) =
-  when wrapExceptionEnabled:
-    try:
-      body
-    except T8NError as e:
-      stderr.writeLine(e.msg)
-      quit(e.exitCode.int)
-    except CatchableError as e:
-      stderr.writeLine($e.name & " : " & e.msg)
-      quit(QuitFailure)
-    except AssertionDefect as e:
-      stderr.writeLine($e.name & " : " & e.msg)
-      quit(QuitFailure)
-  else:
-    body
+when defined(chronicles_runtime_filtering):
+  import chronicles
 
 when defined(chronicles_runtime_filtering):
   proc toLogLevel(v: int): LogLevel =
@@ -46,17 +35,26 @@ when defined(chronicles_runtime_filtering):
     let level = v.toLogLevel
     setLogLevel(level)
 
-proc main() =
+proc executeTransition(conf: T8NConf): Result[void, T8NErr] =
+  var ctx = TransContext()
+  ? ctx.processInputs(conf)
+  let res = ? ctx.transitionAction(conf)
+  ? ctx.dispatchOutput(conf, res)
+  ok()
+
+proc main() {.raises: [IOError].} =
   # https://github.com/status-im/nimbus-eth1/issues/3131
   setStdIoUnbuffered()
 
-  wrapException:
-    let conf = T8NConf.init()
-    when defined(chronicles_runtime_filtering):
-      setVerbosity(conf.verbosity)
-    var ctx = TransContext()
-    ctx.processInputs(conf)
-    let res = ctx.transitionAction(conf)
-    ctx.dispatchOutput(conf, res)
+  let conf = try:
+               T8NConf.init()
+             except CatchableError as exc:
+               stderr.writeLine(exc.msg)
+               quit(QuitFailure)
+  when defined(chronicles_runtime_filtering):
+    setVerbosity(conf.verbosity)
+  executeTransition(conf).isOkOr:
+    stderr.writeLine(error.msg)
+    quit(error.code.int)
 
 main()

@@ -91,14 +91,12 @@ proc initInstance*(
 
   db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
   when compileOption("threads"):
-    db.txRef.lock.init()
-
-  if threadSafeCaches:
-    db.accLeaves.init(accLeavesLruSize)
-    db.stoLeaves.init(stoLeavesLruSize)
-  else:
-    db.accLeaves.init(accLeavesLruSize, shardBits = 0, threadSafe = false)
-    db.stoLeaves.init(stoLeavesLruSize, shardBits = 0, threadSafe = false)
+    if threadSafeCaches:
+      db.accLeaves.init(accLeavesLruSize)
+      db.stoLeaves.init(stoLeavesLruSize)
+    else:
+      db.accLeaves.init(accLeavesLruSize, shardBits = 0, threadSafe = false)
+      db.stoLeaves.init(stoLeavesLruSize, shardBits = 0, threadSafe = false)
   db.maxSnapshots = maxSnapshots
   db.parallelStateRootComputation = parallelStateRootComputation
 
@@ -115,10 +113,11 @@ proc close*(db: AristoDbRef; wipe = false) =
   ##
   ## This distructor may be used on already *destructed* descriptors.
   ##
-  db.accLeaves.dispose()
-  db.stoLeaves.dispose()
-  db.accLeaves.reset()
-  db.stoLeaves.reset()
+  when compileOption("threads"):
+    db.accLeaves.dispose()
+    db.stoLeaves.dispose()
+    db.accLeaves.reset()
+    db.stoLeaves.reset()
 
   db.closeFn wipe
 

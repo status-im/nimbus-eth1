@@ -103,23 +103,24 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
     floorDataGas = regularGas
     tokens = 0
     accessListBytes = 0
+    recipientRegularGas = 0
 
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
   if call.isCreate:
     if hardFork >= Amsterdam:
-      stateGas += CREATE_ACCOUNT_STATE_GAS
+      recipientRegularGas += gasFees[fork][GasTXCreate]
       if call.value.isZero.not:
-        regularGas += TRANSFER_LOG_COST
-
-    regularGas += gasFees[fork][GasTXCreate]
+        recipientRegularGas += TRANSFER_LOG_COST
+    else:
+      regularGas += gasFees[fork][GasTXCreate]
     if hardFork >= Shanghai:
       regularGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
   elif not call.selfTransfer(sender):
     if hardFork >= Amsterdam:
-      regularGas += COLD_ACCOUNT_ACCESS_8038
+      recipientRegularGas += COLD_ACCOUNT_ACCESS_8038
       if call.value.isZero.not:
-        regularGas += TRANSFER_LOG_COST
-        regularGas += TX_VALUE_COST
+        recipientRegularGas += TRANSFER_LOG_COST
+        recipientRegularGas += TX_VALUE_COST
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
   let
@@ -152,12 +153,13 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
 
   if hardFork >= Prague:
     if hardFork >= Amsterdam:
-      regularGas += (ACCOUNT_WRITE_8038 + REGULAR_PER_AUTH_BASE_COST) * call.authorizationList.len
+      regularGas += recipientRegularGas
+      floorDataGas += recipientRegularGas
+      regularGas += REGULAR_PER_AUTH_BASE_COST * call.authorizationList.len
       # EIP-7981: Increase Access List Cost
       let floorTokensInAccessList = accessListBytes * 4
       tokens += floorTokensInAccessList
       regularGas += TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 * floorTokensInAccessList
-      stateGas += (STATE_BYTES_PER_NEW_ACCOUNT + STATE_BYTES_PER_AUTH_BASE) * COST_PER_STATE_BYTE * GasInt(call.authorizationList.len)
       floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7976
     else:
       regularGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
