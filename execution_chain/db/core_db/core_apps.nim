@@ -22,6 +22,7 @@ import
   "../.."/[constants],
   "../.."/stateless/witness_types,
   ".."/[aristo, storage_types],
+  "../kvt"/[kvt_desc, kvt_layers, kvt_utils],
   "."/base
 
 logScope:
@@ -140,7 +141,32 @@ proc getBlockHash*(
     n: BlockNumber;
       ): Result[Hash32, string] =
   ## Return the block hash for the given block number.
-  db.getHash(blockNumberToHashKey(n))
+  const info = "getBlockHash()"
+  let key = blockNumberToHashKey(n)
+
+  let pending = db.kTx.layersGet(key.toOpenArray)
+  if pending.isSome():
+    wrapRlpException info:
+      return ok(rlp.decode(pending.unsafeGet(), Hash32))
+
+  when compileOption("threads"):
+    let
+      kvt = db.kTx.db
+      keyHash = kvt.blockHashes.toKeyHash(n)
+
+    kvt.blockHashes.withGetByHash(keyHash, n, cached):
+      return ok(cached)
+
+  let data = db.kTx.db.getBe(key.toOpenArray).valueOr:
+    if error != GetNotFound:
+      warn info, key, error=($error)
+    return err($error)
+
+  wrapRlpException info:
+    let blockHash = rlp.decode(data, Hash32)
+    when compileOption("threads"):
+      kvt.blockHashes.putByHash(keyHash, n, blockHash)
+    return ok(blockHash)
 
 proc getBlockHeader*(
     db: CoreDbTxRef;

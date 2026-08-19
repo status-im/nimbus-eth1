@@ -15,6 +15,7 @@
 
 import
   results,
+  ../storage_types,
   ./kvt_init/init_common,
   ./[kvt_desc, kvt_layers]
 
@@ -59,6 +60,9 @@ proc persist*(
   # Store structural single trie entries
   for k,v in txFrame.sTab:
     db.putKvpFn(batch, k, v)
+    when compileOption("threads"):
+      if k.isBlockNumberToHashKey():
+        db.blockHashes.del(k.blockNumberFromHashKey())
   # TODO above, we only prepare the changes to the database but don't actually
   #      write them to disk - the code below that updates the frame should
   #      really run after things have been written (to maintain sync betweeen

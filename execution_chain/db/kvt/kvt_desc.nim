@@ -15,10 +15,15 @@
 
 import
   std/[hashes, tables],
+  eth/common/[base, hashes],
   results,
   ./kvt_init/init_common,
   ./kvt_constants,
   ./kvt_desc/desc_error
+
+when compileOption("threads"):
+  import ../../concurrency/lru
+  export lru
 
 # Not auto-exporting backend
 export hashes, tables, kvt_constants, desc_error
@@ -94,6 +99,24 @@ type
     txRef*: KvtTxRef
       ## Tx holding data scheduled to be written to disk during the next
       ## `persist` call
+
+    when compileOption("threads"):
+      blockHashes*: ConcurrentLruCache[BlockNumber, Hash32]
+        ## Block number to block hash cache mirroring the backend
+
+# ------------------------------------------------------------------------------
+# Public constructor helpers
+# ------------------------------------------------------------------------------
+
+proc initInstance*(db: KvtDbRef) =
+  db.txRef = KvtTxRef(db: db)
+  when compileOption("threads"):
+    db.blockHashes.init(BLOCK_HASH_LRU_SIZE)
+
+proc disposeInstance*(db: KvtDbRef) =
+  when compileOption("threads"):
+    db.blockHashes.dispose()
+    db.blockHashes.reset()
 
 # ------------------------------------------------------------------------------
 # Public helpers

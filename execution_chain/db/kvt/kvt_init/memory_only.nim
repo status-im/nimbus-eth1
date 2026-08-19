@@ -28,7 +28,7 @@ proc init*(T: type KvtDbRef): T =
   ## Memory backend constructor.
   ##
   let db = memoryBackend()
-  db.txRef = KvtTxRef(db: db)
+  db.initInstance()
   db
 
 # ------------------------------------------------------------------------------

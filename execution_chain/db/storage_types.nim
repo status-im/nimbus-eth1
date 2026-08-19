@@ -63,6 +63,12 @@ func blockNumberToHashKey*(u: BlockNumber): DbKey {.inline.} =
   copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
   result.dataEndPos = uint8 sizeof(u)
 
+func isBlockNumberToHashKey*(key: openArray[byte]): bool {.inline.} =
+  key.len == sizeof(BlockNumber) + 1 and key[0] == byte(ord(blockNumberToHash))
+
+func blockNumberFromHashKey*(key: openArray[byte]): BlockNumber {.inline.} =
+  copyMem(addr result, unsafeAddr key[1], sizeof(BlockNumber))
+
 func canonicalHeadHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(canonicalHeadHash)
   result.dataEndPos = 1

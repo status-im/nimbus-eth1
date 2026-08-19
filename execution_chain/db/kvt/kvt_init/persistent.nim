@@ -36,7 +36,7 @@ proc init*(
   ## Generic constructor for `RocksDb` backend
   ##
   let db = rocksDbKvtBackend(baseDb, cf)
-  db.txRef = KvtTxRef(db: db)
+  db.initInstance()
   db
 
 # ------------------------------------------------------------------------------

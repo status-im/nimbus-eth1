@@ -14,4 +14,7 @@ import
 export
   EmptyBlob
 
+const
+  BLOCK_HASH_LRU_SIZE* = 256 * 1024
+
 # End
