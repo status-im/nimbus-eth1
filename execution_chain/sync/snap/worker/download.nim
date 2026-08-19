@@ -37,6 +37,7 @@ proc getStateRoot(
   ok((StateRoot stateHdr.stateRoot, accState.number))
 
 proc getLastBalNum(ctx: SnapCtxRef): BlockNumber =
+  ## Return `BlockNumber(0)` unless found. No error logging here.
   let maybe = ctx.pool.cacheDB.lastBalNumber().valueOr:
     return BlockNumber(0)
   if maybe.isSome():
@@ -52,12 +53,16 @@ proc downloadInit*(
     info: static[string];
       ): Opt[void] =
   if not ctx.accUnproc.synced():
-    let adb = ctx.pool.cacheDB
+    # Update state number that can be advanced to
+    ctx.pool.forwardNum = ctx.getLastBalNum()       # can forward to that state
 
+    let adb = ctx.pool.cacheDB
     if ?adb.hasAccMissingIntv(info):                # have an account state?
       let accState = ?adb.getAccMissingIntv(info)
       ctx.accUnproc.unprocessed = accState.ranges   # copy reference (!)
       ctx.pool.pivotNum = accState.number           # set pivot
+      debug info & ": Continue downloading", pivotNum=ctx.pool.pivotNum,
+        forwardNum=ctx.pool.forwardNum
     else:
       let
         number = ?adb.lastHeaderNumber(info)
@@ -65,9 +70,8 @@ proc downloadInit*(
       ?adb.putAccMissingIntv(number, accRng, info)  # new state
       ctx.accUnproc.init ItemKeyRangeMax
       ctx.pool.pivotNum = number                    # set pivot
-
-    # Update state number that can be advanced to
-    ctx.pool.forwardNum = ctx.getLastBalNum()       # can forward to that state
+      debug info & ": Start downloading", pivotNum=ctx.pool.pivotNum,
+        forwardNum=ctx.pool.forwardNum
 
     ctx.accountDownloadMetricsUpdate()
     ctx.accUnproc.synced = true
@@ -177,6 +181,9 @@ template downloadBals*(
 
     ctx.pool.forwardNum = ctx.getLastBalNum()
     bodyRc = typeof(bodyRc).ok()
+
+    trace info & ": Imported BALs", pivotNum=ctx.pool.pivotNum,
+      forwardNum=ctx.pool.forwardNum, nBALs=rc.value
 
   bodyRc
 

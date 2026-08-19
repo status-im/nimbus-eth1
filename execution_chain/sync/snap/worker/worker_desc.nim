@@ -99,7 +99,6 @@ type
     ## similar) fetch request again from the same peer that sent it previously.
     stateRoot*: StateRoot            ## Accounts fetch (per state root)
     balHash*: Hash32                 ## Last failed BAL
-    ethBalHash*: EthBalHashSet       ## Ditto for eth peers
 
   SnapPeerData* = object
     ## Local descriptor data extension
@@ -125,6 +124,7 @@ type
     pivotNum*: BlockNumber           ## Current appl;icable state block number
     forwardNum*: BlockNumber         ## Max possible BALs forward
     balsLocked*: SnapPeerRef         ## Only one peer can download BALs
+    failedEthBalId*: EthBalHashSet   ## Ditto for eth peers
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
@@ -132,6 +132,7 @@ type
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastNoHdrsLog*: chronos.Moment   ## Control update messages
     lastMaxHdrsLog*: chronos.Moment  ## Control update messages
+    lockedBalsLog*: chronos.Moment   ## Control messages about missing peers
     ticker*: Ticker                  ## Ticker function to run in background
 
 # ------------------------------------------------------------------------------

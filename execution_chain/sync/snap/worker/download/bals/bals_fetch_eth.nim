@@ -52,7 +52,7 @@ proc ethGetBals*(
       break                                         # no more peers
 
     let peerID = ethBuddy.peerID
-    buddy.only.failedReq.ethBalHash.get(peerID).isErrOr:
+    buddy.ctx.pool.failedEthBalId.get(peerID).isErrOr:
       if value == zeroHash32 or
          value == req.blockHashes[0]:
         error = err((EAlreadyTriedAndFailed,"","",Moment.now()-start,peerID))

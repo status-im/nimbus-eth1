@@ -11,7 +11,8 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos],
+  std/strutils,
+  pkg/[chronicles, chronos, minilru],
   ../../../../../block_access_list/bal_utils,
   ../../../../wire_protocol,
   ../../[helpers, mpt, worker_desc],
@@ -108,17 +109,22 @@ proc storeBals(
     hdrs: openArray[Header];
     startInx: int;                                  # index of first header
     info: static[string];                           # Log message prefix
-       ): Opt[int] =
+       ): Result[int,ErrorType] =
   ## Verify BALs and store on cache DB. The return code of the `storeBals()`.
-  let
-    ctx = buddy.ctx
-    db = ctx.pool.cacheDB
+  let db = buddy.ctx.pool.cacheDB
 
+  template hdr(n: int): untyped = hdrs[startInx+n]  # shortcut
   for n in 0 ..< rawBals.len:
-    let bal = rawBals[n].decodeBlockAccessList(hdrs[startInx+n]).valueOr:
-      return ok(n)
+
+    # Verify and decode BALs
+    let bal = rawBals[n].decodeBlockAccessList(hdr(n)).valueOr:
+      error info & ": BAL verification failed", number=hdr(n).number
+      return err(EValidationError)
+
     # Store BAL on cache DB
-    ?db.putBal(hdrs[n].number, bal, info)
+    db.putBal(hdr(n).number, bal, info).isOkOr:
+      return err(ECacheError)
+
   ok rawBals.len
 
 # ------------------------------------------------------------------------------
@@ -133,7 +139,7 @@ template balsDownload*(
       ): auto =
   ## Async/template
   ##
-  var bodyRc = Result[int,ErrorType].err(EGeneric)
+  var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
     # Check arguments for sanity
     let peer {.inject,used.} = $buddy.peer          # logging only
@@ -150,26 +156,38 @@ template balsDownload*(
     var fromInx = 0
     while fromInx < q.hdrs.len:
       let resp = buddy.fetchBlockAccessLists(q.balReq, fromInx).valueOr:
-        if fromInx == 0:
-          bodyRc = typeof(bodyRc).err(error)
-        else:
-          bodyRc = typeof(bodyRc).ok(fromInx)
+        bodyRc = typeof(bodyRc).err(error)
+        trace info & ": Fetch error", fromInx=fromInx, `error`=error
         break body
-      if resp.len == 0:
-        bodyRc = typeof(bodyRc).ok(fromInx)
+      if resp.bal.len == 0:
+        trace info & ": Fetch empty resopnse", fromInx=fromInx
+        bodyRc = typeof(bodyRc).ok()
         break body
 
+      trace info & ": Fetched BALS", fromInx=fromInx,
+        fromNumber=q.hdrs[fromInx].number, nResp=resp.bal.len
+
       # Verify BALs and store on cache DB.
-      let nProcessed = buddy.storeBals(resp, q.hdrs, fromInx, info).valueOr:
-        bodyRc = typeof(bodyRc).ok(fromInx)
+      let nProcessed = buddy.storeBals(resp.bal, q.hdrs, fromInx, info).valueOr:
+        if error == EValidationError:
+          # Mark remote peer unusable (if eth peer)
+          buddy.ctx.pool.failedEthBalId.put(resp.peerID, zeroHash32)
+          trace info & ": Validation error", peerID=resp.peerID.toHex,
+            fromInx=fromInx, nResp=resp.bal.len, `error`=error
+        bodyRc = typeof(bodyRc).err(error)
         break body
       if nProcessed == 0:
-        bodyRc = typeof(bodyRc).ok(fromInx)
+        bodyRc = typeof(bodyRc).ok()
         break body
+
+      trace info & ": Verified & stored BALS", fromInx=fromInx,
+        nProcessed=nProcessed, fromNumber=q.hdrs[fromInx].number,
+        nResp=resp.bal.len
+
       fromInx += nProcessed
       # End `while ..`
 
-    bodyRc = typeof(bodyRc).ok(fromInx)
+    bodyRc = typeof(bodyRc).ok()
 
   bodyRc
 
@@ -194,8 +212,8 @@ template balsDownloadAppend*(
         w.number                                    # use this one as default
 
     if topHdrBn <= topBalBn:                        # sanity check
-       bodyRc = typeof(bodyRc).err(EHeadersMissing) # need more headers
-       break body
+      bodyRc = typeof(bodyRc).err(EHeadersMissing)  # need more headers
+      break body
 
     # Download and save blocks
     let
@@ -204,15 +222,18 @@ template balsDownloadAppend*(
     var
       minBn = firstBalBn
     while minBn <= maxBn:
-      let
-        nBals = min(nChunk, (maxBn - minBn + 1).int)
-        nProcessed = buddy.balsDownload(minBn, nBals, info).valueOr:
-          bodyRc = typeof(bodyRc).err(error)
-          break body
-      if nProcessed == 0:
+      let nBals = min(nChunk, (maxBn - minBn + 1).int)
+      buddy.balsDownload(minBn, nBals, info).isOkOr:
+        bodyRc = typeof(bodyRc).err(error)
+        break body
+      let balNum = db.lastBalNumber(info).valueOr:  # get latest BAL
+        bodyRc = typeof(bodyRc).err(ECacheError)
+        break body
+      trace info & ": Processed BALs", nProcessed=(balNum - minBn)
+      if balNum == minBn:                           # no progress
         bodyRc = typeof(bodyRc).ok((minBn - firstBalBn).int)
         break body
-      minBn += nProcessed.uint
+      minBn = balNum
 
     bodyRc = typeof(bodyRc).ok((maxBn - topBalBn).int)
 
