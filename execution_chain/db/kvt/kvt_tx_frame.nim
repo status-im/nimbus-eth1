@@ -14,12 +14,12 @@
 {.push raises: [].}
 
 import
-  eth/common/hashes_rlp,
-  eth/rlp,
   results,
-  ../storage_types,
   ./kvt_init/init_common,
   ./[kvt_desc, kvt_layers]
+
+when compileOption("threads"):
+  import eth/common/hashes_rlp, eth/rlp, ../storage_types
 
 # ------------------------------------------------------------------------------
 # Public functions
