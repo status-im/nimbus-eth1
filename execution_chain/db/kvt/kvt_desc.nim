@@ -108,10 +108,14 @@ type
 # Public constructor helpers
 # ------------------------------------------------------------------------------
 
-proc initInstance*(db: KvtDbRef) =
+proc initInstance*(
+    db: KvtDbRef, threadSafeCaches = true, blockHashesLruSize = 0) =
   db.txRef = KvtTxRef(db: db)
   when compileOption("threads"):
-    db.blockHashes.init(BLOCK_HASH_LRU_SIZE)
+    if threadSafeCaches:
+      db.blockHashes.init(blockHashesLruSize)
+    else:
+      db.blockHashes.init(blockHashesLruSize, shardBits = 0, threadSafe = false)
 
 proc disposeInstance*(db: KvtDbRef) =
   when compileOption("threads"):

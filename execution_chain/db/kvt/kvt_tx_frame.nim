@@ -14,6 +14,8 @@
 {.push raises: [].}
 
 import
+  eth/common/hashes_rlp,
+  eth/rlp,
   results,
   ../storage_types,
   ./kvt_init/init_common,
@@ -62,7 +64,14 @@ proc persist*(
     db.putKvpFn(batch, k, v)
     when compileOption("threads"):
       if k.isBlockNumberToHashKey():
-        db.blockHashes.del(k.blockNumberFromHashKey())
+        let number = k.blockNumberFromHashKey()
+        if v.len == 0:
+          db.blockHashes.del(number)
+        else:
+          try:
+            discard db.blockHashes.update(number, rlp.decode(v, Hash32))
+          except RlpError:
+            db.blockHashes.del(number)
   # TODO above, we only prepare the changes to the database but don't actually
   #      write them to disk - the code below that updates the frame should
   #      really run after things have been written (to maintain sync betweeen

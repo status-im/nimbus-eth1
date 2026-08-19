@@ -24,11 +24,14 @@ export
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc init*(T: type KvtDbRef): T =
+proc init*(T: type KvtDbRef, enableCaches: static bool = false): T =
   ## Memory backend constructor.
   ##
   let db = memoryBackend()
-  db.initInstance()
+  when enableCaches:
+    db.initInstance(blockHashesLruSize = BLOCK_HASH_LRU_SIZE)
+  else:
+    db.initInstance(blockHashesLruSize = 0)
   db
 
 # ------------------------------------------------------------------------------

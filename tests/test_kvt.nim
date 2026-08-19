@@ -206,7 +206,7 @@ suite "Kvt block hash cache":
     hashB = hash32"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
   setup:
-    let db = newCoreDbRef DefaultDbMemory
+    let db = newCoreDbRef(DefaultDbMemory, enableCaches = true)
 
   test "Persisted block hashes are served from the cache":
     let base = db.baseTxFrame()
@@ -238,7 +238,7 @@ suite "Kvt block hash cache":
 
     db.close()
 
-  test "Persisting a new block hash invalidates the cache":
+  test "Persisting a new block hash updates the cache in place":
     let base = db.baseTxFrame()
     base.addBlockNumberToHashLookup(BlockNumber(1), hashA)
     db.persist(base)
@@ -250,6 +250,7 @@ suite "Kvt block hash cache":
     fork.checkpoint(BlockNumber(1))
     db.persist(fork)
 
+    db.kvt.delBe(blockNumberToHashKey(BlockNumber(1)).toOpenArray).expect("del")
     check db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashB
 
     db.close()
