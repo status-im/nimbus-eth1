@@ -340,6 +340,15 @@ proc delMissingBlob*(
     return err()
   ok()
 
+proc nMissingBlob*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[uint] =
+  var nCodes = 0u
+  for _ in db.walkMissingBlob():
+    nCodes.inc
+  ok(move nCodes)
+
 
 proc getFlatCode*(
     db: CacheDbRef;
