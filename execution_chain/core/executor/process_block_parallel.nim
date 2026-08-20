@@ -11,7 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[atomics, algorithm],
+  std/[atomics, algorithm, sets],
   ../../common/common,
   ../../db/ledger,
   ../../db/core_db,
@@ -20,7 +20,8 @@ import
   ../../evm/types,
   ../../evm/precompiles,
   ../../evm/interpreter/gas_costs,
-  ../../block_access_list/[bal_builder, bal_overlay, bal_tracker, bal_utils],
+  ../../block_access_list/[
+    bal_builder, bal_overlay, bal_tracker, bal_utils, bal_validation],
   ../../concurrency/[shared_types, utils],
   ../eip7691,
   ./process_transaction,
@@ -440,6 +441,13 @@ proc processTransactionsParallel*(
   ctx.balPtr = balRef[].addr
   ctx.sharedBuilder = if vmState.balTrackerEnabled: vmState.balTracker.builder else: nil
 
+  var declaredReads: HashSet[(Address, UInt256)]
+  if vmState.balTrackerEnabled and vmState.com.balReadFeasibilityCheckEnabled(
+      vmState.blockCtx.timestamp, Opt.some(balRef)):
+    buildDeclaredReadSet(balRef, declaredReads)
+    for key in vmState.balTracker.builder[].storageAccesses(0):
+      declaredReads.excl(key)
+
   for i in 0 ..< n:
     entries[i].tx = transactions[i].addr
     entries[i].txIndex = i
@@ -498,6 +506,19 @@ proc processTransactionsParallel*(
           "gasLimit=" & $vmState.blockCtx.gasLimit & ", regularGas=" &
           $vmState.blockRegularGasUsed & ", stateGas=" & $vmState.blockStateGasUsed
       )
+
+    # The task for this transaction has been synced, so its accesses have been
+    # written to the shared builder and can be read here.
+    if declaredReads.len > 0 and i < n - 1:
+      for key in vmState.balTracker.builder[].storageAccesses(i + 1):
+        declaredReads.excl(key)
+
+      if (i + 1) mod BAL_READ_FEASIBILITY_CHECK_INTERVAL == 0:
+        let remainingBlockGas =
+          vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+        checkStorageReadFeasibility(declaredReads.len, remainingBlockGas).isOkOr:
+          ctx.cancelled.store(true, moRelease)
+          return err(error)
 
     var logs = unpackLogs(entries[i].logs.data(asOpenArray = true))
     if skipReceipts:

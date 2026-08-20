@@ -59,6 +59,7 @@ const
   defaultBalStatePrefetchWorkers* = 0
   defaultBalParallelExecution* = false
   defaultBalPruning* = true
+  defaultBalReadFeasibilityCheck* = false
 
 template defaultListenAddress(): IpAddress =
   getAutoAddress(Port(0)).toIpAddress()
@@ -404,6 +405,14 @@ type
       desc: "Prune block access lists which have fallen outside of the " &
         "retention period defined by EIP-7928"
       name: "debug-bal-pruning".}: bool
+
+    balReadFeasibilityCheck* {.
+      hidden
+      defaultValue: defaultBalReadFeasibilityCheck
+      desc: "Reject blocks early during validation when the storage reads " &
+        "declared in the supplied block access list can no longer be paid " &
+        "for by the remaining block gas as defined by EIP-7928"
+      name: "debug-bal-read-feasibility-check".}: bool
 
     eagerStateRootCheck* {.
       hidden

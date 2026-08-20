@@ -12,5 +12,5 @@ import
   ./test_block_access_list/[
     test_bal_builder, test_bal_validation,
     test_bal_tracker, test_bal_overlay,
-    test_bal_utils,
+    test_bal_utils, test_bal_feasibility,
   ]

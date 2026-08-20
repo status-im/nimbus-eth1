@@ -82,7 +82,8 @@ proc prepareEnv*(
       parallelSenderRecovery = parallelEnabled,
       optimisticStatePrefetch = parallelEnabled,
       balStatePrefetch = parallelEnabled,
-      balParallelExecution = parallelEnabled
+      balParallelExecution = parallelEnabled,
+      balReadFeasibilityCheck = true
     )
     com.db.mpt.parallelStateRootComputation = parallelEnabled
 

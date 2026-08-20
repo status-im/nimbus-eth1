@@ -312,6 +312,7 @@ proc setupCommonRef*(
     balStatePrefetchWorkers = config.balStatePrefetchWorkers,
     balParallelExecution = config.balParallelExecution and
         not config.statelessProvider and not disableParallelFeatures,
+    balReadFeasibilityCheck = config.balReadFeasibilityCheck,
     parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures)
 
   if config.extraData.len > 32:

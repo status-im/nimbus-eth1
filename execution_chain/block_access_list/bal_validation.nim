@@ -11,7 +11,7 @@
 
 import
   std/[sets, algorithm],
-  eth/common/[block_access_lists, block_access_lists_rlp, hashes],
+  eth/common/[addresses, block_access_lists, block_access_lists_rlp, hashes],
   stint,
   results,
   ../constants,
@@ -29,20 +29,21 @@ export block_access_lists, hashes, results
 # - bal_items = addresses + storage_keys
 # - ITEM_COST = 2000
 
-const BAL_ITEM_COST = 2000.GasInt
+const
+  BAL_ITEM_COST* = 2000.GasInt
+  BAL_READ_FEASIBILITY_CHECK_INTERVAL* = 8
 
-func checkCodeChange(newCode: openArray[byte]): Result[void, string] =
-  if newCode.len > EIP7954_MAX_CODE_SIZE:
-    return err("Code change exceeds the maximum contract code size")
+  SYSTEM_CONTRACT_ADDRESSES = [
+    BEACON_ROOTS_ADDRESS,
+    HISTORY_STORAGE_ADDRESS,
+    WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+    CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
+    BUILDER_DEPOSIT_CONTRACT_ADDRESS,
+    BUILDER_EXIT_CONTRACT_ADDRESS,
+  ]
 
-  # EIP-3541 forbids new contract code starting with the 0xEF byte. The only
-  # valid code beginning with 0xEF is an EIP-7702 delegation designator.
-  if newCode.len > 0 and newCode[0] == 0xEF.byte and not newCode.isDelegation():
-    return err(
-      "Code change starting with 0xEF must be a valid EIP-7702 delegation (EIP-3541)"
-    )
-
-  ok()
+template fitsGasBudget(itemCount: int, gasBudget: GasInt): bool =
+  itemCount.GasInt <= gasBudget div BAL_ITEM_COST
 
 func checkBalSize(
     bal: BlockAccessListRef, blockGasLimit: GasInt
@@ -58,10 +59,40 @@ func checkBalSize(
     storageKeysCount += changes.storageChanges.len() + changes.storageReads.len()
 
   let balItemCount = bal[].len() + storageKeysCount
-  if balItemCount.GasInt <= blockGasLimit div BAL_ITEM_COST:
+  if balItemCount.fitsGasBudget(blockGasLimit):
     ok()
   else:
     err("BAL exceeds max items cap")
+
+func checkStorageReadFeasibility*(
+    remainingReads: int, remainingBlockGas: GasInt
+): Result[void, string] =
+  if remainingReads.fitsGasBudget(remainingBlockGas):
+    ok()
+  else:
+    err("remaining declared storage reads (" & $remainingReads &
+      ") cannot be paid for by the remaining block gas (" & $remainingBlockGas & ")")
+
+func buildDeclaredReadSet*(
+    bal: BlockAccessListRef, declaredReads: var HashSet[(Address, UInt256)]
+) =
+  for accountChanges in bal[]:
+    if accountChanges.address notin SYSTEM_CONTRACT_ADDRESSES:
+      for slot in accountChanges.storageReads:
+        declaredReads.incl((accountChanges.address, slot))
+
+func checkCodeChange(newCode: openArray[byte]): Result[void, string] =
+  if newCode.len > EIP7954_MAX_CODE_SIZE:
+    return err("Code change exceeds the maximum contract code size")
+
+  # EIP-3541 forbids new contract code starting with the 0xEF byte. The only
+  # valid code beginning with 0xEF is an EIP-7702 delegation designator.
+  if newCode.len > 0 and newCode[0] == 0xEF.byte and not newCode.isDelegation():
+    return err(
+      "Code change starting with 0xEF must be a valid EIP-7702 delegation (EIP-3541)"
+    )
+
+  ok()
 
 func validate*(
     bal: BlockAccessListRef,

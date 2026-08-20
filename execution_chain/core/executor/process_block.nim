@@ -11,6 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
+  std/sets,
   ../../common/common,
   ../../constants,
   ../../utils/utils,
@@ -78,6 +79,13 @@ proc processTransactions*(
       return processTransactionsParallel(
         vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
 
+  var declaredReads: HashSet[(Address, UInt256)]
+  if vmState.balTrackerEnabled and
+      vmState.com.balReadFeasibilityCheckEnabled(header.timestamp, blockAccessList):
+    buildDeclaredReadSet(blockAccessList.get(), declaredReads)
+    for key in vmState.balTracker.builder[].storageAccesses(0):
+      declaredReads.excl(key)
+
   vmState.withSender(transactions, blockAccessList):
     if sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
@@ -97,6 +105,15 @@ proc processTransactions*(
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType, rc.value)
       if collectLogs:
         vmState.allLogs.add vmState.receipts[txIndex].logs
+
+    if declaredReads.len > 0 and txIndex < transactions.high:
+      for key in vmState.balTracker.builder[].storageAccesses(txIndex + 1):
+        declaredReads.excl(key)
+
+      if (txIndex + 1) mod BAL_READ_FEASIBILITY_CHECK_INTERVAL == 0:
+        let remainingBlockGas =
+          vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+        ?checkStorageReadFeasibility(declaredReads.len, remainingBlockGas)
   ok()
 
 proc procBlkPreamble(
