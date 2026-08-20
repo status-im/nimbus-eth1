@@ -14,6 +14,7 @@ import
   unittest2,
   results,
   eth/common,
+  eth/rlp,
   ../execution_chain/db/core_db,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/storage_types,
@@ -262,6 +263,19 @@ suite "Kvt block hash cache":
 
     db.kvt.delBe(blockNumberToHashKey(BlockNumber(2)).toOpenArray).expect("del")
     check db.baseTxFrame().getBlockHash(BlockNumber(2)).expect("hash") == hashB
+
+    db.close()
+
+  test "A read miss fills the cache from the backend":
+    let batch = db.kvt.putBegFn().expect("batch")
+    db.kvt.putKvpFn(
+      batch, blockNumberToHashKey(BlockNumber(7)).toOpenArray, rlp.encode(hashA))
+    db.kvt.putEndFn(batch).expect("putEndFn")
+
+    check db.baseTxFrame().getBlockHash(BlockNumber(7)).expect("hash") == hashA
+
+    db.kvt.delBe(blockNumberToHashKey(BlockNumber(7)).toOpenArray).expect("del")
+    check db.baseTxFrame().getBlockHash(BlockNumber(7)).expect("hash") == hashA
 
     db.close()
 

@@ -158,9 +158,14 @@ proc getBlockHash*(
       return ok(cached)
 
   let data = db.kTx.db.getBe(key.toOpenArray).valueOr:
+    let dbError =
+      if error == GetNotFound:
+        error.toError("", KvtNotFound)
+      else:
+        error.toError("")
     if error != GetNotFound:
-      warn info, key, error=($error)
-    return err($error)
+      warn info, key, error=($$dbError)
+    return err($$dbError)
 
   wrapRlpException info:
     let blockHash = rlp.decode(data, Hash32)
