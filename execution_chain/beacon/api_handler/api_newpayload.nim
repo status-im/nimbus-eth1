@@ -54,7 +54,7 @@ template validateVersion(com, timestamp, payloadVersion, apiVersion, payload) =
       raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
 
   if com.isAmsterdamOrLater(timestamp):
-    # TODO: probably blockAccessList field should be a string instead of Opt[string]
+    # TODO: probably blockAccessList field should be a seq[byte] instead of Opt[seq[byte]]
     if payload.blockAccessList.isNone or payload.blockAccessList.value.len == 0:
       raise invalidParams("newPayload" & $apiVersion &
         ": payload missing blockAccessList")
@@ -125,7 +125,7 @@ template validateVersion(com, timestamp, payloadVersion, apiVersion, payload) =
       raise invalidParams("newPayload" & $apiVersion &
         ": excessBlobGas appear before Cancun")
 
-  # TODO: probably blockAccessList field should be a string instead of Opt[string]
+  # TODO: probably blockAccessList field should be a seq[byte] instead of Opt[seq[byte]]
   if payload.blockAccessList.isSome and payload.blockAccessList.value.len > 0:
     if not com.isAmsterdamOrLater(EthTime payload.timestamp):
       raise invalidParams("newPayload" & $apiVersion &
