@@ -107,22 +107,6 @@ proc updAccMissingIntv*(
     return err(error)
   db.put1(cMissingIntv, encodeAccMissingIntvData(number, res.ranges))
 
-proc addAccMissingIntv*(
-    db: CacheDbRef;
-    number: BlockNumber;
-    iv: ItemKeyRange;
-      ): PutResult =
-  let data = db.get1(cMissingIntv).valueOr:
-    return err(error)
-  var res: CacheAccMissingIntvData
-  if data.len == 0:
-    res.ranges = ItemKeyRangeSet.init()
-  else:
-    res = data.decodeAccMissingIntvData().valueOr:
-      return err(error)
-  discard res.ranges.merge iv
-  db.put1(cMissingIntv, encodeAccMissingIntvData(number, res.ranges))
-
 proc delAccMissingIntv*(
     db: CacheDbRef,
       ): DelResult =

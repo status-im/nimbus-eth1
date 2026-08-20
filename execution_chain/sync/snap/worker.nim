@@ -167,6 +167,7 @@ proc runPool*(
   ##
   ## Note that this function does not run in `async` mode.
   ##
+  buddy.ctx.statsStateLog info
   true                                              # stop
 
 template runPeer*(
