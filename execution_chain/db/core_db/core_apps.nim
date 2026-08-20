@@ -22,6 +22,7 @@ import
   "../.."/[constants],
   "../.."/stateless/witness_types,
   ".."/[aristo, storage_types],
+  "../kvt"/[kvt_desc, kvt_layers, kvt_utils],
   "."/base
 
 logScope:
@@ -140,7 +141,37 @@ proc getBlockHash*(
     n: BlockNumber;
       ): Result[Hash32, string] =
   ## Return the block hash for the given block number.
-  db.getHash(blockNumberToHashKey(n))
+  const info = "getBlockHash()"
+  let key = blockNumberToHashKey(n)
+
+  let pending = db.kTx.layersGet(key.toOpenArray)
+  if pending.isSome():
+    wrapRlpException info:
+      return ok(rlp.decode(pending.unsafeGet(), Hash32))
+
+  when compileOption("threads"):
+    let
+      kvt = db.kTx.db
+      keyHash = kvt.blockHashes.toKeyHash(n)
+
+    kvt.blockHashes.withGetByHash(keyHash, n, cached):
+      return ok(cached)
+
+  let data = db.kTx.db.getBe(key.toOpenArray).valueOr:
+    let dbError =
+      if error == GetNotFound:
+        error.toError("", KvtNotFound)
+      else:
+        error.toError("")
+    if error != GetNotFound:
+      warn info, key, error=($$dbError)
+    return err($$dbError)
+
+  wrapRlpException info:
+    let blockHash = rlp.decode(data, Hash32)
+    when compileOption("threads"):
+      kvt.blockHashes.putByHash(keyHash, n, blockHash)
+    return ok(blockHash)
 
 proc getBlockHeader*(
     db: CoreDbTxRef;
@@ -212,6 +243,8 @@ proc getAncestorsHashes*(
 
 proc addBlockNumberToHashLookup*(
     db: CoreDbTxRef; blockNumber: BlockNumber, blockHash: Hash32) =
+  # TODO: Once we remove the kvt frame layers, this function should
+  # write to the kvt block hashes cache.
   let blockNumberKey = blockNumberToHashKey(blockNumber)
   db.put(blockNumberKey.toOpenArray, rlp.encode(blockHash)).isOkOr:
     warn "addBlockNumberToHashLookup", blockNumberKey, error=($$error)
@@ -378,7 +411,7 @@ proc getBlockAccessLists*(
     bals: var openArray[Opt[BlockAccessListRef]]
       ): Result[void, string] =
   var balValues = newSeq[Opt[seq[byte]]](blockHashes.len())
-  
+
   ?db.getBlockAccessLists(blockHashes, balValues)
 
   for i, balBytes in balValues:
@@ -676,7 +709,7 @@ proc getChainTail*(
     key = tailIdKey()
     blkNum = db.get(key.toOpenArray).valueOr:
       return BlockNumber(0)
-    
+
   BlockNumber(uint64.fromBytesLE(blkNum))
 
 # ------------------------------------------------------------------------------

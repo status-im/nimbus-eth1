@@ -200,7 +200,7 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions, wipe = false): Core
 
     adb = AristoDbRef.init(opts, baseDb).valueOr:
       raiseAssert "Could not initialize aristo: " & $error
-    kdb = KvtDbRef.init(baseDb)
+    kdb = KvtDbRef.init(opts, baseDb)
 
   CoreDbRef(kvt: kdb, mpt: adb)
 
