@@ -75,12 +75,15 @@ template accountDownload*(
         bodyRc = typeof(bodyRc).err(EValidationError)
         break body                                  # return err()
 
+      # Make certain that the right end of the downloaded range does not
+      # exceed the requested range. Processing extra accounts might overwrite
+      # the book keeping on the already stored accounts.
       limit = if mpt.rightMost: high(ItemKey)
               else: min(data.accounts[^1].accHash.to(ItemKey), ivReq.maxPt)
 
     # Save accounts on flat tables
     for w in data.accounts:
-      if ivReq.maxPt <= w.accHash.to(ItemKey):      # ignore excess entries
+      if limit < w.accHash.to(ItemKey):             # ignore excess entries
         break                                       # exit `for()` loop
 
       let
