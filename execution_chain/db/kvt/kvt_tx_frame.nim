@@ -69,7 +69,7 @@ proc persist*(
           db.blockHashes.del(number)
         else:
           try:
-            discard db.blockHashes.update(number, rlp.decode(v, Hash32))
+            db.blockHashes.put(number, rlp.decode(v, Hash32))
           except RlpError:
             db.blockHashes.del(number)
   # TODO above, we only prepare the changes to the database but don't actually

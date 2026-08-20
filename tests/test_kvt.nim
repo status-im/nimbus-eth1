@@ -255,6 +255,16 @@ suite "Kvt block hash cache":
 
     db.close()
 
+  test "Persisting inserts an uncached block hash into the cache":
+    let base = db.baseTxFrame()
+    base.addBlockNumberToHashLookup(BlockNumber(2), hashB)
+    db.persist(base)
+
+    db.kvt.delBe(blockNumberToHashKey(BlockNumber(2)).toOpenArray).expect("del")
+    check db.baseTxFrame().getBlockHash(BlockNumber(2)).expect("hash") == hashB
+
+    db.close()
+
   test "A deleted block hash is not resurrected by the cache":
     let base = db.baseTxFrame()
     base.addBlockNumberToHashLookup(BlockNumber(1), hashA)

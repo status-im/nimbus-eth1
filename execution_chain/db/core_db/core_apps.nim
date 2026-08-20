@@ -238,6 +238,8 @@ proc getAncestorsHashes*(
 
 proc addBlockNumberToHashLookup*(
     db: CoreDbTxRef; blockNumber: BlockNumber, blockHash: Hash32) =
+  # TODO: Once we remove the kvt frame layers, this function should
+  # write to the kvt block hashes cache.
   let blockNumberKey = blockNumberToHashKey(blockNumber)
   db.put(blockNumberKey.toOpenArray, rlp.encode(blockHash)).isOkOr:
     warn "addBlockNumberToHashLookup", blockNumberKey, error=($$error)
@@ -404,7 +406,7 @@ proc getBlockAccessLists*(
     bals: var openArray[Opt[BlockAccessListRef]]
       ): Result[void, string] =
   var balValues = newSeq[Opt[seq[byte]]](blockHashes.len())
-  
+
   ?db.getBlockAccessLists(blockHashes, balValues)
 
   for i, balBytes in balValues:
@@ -702,7 +704,7 @@ proc getChainTail*(
     key = tailIdKey()
     blkNum = db.get(key.toOpenArray).valueOr:
       return BlockNumber(0)
-    
+
   BlockNumber(uint64.fromBytesLE(blkNum))
 
 # ------------------------------------------------------------------------------
