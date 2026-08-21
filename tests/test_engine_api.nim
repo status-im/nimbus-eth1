@@ -496,6 +496,11 @@ proc newPayloadV4InvalidRequestType(env: TestEnv): Result[void, string] =
   if res.get.status != PayloadExecutionStatus.invalid:
     return err("res.status should be equal to PayloadExecutionStatus.invalid")
 
+  # The payload is rejected before its ancestry is known, so the most recent
+  # valid block cannot be determined. It must never be the rejected block itself.
+  if res.get.latestValidHash.isSome:
+    return err("latestValidHash should be none for an invalid request type")
+
   ok()
 
 proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =

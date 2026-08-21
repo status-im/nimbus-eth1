@@ -163,7 +163,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
     # The user-facing flag is --discv5, but discv4 is still enabled alongside
     # it until the discv4 code is removed.
     nimbus.ethNode.connectToNetwork(
-      enableDiscV4 = config.discv5,
+      enableDiscV4 = false,
       enableDiscV5 = config.discv5,
     )
 
@@ -252,6 +252,10 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, para
         "Historical block data may have been deleted, and might cause inconsistent DB " &
         "Restart with --prune=true or use a fresh data directory."
       quit(QuitFailure)
+
+  if config.balPruning and com.activationTime(Amsterdam).isSome:
+    nimbus.balPruner = BalPrunerRef.init(com)
+    nimbus.balPruner.start()
 
 proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef, params: NetworkParams): T =
   let nimbus = T()

@@ -16,10 +16,10 @@ import
   ../types
 
 func init*(m: var GasMeter, startGas: GasInt, stateGas: GasInt) =
-  m.gasRemaining = startGas
+  m.executionGasLeft = startGas
   m.gasRefunded = 0
   m.stateGasLeft = stateGas
-  m.regularGasUsed = 0
+  m.executionGasUsed = 0
 
 template consumeGas*(
     gasMeter: var GasMeter; amount: GasInt; reason: static string): EvmResultVoid =
@@ -27,15 +27,15 @@ template consumeGas*(
   # instruction
   # TODO report reason - consumeGas is a hotspot in EVM execution so it has to
   #      be done carefully
-  if amount > gasMeter.gasRemaining:
+  if amount > gasMeter.executionGasLeft:
     EvmResultVoid.err(gasErr(OutOfGas))
   else:
-    gasMeter.regularGasUsed += amount
-    gasMeter.gasRemaining -= amount
+    gasMeter.executionGasUsed += amount
+    gasMeter.executionGasLeft -= amount
     EvmResultVoid.ok()
 
 func returnGas*(gasMeter: var GasMeter; amount: GasInt) =
-  gasMeter.gasRemaining += amount
+  gasMeter.executionGasLeft += amount
 
 func refundGas*(gasMeter: var GasMeter; amount: int64) =
   # EIP-2183 Net gas metering for sstore is built upon idea
@@ -52,10 +52,10 @@ func refundGas*(gasMeter: var GasMeter; amount: int64) =
 func chargeStateGas*(gasMeter: var GasMeter; amount: GasInt, reason: string): EvmResultVoid =
   if gasMeter.stateGasLeft >= amount:
     gasMeter.stateGasLeft -= amount
-  elif gasMeter.stateGasLeft + gasMeter.gasRemaining >= amount:
+  elif gasMeter.stateGasLeft + gasMeter.executionGasLeft >= amount:
     let remainder = amount - gasMeter.stateGasLeft
     gasMeter.stateGasLeft = 0
-    gasMeter.gasRemaining -= remainder
+    gasMeter.executionGasLeft -= remainder
     gasMeter.stateGasSpilled += remainder
   else:
     return EvmResultVoid.err(gasErr(OutOfGas))
@@ -67,43 +67,43 @@ func returnStateGas*(gasMeter: var GasMeter; amount: GasInt) =
   gasMeter.stateGasLeft += amount
 
 func burnGas*(gasMeter: var GasMeter) =
-  gasMeter.regularGasUsed += gasMeter.gasRemaining
-  gasMeter.gasRemaining = 0
+  gasMeter.executionGasUsed += gasMeter.executionGasLeft
+  gasMeter.executionGasLeft = 0
 
-func escrowSubcallRegularGas*(gasMeter: var GasMeter, subCallGas: GasInt) =
-  # Remove forwarded CALL* gas from the caller's regular gas usage.
+func escrowSubcallExecutionGas*(gasMeter: var GasMeter, subCallGas: GasInt) =
+  # Remove forwarded CALL* gas from the caller's execution gas usage.
   #
   # CALL* forwards `subCallGas` to the child frame as temporary escrow.
   # Only gas actually burned by the child should be reintroduced via
   # `incorporate_child_*` child gas accounting.
 
-  gasMeter.regularGasUsed -= subCallGas
+  gasMeter.executionGasUsed -= subCallGas
 
-func appendRegularGasUsed*(gasMeter: var GasMeter, amount: GasInt) =
-  gasMeter.regularGasUsed += amount
+func appendExecutionGasUsed*(gasMeter: var GasMeter, amount: GasInt) =
+  gasMeter.executionGasUsed += amount
 
 func appendStateGasUsed*(gasMeter: var GasMeter, amount: int64) =
   gasMeter.stateGasUsed += amount
 
 func checkGas*(gasMeter: GasMeter, cost, amount: GasInt): EvmResultVoid =
   # Check enough state gas after `cost` consumption.
-  if amount > gasMeter.stateGasLeft + gasMeter.gasRemaining - cost:
+  if amount > gasMeter.stateGasLeft + gasMeter.executionGasLeft - cost:
     return err(gasErr(OutOfGas))
   ok()
 
 func checkGas*(gasMeter: GasMeter, amount: GasInt): EvmResultVoid =
-  if amount > gasMeter.gasRemaining:
+  if amount > gasMeter.executionGasLeft:
     return err(gasErr(OutOfGas))
   ok()
 
 func refillFrameStateGas*(gasMeter: var GasMeter, stateGasReservoir: GasInt) =
-  gasMeter.gasRemaining += gasMeter.stateGasSpilled
+  gasMeter.executionGasLeft += gasMeter.stateGasSpilled
   gasMeter.stateGasLeft = stateGasReservoir
   gasMeter.stateGasSpilled = 0
 
 proc creditStateGasRefund*(gasMeter: var GasMeter; amount: GasInt) =
   let fromGasLeft = min(amount, gasMeter.stateGasSpilled)
-  gasMeter.gasRemaining += fromGasLeft
+  gasMeter.executionGasLeft += fromGasLeft
   gasMeter.stateGasSpilled -= fromGasLeft
   gasMeter.stateGasLeft += amount - fromGasLeft
   gasMeter.stateGasUsed -= amount.int64

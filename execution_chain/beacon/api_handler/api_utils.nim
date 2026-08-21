@@ -73,10 +73,10 @@ func validateBlockHash*(header: common.Header,
 template toValidHash*(x: common.Hash32): Opt[Hash32] =
   Opt.some(x)
 
-proc simpleFCU*(status: PayloadStatus): ForkchoiceUpdatedResponse =
+func simpleFCU*(status: PayloadStatus): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: status)
 
-proc simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
+func simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: PayloadStatus(status: status))
 
 func simpleFCU*(status: PayloadExecutionStatus,
@@ -109,14 +109,20 @@ func validFCU*(id: Opt[Bytes8],
     payloadId: id
   )
 
-proc invalidStatus*(validHash: Opt[common.Hash32], msg: string): PayloadStatus =
+func invalidStatus*(validHash: Opt[common.Hash32], msg: string): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: validHash,
     validationError: Opt.some(msg)
   )
 
-proc invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
+func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatusV1 =
+  invalidStatus(Opt.some(validHash), msg)
+
+func invalidStatus*(msg: string): PayloadStatusV1 =
+  invalidStatus(Opt.none(Hash32), msg)
+
+func invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash)
@@ -124,32 +130,32 @@ proc invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
 
 func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatus =
   invalidStatus(Opt.some(validHash), msg)
-  
-proc acceptedStatus*(validHash: common.Hash32): PayloadStatus =
+
+func acceptedStatus*(validHash: common.Hash32): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.accepted,
     latestValidHash: toValidHash(validHash)
   )
 
-proc acceptedStatus*(): PayloadStatus =
+func acceptedStatus*(): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.accepted
   )
 
-proc validStatus*(validHash: common.Hash32): PayloadStatus =
+func validStatus*(validHash: common.Hash32): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.valid,
     latestValidHash: toValidHash(validHash)
   )
 
-proc validStatus*(validHash: common.Hash32, validIL: bool): PayloadStatus =
+func validStatus*(validHash: common.Hash32, validIL: bool): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.valid,
     latestValidHash: toValidHash(validHash),
     inclusionListSatisfied: Opt.some(validIL)
   )
 
-proc invalidParams*(msg: string): ref ApplicationError =
+func invalidParams*(msg: string): ref ApplicationError =
 
   (ref ApplicationError)(
     code: engineApiInvalidParams,

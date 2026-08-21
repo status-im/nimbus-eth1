@@ -243,11 +243,16 @@ template checkVerdictErr(chain, blk, expected) =
       " expected err(", expected, ") got ok(", res.value, ")"
 
 template checkForkChoice(chain, a, b) =
-  let res = waitFor chain.forkChoice(a.blockHash, b.blockHash)
+  let bHash = when typeof(b) is Hash32: b
+              else: b.blockHash
+  let res = waitFor chain.forkChoice(a.blockHash, bHash)
   check res.isOk
   if res.isErr:
     debugEcho "FORK CHOICE FAIL: ", res.error
-    debugEcho "Block Number: ", a.header.number, " ", b.header.number
+    when typeof(b) is Hash32:
+      debugEcho "Block Number: ", a.header.number, ", ", bHash
+    else:
+      debugEcho "Block Number: ", a.header.number, ", ", b.header.number
 
 template checkForkChoiceErr(chain, a, b) =
   let res = waitFor chain.forkChoice(a.blockHash, b.blockHash)
@@ -1284,6 +1289,16 @@ suite "ForkedChainRef tests":
     checkHeadHash chain, B4.blockHash
     check chain.heads.len == 1
     check chain.validate info & " (2)"
+
+  test "fcu with empty fin":
+    const info = "setHead finalized"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkForkChoice(chain, genesis, default(Hash32))
+    check chain.validate info & " (1)"
+    check chain.latestHash == blk1.blockHash
+    check chain.fcuHead.number == 0
 
   test "BaseVMState.reinit with per-block BAL tracker flags":
     let

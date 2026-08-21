@@ -36,4 +36,5 @@ export
   getBlobsV1,
   getBlobsV2,
   getBlobsV3,
+  getBlobsV4,
   getInclusionList

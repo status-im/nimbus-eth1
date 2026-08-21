@@ -177,6 +177,11 @@ proc customGenesisTest() =
       validateBlobSchedule(cg, Bpo1, 9, 12, 5008888)
       validateBlobSchedule(cg, Amsterdam, 9, 12, 5008888) # fallback to bpo1, not Bpo2
 
+  test "Amsterdam-slotnumber":
+    var cg: NetworkParams
+    check loadNetworkParams("amsterdam_slotnumber.json".findFilePath, cg)
+    var com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+    check com.genesisHash == hash32"0x3d2eaa7c142566aeb179c206774b2ad1f67acab937a2119efc54d170fb52b72d"
 
 proc genesisBlockHashTest() =
   suite "Genesis block hash":

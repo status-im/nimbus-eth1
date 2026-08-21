@@ -33,6 +33,7 @@ type
     tail = 14
     prunerState = 15
     txFrame = 16
+    balTail = 17
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -62,6 +63,14 @@ func blockNumberToHashKey*(u: BlockNumber): DbKey {.inline.} =
   copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
   result.dataEndPos = uint8 sizeof(u)
 
+template isBlockNumberToHashKey*(key: openArray[byte]): bool =
+  key.len == sizeof(BlockNumber) + 1 and key[0] == byte(ord(blockNumberToHash))
+
+template blockNumberFromHashKey*(key: openArray[byte]): BlockNumber =
+  var res {.noinit.}: BlockNumber
+  copyMem(addr res, unsafeAddr key[1], sizeof(BlockNumber))
+  res
+
 func canonicalHeadHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(canonicalHeadHash)
   result.dataEndPos = 1
@@ -72,6 +81,10 @@ func tailIdKey*(): DbKey {.inline.} =
 
 func prunerStateKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(prunerState)
+  result.dataEndPos = 1
+
+func balTailKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(balTail)
   result.dataEndPos = 1
 
 func txFrameKey*(h: Hash32): DbKey {.inline.} =

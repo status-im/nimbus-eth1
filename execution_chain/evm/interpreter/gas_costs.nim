@@ -139,21 +139,21 @@ const
   TX_BASE_COST*             = 21000
   TX_BASE_COST_2780*        = 12000
   COLD_ACCOUNT_ACCESS_8038* = 3000
-  COLD_STORAGE_ACCESS_8038* = 3000
-  ACCOUNT_WRITE_8038*       = 8000
+  COLD_STORAGE_ACCESS_8038* = 2100
+  ACCOUNT_WRITE_8038*       = 9000
   STORAGE_WRITE_8038*       = 10000
 
   # From EIP-2929
   COLD_STORAGE_ACCESS_2929* = 2100
   COLD_ACCOUNT_ACCESS_2929* = 2600
-  WarmStorageReadCost*      = 100
+  WARM_ACCESS*      = 100
 
   # From EIP-2930 (Berlin).
   ACCESS_LIST_STORAGE_KEY_COST_2930* = 1900
   ACCESS_LIST_ADDRESS_COST_2930*     = 2400
 
-  ACCESS_LIST_STORAGE_KEY_COST_8038* = 3000
-  ACCESS_LIST_ADDRESS_COST_8038*     = 3000
+  ACCESS_LIST_STORAGE_KEY_COST_8038* = COLD_STORAGE_ACCESS_8038 - WARM_ACCESS
+  ACCESS_LIST_ADDRESS_COST_8038*     = COLD_ACCOUNT_ACCESS_8038 - WARM_ACCESS
 
 template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
@@ -256,7 +256,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     when fork >= FkBerlin:
       # EIP2929
       const
-        SLOAD_GAS = WarmStorageReadCost
+        SLOAD_GAS = WARM_ACCESS
         SSTORE_RESET_GAS = 5000 - COLD_STORAGE_ACCESS_2929
     else:
       const
@@ -745,7 +745,7 @@ const
     GasBlockhash:       20,
     GasExtCodeHash:     400,
     GasInitcodeWord:    0,      # Changed to 2 in EIP-3860
-    GasWarmStorageRead: WarmStorageReadCost
+    GasWarmStorageRead: WARM_ACCESS
   ]
 
 # Create the schedule for each forks
@@ -787,7 +787,7 @@ func berlinGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
 
   # SLOAD gasCost become fully dynamic, see sloadEIP2929
   result[GasSload]        = 0
-  result[GasCall]         = WarmStorageReadCost
+  result[GasCall]         = WARM_ACCESS
 
 func londonGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   result = previousFees
@@ -804,10 +804,10 @@ func shanghaiGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
 
 func amsterdamGasFees(previousFees: GasFeeSchedule): GasFeeSchedule =
   result = previousFees
-  result[GasTXCreate] = 11000.GasInt # EIP-8038
-  result[GasCreate]       = 11000.GasInt # EIP-8038
-  result[RefundsClear]    = 12480.GasInt # EIP-8038
-  result[GasCallValue]    = ACCOUNT_WRITE_8038 + result[GasCallStipend] # EIP-8038
+  result[GasTXCreate]  = ACCOUNT_WRITE_8038 + COLD_ACCOUNT_ACCESS_8038 # EIP-8038
+  result[GasCreate]    = ACCOUNT_WRITE_8038 + COLD_ACCOUNT_ACCESS_8038 # EIP-8038
+  result[RefundsClear] = 11_616.GasInt # EIP-8038
+  result[GasCallValue] = ACCOUNT_WRITE_8038 + result[GasCallStipend] # EIP-8038
 
 const
   HomesteadGasFees = BaseGasFees.homesteadGasFees

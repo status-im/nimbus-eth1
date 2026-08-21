@@ -28,16 +28,18 @@ proc applySlotChanges(
     info: static[string];
       ): Opt[void] =
   ## Apply BAL to storage slots. Returns the number of changes
-  let
-    maybeStats = ?db.getStoMissingIntv(accPath, info)
-    stoMissing = if maybeStats.isNone(): ItemKeyRangeSet(nil)
-                 else: maybeStats.unsafeGet().ranges
+  let maybeStats = ?db.getStoMissingIntv(accPath, info)
+
+  if maybeStats.isNone():
+    # All covered, nothing to do
+    return ok()
+
+  let stoMissing = maybeStats.unsafeGet().ranges
   for w in slots:
     if w.changes.len == 0:
       continue
     let slotKey = w.slot.computeSlotKey()
-    if not stoMissing.isNil and
-       stoMissing.covered(slotKey.to(ItemKey)):
+    if stoMissing.covered(slotKey.to(ItemKey)):
       continue
     let slotValue = w.changes[^1].newValue
     if slotValue == 0:
@@ -83,7 +85,7 @@ proc applyAccountChanges*(
   if accExcl.covered(accPath.to(ItemKey)):
     return ok(false)                                # ignore for now
 
-  var acc = (?db.getFlatAcc(accPath, info)).valueOr:
+  var acc = db.getFlatAcc(accPath, info).valueOr:
     emptyFlatAccData                                # new account
 
   # Apply change list to database

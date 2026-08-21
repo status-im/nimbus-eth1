@@ -75,6 +75,7 @@ type
     newPayloadVersion*: Numero
     forkchoiceUpdatedVersion*: Numero
     validationError*: Opt[string]
+    errorCode*: Opt[string]
 
   EnvConfig* = object
     network*: string

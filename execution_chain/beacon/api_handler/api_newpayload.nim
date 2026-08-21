@@ -41,92 +41,142 @@ func validateVersionedHashed(payload: ExecutionPayload,
       return false
   true
 
-template validateVersion(com, timestamp, payloadVersion, apiVersion) =
+template validateVersion(com, timestamp, payloadVersion, apiVersion, payload) =
   if apiVersion == Version.V5:
     if not com.isAmsterdamOrLater(timestamp):
       raise unsupportedFork("newPayloadV5 expect payload timestamp fall within Amsterdam")
-    if payloadVersion != Version.V4:
-      raise invalidParams("newPayload" & $apiVersion &
-      " expect ExecutionPayloadV4" &
-      " but got ExecutionPayload" & $payloadVersion)
 
   elif apiVersion == Version.V4:
     if not com.isPragueOrLater(timestamp):
-      raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague")
-    if payloadVersion != Version.V3:
-      raise invalidParams("newPayload" & $apiVersion &
-      " expect ExecutionPayloadV3" &
-      " but got ExecutionPayload" & $payloadVersion)
+      raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague or Osaka")
 
   elif apiVersion == Version.V3:
     if not com.isCancunOrLater(timestamp):
       raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
-    if payloadVersion != Version.V3:
-      raise invalidParams("newPayload" & $apiVersion &
-      " expect ExecutionPayloadV3" &
-      " but got ExecutionPayload" & $payloadVersion)
 
   if com.isAmsterdamOrLater(timestamp):
-    if payloadVersion != Version.V4:
-      raise invalidParams("if timestamp is Amsterdam or later, " &
-        "payload must be ExecutionPayloadV4, got ExecutionPayload" & $payloadVersion)
+    # TODO: probably blockAccessList field should be a seq[byte] instead of Opt[seq[byte]]
+    if payload.blockAccessList.isNone or payload.blockAccessList.value.len == 0:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing blockAccessList")
+
+    if payload.slotNumber.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing slotNumber")
+
+    if payload.excessBlobGas.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing excessBlobGas")
+
+    if payload.blobGasUsed.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing blobGasUsed")
+
+    if payload.withdrawals.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing withdrawals")
 
   elif com.isPragueOrLater(timestamp):
-    if payloadVersion != Version.V3:
-      raise invalidParams("if timestamp is Prague or later, " &
-        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
+    if payload.excessBlobGas.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing excessBlobGas")
+
+    if payload.blobGasUsed.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing blobGasUsed")
+
+    if payload.withdrawals.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing withdrawals")
 
   elif com.isCancunOrLater(timestamp):
-    if payloadVersion != Version.V3:
-      raise invalidParams("if timestamp is Cancun or later, " &
-        "payload must be ExecutionPayloadV3, got ExecutionPayload" & $payloadVersion)
+    if payload.excessBlobGas.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing excessBlobGas")
+
+    if payload.blobGasUsed.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing blobGasUsed")
+
+    if payload.withdrawals.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing withdrawals")
 
   elif com.isShanghaiOrLater(timestamp):
-    if payloadVersion != Version.V2:
-      raise invalidParams("if timestamp is Shanghai or later, " &
-        "payload must be ExecutionPayloadV2, got ExecutionPayload" & $payloadVersion)
+    if payload.withdrawals.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing withdrawals")
 
   elif payloadVersion != Version.V1:
     raise invalidParams("if timestamp is earlier than Shanghai, " &
       "payload must be ExecutionPayloadV1, got ExecutionPayload" & $payloadVersion)
 
-template validatePayload(apiVersion, payloadVersion, payload) =
-  if payloadVersion >= Version.V2:
+  if payload.withdrawals.isSome:
+    if not com.isShanghaiOrLater(EthTime payload.timestamp):
+      raise invalidParams("newPayload" & $apiVersion &
+        ": withdrawals appear before Shanghai")
+
+  if payload.blobGasUsed.isSome:
+    if not com.isCancunOrLater(EthTime payload.timestamp):
+      raise invalidParams("newPayload" & $apiVersion &
+        ": blobGasUsed appear before Cancun")
+
+  if payload.excessBlobGas.isSome:
+    if not com.isCancunOrLater(EthTime payload.timestamp):
+      raise invalidParams("newPayload" & $apiVersion &
+        ": excessBlobGas appear before Cancun")
+
+  # TODO: probably blockAccessList field should be a seq[byte] instead of Opt[seq[byte]]
+  if payload.blockAccessList.isSome and payload.blockAccessList.value.len > 0:
+    if not com.isAmsterdamOrLater(EthTime payload.timestamp):
+      raise invalidParams("newPayload" & $apiVersion &
+        ": blockAccessList appear before Amsterdam")
+
+  if payload.slotNumber.isSome:
+    if not com.isAmsterdamOrLater(EthTime payload.timestamp):
+      raise invalidParams("newPayload" & $apiVersion &
+        ": slotNumber appear before Amsterdam")
+
+template validatePayload(apiVersion, payload) =
+  if apiVersion >= Version.V2:
     if payload.withdrawals.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        "withdrawals is expected from execution payload")
+        ": withdrawals is expected from execution payload")
 
-  if apiVersion >= Version.V3 or payloadVersion >= Version.V3:
+  if apiVersion >= Version.V3:
     if payload.blobGasUsed.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        "blobGasUsed is expected from execution payload")
+        ": blobGasUsed is expected from execution payload")
     if payload.excessBlobGas.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        "excessBlobGas is expected from execution payload")
+        ": excessBlobGas is expected from execution payload")
 
-  if apiVersion >= Version.V5 or payloadVersion >= Version.V4:
+  if apiVersion >= Version.V5:
     if payload.blockAccessList.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        "blockAccessList is expected from execution payload")
+        ": blockAccessList is expected from execution payload")
+    if payload.slotNumber.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": slotNumber is expected from execution payload")
 
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
-func validateExecutionRequest(blockHash: Hash32,
+func validateExecutionRequest(
             requests: openArray[seq[byte]], apiVersion: Version):
               Opt[PayloadStatus] {.raises: [ApplicationError].} =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
       raise invalidParams("newPayload" & $apiVersion &
-        ": " & "Execution request data must not be empty")
+        ": Execution request data must not be empty")
 
     let requestType = request[0]
     if requestType.int <= previousRequestType:
       raise invalidParams("newPayload" & $apiVersion &
-        ": " & "Execution requests are not in strictly ascending order")
+        ": Execution requests are not in strictly ascending order")
 
     if request.len == 1:
       raise invalidParams("newPayload" & $apiVersion &
-        ": " & "Empty data for request type " & $requestType)
+        ": Empty data for request type " & $requestType)
 
     if apiVersion >= Version.V5:
       if requestType notin [
@@ -135,18 +185,18 @@ func validateExecutionRequest(blockHash: Hash32,
         CONSOLIDATION_REQUEST_TYPE,
         BUILDER_DEPOSIT_REQUEST_TYPE,
         BUILDER_EXIT_REQUEST_TYPE]:
-        return Opt.some(invalidStatus(blockHash,
+        return Opt.some(invalidStatus(
           "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
     else:
       if requestType notin [
         DEPOSIT_REQUEST_TYPE,
         WITHDRAWAL_REQUEST_TYPE,
         CONSOLIDATION_REQUEST_TYPE]:
-        return Opt.some(invalidStatus(blockHash,
+        return Opt.some(invalidStatus(
           "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
 
     previousRequestType = requestType.int
-  err()
+  Opt.none(PayloadStatusV1)
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
@@ -164,14 +214,15 @@ proc newPayload*(ben: BeaconEngineRef,
 
   if apiVersion >= Version.V3:
     if beaconRoot.isNone:
-      raise invalidParams("newPayloadV3 expect beaconRoot but got none")
+      raise invalidParams("newPayloadV" & $apiVersion &
+        ": expect beaconRoot but got none")
 
   if apiVersion >= Version.V4:
     if executionRequests.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         ": executionRequests is expected from execution payload")
 
-    let res = validateExecutionRequest(payload.blockHash, executionRequests.value, apiVersion)
+    let res = validateExecutionRequest(executionRequests.value, apiVersion)
     if res.isSome:
       return res.value
 
@@ -186,8 +237,8 @@ proc newPayload*(ben: BeaconEngineRef,
     timestamp = ethTime payload.timestamp
     version = payload.version
 
-  validatePayload(apiVersion, version, payload)
-  validateVersion(com, timestamp, version, apiVersion)
+  validatePayload(apiVersion, payload)
+  validateVersion(com, timestamp, version, apiVersion, payload)
 
   let
     requestsHash = calcRequestsHash(executionRequests)
@@ -197,25 +248,27 @@ proc newPayload*(ben: BeaconEngineRef,
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        return invalidStatus(Opt.none(Hash32),
-          "Failed to decode block in payload: " & e.msg)
+        return invalidStatus("newPayload" & $apiVersion &
+          ": Failed to decode block in payload: " & e.msg)
     blockAccessList =
       try:
         blockAccessList(payload)
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        return invalidStatus(Opt.none(Hash32),
-          "Failed to decode BAL in payload: " & e.msg)
-
-  template header: Header = blk.header
+        raise invalidParams("newPayload" & $apiVersion &
+          ": Failed to decode BAL in payload: " & e.msg)
 
   if apiVersion >= Version.V3:
     if versionedHashes.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        " expect blobVersionedHashes but got none")
+        ": expect blobVersionedHashes but got none")
+
     if not validateVersionedHashed(payload, versionedHashes.value):
-      return invalidStatus(header.parentHash, "invalid blob versionedHashes")
+      return invalidStatus("newPayload" & $apiVersion &
+        ": invalid blob versionedHashes")
+
+  template header: Header = blk.header
 
   let blockHash = payload.blockHash
   header.validateBlockHash(blockHash, version).isOkOr:
@@ -229,9 +282,10 @@ proc newPayload*(ben: BeaconEngineRef,
     return validStatus(blockHash)
 
   # If this block was rejected previously, keep rejecting it
-  let res = ben.checkInvalidAncestor(blockHash, blockHash)
-  if res.isSome:
-    return res.value
+  block:
+    let res = ben.checkInvalidAncestor(blockHash, blockHash)
+    if res.isSome:
+      return res.value
 
   # If the parent is missing, we - in theory - could trigger a sync, but that
   # would also entail a reorg. That is problematic if multiple sibling blocks
@@ -279,18 +333,19 @@ proc newPayload*(ben: BeaconEngineRef,
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
 
-  let vres = await chain.queueImportBlock(blk, blockAccessList)
-  if vres.isErr:
-    warn "Error importing block",
-      number = header.number,
-      hash = blockHash.short,
-      parent = header.parentHash.short,
-      error = vres.error.msg
-    ben.setInvalidAncestor(header, blockHash)
-    let
-      txFrame = chain.latestTxFrame()
-      blockHash = latestValidHash(txFrame, parent, ttd)
-    return invalidStatus(blockHash, vres.error.msg)
+  block:
+    let res = await chain.queueImportBlock(blk, blockAccessList)
+    if res.isErr:
+      warn "Error importing block",
+        number = header.number,
+        hash = blockHash.short,
+        parent = header.parentHash.short,
+        error = res.error.msg
+      ben.setInvalidAncestor(header, blockHash)
+      let
+        txFrame = chain.latestTxFrame()
+        blockHash = latestValidHash(txFrame, parent, ttd)
+      return invalidStatus(blockHash, res.error.msg)
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 

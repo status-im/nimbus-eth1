@@ -65,6 +65,7 @@ const supportedMethods: HashSet[string] =
     "engine_getBlobsV1",
     "engine_getBlobsV2",
     "engine_getBlobsV3",
+    "engine_getBlobsV4",
     "engine_getInclusionListV1",
   ])
 
@@ -156,12 +157,12 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
         await engine.forkchoiceUpdated(Version.V3, update, attrs)
 
     proc engine_forkchoiceUpdatedV4(update: ForkchoiceState,
-                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
+                      attrs: Opt[PayloadAttributes], custodyColumns: Opt[seq[byte]]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       apiTiming("engine_forkchoiceUpdatedV4"):
-        await engine.forkchoiceUpdated(Version.V4, update, attrs)
+        await engine.forkchoiceUpdated(Version.V4, update, attrs, custodyColumns)
 
     proc engine_forkchoiceUpdatedV5(update: ForkchoiceState,
-                      attrs: Opt[PayloadAttributes], custodyColumns: Opt[BitArray128]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
+                      attrs: Opt[PayloadAttributes], custodyColumns: Opt[seq[byte]]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       apiTiming("engine_forkchoiceUpdatedV5"):
         await engine.forkchoiceUpdated(Version.V5, update, attrs, custodyColumns)
 
@@ -210,6 +211,11 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
                                           seq[Opt[BlobAndProofV2]] {.raises: [ApplicationError].} =
       apiTiming("engine_getBlobsV3"):
         engine.getBlobsV3(versionedHashes)
+
+    proc engine_getBlobsV4(versionedHashes: seq[VersionedHash], indicesBitarray: seq[byte]):
+                                          seq[Opt[BlobCellsAndProofsV1]] {.raises: [ApplicationError].} =
+      apiTiming("engine_getBlobsV4"):
+        engine.getBlobsV4(versionedHashes, indicesBitarray)
 
     proc engine_getInclusionListV1(): InclusionList {.raises: [ApplicationError].} =
       apiTiming("engine_getInclusionListV1"):

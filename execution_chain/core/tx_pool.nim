@@ -120,6 +120,7 @@ export
   removeExpiredTxs,
   getBlobAndProofV1,
   getBlobAndProofV2,
+  getBlobCellAndProofV1,
   getInclusionListV1
 
 # addTx(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError]
