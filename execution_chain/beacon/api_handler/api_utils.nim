@@ -116,10 +116,10 @@ func invalidStatus*(validHash: Opt[common.Hash32], msg: string): PayloadStatus =
     validationError: Opt.some(msg)
   )
 
-func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatusV1 =
+func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatus =
   invalidStatus(Opt.some(validHash), msg)
 
-func invalidStatus*(msg: string): PayloadStatusV1 =
+func invalidStatus*(msg: string): PayloadStatus =
   invalidStatus(Opt.none(Hash32), msg)
 
 func invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
@@ -127,9 +127,6 @@ func invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash)
   )
-
-func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatus =
-  invalidStatus(Opt.some(validHash), msg)
 
 func acceptedStatus*(validHash: common.Hash32): PayloadStatus =
   PayloadStatus(

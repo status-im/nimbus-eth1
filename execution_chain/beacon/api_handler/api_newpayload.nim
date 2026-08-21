@@ -196,7 +196,7 @@ func validateExecutionRequest(
           "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
 
     previousRequestType = requestType.int
-  Opt.none(PayloadStatusV1)
+  Opt.none(PayloadStatus)
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
