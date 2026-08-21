@@ -57,12 +57,13 @@ const supportedMethods: HashSet[string] =
     "engine_forkchoiceUpdatedV4",
     "engine_getPayloadBodiesByHashV1",
     "engine_getPayloadBodiesByHashV2",
-    "engine_getPayloadBodiesByRangeV1",    
+    "engine_getPayloadBodiesByRangeV1",
     "engine_getPayloadBodiesByRangeV2",
     "engine_getClientVersionV1",
     "engine_getBlobsV1",
     "engine_getBlobsV2",
-    "engine_getBlobsV3"
+    "engine_getBlobsV3",
+    "engine_getBlobsV4"
   ])
 
 # I'm trying to keep the handlers below very thin, and move the
@@ -144,9 +145,9 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
         await engine.forkchoiceUpdated(Version.V3, update, attrs)
 
     proc engine_forkchoiceUpdatedV4(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
+                      attrs: Opt[PayloadAttributes], custodyColumns: Opt[seq[byte]]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
       apiTiming("engine_forkchoiceUpdatedV4"):
-        await engine.forkchoiceUpdated(Version.V4, update, attrs)
+        await engine.forkchoiceUpdated(Version.V4, update, attrs, custodyColumns)
 
     proc engine_getPayloadBodiesByHashV1(hashes: seq[Hash32]):
                                                 seq[Opt[ExecutionPayloadBodyV1]] {.raises: [CatchableError].} =
@@ -193,3 +194,8 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
                                           seq[Opt[BlobAndProofV2]] {.raises: [ApplicationError].} =
       apiTiming("engine_getBlobsV3"):
         engine.getBlobsV3(versionedHashes)
+
+    proc engine_getBlobsV4(versionedHashes: seq[VersionedHash], indicesBitarray: seq[byte]):
+                                          seq[Opt[BlobCellsAndProofsV1]] {.raises: [ApplicationError].} =
+      apiTiming("engine_getBlobsV4"):
+        engine.getBlobsV4(versionedHashes, indicesBitarray)
