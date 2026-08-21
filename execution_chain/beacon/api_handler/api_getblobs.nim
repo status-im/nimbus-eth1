@@ -10,6 +10,7 @@
 import
   std/sequtils,
   results,
+  stew/[bitseqs, assign2],
   json_rpc/errors,
   web3/engine_api_types,
   ../../core/tx_pool,
@@ -65,4 +66,26 @@ proc getBlobsV3*(ben: BeaconEngineRef,
 
   versionedHashes.mapIt(
     ben.txPool.getBlobAndProofV2(it)
+  )
+
+proc getBlobsV4*(ben: BeaconEngineRef,
+               versionedHashes: openArray[VersionedHash],
+               indicesBitarray: seq[byte]):
+                  seq[Opt[BlobCellsAndProofsV1]] =
+  # https://github.com/ethereum/execution-apis/blob/742d45db810b31265c8d3c075af324953330d1ed/src/engine/amsterdam.md#engine_getblobsv4
+  if versionedHashes.len > 128:
+    raise tooLargeRequest("the number of requested blobs is too large")
+
+  if ben.latestFork < Osaka:
+    raise unsupportedFork(
+      "getBlobsV4 called before Amsterdam has been activated")
+
+  if indicesBitarray.len != 16:
+    raise invalidParams("indicesBitarray length must be 16 bytes")
+
+  var indices {.noinit.}: BitArray[128]
+  assign(indices.bytes, indicesBitarray)
+
+  versionedHashes.mapIt(
+    ben.txPool.getBlobCellAndProofV1(it, indices)
   )

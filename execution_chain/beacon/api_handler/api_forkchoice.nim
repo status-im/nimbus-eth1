@@ -81,7 +81,8 @@ template validateHeaderTimestamp(header, com, apiVersion) =
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,
                         update: ForkchoiceStateV1,
-                        attrsOpt: Opt[PayloadAttributes]):
+                        attrsOpt: Opt[PayloadAttributes],
+                        custodyColumns = Opt.none(seq[byte])):
                           Future[ForkchoiceUpdatedResponse]
                             {.async: (raises: [CancelledError, ApplicationError]).} =
   let
@@ -136,6 +137,16 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     com.headerChainUpdate(header, update.finalizedBlockHash)
 
     return simpleFCU(PayloadExecutionStatus.syncing)
+
+  if custodyColumns.isSome:
+    # https://github.com/ethereum/execution-apis/blob/742d45db810b31265c8d3c075af324953330d1ed/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
+    if not com.isAmsterdamOrLater(header.timestamp):
+      raise invalidParams("custodyColumns must not appear before Amsterdam")
+
+    if custodyColumns.value.len != 16:
+      raise invalidParams("custodyColumns length must be 16 bytes")
+
+    # TODO: Add custody set expansion and contraction handler
 
   validateHeaderTimestamp(header, com, apiVersion)
 
