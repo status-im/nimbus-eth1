@@ -33,6 +33,7 @@ copy_rocksdb() {
 #- we need to build everything against libraries available inside this container, including the Nim compiler
 #- "librocksdb.a" is a C++ library so we need to link it with the C++ profile
 make clean
+./scripts/clean_foreign_nim.sh
 NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only'"
 
 if [[ "${PLATFORM}" == "windows_amd64" ]]; then
@@ -119,7 +120,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     CXX="${CXX}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --passC:-fPIC --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --passC:-fPIC --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     USE_CACHED_ROCKSDB=1 \
     nimbus nimbus_verified_proxy
@@ -129,7 +130,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     CXX="${CXX}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} -d:disableLTO --cpu:arm64 --passC:-fPIC --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    NIMFLAGS="${NIMFLAGS_COMMON} -d:disableLTO --cpu:arm64 --passC:-fPIC --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     USE_CACHED_ROCKSDB=1 \
     libverifproxy

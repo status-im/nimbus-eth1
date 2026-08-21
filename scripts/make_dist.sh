@@ -24,6 +24,7 @@ cd docker/dist
 
 DOCKER_BUILDKIT=1 \
   docker build \
+  --platform linux/amd64 \
   -t ${DOCKER_TAG} \
   --progress=plain \
   --build-arg USER_ID=$(id -u) \
@@ -31,7 +32,7 @@ DOCKER_BUILDKIT=1 \
   -f Dockerfile.${ARCH} .
 
 # seccomp can have some serious overhead, so we disable it with "--privileged" - https://pythonspeed.com/articles/docker-performance-overhead/
-docker run --privileged --rm --name ${DOCKER_TAG} -v ${REPO_DIR}:/home/user/nimbus-eth1 ${DOCKER_TAG}
+docker run --privileged --platform linux/amd64 --rm --name ${DOCKER_TAG} -v ${REPO_DIR}:/home/user/nimbus-eth1 ${DOCKER_TAG}
 
 cd - &>/dev/null
 
@@ -39,3 +40,4 @@ ls -l dist
 
 # We rebuild everything inside the container, so we need to clean up afterwards.
 ${MAKE} --no-print-directory clean
+./scripts/clean_foreign_nim.sh
