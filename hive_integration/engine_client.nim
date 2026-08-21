@@ -74,7 +74,7 @@ proc forkchoiceUpdatedV3*(client: RpcClient,
 proc forkchoiceUpdatedV4*(client: RpcClient,
       update: ForkchoiceStateV1,
       payloadAttributes = Opt.none(PayloadAttributesV4),
-      custodyColumns = Opt.none(seq[byte])):
+      custodyColumns = Opt.none(FixedBytes[16])):
         Result[ForkchoiceUpdatedResponse, string] =
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV4(update, payloadAttributes, custodyColumns)
@@ -83,7 +83,7 @@ proc forkchoiceUpdated*(client: RpcClient,
                         version: Version,
                         update: ForkchoiceStateV1,
                         attr = Opt.none(PayloadAttributes),
-                        custodyColumns = Opt.none(seq[byte])):
+                        custodyColumns = Opt.none(FixedBytes[16])):
                           Result[ForkchoiceUpdatedResponse, string] =
   case version
   of Version.V1: return client.forkchoiceUpdatedV1(update, attr.V1)
