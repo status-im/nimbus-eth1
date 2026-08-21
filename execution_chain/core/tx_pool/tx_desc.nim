@@ -37,6 +37,7 @@ import
 import beacon_chain/spec/engine_types as engine_ssz_types
 
 from eth/common/eth_types_rlp import rlpHash
+from std/sequtils import mapIt
 
 logScope:
   topics = "txpool"
@@ -518,10 +519,9 @@ func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[engine_ssz_types.B
       endIndex   = startIndex + engine_ssz_types.CELLS_PER_EXT_BLOB
     doAssert(list.len >= endIndex)
 
-    var proofs = newSeq[engine_ssz_types.KzgProof](engine_ssz_types.CELLS_PER_EXT_BLOB)
-    for i in 0..<engine_ssz_types.CELLS_PER_EXT_BLOB:
-      proofs[i] = engine_ssz_types.KzgProof(bytes: distinctBase(list[startIndex + i]))
-    ProofsList.init(proofs)
+    ProofsList.init(
+      list[startIndex ..< endIndex].mapIt(
+        engine_ssz_types.KzgProof(bytes: distinctBase(it))))
 
   xp.blobTab.withValue(v, val):
     let np = val.item.pooledTx.blobsBundle

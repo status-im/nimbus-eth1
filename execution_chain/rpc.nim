@@ -212,7 +212,7 @@ proc setupRpc*(nimbus: NimbusNode, config: ExecutionClientConf,
     warn "Engine API disabled, the node will not respond to consensus client updates (enable with `--engine-api`)"
 
   if config.engineApiRestEnabled and not config.engineApiEnabled:
-    warn "--engine-api-rest has no effect without --engine-api: the REST API " &
+    warn "--debug-engine-api-rest has no effect without --engine-api: the REST API " &
       "shares the JSON-RPC Engine API's listener and port"
 
   if not config.serverEnabled:

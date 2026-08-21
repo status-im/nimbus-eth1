@@ -35,25 +35,16 @@ func ethTx*(bytes: openArray[byte]): transactions.Transaction {.raises: [RlpErro
 
 func ethTxs*[T](list: openArray[T]): seq[transactions.Transaction]
     {.raises: [RlpError].} =
-  var txs = newSeqOfCap[transactions.Transaction](list.len)
-  for x in list:
-    txs.add ethTx(asSeq(x))
-  txs
+  list.mapIt(ethTx(asSeq(it)))
 
 func sszTx*(tx: transactions.Transaction): bellatrix.Transaction =
   bellatrix.Transaction.init(rlp.encode(tx))
 
 func sszTxs*(list: openArray[transactions.Transaction]): seq[bellatrix.Transaction] =
-  var txs = newSeqOfCap[bellatrix.Transaction](list.len)
-  for tx in list:
-    txs.add sszTx(tx)
-  txs
+  list.mapIt(sszTx(it))
 
 func sszTxsAmsterdam*(list: openArray[transactions.Transaction]): seq[gloas.Transaction] =
-  var txs = newSeqOfCap[gloas.Transaction](list.len)
-  for tx in list:
-    txs.add gloas.Transaction.init(rlp.encode(tx))
-  txs
+  list.mapIt(gloas.Transaction.init(rlp.encode(it)))
 
 func ethWithdrawal*(w: capella.Withdrawal): blocks.Withdrawal =
   blocks.Withdrawal(
@@ -63,10 +54,7 @@ func ethWithdrawal*(w: capella.Withdrawal): blocks.Withdrawal =
     amount: uint64(w.amount))
 
 func ethWithdrawals*(list: openArray[capella.Withdrawal]): seq[blocks.Withdrawal] =
-  var withdrawals = newSeqOfCap[blocks.Withdrawal](list.len)
-  for w in list:
-    withdrawals.add ethWithdrawal(w)
-  withdrawals
+  list.mapIt(ethWithdrawal(it))
 
 func sszWithdrawal*(w: blocks.Withdrawal): capella.Withdrawal =
   capella.Withdrawal(
@@ -76,10 +64,7 @@ func sszWithdrawal*(w: blocks.Withdrawal): capella.Withdrawal =
     amount: Gwei(w.amount))
 
 func sszWithdrawals*(list: openArray[blocks.Withdrawal]): seq[capella.Withdrawal] =
-  var withdrawals = newSeqOfCap[capella.Withdrawal](list.len)
-  for w in list:
-    withdrawals.add sszWithdrawal(w)
-  withdrawals
+  list.mapIt(sszWithdrawal(it))
 
 template append(w: var RlpWriter, txBytes: bellatrix.Transaction) =
   w.appendRawBytes(asSeq(txBytes))
