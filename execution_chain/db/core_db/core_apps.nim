@@ -262,13 +262,13 @@ proc persistTransactions*(
     return
 
   for idx, tx in transactions:
+    var encodedTx = rlp.encode(tx)
     let
-      encodedTx = rlp.encode(tx)
       txHash = keccak256(encodedTx)
       blockKey = transactionHashToBlockKey(txHash)
       txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
       key = hashIndexKey(txRoot, idx.uint16)
-    db.put(key, encodedTx).isOkOr:
+    db.put(key, move encodedTx).isOkOr:
       warn info, idx, error=($$error)
       return
     db.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:

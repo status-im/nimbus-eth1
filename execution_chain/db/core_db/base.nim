@@ -230,6 +230,18 @@ proc put*(
 
   ok()
 
+proc put*(
+    kvt: CoreDbTxRef;
+    key: openArray[byte];
+    val: sink seq[byte];
+      ): CoreDbRc[void] =
+  ## Variant of `put()` that takes over ownership of `val` instead of
+  ## copying it - the caller must not use `val` after this call
+  kvt.kTx.put(key, val).isOkOr:
+    return err(error.toError(""))
+
+  ok()
+
 proc hasKeyRc*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[bool] =
   ## For the argument `key` return `true` if `get()` returned a value on
   ## that argument, `false` if it returned `GetNotFound`, and an error

@@ -81,6 +81,21 @@ proc put*(
   db.layersPut(key, data)
   ok()
 
+proc put*(
+    db: KvtTxRef;                     # Database
+    key: openArray[byte];             # Key of database record to store
+    data: sink seq[byte];             # Value, ownership taken over
+      ): Result[void,KvtError] =
+  ## Variant of `put()` that takes over ownership of `data` instead of
+  ## copying it - the caller must not use `data` after this call.
+  if key.len == 0:
+    return err(KeyInvalid)
+  if data.len == 0:
+    return err(DataInvalid)
+
+  db.layersPut(key, data)
+  ok()
+
 
 proc del*(
     db: KvtTxRef;                     # Database

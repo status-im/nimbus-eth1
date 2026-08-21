@@ -58,6 +58,11 @@ func layersPut*(db: KvtTxRef; key: openArray[byte]; data: openArray[byte]) =
   ## Store a (potentally empty) value on the top layer
   db.sTab[@key] = @data
 
+func layersPut*(db: KvtTxRef; key: openArray[byte]; data: sink seq[byte]) =
+  ## Store `data` on the top layer taking over ownership - the caller must not
+  ## use `data` after this call
+  swap(db.sTab.mgetOrPut(@key, EmptyBlob), data)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
