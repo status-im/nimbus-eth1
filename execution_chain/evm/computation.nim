@@ -286,7 +286,7 @@ proc writeContract*(c: Computation) =
     if fork >= FkAmsterdam:
       # The order here is:
       # 1. Check code size
-      # 2. Charge regular gas
+      # 2. Charge execution gas
       # #. Charge state gas
       # https://github.com/ethereum/execution-specs/commit/0c7d32c13bbd3fc91ea44ff56a32ca766d59f1d5
       if len > EIP7954_MAX_CODE_SIZE:
@@ -425,7 +425,7 @@ func traceOpCodeStarted*(c: Computation, op: Op): int =
     c,
     c.code.pc - 1,
     op,
-    c.gasMeter.gasRemaining,
+    c.gasMeter.executionGasLeft,
     c.msg.depth + 1)
 
 func traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) =
@@ -433,7 +433,7 @@ func traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) =
     c,
     c.code.pc - 1,
     op,
-    c.gasMeter.gasRemaining,
+    c.gasMeter.executionGasLeft,
     c.gasMeter.gasRefunded,
     c.returnData,
     c.msg.depth + 1,
@@ -444,7 +444,7 @@ func traceError*(c: Computation) =
     c,
     c.code.pc - 1,
     c.instr,
-    c.gasMeter.gasRemaining,
+    c.gasMeter.executionGasLeft,
     c.gasMeter.gasRefunded,
     c.returnData,
     c.msg.depth + 1,
@@ -463,7 +463,7 @@ template opcodeGasCost*(
       c,
       op,
       gasCost,
-      c.gasMeter.gasRemaining,
+      c.gasMeter.executionGasLeft,
       c.msg.depth + 1)
   c.gasMeter.consumeGas(gasCost, reason)
 
@@ -475,7 +475,7 @@ template opcodeGasCost*(
       c,
       op,
       cost,
-      c.gasMeter.gasRemaining,
+      c.gasMeter.executionGasLeft,
       c.msg.depth + 1)
   c.gasMeter.consumeGas(cost, reason)
 

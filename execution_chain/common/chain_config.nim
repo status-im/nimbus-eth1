@@ -40,6 +40,7 @@ type
     blobGasUsed*  : Opt[uint64]    # EIP-4844
     excessBlobGas*: Opt[uint64]    # EIP-4844
     parentBeaconBlockRoot*: Opt[Hash32]   # EIP-4788
+    slotNumber* : Opt[uint64]
 
   GenesisAlloc* = Table[Address, GenesisAccount]
   GenesisStorage* = Table[UInt256, UInt256]
