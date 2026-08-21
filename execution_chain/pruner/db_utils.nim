@@ -63,13 +63,12 @@ proc deleteBlockBodyAndReceiptsBe*(kvt: KvtDbRef, header: Header) =
 proc deleteBlockAccessListsBe*(
     kvt: KvtDbRef, blockHashes: openArray[Hash32], tail: BlockNumber
 ) =
-  let batch = kvt.putBegFn().expect("deleteBlockAccessListsBe: putBegFn")
+  {.warning: "deleteBlockAccessListsBe: use batch write".}
   for blockHash in blockHashes:
-    kvt.putKvpFn(
-      batch, blockHashToBlockAccessListKey(blockHash).toOpenArray, default(seq[byte]))
-  kvt.putKvpFn(batch, balTailKey().toOpenArray, tail.toBytesLE())
-  kvt.putEndFn(batch).expect("deleteBlockAccessListsBe: putEndFn")
-
+    kvt.put(
+      blockHashToBlockAccessListKey(blockHash).toOpenArray,
+      default(seq[byte])).expect("no error")
+  kvt.put(balTailKey().toOpenArray, tail.toBytesLE()).expect("no error")
 
 # ------------------------------------------------------------------------------
 # Direct-backend progress tracking

@@ -89,7 +89,6 @@ type
 
 proc initInstance*(
     db: KvtDbRef, threadSafeCaches = true, blockHashesLruSize = 0) =
-  db.txRef = KvtTxRef(db: db)
   when compileOption("threads"):
     if threadSafeCaches:
       db.blockHashes.init(blockHashesLruSize)
