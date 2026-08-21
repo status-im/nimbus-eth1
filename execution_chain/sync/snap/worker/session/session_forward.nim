@@ -81,7 +81,7 @@ proc sessionForward*(
     ctx: SnapCtxRef;
     info: static[string];
     nBalsMax = high(uint);
-      ): Opt[BlockNumber] =
+      ): Opt[void] =
   ## Apply stored BALs to the downloaded flat account and storage tables.
   ## If successful, the block number of the last state is returned.
   ##
@@ -90,37 +90,37 @@ proc sessionForward*(
   ## are exhausted. The latter can be detected if the return value stays
   ## the same.
   ##
-  ## TODO: This function has only been tested for complete states. The
-  ##       real purpose is to use it for partial states.
-  ##
   let
     db = ctx.pool.cacheDB
     stats = ?db.getAccMissingIntv(info)
-    base = stats.number
+    pivotNum = stats.number
 
-  var number = base
-  template dist: untyped = (number-base)
+  var number = pivotNum
+  template dist: untyped = (number-pivotNum)
 
   while true:
     if nBalsMax <= dist:
-      trace info & ": BALs applied", base, number, dist
+      trace info & ": BALs applied", pivotNum, number, dist
       break
     number.inc
     let bal = db.getBal(number, info).valueOr:
-      trace info & ": BALs exhausted", base, number, dist
       number.dec
+      trace info & ": BALs exhausted", pivotNum, number, dist
       break
 
     for w in bal[]:
       discard db.applyAccountChanges(w, stats.ranges, info).valueOr:
-        error info & ": Error applying BAL account changes", base, number,
+        error info & ": Error applying BAL account changes", pivotNum, number,
           dist, addr=($w.address), accPath=w.address.computeAccPath.toStr
         return err()
 
-    # Update state block number after each BAL.
+  # Update pivot and forward block numbers if there was some progress
+  if pivotNum < number:
     ?db.updAccMissingIntv(number, info)
+    ctx.pool.pivotNum = number
+    ctx.pool.forwardNum = number
 
-  ok(number)
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

@@ -11,295 +11,209 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/[sequtils, typetraits],
   pkg/[chronicles, chronos],
+  ../../../../../db/aristo/aristo_constants,
   ../../[helpers, mpt, worker_desc],
   ./code_fetch
 
+logScope:
+  topics = "snap sync"
+
+type
+  AccCodeItem = tuple
+    accPath: Hash32
+    codeHash: Hash32
+    data: seq[byte]
+
 # ------------------------------------------------------------------------------
-# Private helpers
+# Private helpers(s) for `queueAndDownload()`
 # ------------------------------------------------------------------------------
 
-proc reCacheContract(
-    buddy: SnapPeerRef;
-    kpp: KpPair;
-    info: static[string];
-      ): Opt[void] =
-  buddy.ctx.pool.cacheDB.putCodeMissKvt(kpp).isOkOr:
-    chronicles.error info & ": Error re-caching missing contract",
-      peer=buddy.peer, `error`=error
-    return err()
-  ok()
+proc storeCdeUpdated(
+    adb: CacheDbRef;
+    cdeQ: openArray[AccCodeItem];
+    info: static[string];                           # Log message prefix
+      ): Result[int,ErrorType] =
+  ## Store or restore contract data on cache DB
+  var nMissing = 0
+  for w in cdeQ:
+    if w.data.len == 0:
+      adb.putMissingBlob(w.accPath, info).isOkOr:
+        return err(ECacheError)                     # cannot do much, here
+      nMissing.inc
 
-proc reCacheContracts(
-    buddy: SnapPeerRef;
-    kpq: openArray[KpPair];
-    info: static[string];
-      ): Opt[void] =
-  buddy.ctx.pool.cacheDB.putCodeMissKvt(kpq).isOkOr:
-    chronicles.error info & ": Error re-caching missing contracts",
-      peer=buddy.peer, `error`=error
-    return err()
-  ok()
+    else:
+      # Need to fetch account now for updating latest record
+      var accData = adb.getFlatAcc(w.accPath, info).valueOr:
+        return err(ECacheError)                     # cannot do much, here
+      accData.dirtyCode = false                     # update account flag
+      adb.putFlatAcc(w.accPath, accData, info).isOkOr:
+        return err(ECacheError)                     # cannot do much, here
 
-proc delCachedContracts(
-    buddy: SnapPeerRef;
-    kpq: openArray[KpPair];
-    info: static[string];
-      ): Opt[void] =
-  buddy.ctx.pool.cacheDB.delCodeMissKvt(kpq.mapIt it.key).isOkOr:
-    chronicles.error info & ": Error deleting missing contracts",
-      peer=buddy.peer, `error`=error
-    return err()
-  ok()
+      # Store contract code
+      adb.putFlatCode(w.accPath, w.data, info).isOkOr:
+        return err(ECacheError)                     # cannot do much, here
 
-proc persistContracts(
-    buddy: SnapPeerRef;
-    kvq: openArray[KvPair];
-    info: static[string];
-      ): Opt[void] =
-  buddy.ctx.pool.cacheDB.putCodeKvt(kvq).isOkOr:
-    chronicles.error info & ": Error persisting contracts",
-      peer=buddy.peer, `error`=error
-    return err()
-  ok()
+  ok(nMissing)
 
-# -----------
+proc fetchAndLockCodeList(
+    adb: CacheDbRef;
+    info: static[string];                           # Log message prefix
+      ): Result[seq[AccCodeItem],ErrorType] =
+  ## Collect some missing contract code items from cache DB
+  var cdeQ = newSeqOfCap[AccCodeItem](fetchCodeBatchMax)
 
-proc register(state: StateDataRef, acc: seq[(ItemKey,CodeHash)]) =
-  for (key,val) in acc:
-    state.register(key,val)
+  for accPath in adb.walkMissingBlob():
+    let accData = adb.getFlatAcc(accPath, info).valueOr:
+      return err(ECacheError)                       # cannot do much, here
+
+    cdeQ.add (accPath, accData.account.codeHash, EmptyBlob)
+    if fetchCodeBatchMax <= cdeQ.len:
+      break                                         # enough collected
+
+  if cdeQ.len == 0:                                 # empty batch
+    return err(ECompleted)                          # done so far
+
+  # Remove from cache DB, so there is unique access
+  for w in cdeQ:
+    adb.delMissingBlob(w.accPath, info).isOkOr:
+      return err(ECacheError)                      # cannot do much, here
+
+  ok(move cdeQ)
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc getMiissingCodeList(
-    buddy: SnapPeerRef;
-    info: static[string];
-      ): seq[KpPair] =
-  ## Fetch some missing contracts
-  var kpq: seq[KpPair]
-  for w in buddy.ctx.pool.cacheDB.walkCodeMissKvt:
-    kpq.add w
-    if nFetchByteCodesMax <= kpq.len:
-      break
-  kpq
-
-proc getKeyValuePair(
-    buddy: SnapPeerRef;
-    key: openArray[byte];
-    code: CodeItem;
-    info: static[string];
-      ): Opt[KvPair] =
-  ## Verify hash, etc
-  let
-    contract = code.distinctBase
-    hash = contract.keccak256                       # verify contracts data
-    key1 = Hash32.fromBytes(key)
-  if hash != key1:
-    error info & ": Contract key/hash mismatch", peer=buddy.peer,
-      key=key1.toStr, expected=hash.toStr
-    return err()
-  ok((@key, contract))
-
-
-template persistCodesRange(
-    buddy: SnapPeerRef;
-    info: static[string];
-      ): auto =
-  var bodyRc = Result[bool,ErrorType].err(ECacheError)
-  block body:
-    let kpq = buddy.getMiissingCodeList(info)
-    var contracts: seq[KvPair]
-    if kpq.len == 0:
-      bodyRc = typeof(bodyRc).ok(false)             # empty list => all done
-      break body
-
-    var nHashError = 0
-    buddy.ctx.pool.cacheDB.withMissContracts():
-      # Temporarily remove data from disk.
-      buddy.delCachedContracts(kpq, info).isOkOr:
-        break body
-
-      let
-        req = kpq.mapIt(CodeHash Hash32.fromBytes(it.key))
-        data = buddy.fetchCodes(req).valueOr:
-          buddy.reCacheContracts(kpq, info).isOkOr:
-            break body
-          bodyRc = typeof(bodyRc).err(error)
-          break body
-
-      # Extract contracts or restore omitted contract responses
-      for n in 0 ..< data.codes.len:
-        if 0 < kpq[n].key.len:
-          buddy.getKeyValuePair(kpq[n].key, data.codes[n], info).isErrOr:
-            contracts.add value
-            continue
-          nHashError.inc
-
-        buddy.reCacheContract(kpq[n], info).isOkOr:
-          break body
-
-      # Restore omitted node response tail
-      template tailData(): auto = kpq.toOpenArray(data.codes.len, kpq.len-1)
-      if data.codes.len < kpq.len:
-        buddy.reCacheContracts(tailData(), info).isOkOr:
-          break body
-      # End `withMissContracts()`
-
-    if contracts.len == 0:
-      if 0 < nHashError:
-        buddy.ctrl.zombie = true
-      else:
-        buddy.ctrl.stopped = true
-      bodyRc = typeof(bodyRc).err(ENoDataAvailable)
-      break body
-
-    # Store contracts on MPT assoociated table
-    buddy.persistContracts(contracts, info).isOkOr:
-      bodyRc = typeof(bodyRc).err(ETrieError)
-      break body
-
-    bodyRc = typeof(bodyRc).ok(true)
-
-  bodyRc                                            # return code
-
-# -----------
-
 template downloadImpl(
     buddy: SnapPeerRef;                             # Snap peer
-    state: StateDataRef;                            # Current state
-    accounts: seq[(ItemKey,CodeHash)];              # Acoounts with contracts
+    stateRoot: StateRoot;
+    number: BlockNumber;                            # for logging only
+    cdeQ: var seq[AccCodeItem];
     info: static[string];                           # Log message prefix
-      ): bool =
+      ): auto =
   ## Async/template
   ##
   ## The template will return `true` if there were some data that could be
   ## downloaded and processed.
   ##
-  var bodyRc = false
+  var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
     let
-      ctx = buddy.ctx
-      adb = ctx.pool.cacheDB
-      peerID = buddy.peerID
+      req =  cdeQ.mapIt(CodeHash it.codeHash)
 
       peer {.inject,used.} = $buddy.peer            # logging only
-      root {.inject,used.} = state.rootStr          # logging only
+      root {.inject,used.} = stateRoot.toStr        # logging only
+    var
+      start = 0
 
-    # Fetch storage slots from argument list `accounts`
-    var start {.inject.} = 0
-    while start < accounts.len:
-      let
-        accLeft = if start == 0: accounts else: accounts[start .. ^1]
-        codeHashes = accLeft.mapIt(it[1])
+    # Fetch storage contract codes from argument list `accounts`
+    while start < req.len:
+      let codeLeft: seq[CodeHash] = req[start .. ^1]
 
-      # Fetch from network
-      let data = buddy.fetchCodes(codeHashes).valueOr:
-        state.register accLeft                      # stash data and return
+      trace info & ": Requesting contract codes", peer, root, number,
+        start, nCodeLeft=codeLeft.len
+
+      let data = buddy.fetchCodes(codeLeft).valueOr:
+        trace info & ": Fetching codes failed", peer, root, number,
+          start=start, nCodeLeft=codeLeft.len, `error`=error
+        bodyRc = typeof(bodyRc).err(error)
         break body                                  # error => return
 
-      if not state.isOperable():                    # evicted => return
-        bodyRc = false                              # ignore downloaded data
-        break body
+      # Verify contracts
+      for n in 0 ..< data.codes.len:                # length at most `req.len`
+        let hash = data.codes[n].distinctBase.keccak256
+        if hash != cdeQ[n].codeHash:
+          error info & ": Code hash mismatch", peer, root, number, nth=n,
+            codeHash=cdeQ[n].codeHash.toStr, fromResp=hash.toStr
+        else:
+          # Accept for storage
+          cdeQ[n].data = data.codes[n].distinctBase
+        # End `for..`
 
-      # Store byte codes on database
-      adb.putByteCode(
-        state.stateRoot, accLeft[0][0], accLeft[^1][0],
-        codeHashes.zip data.codes, peerID).isOkOr:
-          state.register(accLeft)                   # stash data and return
-          debug info & ": Storing codes failed", peer, root,
-            start, nAccLeft=accLeft.len
-          break body                                # error => return
+      start += data.codes.len                       # next round?
+      # End `while..`
 
-      start += data.codes.len
-      bodyRc = true                                 # did something
-      # End `while`
+    bodyRc = typeof(bodyRc).ok()
+    # End `block body`
 
   bodyRc
-
-template downloadFromQueue(
+ 
+template queueAndDownload(
     buddy: SnapPeerRef;                             # Snap peer
-    state: StateDataRef;                            # Current state
+    stateRoot: StateRoot;
+    number: BlockNumber;                            # for logging only
     info: static[string];                           # Log message prefix
-      ): bool =
+      ): auto =
   ## Async/template
   ##
-  ## Process stashed unprocessed byte codes from the state DB.
-  ##
-  ## The template will return `true` if there were some data that could be
-  ## downloaded and processed.
-  ##
-  var bodyRc = false
+  var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
-    var
-      accQueue: seq[(ItemKey,CodeHash)]
+    let
+      adb = buddy.ctx.pool.cacheDB
 
-    for w in state.codeItems(nFetchByteCodesMax):
-      accQueue.add (w.key, w.data.code)
-      state.delCode w.key
+      peer {.inject,used.} = $buddy.peer            # logging only
+      root {.inject,used.} = stateRoot.toStr        # logging only
 
-    if 0 < accQueue.len:
-      bodyRc = buddy.downloadImpl(state, accQueue, info)
+    # Collect some missing storage intervals from cache
+    var cdeQ = adb.fetchAndLockCodeList(info).valueOr:
+      bodyRc = typeof(bodyRc).err(error)
+      break body
 
-  bodyRc
+    trace info & ": Requesting contract codes", peer, root, number,
+      nItems=cdeQ.len
+
+    let
+      # Fetch data from network
+      rc = buddy.downloadImpl(stateRoot, number, cdeQ, info)
+
+      # Save or restore accordingly
+      nMissing = adb.storeCdeUpdated(cdeQ, info).valueOr:
+        bodyRc = typeof(bodyRc).err(error)          # cannot do much, here
+        break body
+
+    # Check download result
+    if rc.isErr:
+      bodyRc = typeof(bodyRc).err(rc.error)
+      break body
+
+    trace info & ": Code processing ok", peer, root, number,
+      nComplete=(cdeQ.len - nMissing), nMissing, syncState=($buddy.syncState)
+
+    bodyRc = typeof(bodyRc).ok()
+    # End `block body`
+
+  bodyRc                                            # visual alignment
 
 # ------------------------------------------------------------------------------
 # Public function
 # ------------------------------------------------------------------------------
 
-template downloadCodePersist*(buddy: SnapPeerRef; info: static[string]): auto =
+template codeDownload*(
+    buddy: SnapPeerRef;                             # Snap peer
+    stateRoot: StateRoot;
+    number: BlockNumber;                            # for logging only
+    info: static[string];                           # Log message prefix
+      ): auto =
   ## Async/template
-  ##
-  ## Fetch and persist missing contracts.
   ##
   var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
 
-    while true:
-      let ok = buddy.persistCodesRange(info).valueOr:
-        bodyRc = typeof(bodyRc).err(error)
-        break body
-      if not ok:                                    # all done
-        break body
+    while not buddy.ctrl.stopped:
+      buddy.queueAndDownload(stateRoot, number, info).isOkOr:
+        if error != ECompleted:
+          bodyRc = typeof(bodyRc).err(error)
+          break body                                # return error
+        break                                       # done so far
 
-    bodyRc = typeof(bodyRc).ok()
+    trace info & ": Contract code done", peer=buddy.peer, root=stateRoot.toStr,
+      number, syncState=($buddy.syncState)
 
-  bodyRc                                            # return code
+    # End `block body`
 
-
-template downloadCodeCache*(
-    buddy: SnapPeerRef;                             # Snap peer
-    state: StateDataRef;                            # Current state
-    accounts: seq[SnapAccount];                     # Acoounts with sub-tries
-    info: static[string];                           # Log message prefix
-      ) =
-  ## Async/template
-  ##
-  block body:
-    if state.isOperable():                          # evicted => return
-
-      # Register downloads for peer synchronisateion
-      state.register accounts
-         .filterIt(not it.accBody.codeHash.isEmpty)
-         .mapIt( (it.accHash.to(ItemKey),
-                  it.accBody.codeHash.to(Hash32).to(CodeHash)) )
-
-      if state.hasCodeOrStorage:
-        let sdb {.used.} = buddy.ctx.pool.stateDB   # logging only
-        trace info & ": code download", peer, `state`=state.toStr(sdb),
-          syncState=buddy.syncState
-
-        while not buddy.ctrl.stopped and
-              state.hasCodeOrStorage and
-              buddy.downloadFromQueue(state, info):
-          continue
-
-        trace info & ": Byte code done", peer, `state`=state.toStr(sdb),
-          todo=state.hasCodeOrStorage, syncState=buddy.syncState
-
-  discard                                           # visual alignment
+  bodyRc
 
 # ------------------------------------------------------------------------------
 # End

@@ -118,6 +118,9 @@ func invalidStatus*(
 func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatusV1 =
   invalidStatus(Opt.some(validHash), msg)
 
+func invalidStatus*(msg: string): PayloadStatusV1 =
+  invalidStatus(Opt.none(Hash32), msg)
+  
 func invalidStatus*(validHash = default(common.Hash32)): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.invalid,

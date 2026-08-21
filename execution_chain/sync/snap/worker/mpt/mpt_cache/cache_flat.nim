@@ -11,13 +11,19 @@
 ## Flat leaf tables and range lists
 ## --------------------------------
 ##
-## * Unprocessed leaf ranges
-##   + key33: <col, key>
-##   + value: <root, ranges>
+## * Unprocessed account leaf ranges
+##   + key33: <col>
+##   + value: <number, ranges>
 ##   where
 ##   + col:       `cMissingIntv`
-##   + key:       `Hash32`, zero for accounts, account path for storage slots
-##   * root:      `Hash32`, state root or storage root
+##   + number:    `BlockNumber`, of header containing state root
+##   * ranges:    `ItemKeyRangeSet`
+##
+## * Unprocessed storage leaf ranges
+##   + key33: <col, key>
+##   + value: <ranges>
+##   where
+##   + col:       `cMissingIntv`, same column as above without key
 ##   * ranges:    `ItemKeyRangeSet`
 ##
 ## * Missing contract codes

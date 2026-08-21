@@ -191,6 +191,7 @@ proc close*(db: KvtDbRef; wipe = false) =
   ## depending on the type of backend (e.g. the `BackendMemory` backend will
   ## always wipe on close.)
   ##
+  db.disposeInstance()
   db.closeFn wipe
 
 # ------------------------------------------------------------------------------

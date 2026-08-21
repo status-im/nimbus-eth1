@@ -48,5 +48,6 @@ import
     test_stateless,
     test_block_access_list,
     test_pruner,
+    test_bal_pruner,
   ],
   ./blockproofs/all_blockproofs_tests

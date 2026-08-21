@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -45,10 +45,10 @@ func fromHex*(T: type CodeBytesRef, hex: string): Opt[CodeBytesRef] =
   except ValueError:
     Opt.none(CodeBytesRef)
 
-func bytes*(c: CodeBytesRef): lent seq[byte] =
+func bytes*(c: CodeBytesRef): lent seq[byte] {.inline.} =
   c[].bytes
 
-func len*(c: CodeBytesRef): int =
+func len*(c: CodeBytesRef): int {.inline.} =
   len(c.bytes)
 
 # Bounds checking done manually - this is a hotspot in the EVM

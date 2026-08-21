@@ -84,6 +84,7 @@ type
     stops*: Table[HashKey,StopNodeRef]              ## sub-MPT to complete
     dangling*: seq[(HashKey,StopNodeRef)]           ## dangling link keys
     leafs*: seq[(Hash32,LeafNodeRef)]               ## leaf pairs `(path,node)`
+    atRightEnd*: bool                               ## no more right leafs
 
   KnPair* = tuple
     ## Key-node pair

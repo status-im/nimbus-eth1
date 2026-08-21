@@ -100,7 +100,7 @@ jobs:
           make 'push-${{ matrix.os }}-${{ matrix.cpu }}'
 
       - name: Delete artefacts
-        uses: geekyeggo/delete-artifact@v5
+        uses: geekyeggo/delete-artifact@v6
         with:
           failOnError: false
           name: '${{ matrix.os }}_${{ matrix.cpu }}_rocksdb'

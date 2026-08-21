@@ -139,15 +139,9 @@ proc txFrameBegin*(
     vTop: parent.vTop,
     level: parent.level + 1)
 
-  when compileOption("threads"):
-    txRef.lock.init()
-  
   txRef
 
 proc dispose*(txFrame: AristoTxRef) =
-  when compileOption("threads"):
-    txFrame.lock.dispose()
-
   if not txFrame.db.isNil():
     txFrame.db.removeSnapshotFrame(txFrame)
   txFrame[].reset()

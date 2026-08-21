@@ -91,8 +91,6 @@ proc initInstance*(
 
   db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
   when compileOption("threads"):
-    db.txRef.lock.init()
-
     if threadSafeCaches:
       db.accLeaves.init(accLeavesLruSize)
       db.stoLeaves.init(stoLeavesLruSize)

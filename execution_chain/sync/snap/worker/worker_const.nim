@@ -16,46 +16,82 @@ import
 type
   SnapState* = enum
     SnapIdle = 0
-    SnapReady                      ## Wait for download state
     SnapResume                     ## Resume from previous session
-    SnapDownload                   ## Downloading and caching data
+    SnapClear                      ## Reset and prepare for brand new start
+    SnapReady                      ## Wait for download state
+    SnapDownload                   ## Download and cache initial state data
     SnapDownloadFinish             ## Wait for sync before proceeding
-    SnapMkTrie                     ## Assembling downloaded data
-    SnapAnalyse                    ## Analyse for missing MPT nodes
+    SnapBalsFetch                  ## Bring state forward using BALs
+    SnapBalsFetchFinish            ## Wait for sync before proceeding
+    SnapStateForward               ## Apply BALs and advance state
     # ..                           ## TBD ..
     SnapStop                       ## TBD ..
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
     EGeneric = 0                   ## Not further specified error
-    ENoDataAvailable               ## Out of scope, unsuuported state
-    EMissingEthContext             ## Cannot retrieve `eth` peer descriptor
     EAlreadyTriedAndFailed         ## The same action failed before
+    EMissingEthContext             ## Cannot retrieve `eth` peer descriptor
     EPeerDisconnected              ## Exception
     ECatchableError                ## Exception
     ECancelledError                ## Exception
+
+    # The following symbols are not used in fetch functions (see below
+    # the symbol set `EUnusedForFetch`.)
+    ENoDataAvailable               ## Out of scope, unsuuported state
     ELockError                     ## Locked by some other peer
     ETrieError                     ## Trie/mpt database error
+    EValidationError               ## Sub-MPT validation failed
     ECacheError                    ## Database cache error
     ECompleted                     ## Nothing to do, here
+    ERlpError                      ## Decoding problem
+    EArgumentError                 ## Inconsistent function arguments
+    EMissingBalSupport             ## Chain before `Amsterdam`
+    EHeadersMissing                ## Need to fetch more headers
 
 const
+  EUnusedForFetch* = {ENoDataAvailable .. EHeadersMissing}
+    ## Shortcut for `case..of` directive. These error symbols are not used
+    ## for fetching data via the `snap` or `eth` wire protocol.
+
+  # -----------------
+
   snapAsmFolder* = "snap"
     ## Folder for assembly database (different from aristo `ecdb` folder)
 
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
+  noPeersLogWaitInterval* = chronos.seconds(50)
+    ## Reduce logging noise
+
+  noHeadersLogWaitInterval* = chronos.seconds(50)
+    ## Reduce logging noise
+
+  maxHeadersLogWaitInterval* = chronos.seconds(30)
+    ## Reduce logging noise
+
+  lockedBalsLogWaitInterval* = chronos.seconds(30)
+    ## Reduce logging noise
+
   daemonWaitReadyInterval* = chronos.seconds(47)
     ## Some polling interval time waiting until the system gets into download
     ## state when the the FCU modue hash provides a finalised header and there
     ## are eth/xx download peers available.
 
-  daemonWaitHeaderInterval* = chronos.seconds(30)
-    ## Ditto for header download.
+  daemonWaitClearInterval* = chronos.seconds(10)
+    ## Ditto for setup.
 
   daemonWaitElseInterval* = chronos.seconds(10)
     ## Ditto for other states.
+
+  daemonWaitDownloadInterval* = chronos.seconds(10)
+    ## Some waiting time at the end of the daemon task which always lingers
+    ## in the background. This one is for `SnapDownload` state.
+
+  daemonWaitDownloadFinishInterval* = chronos.seconds(5)
+    ## Poll waiting for all downloading peers to have stopped
+
 
   peerWaitDownloadInterval* = chronos.seconds(5)
     ## Some waiting time at the end of the daemon task which always lingers
@@ -65,25 +101,19 @@ const
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background. This one is for non-`SnapDownload` states.
 
-  threadLogTimeLimit* = chronos.seconds(45)
-    ## Print intermediate messages when running a time consuming task
+  peerWaitExhaustedInterval* = chronos.milliseconds(1200)
+    ## Suspend peer until the download state has been forwarded. This timeout
+    ## will be regularly polled for the updated state.
 
-  threadSwitchRunLimit* = chronos.seconds(25)
-    ## Force a thread switch after that time running continuously. This
-    ## applies mainly for DB building and analysing sessions.
+  peerWaitBalsLockedInterval* = chronos.milliseconds(300)
+    ## Only one peer can download BALs. This constatnt is the polling timr
+    ## for the waiting peers.
 
-  accuAccountsCovMin* = 1.01
-    ## In absence of a completed pivot state, the syncer will stop downloading
-    ## if all accounts are covered at least by this factor. Then trie-assembly
-    ## and healing can take place.
+  peerWaitHeadersInterval* = chronos.milliseconds(300)
+    ## Suspend peer waiting for new headers. Then check again.
 
-  stateIdleTimeBeforeEviction* = chronos.minutes(30)
-    ## Minimum time a state is cached before eviction unless other criteria
-    ## apply (e.g. fully unprocessed account range.)
-
-  noStateRecordsMsgDelay* = chronos.seconds(20)
-    ## After logging a `no state records` message, subsequent similar messages
-    ## are suppressed for a while.
+  peerWaitNoEthPeersInterval* = chronos.milliseconds(500)
+    ## Waithing for eth peers supporting BAL
 
   # ----------------------
 
@@ -93,32 +123,16 @@ const
     ## these intervals are sparsely filled and there will be returned not
     ## more than ~1k accounts.
 
-  stateDbCapacity* = 8
-    ## Maximal numbers of simultanously incomplete states. Note that the
-    ## protocol suggests a single peer to provide a download window of 128
-    ## state roots corresponding to consecutibe block numbers.
-    ##
-    ## Note that there are about 400k accounts on `mainnet` (as of early 2026.)
+  consHeadSupportWindowSize* = 144
+    ## This might be a bit more than the supported download states window,
+    ## which is 128. If the FCU update header is more than that distance
+    ## apart form the pivot state block number, a BAL download and forward
+    ## cycle will be triggerd.
 
-  daemonWaitDownloadInterval* = chronos.seconds(10)
-    ## Some waiting time at the end of the daemon task which always lingers
-    ## in the background. This one is for `SnapDownload` state.
-
-  daemonWaitDownloadFinishInterval* = chronos.seconds(5)
-    ## Poll waiting for all downloading peers to have stopped
-
-  # -----------
-
-  nConsHeadcachedDeltaMax* = 128
+  nConsHeadCachedDeltaMax* = 128
     ## If the block number difference between FCU update header and cached
     ## header is larger than this contant, a beacon header fetch cycle is
     ## triggered to fill up the cache.
-
-  nFetchHeaderPeersMax* = 5
-    ## Try at most this many `eth` peers for fetching a header
-
-  fetchHeaderRlpxTimeout* = chronos.seconds(30)
-    ## Timeout cap for the `RLPX` handler when fetching header. This value
 
   # -----------
 
@@ -137,6 +151,9 @@ const
 
   # -----------
 
+  fetchStorageBatchMax* = 1024
+    ## Maximal batch size for storage slots
+
   fetchStorageSnapTimeout* = chronos.seconds(120)
     ## Similar to `fetchAccountSnapTimeout`
 
@@ -154,30 +171,8 @@ const
 
   # -----------
 
-  daemonWaitHealingInterval* = chronos.seconds(10)
-    ## Poll waiting for peers to process account and storage nodes
-
-  daemonWaitHealingFinishInterval* = chronos.seconds(5)
-    ## Wait for sync
-
-  trieNodeAccPathCapacity* = 10
-
-  fetchTrieNodeSnapTimeout* = chronos.seconds(120)
-    ## Similar to `fetchAccountSnapTimeout`
-
-  nFetchTrieNodeSnapErrThreshold* = 4
-    ## Similar to `nFetchAccountSnapErrThreshold`
-
-  fetchTrieNodeSnapBytesLimit* = 512 * 1024
-    ## Similar to `fetchAccountSnapBytesLimit`
-
-  nProcTrieNodeErrThreshold* = 4
-    ## Similar to `nProcAccountErrThreshold`
-
-  nFetchTrieNodeSnapItemsMax* = 1024
-    ## Maximal size of storage slots downloaded in a single message.
-
-  # -----------
+  fetchCodeBatchMax* = 1024
+    ## Maximal batch size for contract codes
 
   daemonWaitCodesInterval* = chronos.seconds(10)
     ## Poll waiting for peers to process contract codes
@@ -201,5 +196,41 @@ const
     ## Maximal sise of byte codes downloaded in a single message. Note
     ## that the snap/1 protocol description recommends someting about
     ## 80-100 items for a 515K byte limit.
+
+  # -----------
+
+  ethBalFetchCapacity* = 10
+    ## Register first hash of last BAL request for error handling
+    ## support.
+
+  nFetchBalEthPeersMax* = 5
+    ## Try at most this many `eth` peers for fetchinga block access lists.
+
+  fetchBalRlpxTimeout* = chronos.seconds(50)
+    ## Timeout cap for the `RLPx` handlers, either `snap` or `eth`
+    ## when fetching block access lists.
+
+  fetchBalErrTimeout* = chronos.seconds(25)
+    ## Needed for detecting slow peers. If the response time exceeds this
+    ## threshold, the peer is considered `slow`.
+
+  nFetchBalErrThreshold* = 4
+    ## Maximum account fetch errors before zombification.
+
+  nProcBalErrThreshold* = 4
+    ## Similar to `nFetchAccountSnapErrThreshold` but for the later part
+    ## when errors occur while cached data packets are processed.
+
+  nProcBalDwnldBatchMax* = 800
+    ## Maximal size of single download batch for BALs.
+
+  nProcBalDefaultChunk* = 80
+    ## Default size for auto downloading a single chunk of BALs.
+
+  nProcBalDefaultBatchMax* = 1000
+    ## Default maximum number of BALs for a single auto downloading session.
+
+static:
+  doAssert 0 < nConsHeadCachedDeltaMax
 
 # End
