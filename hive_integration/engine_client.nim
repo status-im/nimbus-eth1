@@ -75,14 +75,14 @@ proc forkchoiceUpdatedV4*(client: RpcClient,
       update: ForkchoiceStateV1,
       payloadAttributes = Opt.none(PayloadAttributesV4),
       custodyColumns = Opt.none(seq[byte])):
-        Result[ForkchoiceUpdatedResponse, string] =
+        Result[ForkchoiceUpdatedResponseV1, string] =
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV4(update, payloadAttributes, custodyColumns)
 
 proc forkchoiceUpdatedV5*(client: RpcClient,
       update: ForkchoiceStateV1,
       payloadAttributes = Opt.none(PayloadAttributesV5),
-      custodyColumns = Opt.none(BitArray128)):
+      custodyColumns = Opt.none(seq[byte])):
         Result[ForkchoiceUpdatedResponseV2, string] =
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV5(update, payloadAttributes, custodyColumns)
