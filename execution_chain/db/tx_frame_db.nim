@@ -33,7 +33,7 @@
 ##    - `blobifyTxFrame(src.aTx)` walks `sTab`, `kMap`, `accLeaves`, `stoLeaves` and produces the Aristo blob.
 ##    - `blobifyKvtTxFrame(src.kTx)` walks `sTab` and produces the KVT blob.
 ##    - The two blobs are length-prefixed and concatenated.
-##    - The result is written to KVT via `target.put(txFrameKey(blockHash), combinedBlob)`.
+##    - The result is written to KVT via `target.putMove(txFrameKey(blockHash), combinedBlob)`.
 ## 3. On the next `persist` call the entry is flushed to RocksDB alongside the block's trie changes.
 ##
 ## Deserialization Process (startup restore)
@@ -94,7 +94,7 @@ proc storeTxFrame*(
   blob.add kvtBlob.len.uint32.toBytesBE
   blob.add kvtBlob
 
-  target.put(txFrameKey(blockHash).toOpenArray, blob)
+  target.putMove(txFrameKey(blockHash).toOpenArray, blob)
 
 proc loadTxFrameAsChild*(
     srcBase: CoreDbTxRef;

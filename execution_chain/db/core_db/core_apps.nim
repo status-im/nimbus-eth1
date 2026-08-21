@@ -268,7 +268,7 @@ proc persistTransactions*(
       blockKey = transactionHashToBlockKey(txHash)
       txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
       key = hashIndexKey(txRoot, idx.uint16)
-    db.put(key, encodedTx).isOkOr:
+    db.putMove(key, encodedTx).isOkOr:
       warn info, idx, error=($$error)
       return
     db.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:

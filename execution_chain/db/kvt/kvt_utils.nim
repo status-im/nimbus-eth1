@@ -66,7 +66,7 @@ proc delRangeBe*(
 
 # ------------
 
-proc put*(
+proc putMove*(
     db: KvtTxRef;                     # Database
     key: openArray[byte];             # Key of database record to store
     data: var seq[byte];              # Value of database record to store
@@ -79,7 +79,7 @@ proc put*(
   if data.len == 0:
     return err(DataInvalid)
 
-  db.layersPut(key, data)
+  db.layersPutMove(key, data)
   ok()
 
 proc put*(
@@ -87,9 +87,9 @@ proc put*(
     key: openArray[byte];             # Key of database record to store
     data: openArray[byte];            # Value of database record to store
       ): Result[void,KvtError] =
-  ## Variant of `put()` copying `data` into the top layer cache.
+  ## Variant of `putMove()` copying `data` into the top layer cache.
   var data = @data
-  db.put(key, data)
+  db.putMove(key, data)
 
 
 proc del*(
