@@ -22,9 +22,18 @@ docker rm ${DOCKER_TAG} &>/dev/null || true
 
 cd docker/dist
 
+# The dist base images are published for amd64 only. An arm64 host must ask for
+# amd64 explicitly, or BuildKit targets the host platform and the build dies on
+# the first RUN, unable to exec /bin/sh from the amd64 rootfs. On an amd64 host
+# this is what Docker picks anyway, so leave the command line untouched there.
+PLATFORM_ARGS=()
+if [[ "$(uname -m)" != "x86_64" ]]; then
+  PLATFORM_ARGS=(--platform linux/amd64)
+fi
+
 DOCKER_BUILDKIT=1 \
   docker build \
-  --platform linux/amd64 \
+  "${PLATFORM_ARGS[@]}" \
   -t ${DOCKER_TAG} \
   --progress=plain \
   --build-arg USER_ID=$(id -u) \
@@ -32,7 +41,7 @@ DOCKER_BUILDKIT=1 \
   -f Dockerfile.${ARCH} .
 
 # seccomp can have some serious overhead, so we disable it with "--privileged" - https://pythonspeed.com/articles/docker-performance-overhead/
-docker run --privileged --platform linux/amd64 --rm --name ${DOCKER_TAG} -v ${REPO_DIR}:/home/user/nimbus-eth1 ${DOCKER_TAG}
+docker run --privileged --rm --name ${DOCKER_TAG} -v ${REPO_DIR}:/home/user/nimbus-eth1 ${DOCKER_TAG}
 
 cd - &>/dev/null
 
