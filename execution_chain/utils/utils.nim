@@ -61,8 +61,12 @@ proc append(w: var RlpWriter, rec: NetworkFormatReceipt) =
 
   w.append(r.logs)
 
-func calcReceiptsRoot*(receipts: seq[StoredReceipt]): Root =
-  orderedTrieRoot(cast[seq[NetworkFormatReceipt]](receipts))
+func calcReceiptsRoot*(receipts: openArray[StoredReceipt]): Root =
+  if receipts.len == 0:
+    return EMPTY_ROOT_HASH
+  orderedTrieRoot(
+    cast[ptr UncheckedArray[NetworkFormatReceipt]](addr receipts[0])
+      .toOpenArray(0, receipts.high))
 
 template calcReceiptsRoot*(receipts: openArray[Receipt]): Root =
   orderedTrieRoot(receipts)
