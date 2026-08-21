@@ -47,12 +47,14 @@ proc append(w: var RlpWriter, rec: NetworkFormatReceipt) =
   else:
     w.append(r.status.uint8)
   w.append(r.cumulativeGasUsed)
+
   var bloom: bloom.BloomFilter
   for log in r.logs:
     bloom.incl log.address
     for topic in log.topics:
       bloom.incl topic
   w.append(bloom.value.to(Bloom))
+  
   w.append(r.logs)
 
 func calcReceiptsRoot*(receipts: seq[StoredReceipt]): Root =

@@ -233,7 +233,7 @@ proc put*(
 proc put*(
     kvt: CoreDbTxRef;
     key: openArray[byte];
-    val: sink seq[byte];
+    val: var seq[byte];
       ): CoreDbRc[void] =
   ## Variant of `put()` that takes over ownership of `val` instead of
   ## copying it - the caller must not use `val` after this call

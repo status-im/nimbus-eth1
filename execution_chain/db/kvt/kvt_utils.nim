@@ -69,10 +69,11 @@ proc delRangeBe*(
 proc put*(
     db: KvtTxRef;                     # Database
     key: openArray[byte];             # Key of database record to store
-    data: openArray[byte];            # Value of database record to store
+    data: var seq[byte];              # Value of database record to store
       ): Result[void,KvtError] =
   ## For the argument `key` associated the argument `data` as value (which
-  ## will be marked in the top layer cache.)
+  ## will be marked in the top layer cache.) The contents of `data` are taken
+  ## over, leaving it empty.
   if key.len == 0:
     return err(KeyInvalid)
   if data.len == 0:
@@ -84,17 +85,11 @@ proc put*(
 proc put*(
     db: KvtTxRef;                     # Database
     key: openArray[byte];             # Key of database record to store
-    data: sink seq[byte];             # Value, ownership taken over
+    data: openArray[byte];            # Value of database record to store
       ): Result[void,KvtError] =
-  ## Variant of `put()` that takes over ownership of `data` instead of
-  ## copying it - the caller must not use `data` after this call.
-  if key.len == 0:
-    return err(KeyInvalid)
-  if data.len == 0:
-    return err(DataInvalid)
-
-  db.layersPut(key, data)
-  ok()
+  ## Variant of `put()` copying `data` into the top layer cache.
+  var data = @data
+  db.put(key, data)
 
 
 proc del*(
