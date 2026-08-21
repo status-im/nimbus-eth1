@@ -58,6 +58,7 @@ func layersPut*(db: KvtTxRef; key: openArray[byte]; data: var seq[byte]) =
   ## Store a (potentally empty) value on the top layer, taking over the
   ## contents of `data` which is left empty
   swap(db.sTab.mgetOrPut(@key, EmptyBlob), data)
+  data.setLen(0)
 
 func layersPut*(db: KvtTxRef; key: openArray[byte]; data: openArray[byte]) =
   ## Store a (potentally empty) value on the top layer
