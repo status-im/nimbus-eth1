@@ -199,10 +199,12 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
     b.index = uint i
     inc i
 
-  ?txFrame.put(FcStateKey.toOpenArray, rlp.encode(fc))
+  var encodedState = rlp.encode(fc)
+  ?txFrame.putMove(FcStateKey.toOpenArray, encodedState)
 
   for b in fc.hashToBlock.values:
-    ?txFrame.put(blockIndexKey(b.index), rlp.encode(b))
+    var encodedBlock = rlp.encode(b)
+    ?txFrame.putMove(blockIndexKey(b.index), encodedBlock)
     # Persist the per-block txFrame delta (Aristo + KVT) so deserialize can
     # restore the in-memory frame without re-executing the block.  The base
     # block shares its frame with the on-disk base and needs no blob.
