@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -42,6 +42,19 @@ proc getKeyBe*(
       ): Result[(HashKey, VertexRef),AristoError] =
   ## Get the Merkle hash/key from the backend if available.
   db.getKeyFn(rvid, flags)
+
+proc getKeysBe*(
+    db: AristoDbRef;
+    rvids: openArray[RootedVertexID];
+    keyvtxs: var openArray[(HashKey, VertexRef)];
+    flags: set[GetVtxFlag];
+      ): Result[void,AristoError] =
+  if db.getKeysFn.isNil:
+    for i, rvid in rvids:
+      keyvtxs[i] = ?db.getKeyFn(rvid, flags)
+    ok()
+  else:
+    db.getKeysFn(rvids, keyvtxs, flags)
 
 # ------------------
 

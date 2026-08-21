@@ -41,6 +41,7 @@ type
   RdbInst* = object
     baseDb*: RocksDbInstanceRef
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
+    readOpts*: ReadOptionsRef
 
     # Note that the key type `VertexID` for LRU caches requires that there is
     # strictly no vertex ID re-use.

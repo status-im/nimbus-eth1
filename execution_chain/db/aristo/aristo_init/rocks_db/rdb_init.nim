@@ -111,6 +111,8 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   rdb.vtxCol = baseDb.db.getColFamily($VtxCF).valueOr:
     raiseAssert "Cannot initialise VtxCF descriptor: " & error
 
+  rdb.readOpts = defaultReadOptions(autoClose = false)
+
 proc close*(rdb: var RdbInst, wipe: bool) =
   ## Destructor
   rdb.rdKeyLru.dispose()
@@ -124,6 +126,9 @@ proc close*(rdb: var RdbInst, wipe: bool) =
     ks = rdb.rdKeySize
     vs = rdb.rdVtxSize
     bs = rdb.rdBranchSize
+  if not rdb.readOpts.isNil:
+    rdb.readOpts.close()
+    rdb.readOpts = nil
   rdb.baseDb.close(wipe)
   if rdb.rdbPrintStats:
     dumpCacheStats(ks, vs, bs)

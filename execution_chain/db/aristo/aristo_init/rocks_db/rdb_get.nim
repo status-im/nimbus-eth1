@@ -20,6 +20,10 @@ import
   ./rdb_desc,
   std/concurrency/atomics
 
+from rocksdb/lib/librocksdb import
+  rocksdb_slice_t, rocksdb_pinnableslice_t, rocksdb_batched_multi_get_cf_slice,
+  rocksdb_pinnableslice_value, rocksdb_pinnableslice_destroy, rocksdb_free
+
 const extraTraceMessages = false ## Enable additional logging noise
 
 when extraTraceMessages:
@@ -170,13 +174,138 @@ proc getKey*(
     # follow a different access pattern!
     rdb.rdVtxLru.put(rvid.vid, vtxBuf)
 
-  let vtx = 
+  let vtx =
     if res.isNone():
       vtxBuf.data().deblobify(VertexRef).expect("valid data in db")
     else:
       nil
 
   ok (res.valueOr(VOID_HASH_KEY), vtx)
+
+const MaxKeysFetch* = 16
+
+proc getKeys*(
+    rdb: var RdbInst,
+    rvids: openArray[RootedVertexID],
+    keyvtxs: var openArray[(HashKey, VertexRef)],
+    flags: set[GetVtxFlag],
+): Result[void, (AristoError, string)] =
+  doAssert rvids.len <= MaxKeysFetch and keyvtxs.len >= rvids.len
+
+  var
+    fetchIdxs {.noinit.}: array[MaxKeysFetch, uint8]
+    nFetch = 0
+
+  for i, rvid in rvids:
+    block lookup:
+      block:
+        let rc =
+          if GetVtxFlag.PeekCache in flags:
+            rdb.rdKeyLru.peek(rvid.vid)
+          else:
+            rdb.rdKeyLru.get(rvid.vid)
+
+        if rc.isOk:
+          rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
+          keyvtxs[i] = (rc.value, VertexRef(nil))
+          break lookup
+
+        rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
+
+      block:
+        var leafVtx: VertexRef
+        rdb.rdVtxLru.withPeek(rvid.vid, cached):
+          let vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
+          if vtx.vType in Leaves:
+            leafVtx = vtx
+
+        if not leafVtx.isNil:
+          keyvtxs[i] = (VOID_HASH_KEY, leafVtx)
+          break lookup
+
+      fetchIdxs[nFetch] = uint8 i
+      inc nFetch
+
+  if nFetch == 0:
+    return ok()
+
+  var
+    keyBufs {.noinit.}: array[MaxKeysFetch, RVidBuf]
+    keySlices {.noinit.}: array[MaxKeysFetch, rocksdb_slice_t]
+    valueSlices {.noinit.}: array[MaxKeysFetch, ptr rocksdb_pinnableslice_t]
+    errs: array[MaxKeysFetch, cstring]
+
+  for j in 0 ..< nFetch:
+    keyBufs[j] = rvids[int fetchIdxs[j]].blobify()
+    keySlices[j] = rocksdb_slice_t(
+      data: cast[cstring](addr keyBufs[j].buf[0]), size: csize_t(keyBufs[j].len)
+    )
+
+  rocksdb_batched_multi_get_cf_slice(
+    rdb.vtxCol.db.cPtr,
+    rdb.readOpts.cPtr,
+    rdb.vtxCol.handle.cPtr,
+    csize_t(nFetch),
+    addr keySlices[0],
+    addr valueSlices[0],
+    cast[cstringArray](addr errs[0]),
+    false,
+  )
+
+  block errCheck:
+    var errMsg: string
+    for j in 0 ..< nFetch:
+      if not errs[j].isNil:
+        if errMsg.len == 0:
+          errMsg = $errs[j]
+        rocksdb_free(errs[j])
+
+    if errMsg.len > 0:
+      for j in 0 ..< nFetch:
+        if not valueSlices[j].isNil:
+          rocksdb_pinnableslice_destroy(valueSlices[j])
+      return err((RdbBeDriverGetKeyError, errMsg))
+
+  for j in 0 ..< nFetch:
+    let i = int fetchIdxs[j]
+    if valueSlices[j].isNil:
+      keyvtxs[i] = (VOID_HASH_KEY, VertexRef(nil))
+      continue
+
+    var
+      vtxBuf {.noinit.}: VertexBuf
+      valLen: csize_t
+    let valPtr = rocksdb_pinnableslice_value(valueSlices[j], valLen.addr)
+
+    if int(valLen) > vtxBuf.buf.len:
+      for k in j ..< nFetch:
+        if not valueSlices[k].isNil:
+          rocksdb_pinnableslice_destroy(valueSlices[k])
+      return err((RdbBeDriverGetKeyError, "vertex record does not fit buffer"))
+
+    if valLen > 0:
+      copyMem(addr vtxBuf.buf[0], valPtr, int valLen)
+    vtxBuf.n = typeof(vtxBuf.n)(valLen)
+    rocksdb_pinnableslice_destroy(valueSlices[j])
+
+    let
+      rvid = rvids[i]
+      res = vtxBuf.data().deblobify(HashKey)
+
+    if res.isSome() and
+        (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
+      rdb.rdKeyLru.put(rvid.vid, res.value())
+
+    if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+      rdb.rdVtxLru.put(rvid.vid, vtxBuf)
+
+    keyvtxs[i] =
+      if res.isSome():
+        (res.value(), VertexRef(nil))
+      else:
+        (VOID_HASH_KEY, vtxBuf.data().deblobify(VertexRef).expect("valid data in db"))
+
+  ok()
 
 proc getVtx*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
