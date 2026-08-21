@@ -51,7 +51,7 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
     USE_CACHED_ROCKSDB=1 \
-    deps-common
+    deps-common build/generate_makefile
 
   make \
     -j$(nproc) \
@@ -111,7 +111,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
     USE_CACHED_ROCKSDB=1 \
-    deps-common
+    deps-common build/generate_makefile
 
   # -j1 will disable parallel build and prevent OOM in github CI
   make \
@@ -156,7 +156,7 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
     USE_CACHED_ROCKSDB=1 \
-    deps-common
+    deps-common build/generate_makefile
 
   make \
     -j$(nproc) \
