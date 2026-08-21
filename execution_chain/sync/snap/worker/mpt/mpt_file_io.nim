@@ -16,8 +16,6 @@
 import
   std/[streams, syncio],
   pkg/[eth/common, stew/byteutils, zlib],
-  ../../../wire_protocol/snap/snap_types,
-  ../state_db,
   ./mpt_build/build_desc
 
 export

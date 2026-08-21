@@ -12,7 +12,6 @@
 import
   std/[typetraits],
   pkg/[eth/common, eth/trie/nibbles],
-  ../../../../wire_protocol/snap/snap_types,
   ./build_desc
 
 # ------------------------------------------------------------------------------

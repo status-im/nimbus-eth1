@@ -12,7 +12,6 @@
 import
   std/typetraits,
   pkg/eth/common,
-  ../../state_db,
   ./[cache_const, cache_desc, cache_r_cmd]
 
 # ------------------------------------------------------------------------------
