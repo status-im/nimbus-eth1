@@ -48,7 +48,6 @@ func createBloom*(receipts: openArray[StoredReceipt]): Bloom =
 
 proc makeReceipt*(
     vmState: BaseVMState; txType: TxType, callResult: var LogResult): StoredReceipt =
-  ## Note: `callResult.logEntries` is moved into the receipt, leaving it empty
   var rec: StoredReceipt
   if vmState.com.isByzantiumOrLater(vmState.blockNumber, vmState.blockCtx.timestamp):
     rec.isHash = false

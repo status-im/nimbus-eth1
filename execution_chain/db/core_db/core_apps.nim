@@ -260,9 +260,9 @@ proc persistTransactions*(
     info = "persistTransactions()"
 
   if transactions.len == 0:
-    return
+    return @[]
 
-  result = newSeqOfCap[Hash32](transactions.len)
+  var txHashes = newSeqOfCap[Hash32](transactions.len)
   for idx, tx in transactions:
     var encodedTx = rlp.encode(tx)
     let
@@ -271,15 +271,17 @@ proc persistTransactions*(
       txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
       key = hashIndexKey(txRoot, idx.uint16)
 
-    result.add txHash
+    txHashes.add txHash
     db.putMove(key, encodedTx).isOkOr:
       warn info, idx, error=($$error)
-      return
+      return txHashes
 
     var encodedTxKey = rlp.encode(txKey)
     db.putMove(blockKey.toOpenArray, encodedTxKey).isOkOr:
       trace info, blockKey, error=($$error)
-      return
+      return txHashes
+
+  txHashes
 
 proc getTransactionByIndex*(
     db: CoreDbTxRef;

@@ -32,7 +32,8 @@ proc writeBaggage*(
   template header(): Header =
     blk.header
 
-  result = txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
+  let txHashes =
+    txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
   txFrame.persistReceipts(header.receiptsRoot, receipts)
   discard txFrame.persistUncles(blk.uncles)
 
@@ -52,6 +53,8 @@ proc writeBaggage*(
       blkHash,
       generatedBal.get(),
     )
+
+  txHashes
 
 proc getVmState(
     c: ForkedChainRef,
@@ -101,7 +104,6 @@ proc processBlock*(
     blkHash: Hash32,
     finalized: bool,
 ): Result[seq[Hash32], string] =
-  ## On success returns the block's transaction hashes, in transaction order.
   template header(): Header =
     blk.header
 
