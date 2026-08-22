@@ -25,6 +25,8 @@ const
   STEADY_WARMUP = 10
   STEADY_ACCOUNTS_PER_BLOCK = 2_000
   COLD_REPEATS = 3
+  STORAGE_EVERY = 4
+  SLOTS_PER_CONTRACT = 4
 
 proc makeOpts(): DbOptions =
   DbOptions.init(
@@ -76,6 +78,11 @@ proc addAccounts(txFrame: AristoTxRef, n: int) =
     doAssert txFrame.mergeAccount(
       p, AristoAccount(balance: pathCounter.u256(), codeHash: EMPTY_CODE_HASH)
     ).isOk()
+    if pathCounter mod STORAGE_EVERY == 0:
+      for s in 0'u64 ..< SLOTS_PER_CONTRACT:
+        doAssert txFrame.mergeSlot(
+          p, path(0x8000_0000_0000_0000'u64 + pathCounter * 16 + s), (s + 1).u256()
+        ).isOk()
 
 proc persistFrame(db: AristoDbRef, txFrame: AristoTxRef, blockNumber: uint64) =
   txFrame.checkpoint(blockNumber, skipSnapshot = true)

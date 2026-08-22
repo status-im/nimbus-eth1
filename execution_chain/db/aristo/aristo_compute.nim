@@ -34,6 +34,8 @@ type
 
   KeyWriteBuf* = SharedSeq[(RootedVertexID, HashKey, uint32)]
 
+  KeyVtxLevel = ((HashKey, VertexRef), int)
+
 proc `=copy`(
     dest: var WriteBatch, src: WriteBatch
 ) {.error: "Copying WriteBatch is forbidden".} =
@@ -219,6 +221,57 @@ proc getKeys(
 
   ok()
 
+proc getStoKeys(
+    txRef: AristoTxRef,
+    vtx: BranchRef,
+    keyvtxs: array[16, KeyVtxLevel],
+    stoKeyvtxs: var array[16, KeyVtxLevel],
+    stoPrefetched: var uint16,
+    skipLayers: static bool,
+    parallel: static bool,
+): Result[void, AristoError] =
+  const flags: set[GetVtxFlag] =
+    when parallel or skipLayers:
+      {GetVtxFlag.PeekCache}
+    else:
+      {}
+
+  var
+    rvids {.noinit.}: array[16, RootedVertexID]
+    nibbles {.noinit.}: array[16, uint8]
+    nFetch = 0
+
+  for n, subvid in vtx.pairs:
+    if keyvtxs[n][0][0].isValid:
+      continue
+    let child = keyvtxs[n][0][1]
+    if child.isNil or child.vType != AccLeaf:
+      continue
+    let stoID = AccLeafRef(child).stoID
+    if not stoID.isValid:
+      continue
+    let stoRvid = (stoID.vid, stoID.vid)
+    when not skipLayers:
+      let keyVtxRes = txRef.layersGetKeyOrVtx(stoRvid)
+      if keyVtxRes.isSome():
+        stoKeyvtxs[n] = keyVtxRes[]
+        stoPrefetched = stoPrefetched or (1'u16 shl n)
+        continue
+    rvids[nFetch] = stoRvid
+    nibbles[nFetch] = n
+    inc nFetch
+
+  if nFetch > 0:
+    var keyvtxsBe: array[16, (HashKey, VertexRef)]
+    ?txRef.db.getKeysBe(
+      rvids.toOpenArray(0, nFetch - 1), keyvtxsBe.toOpenArray(0, nFetch - 1), flags
+    )
+    for j in 0 ..< nFetch:
+      stoKeyvtxs[int nibbles[j]] = (keyvtxsBe[j], dbLevel)
+      stoPrefetched = stoPrefetched or (1'u16 shl nibbles[j])
+
+  ok()
+
 template childVid(vp: VertexRef): VertexID =
   # If we have to recurse into a child, where would that recusion start?
   let v = vp
@@ -247,6 +300,7 @@ proc computeKeyImpl(
     snapshotFrame: AristoTxRef,
     keyBuf: ptr KeyWriteBuf,
     vtxBufQueue: ptr ConcurrentVertexBufQueue,
+    stoKeyvtx: Opt[KeyVtxLevel],
 ): Result[(HashKey, int), AristoError]
 
 when compileOption("threads"):
@@ -332,6 +386,7 @@ when compileOption("threads"):
         snapshotFrame = nil,
         keyBuf,
         vtxBufQueue,
+        Opt.none(KeyVtxLevel),
       )
     else:
       txRef[].computeKeyImpl(
@@ -345,6 +400,7 @@ when compileOption("threads"):
         snapshotFrame = nil,
         keyBuf,
         vtxBufQueue,
+        Opt.none(KeyVtxLevel),
       )
 
 proc computeKeyImpl(
@@ -359,6 +415,7 @@ proc computeKeyImpl(
     snapshotFrame: AristoTxRef,
     keyBuf: ptr KeyWriteBuf,
     vtxBufQueue: ptr ConcurrentVertexBufQueue,
+    stoKeyvtx: Opt[KeyVtxLevel],
 ): Result[(HashKey, int), AristoError] =
   # The bloom filter available used only when creating the key cache from an
   # empty state
@@ -374,7 +431,10 @@ proc computeKeyImpl(
         if vtx.stoID.isValid:
           let
             keyvtxl =
-              ?txRef.getKey((vtx.stoID.vid, vtx.stoID.vid), skipLayers, parallel)
+              if stoKeyvtx.isSome():
+                stoKeyvtx[]
+              else:
+                ?txRef.getKey((vtx.stoID.vid, vtx.stoID.vid), skipLayers, parallel)
             (skey, sl) =
               if keyvtxl[0][0].isValid:
                 (keyvtxl[0][0], keyvtxl[1])
@@ -390,6 +450,7 @@ proc computeKeyImpl(
                   snapshotFrame,
                   keyBuf,
                   vtxBufQueue,
+                  Opt.none(KeyVtxLevel),
                 )
           level = max(level, sl)
           skey
@@ -411,6 +472,14 @@ proc computeKeyImpl(
       let vtx = BranchRef(vtx)
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
       ?txRef.getKeys(rvid.root, vtx, keyvtxs, skipLayers, parallel)
+
+      when not spawnTpTasks:
+        var
+          stoKeyvtxs: array[16, KeyVtxLevel]
+          stoPrefetched = 0'u16
+        ?txRef.getStoKeys(
+          vtx, keyvtxs, stoKeyvtxs, stoPrefetched, skipLayers, parallel
+        )
 
       when spawnTpTasks:
         var
@@ -459,6 +528,7 @@ proc computeKeyImpl(
                 snapshotFrame,
                 keyBuf,
                 vtxBufQueue,
+                Opt.none(KeyVtxLevel),
               )
               n += 1
               continue
@@ -503,6 +573,10 @@ proc computeKeyImpl(
               snapshotFrame,
               keyBuf,
               vtxBufQueue,
+              if (stoPrefetched and (1'u16 shl minIdx)) != 0:
+                Opt.some(stoKeyvtxs[minIdx])
+              else:
+                Opt.none(KeyVtxLevel),
             )
             when not parallel:
               batch.leave(n)
@@ -628,7 +702,7 @@ proc computeKeyImpl(
 
   let res = computeKeyImpl(
     txRef, rvid, batch, keyvtx[1], level, skipLayers, spawnTpTasks, parallel,
-    snapshotFrame, nil, nil,
+    snapshotFrame, nil, nil, Opt.none(KeyVtxLevel),
   )
 
   if res.isOk:

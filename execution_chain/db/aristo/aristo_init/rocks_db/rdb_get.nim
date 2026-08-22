@@ -184,6 +184,13 @@ proc getKey*(
 
 const MaxKeysFetch* = 16
 
+func lessThan(a, b: RVidBuf): bool =
+  let minLen = min(int a.len, int b.len)
+  for i in 0 ..< minLen:
+    if a.buf[i] != b.buf[i]:
+      return a.buf[i] < b.buf[i]
+  int(a.len) < int(b.len)
+
 proc getKeys*(
     rdb: var RdbInst,
     rvids: openArray[RootedVertexID],
@@ -233,12 +240,25 @@ proc getKeys*(
     keyBufs {.noinit.}: array[MaxKeysFetch, RVidBuf]
     keySlices {.noinit.}: array[MaxKeysFetch, rocksdb_slice_t]
     valueSlices {.noinit.}: array[MaxKeysFetch, ptr rocksdb_pinnableslice_t]
+    order {.noinit.}: array[MaxKeysFetch, uint8]
     errs: array[MaxKeysFetch, cstring]
 
   for j in 0 ..< nFetch:
     keyBufs[j] = rvids[int fetchIdxs[j]].blobify()
+    order[j] = uint8 j
+
+  for j in 1 ..< nFetch:
+    let oj = order[j]
+    var k = j
+    while k > 0 and keyBufs[int oj].lessThan(keyBufs[int order[k - 1]]):
+      order[k] = order[k - 1]
+      dec k
+    order[k] = oj
+
+  for j in 0 ..< nFetch:
+    let b = int order[j]
     keySlices[j] = rocksdb_slice_t(
-      data: cast[cstring](addr keyBufs[j].buf[0]), size: csize_t(keyBufs[j].len)
+      data: cast[cstring](addr keyBufs[b].buf[0]), size: csize_t(keyBufs[b].len)
     )
 
   rocksdb_batched_multi_get_cf_slice(
@@ -249,7 +269,7 @@ proc getKeys*(
     addr keySlices[0],
     addr valueSlices[0],
     cast[cstringArray](addr errs[0]),
-    false,
+    true,
   )
 
   block errCheck:
@@ -267,7 +287,7 @@ proc getKeys*(
       return err((RdbBeDriverGetKeyError, errMsg))
 
   for j in 0 ..< nFetch:
-    let i = int fetchIdxs[j]
+    let i = int fetchIdxs[int order[j]]
     if valueSlices[j].isNil:
       keyvtxs[i] = (VOID_HASH_KEY, VertexRef(nil))
       continue
