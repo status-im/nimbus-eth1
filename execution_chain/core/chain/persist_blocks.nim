@@ -214,7 +214,8 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     ?txFrame.persistHeaderAndSetHead(blockHash, header, com.startOfHistory)
 
   if PersistTransactions in p.flags:
-    txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
+    txFrame.persistTransactions(
+      header.number, header.txRoot, blk.transactions, collectTxHashes = false)
 
   if PersistReceipts in p.flags:
     txFrame.persistReceipts(header.receiptsRoot, vmState.receipts)

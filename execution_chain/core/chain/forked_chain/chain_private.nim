@@ -182,6 +182,9 @@ proc processBlock*(
   let txHashes = c.writeBaggage(
     blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
 
+  vmState.receipts.setLen(0)
+  vmState.allLogs.setLen(0)
+
   # Cache for the next block - the ledger caches stay warm on linear import
   c.vmState = vmState
   c.vmStateBlockHash = blkHash
