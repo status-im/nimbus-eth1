@@ -85,7 +85,7 @@ proc processTransactions*(
     if vmState.balTrackerEnabled:
       vmState.balTracker.setBlockAccessIndex(txIndex + 1)
 
-    let rc = vmState.processTransaction(tx, sender)
+    var rc = vmState.processTransaction(tx, sender)
     if rc.isErr:
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
     if skipReceipts:
