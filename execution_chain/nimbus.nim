@@ -16,15 +16,15 @@ proc workaround*(): int {.exportc.} =
   return int(Future[Quantity]().internalValue)
 
 import
-  std/[os, net, options, strformat, terminal, typetraits],
+  std/[os, net, options, terminal, typetraits],
   stew/io2,
   chronos/threadsync,
   chronicles,
   metrics,
   metrics/chronos_httpserver,
-  nimcrypto/sysrand,
   eth/enr/enr,
   eth/net/nat,
+  json_rpc/rpcchannels,
   eth/p2p/discoveryv5/random2,
   beacon_chain/spec/[engine_authentication],
   beacon_chain/validators/keystore_management,
@@ -54,11 +54,16 @@ const
 
 type NStartUpCmd* {.pure.} = enum
   nimbus = "Run Ethereum node"
-  beaconNode = "Run beacon node in stand-alone mode\pSee 'nimbus beaconNode --help' for further details"
-  executionClient = "Run execution client in stand-alone mode\pSee 'nimbus executionClient --help' for further details"
-  `import` = "Import execution blocks from ere or era1/era files\pSee 'nimbus import --help' for further details"
-  trustedNodeSync = "Sync the beacon node database from a trusted node (checkpoint sync)\pSee 'nimbus trustedNodeSync --help' for further details"
-  deposits = "Handle validator deposits\pSee 'nimbus deposits --help' for further details"
+  beaconNode =
+    "Run beacon node in stand-alone mode\pSee 'nimbus beaconNode --help' for further details"
+  executionClient =
+    "Run execution client in stand-alone mode\pSee 'nimbus executionClient --help' for further details"
+  `import` =
+    "Import execution blocks from ere or era1/era files\pSee 'nimbus import --help' for further details"
+  trustedNodeSync =
+    "Sync the beacon node database from a trusted node (checkpoint sync)\pSee 'nimbus trustedNodeSync --help' for further details"
+  deposits =
+    "Handle validator deposits\pSee 'nimbus deposits --help' for further details"
 
 proc matchSymbolName*(T: type enum, p: string): T {.raises: [ValueError].} =
   let p = normalize(p)
@@ -178,17 +183,18 @@ type
     tcpPort: Port
     udpPort: Port
     elSync: bool
+    channel: RpcChannelPtrs
 
   ExecutionThreadConfig = object
     tsp: ThreadSignalPtr
     tcpPort: Port
     udpPort: Option[Port]
+    channel: RpcChannelPtrs
 
 var
   jwtKey: JwtSharedKey
 
-  natExtIp: Opt[IpAddress]
-    ## Resolved once by the main thread - see `setupSharedNat`
+  natExtIp: Opt[IpAddress] ## Resolved once by the main thread - see `setupSharedNat`
 
 proc sharedNatConfig(): NatConfig =
   ## A fixed external IP makes `setupAddress` return without port mapping, so
@@ -210,14 +216,19 @@ proc justWait(tsp: ThreadSignalPtr) {.async: (raises: [CancelledError]).} =
     notice "Waiting failed", err = exc.msg
 
 proc elSyncLoop(
-    dag: ChainDAGRef, url: EngineApiUrl
+    dag: ChainDAGRef, elManager: ELManager
 ) {.async: (raises: [CancelledError]).} =
   while true:
     await sleepAsync(12.seconds)
 
     # TODO trigger only when the EL needs syncing
     try:
-      await syncToEngineApi(dag, url)
+      let channel = elManager.channel()
+      if channel == nil:
+        debug "Channel not ready"
+        continue
+
+      await syncToEngineApi(dag, channel)
     except CatchableError as exc:
       # This can happen when the EL is busy doing some work, specially on
       # startup
@@ -228,14 +239,8 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
     stderr.writeLine error # Logging not yet set up
     quit QuitFailure
 
-  let engineUrl =
-    EngineApiUrl.init(&"http://127.0.0.1:{defaultEngineApiPort}/", Opt.some(jwtKey))
-
   config.metricsEnabled = false
-  config.elUrls.add EngineApiUrlConfigValue(
-    url: engineUrl.url, jwtSecret: some toHex(distinctBase(jwtKey))
-  )
-
+  config.elUrls = @[EngineApiUrlConfigValue(channel: Opt.some(p.channel))]
   config.statusBarEnabled = false # Multi-threading issues due to logging
   config.tcpPort = p.tcpPort
   config.udpPort = p.udpPort
@@ -264,7 +269,7 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
     return
 
   if p.elSync:
-    discard elSyncLoop(node.dag, engineUrl)
+    discard elSyncLoop(node.dag, node.elManager)
 
   dynamicLogScope(comp = "bn"):
     if node.nickname != "":
@@ -279,11 +284,8 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
 proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
   var config = makeConfig(ignoreUnknown = true)
   config.metricsEnabled = false
-  config.engineApiEnabled = true
-  config.engineApiPort = Port(defaultEngineApiPort)
-  config.engineApiAddress = defaultAdminListenAddress
-  config.jwtSecret.reset()
-  config.jwtSecretValue = some toHex(distinctBase(jwtKey))
+  config.engineApiEnabled = false
+  config.engineApiChannelEnabled = true
   config.agentString = "nimbus"
   config.tcpPort = p.tcpPort
   config.udpPortFlag = p.udpPort
@@ -313,17 +315,17 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
     com.db.close()
 
   dynamicLogScope(comp = "ec"):
-    nimbus_execution_client.runExeClient(config, com, params, p.tsp.justWait())
+    nimbus_execution_client.runExeClient(
+      config, com, params, p.tsp.justWait(), channel = Opt.some p.channel
+    )
 
   # Stop the other thread as well, in case `runExeClient` stopped early
   waitFor p.tsp.fire()
 
 proc runCombinedClient() =
-  # Make it harder to connect to the (internal) engine - this will of course
-  # go away
-  discard randomBytes(distinctBase(jwtKey))
-
-  const banner = ClientId & "\p\pSubcommand options can also be used with the main node, see `beaconNode --help` and `executionClient --help`"
+  const banner =
+    ClientId &
+    "\p\pSubcommand options can also be used with the main node, see `beaconNode --help` and `executionClient --help`"
 
   var config = NimbusConf.loadWithBanners(
     banner, copyright, [specBanner], ignoreUnknown = true, setupLogger = true
@@ -395,13 +397,21 @@ proc runCombinedClient() =
       NimbusName & " " & NimbusVersion,
     ).ip
 
+  var channel: RpcChannel
+
+  let pairs = channel.open()
   var bnThread: Thread[BeaconThreadConfig]
   let bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
+
   createThread(
     bnThread,
     runBeaconNode,
     BeaconThreadConfig(
-      tsp: bnStop, tcpPort: bnTcpPort, udpPort: bnUdpPort, elSync: config.elSync
+      tsp: bnStop,
+      tcpPort: bnTcpPort,
+      udpPort: bnUdpPort,
+      elSync: config.elSync,
+      channel: pairs,
     ),
   )
 
@@ -410,7 +420,9 @@ proc runCombinedClient() =
   createThread(
     ecThread,
     runExecutionClient,
-    ExecutionThreadConfig(tsp: ecStop, tcpPort: ecTcpPort, udpPort: ecUdpPort),
+    ExecutionThreadConfig(
+      tsp: ecStop, tcpPort: ecTcpPort, udpPort: ecUdpPort, channel: pairs
+    ),
   )
 
   while not ProcessState.stopIt(notice("Shutting down", reason = it)):
