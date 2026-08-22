@@ -27,6 +27,7 @@ import
   ../../transaction/call_types,
   ../chain/forked_chain,
   ../pow/header,
+  ../focil,
   ../eip4844,
   ../eip7594,
   ../validate,
@@ -55,6 +56,7 @@ type
     beaconRoot  : Hash32 ## EIP-4788
     slotNumber  : uint64 ## EIP-7843
     targetGasLimit: Opt[uint64]
+    focil       : Focil
 
   TxPoolFlags* = enum
     XP_ORDERED
@@ -483,11 +485,11 @@ iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
     yield item
 
 iterator allItems*(xp: TxPoolRef): TxItemRef =
-  for _, item in xp.idTab:
+  for item in xp.idTab.values:
     yield item
 
 iterator byOrder*(xp: TxPoolRef): TxItemRef =
-  for _, item in xp.idTab:
+  for item in xp.idTab.values:
     yield item
 
 func isOrdered*(xp: TxPoolRef): bool =
@@ -563,6 +565,30 @@ proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: Bi
 
   Opt.none(BlobCellsAndProofsV1)
 
+func getInclusionListV1*(xp: TxPoolRef): InclusionList =
+  const MaxILSize = 1024 * 8
+  var
+    rlpSize = 0
+    list = newSeqOfCap[TxItemRef](xp.idTab.len)
+    res: seq[TypedTransaction]
+
+  for item in xp.idTab.values:
+    # Inclusion List must not contains blob tx
+    if item.tx.txType == TxEip4844:
+      continue
+    list.add item
+
+  for i in countdown(list.len-1, 0):
+    var
+      item = list[i]
+      rlpBytes = rlp.encode(item.tx)
+    if rlpSize + rlpBytes.len > MaxILSize:
+      return move(res)
+    rlpSize += rlpBytes.len
+    res.add TypedTransaction(move(rlpBytes))
+
+  move(res)
+
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters
 # ------------------------------------------------------------------------------
@@ -584,6 +610,9 @@ func parentBeaconBlockRoot*(xp: TxPoolRef): Hash32 =
 
 func slotNumber*(xp: TxPoolRef): uint64 =
   xp.pos.slotNumber
+
+func focil*(xp: TxPoolRef): Focil =
+  xp.pos.focil
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes setters
@@ -609,3 +638,6 @@ func `slotNumber=`*(xp: TxPoolRef, val: uint64) =
 
 func `targetGasLimit=`*(xp: TxPoolRef, val: Opt[uint64]) =
   xp.pos.targetGasLimit = val
+
+func `focil=`*(xp: TxPoolRef, val: Focil) =
+  xp.pos.focil = val
