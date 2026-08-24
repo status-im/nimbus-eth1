@@ -167,7 +167,13 @@ proc runPool*(
   ##
   ## Note that this function does not run in `async` mode.
   ##
-  buddy.ctx.statsStateLog info
+  let ctx = buddy.ctx
+  ctx.statsStateLog info                            # print statistics
+
+  if ctx.pool.syncState == SnapDownloadFinish:
+    ctx.downloadCommit(info).isOkOr:                # write back ranges to DB
+      error info & ": Error storing progress", `error`=error
+
   true                                              # stop
 
 template runPeer*(

@@ -41,6 +41,7 @@ type
     ENoDataAvailable               ## Out of scope, unsuuported state
     ELockError                     ## Locked by some other peer
     ETrieError                     ## Trie/mpt database error
+    EDirtyData                     ## Some data must be cleaned up. first
     EValidationError               ## Sub-MPT validation failed
     ECacheError                    ## Database cache error
     ECompleted                     ## Nothing to do, here

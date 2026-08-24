@@ -118,15 +118,6 @@ template accountDownload*(
     else:
       ctx.accUnproc.commit(ivReq)
 
-    # Update missing accounts list
-    var accState = adb.getAccMissingIntv(info).valueOr:
-      bodyRc = typeof(bodyRc).err(ECacheError)
-      break body                                    # return err()
-    discard accState.ranges.reduce(ivReq.minPt, limit)
-    adb.putAccMissingIntv(accState, info).isOkOr:   # done this range, save it
-      bodyRc = typeof(bodyRc).err(ECacheError)
-      break body                                    # return err()
-
     # Update metrics
     ctx.accountDownloadMetricsUpdate()
 
