@@ -14,8 +14,10 @@ import
   std/paths,
   pkg/[chronos, eth/common, rocksdb],
   pkg/stew/interval_set,
-  ../../state_db,
   ../mpt_build/build_desc
+
+export
+  build_desc
 
 type
   CacheDbRef* = ref object

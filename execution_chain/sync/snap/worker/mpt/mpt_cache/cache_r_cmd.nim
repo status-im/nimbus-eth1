@@ -15,7 +15,6 @@ import
   std/typetraits,
   pkg/[results, rocksdb],
   pkg/stew/byteutils,
-  ../mpt_build/build_desc,
   ./[cache_const, cache_desc]
 
 when extraTraceMessages:

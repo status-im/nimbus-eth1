@@ -11,10 +11,9 @@
 {.push raises: [].}
 
 import
-  ./session/[session_forward, session_stats]
+  ./session_stats/stats_state
 
 export
-  session_forward,
-  session_stats
+  stats_state
 
 # End

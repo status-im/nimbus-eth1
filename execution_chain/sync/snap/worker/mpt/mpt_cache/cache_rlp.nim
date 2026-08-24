@@ -13,8 +13,6 @@
 import
   pkg/[chronos, eth/common, results, stew/interval_set],
   ../../../../wire_protocol/snap/snap_types,
-  ../../state_db,
-  ../mpt_build/build_desc,
   ./cache_desc
 
 when sizeof(Hash) != sizeof(uint):

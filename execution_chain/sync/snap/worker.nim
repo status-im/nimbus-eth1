@@ -12,8 +12,7 @@
 
 import
   pkg/[chronicles, chronos, minilru, results, stew/byteutils],
-  ./worker/[download, helpers, mpt, session, start_stop,
-            state_db, update, worker_desc]
+  ./worker/[download, helpers, mpt, session, start_stop, update, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -168,6 +167,7 @@ proc runPool*(
   ##
   ## Note that this function does not run in `async` mode.
   ##
+  buddy.ctx.statsStateLog info
   true                                              # stop
 
 template runPeer*(
