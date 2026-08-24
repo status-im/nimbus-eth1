@@ -28,6 +28,35 @@ proc accountDownloadMetricsReset*(ctx: SnapCtxRef) =
 proc accountDownloadMetricsUpdate*(ctx: SnapCtxRef) =
   metrics.set(nec_snap_accounts_coverage, 1.0 - ctx.accUnproc.totalRatio)
 
+
+proc accountDownloadCommit*(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Result[void,ErrorType] =
+  ## Get ready for state froward procedure using BAL forwarding.
+  ##
+  ## In particular, write back the accounts accounting ranges to the
+  ## cache DB.
+  ##
+  # Update missing accounts list
+  if ctx.accUnproc.borrowed.chunks != 0:
+    error info & ": Cannot commit dirty unprocessed ranges"
+    return err(EDirtyData)
+
+  let adb = ctx.pool.cacheDB
+  var accState = adb.getAccMissingIntv(info).valueOr:
+    return err(ECacheError)
+
+  # Note that `ctx.accUnproc.unprocessed` is a reference to data that will
+  # be written back to the cache DB. The `ctx.accUnproc` object will not be
+  # changed.
+  accState.ranges = ctx.accUnproc.unprocessed
+  adb.putAccMissingIntv(accState, info).isOkOr:
+    return err(ECacheError)
+
+  accState.ranges = ItemKeyRangeSet(nil)            # force GC to release ref
+  ok()
+
 template accountDownload*(
     buddy: SnapPeerRef;                             # Snap peer
     stateRoot: StateRoot;

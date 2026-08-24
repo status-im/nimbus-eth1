@@ -18,18 +18,8 @@ logScope:
     topics = "snap sync"
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private function(s)
 # ------------------------------------------------------------------------------
-
-proc setStoNoneMissing(
-    db: CacheDbRef;
-    accPath: Hash32;
-    info: static[string];
-      ): Opt[CacheStoMissingIntvData] =
-  var data: CacheStoMissingIntvData
-  data.ranges = ItemKeyRangeSet.init()
-  ?db.putStoMissingIntv(accPath, data, info)
-  ok(move data)
 
 proc setAccMissing(
     db: CacheDbRef;
@@ -58,18 +48,16 @@ proc applySlotChanges(
     slots: openArray[SlotChanges];
     info: static[string];
       ): Opt[bool] =
-  ## Apply BAL to storage slots. Returns `true` if changes could be alloed,
-  ## and `false` if the storage sub-MPT was cleared.
+  ## Apply BAL to storage slots. Returns `true` if changes were performed,
+  ## and `false` if there was a partial storage sub-MPT.
   ##
-  let stoState = (?db.getStoMissingIntv(accPath, info)).valueOr:
-    # This is a new account with additional storage chages.
-    ?db.setStoNoneMissing(accPath, info)
-
-  # There is no way to reliably update partial MPTs. So all that can be done
-  # is to clear them and re-download.
-  if stoState.ranges.total != 0 or                  # 0 mod 2^256 => 0 or 2^256
-     stoState.ranges.chunks != 0:                   # intervals => 2^256 => all
-    return ok(false)
+  (?db.getStoMissingIntv(accPath, info)).isErrOr:
+    # Note that this might not apply at all unless there is a special
+    # accounting implemented for partial sub-MPTs.
+    #
+    # At the moment, accounts with partial sub-MPTs are deleted before
+    # any BAL forwarding is applied.
+    return ok(false)                                # there is a partial sub-MPT
 
   # So there is a full MPT which can be updated.
   for w in slots:

@@ -81,22 +81,14 @@ proc downloadCommit*(
     ctx: SnapCtxRef;
     info: static[string];
       ): Result[void,ErrorType] =
-  # Update missing accounts list
-  if ctx.accUnproc.borrowed.chunks != 0:
-    error info & ": Cannot commit dirty unprocessed ranges"
-    return err(EDirtyData)
+  ## Finish downloading.
+  ##
+  ?ctx.accountDownloadCommit(info)
 
-  let adb = ctx.pool.cacheDB
-  var accState = adb.getAccMissingIntv(info).valueOr:
-    return err(ECacheError)
+  # This directive should come after storing `accountDownloadCommit()`
+  # updates. It will update the tables and delete partial MPTs.
+  ?ctx.storageDownloadCommit(info)
 
-  # Note that `ctx.accUnproc.unprocessed` is a reference to data that will
-  # be written back to the cache DB. The `ctx.accUnproc` object will not be
-  # changed.
-  accState.ranges = ctx.accUnproc.unprocessed
-  adb.putAccMissingIntv(accState, info).isOkOr:
-    return err(ECacheError)
-  accState.ranges = ItemKeyRangeSet(nil)            # force GB release
   ok()
 
 template downloadState*(

@@ -8,10 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+## Storage Sub-MPT Downloads
+## -------------------------
+##
+## See `README.md` in the same folder as this source file.
+##
+
 {.push raises: [].}
 
 import
-  #std/[sequtils],
   pkg/[chronicles, chronos, stew/interval_set],
   ../../[helpers, mpt, worker_desc],
   ./storage_fetch
@@ -20,7 +25,31 @@ const
   emptyProof = seq[ProofNode].default
 
 # ------------------------------------------------------------------------------
-# Private helper(s) for `downloadImpl()`
+# Private helpers for `storageDownloadCommit()`
+# ------------------------------------------------------------------------------
+
+proc deleteAccount(
+    adb: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  ?adb.delFlatAcc(accPath, info)                    # remove account record
+  ?adb.delFlatSlot(accPath, info)                   # delete all slots
+  ?adb.delMissingBlob(accPath, info)                # delete code accounting
+  ?adb.delFlatCode(accPath, info)                   # delete contract code
+  ok()
+
+proc replaceMissingIntv(
+    adb: CacheDbRef;
+    accState: CacheAccMissingIntvData;
+    info: static[string];
+      ): Opt[void] =
+  ?adb.clearMissingIntv(info)                       # clears acc and sto lists
+  ?adb.putAccMissingIntv(accState, info)            # update accounts list
+  ok()
+
+# ------------------------------------------------------------------------------
+# Private helpers for `downloadImpl()`
 # ------------------------------------------------------------------------------
 
 proc getQueryList(
@@ -30,7 +59,10 @@ proc getQueryList(
     qLen: uint;                                     # num. of stoQueue[]` items
     info: static[string];                           # Log message prefix
       ): Result[(seq[ItemKey],seq[StoreRoot]),ErrorType] =
-  ## Assemble storage data paths for query, and sub-MPT roots for verification.
+  ## For the argument `stoQueue[]`, collect
+  ## * storage data paths (for query), and
+  ## * sub-MPT storage roots for verification.
+  ##
   let
     adb = buddy.ctx.pool.cacheDB
     peer {.inject,used.} = $buddy.peer              # logging only
@@ -55,10 +87,11 @@ proc storeValidatedSlots(
     stoQ: var seq[WalkStoMissingIntvData];          # to be modified
     qStart: uint;                                   # first root/queue item
     data: StorageRangesData;                        # fetch result
-    ivReq: ItemKeyRange;                            # applies all last item
+    ivReq: ItemKeyRange;                            # applies to last item
     info: static[string];                           # Log message prefix
       ): Result[void,ErrorType] =
-  ## ..
+  ## Process a storage slots reply message data from the fetch utility.
+  ##
   let
     adb = buddy.ctx.pool.cacheDB
     peer {.inject,used.} = $buddy.peer              # logging only
@@ -69,27 +102,27 @@ proc storeValidatedSlots(
       slots = data.slots[n]
       stoRoot = stoRoots[qStart + n]
 
-    # Validate slots
+    # Validate full sub-MPT.
     stoRoot.validate(ivReq.minPt, slots, emptyProof).isOkOr:
       buddy.ctrl.zombie = true                      # peer not useful
       debug info & ": Storage full sub-MPT validation failed", peer,
         stoRoot=stoRoot.toStr, nth=n, syncState=($buddy.syncState)
       return err(EValidationError)
 
-    # Store validated slots
+    # Store validated full sub-MPT slot entries.
     for w in data.slots[n]:
       let accPath = stoQ[qStart + n].accPath
       adb.putFlatSlot(accPath, w.slotHash, w.slotData, info).isOkOr:
         return err(ECacheError)
     stoQ[qStart + n].data.ranges.clear()            # set MPT complete
 
-  # Validate sub-MPT data with proof (i.e. potentially partial sub-MPTs)
+  # Validate partial sub-MPT data with non-empty proof.
   if 0 < data.proof.len:
     let
       topInx = data.slots.len.uint
       stoRoot = stoRoots[qStart + topInx]
 
-    # Validate slots
+    # Validate slots, some partial sub-MPT for this storage sub-MPT
     let mpt = stoRoot.validate(ivReq.minPt, data.slot, data.proof).valueOr:
       buddy.ctrl.zombie = true                      # peer not useful
       debug info & ": Storage partial sub-MPT validation failed", peer,
@@ -112,14 +145,17 @@ proc storeValidatedSlots(
   ok()
 
 # ------------------------------------------------------------------------------
-# Private helper(s) for `queueAndDownload()`
+# Private helpers for `queueAndDownload()`
 # ------------------------------------------------------------------------------
 
 proc fetchAndLockStoList(
     adb: CacheDbRef;
     info: static[string];                           # Log message prefix
       ): Result[(seq[WalkStoMissingIntvData],uint),ErrorType] =
-  ## Collect some missing storage intervals from cache DB
+  ## Collect some missing storage intervals from cache DB.
+  ##
+  ## TODO: Collect as many partial storage sub-MPTs as possible.
+  ##
   var
     stoQ = newSeqOfCap[WalkStoMissingIntvData](fetchStorageBatchMax)
     nFullMpt = -1
@@ -160,18 +196,24 @@ proc saveStoUpdates(
     stoQueue: openArray[WalkStoMissingIntvData];
     info: static[string];                           # Log message prefix
       ): Result[int,ErrorType] =
-  ## Post process updated storage sub-MPT
+  ## Post process updated storage sub-MPT. The corresponding accounting data
+  ## are updated on the cache DB.
+  ##
   var (nPartial, nErrors) = (0,0)
   for w in stoQueue:
 
-    # Save back incomplete sub-MPT
+    # Save back incomplete sub-MPT. Store updated interval. The corresounding
+    # accounts record need not be updated. The `dirtyStorage` remains `true`.
     if 0 < w.data.ranges.chunks():
       nPartial.inc
       adb.putStoMissingIntv(w.accPath, w.data, info).isOkOr:
         nErrors.inc                                 # cannot do much, here
       continue
 
-    # Have sub-MPT, mark it complete in the accounts record
+    # Save/update complete sub-MPT. Mark it complete in the accounts record.
+    # Note that the `StoMissingIntv` table entry was deleted. So, according
+    # to storage sub-MPT rules, it must not be restored and kept
+    # missing/deleted.
     var data = adb.getFlatAcc(w.accPath, info).valueOr:
       nErrors.inc                                   # cannot do much, here
       continue
@@ -241,6 +283,8 @@ template downloadImpl(
 
       start += nProcessed.uint
       # End `while` accounts left
+
+    bodyRc = typeof(bodyRc).ok()
     # End `body`
 
   bodyRc                                            # return code
@@ -263,7 +307,7 @@ template queueAndDownload(
 
     # Collect some missing storage intervals from cache
     var (stoQ, nFullMpt) = adb.fetchAndLockStoList(info).valueOr:
-      bodyRc = typeof(bodyRc).err(error)            # maybe completed
+      bodyRc = typeof(bodyRc).err(error)            # maybe completed, already
       break body
 
     # Process full tries (all at once)
@@ -316,6 +360,41 @@ template queueAndDownload(
 # ------------------------------------------------------------------------------
 # Public function
 # ------------------------------------------------------------------------------
+
+proc storageDownloadCommit*(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Result[void,ErrorType] =
+  ## Get ready for state froward procedure using BAL forwarding.
+  ##
+  ## In particular, partial storage sub-MPTs, its correspnding accounts,
+  ## and contract codes are deleted.
+  ##
+  let adb = ctx.pool.cacheDB
+
+  # Collect paths for partial subMPTs.
+  var accPaths: seq[Hash32]
+  for w in adb.walkStoMissingIntv:
+    if 0 < w.error.len:
+      error info & ": Error walking missing storage list", `error`=w.error
+      return err(ECacheError)
+    accPaths.add w.accPath
+
+  if 0 < accPaths.len:
+    # Delete all partial sub-MPTs.
+    var accState = adb.getAccMissingIntv(info).valueOr:
+      return err(ECacheError)
+
+    for accPath in accPaths:
+      adb.deleteAccount(accPath, info).isOkOr:
+        return err(ECacheError)
+      accState.ranges.merge(accPath.to(ItemKey))    # update range
+
+    adb.replaceMissingIntv(accState, info).isOkOr:  # update accounting
+      return err(ECacheError)
+
+  chronicles.info info & ": Cleared storage sub-MPTs", nMpt=accPaths.len
+  ok()
 
 template storageDownload*(
     buddy: SnapPeerRef;                             # Snap peer

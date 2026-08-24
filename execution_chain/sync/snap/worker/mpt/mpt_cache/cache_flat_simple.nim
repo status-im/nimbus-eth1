@@ -287,7 +287,7 @@ proc delFlatSlot*(
     info: static[string];
       ): Opt[void] =
   db.delFlatSlot(accPath).isOkOr:
-    error info.failedDeleting "storage trie", accPath=accPath.toStr,
+    error info.failedDeleting "storage sub-MPT", accPath=accPath.toStr,
       `error`=error
     return err()
   ok()
@@ -304,6 +304,19 @@ proc nFlatSlot*(
       return err()
     nSlots.inc
   ok(move nSlots)
+
+# -----------
+
+proc clearMissingIntv*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[void] =
+  ## Deletes all missing interval records for accounts and storage
+  ## sub-MPTs.
+  db.clearMissingIntv().isOkOr:
+    error info.failedDeleting "all accounting records", `error`=error
+    return err()
+  ok()
 
 # -----------
 
