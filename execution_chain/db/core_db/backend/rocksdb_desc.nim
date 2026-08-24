@@ -12,6 +12,8 @@
 
 import std/[os, sequtils], rocksdb, chronicles
 
+from rocksdb/lib/librocksdb import rocksdb_write, rocksdb_free
+
 export rocksdb
 
 const
@@ -22,6 +24,8 @@ type
   RocksDbInstanceRef* = ref object ## Shared handle to a single rocksdb instance
     db*: RocksDbReadWriteRef
     baseDir*: string
+
+    noWalWriteOpts*: WriteOptionsRef
 
     sharedBatch*: SharedWriteBatchRef
 
@@ -84,7 +88,18 @@ proc commit*(
 
   if session.commits == session.refs:
     # Write to disk if everyone that opened a session also committed it
-    ?rdb.db.write(session.batch)
+    block:
+      var errors: cstring
+      rocksdb_write(
+        rdb.db.cPtr,
+        rdb.noWalWriteOpts.cPtr,
+        session.batch.cPtr,
+        cast[cstringArray](errors.addr),
+      )
+      if not errors.isNil:
+        let msg = $errors
+        rocksdb_free(errors)
+        return err(msg)
 
     if session.families.len > 0:
       # This flush forces memtables to be written to disk, which is necessary given
@@ -136,14 +151,23 @@ proc open*(
           name.initColFamilyDescriptor(defaultColFamilyOptions(autoClose = true))
         )
 
+  let noWalWriteOpts = createWriteOptions(autoClose = false)
+  noWalWriteOpts.disableWAL = true
+
   ok RocksDbInstanceRef(
-    db: ?openRocksDb(ecdbDir, dbOpts, columnFamilies = descs), baseDir: baseDir
+    db: ?openRocksDb(ecdbDir, dbOpts, columnFamilies = descs),
+    baseDir: baseDir,
+    noWalWriteOpts: noWalWriteOpts,
   )
 
 proc close*(rdb: RocksDbInstanceRef, wipe = false) =
   if rdb.db != nil:
     rdb.db.close()
     rdb.db = nil
+
+  if rdb.noWalWriteOpts != nil:
+    rdb.noWalWriteOpts.close()
+    rdb.noWalWriteOpts = nil
 
   if wipe:
     rdb.baseDir.wipeDir()
