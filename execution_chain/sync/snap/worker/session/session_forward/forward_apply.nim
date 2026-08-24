@@ -37,6 +37,7 @@ proc setAccMissing(
     info: static[string];
       ): Opt[void] =
   ?db.delStoMissingIntv(accPath, info)              # delete storage accounting
+  ?db.delMissingBlob(accPath, info)                 # delete code accounting
   ?db.delFlatSlot(accPath, info)                    # delete all slots
   ?db.delFlatCode(accPath, info)                    # delete contract code
   ?db.delFlatAcc(accPath, info)                     # remove account record
@@ -91,7 +92,6 @@ proc applyCodeChange(
       ): Opt[Hash32] =
   ## Apply BAL to contract code
   ##
-  ?db.delMissingBlob(accPath, info)
   if code.len == 0:
     return ok(EMPTY_CODE_HASH)
 
@@ -106,7 +106,6 @@ proc applyCodeChange(
 proc applyAccountChanges*(
     db: CacheDbRef;
     chng: AccountChanges;
-    accExcl: ItemKeyRangeSet;
     info: static[string];
       ): Opt[bool] =
   ## Apply BAL to account. Returns `true` if there were some changes.
@@ -118,7 +117,7 @@ proc applyAccountChanges*(
 
   # Check for existing accounts that have not been fetched, yet
   let accPath = chng.address.computeAccPath
-  if accExcl.covered(accPath.to(ItemKey)):
+  if (?db.getAccMissingIntv(info)).ranges.covered(accPath.to(ItemKey)):
     return ok(false)                                # ignore for now
 
   var acc = db.getFlatAcc(accPath, info).valueOr:
