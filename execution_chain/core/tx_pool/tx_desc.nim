@@ -531,6 +531,11 @@ proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: Bi
     KzgProof = engine_api_types.KzgProof
     KzgCells = eip4844.KzgCells
 
+  func getNumIndices(indices: BitArray[128]): int =
+    for i in 0..<indices.len:
+      if indices[i]:
+        inc result
+
   func getCellsAndProofs(indices: BitArray[128],
                          cells: KzgCells,
                          list: openArray[KzgProof],
@@ -539,12 +544,16 @@ proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: Bi
     let
       startIndex = index * CELLS_PER_EXT_BLOB
       endIndex   = startIndex + CELLS_PER_EXT_BLOB
+      numIndices = indices.getNumIndices
+
     doAssert(list.len >= endIndex)
 
+    output.blob_cells = newSeqOfCap[seq[byte]](numIndices)
+    output.proofs = newSeqOfCap[KzgProof](numIndices)
     for i in 0..<indices.len:
       if indices[i]:
-        output.proofs[i] = Opt.some(list[startIndex + i])
-        output.cells[i] = Opt.some(@(cells[i].bytes))
+        output.blob_cells.add(@(cells[i].bytes))
+        output.proofs.add(list[startIndex + i])
 
   xp.blobTab.withValue(v, val):
     let
