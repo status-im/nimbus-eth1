@@ -282,7 +282,7 @@ proc persistTransactions*(
     db.putMove(blockKey.toOpenArray, encodedTxKey).isOkOr:
       raiseAssert info & ": " & $$error
 
-  txHashes
+  move(txHashes)
 
 proc getTransactionByIndex*(
     db: CoreDbTxRef;

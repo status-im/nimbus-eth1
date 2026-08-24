@@ -71,7 +71,7 @@ proc processTransactions*(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.allLogs = @[]
+  vmState.allLogs.setLen(0)
 
   when compileOption("threads"):
     if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):

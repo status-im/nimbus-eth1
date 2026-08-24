@@ -50,20 +50,18 @@ proc makeReceipt*(
     vmState: BaseVMState; txType: TxType, callResult: var LogResult): StoredReceipt =
   ## Builds the receipt for `callResult`, moving its log entries into the
   ## receipt and leaving `callResult.logEntries` empty.
-  var rec: StoredReceipt
   if vmState.com.isByzantiumOrLater(vmState.blockNumber, vmState.blockCtx.timestamp):
-    rec.isHash = false
-    rec.status = vmState.status
+    result.isHash = false
+    result.status = vmState.status
   else:
-    rec.isHash = true
-    rec.hash   = vmState.ledger.getStateRoot()
+    result.isHash = true
+    result.hash   = vmState.ledger.getStateRoot()
     # we set the status for the t8n output consistency
-    rec.status = vmState.status
+    result.status = vmState.status
 
-  rec.receiptType = txType
-  rec.cumulativeGasUsed = vmState.cumulativeGasUsed
-  swap(rec.logs, callResult.logEntries)
-  rec
+  result.receiptType = txType
+  result.cumulativeGasUsed = vmState.cumulativeGasUsed
+  result.logs = move(callResult.logEntries)
 
 # ------------------------------------------------------------------------------
 # End

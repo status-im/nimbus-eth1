@@ -32,7 +32,7 @@ proc writeBaggage*(
   template header(): Header =
     blk.header
 
-  let txHashes =
+  var txHashes =
     txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
   txFrame.persistReceipts(header.receiptsRoot, receipts)
   discard txFrame.persistUncles(blk.uncles)
@@ -54,7 +54,7 @@ proc writeBaggage*(
       generatedBal.get(),
     )
 
-  txHashes
+  move(txHashes)
 
 proc getVmState(
     c: ForkedChainRef,
@@ -179,7 +179,7 @@ proc processBlock*(
   # because validateUncles still need it
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
 
-  let txHashes = c.writeBaggage(
+  var txHashes = c.writeBaggage(
     blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
 
   vmState.receipts.setLen(0)
@@ -190,4 +190,4 @@ proc processBlock*(
   c.vmStateBlockHash = blkHash
   cached = true
 
-  ok(txHashes)
+  ok(move(txHashes))
