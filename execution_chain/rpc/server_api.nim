@@ -569,7 +569,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         txHash = data
         res = api.txPool.getItem(txHash)
       if res.isOk:
-        return populateTransactionObject(res.get().tx, Opt.none(Hash32), Opt.none(uint64))
+        return populateTransactionObject(res.get().tx, chainId = Opt.some(api.chain.com.chainId))
 
       let
         (blockHash, txId) = api.chain.txDetailsByTxHash(txHash).valueOr:
@@ -586,6 +586,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.number),
         Opt.some(blk.header.timestamp),
         Opt.some(txId),
+        Opt.some(api.chain.com.chainId),
       )
 
     proc eth_getTransactionByBlockHashAndIndex(
@@ -609,6 +610,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.number),
         Opt.some(blk.header.timestamp),
         Opt.some(index),
+        Opt.some(api.chain.com.chainId),
       )
 
     proc eth_getTransactionByBlockNumberAndIndex(
@@ -632,6 +634,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.number),
         Opt.some(blk.header.timestamp),
         Opt.some(index),
+        Opt.some(api.chain.com.chainId),
       )
 
     proc eth_getProof(
