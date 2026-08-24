@@ -71,7 +71,7 @@ proc processTransactions*(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.allLogs = @[]
+  vmState.allLogs.setLen(0)
 
   when compileOption("threads"):
     if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
@@ -85,7 +85,7 @@ proc processTransactions*(
     if vmState.balTrackerEnabled:
       vmState.balTracker.setBlockAccessIndex(txIndex + 1)
 
-    let rc = vmState.processTransaction(tx, sender)
+    var rc = vmState.processTransaction(tx, sender)
     if rc.isErr:
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
     if skipReceipts:

@@ -504,8 +504,9 @@ proc processTransactionsParallel*(
       if collectLogs:
         vmState.allLogs.add logs
     else:
+      var callResult = LogResult(logEntries: move(logs))
       vmState.receipts[i] =
-        vmState.makeReceipt(transactions[i].txType, LogResult(logEntries: move(logs)))
+        vmState.makeReceipt(transactions[i].txType, callResult)
       if collectLogs:
         vmState.allLogs.add vmState.receipts[i].logs
 
