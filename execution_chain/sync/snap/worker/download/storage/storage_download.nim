@@ -331,10 +331,11 @@ template queueAndDownload(
             ", ranges=" & stoQ[0].data.ranges.flStr
         iv                                          # download partial sub-MPT
 
-    # Download a list of full sub-MPTs, or a single one with a sub-range. This
-    # directive below will store any success in the `stoQ[]` list.
+    # Download a list of full sub-MPTs, or a single one with a sub-range.
+    # The `downloadImpl()` directive below will store any success in the
+    # `stoQ[]` list.
     buddy.downloadImpl(stateRoot, number, stoQ, ivReq, info).isOkOr:
-      adb.saveStoUpdates(stoQ, info).isOkOr:        # restore `stoQ[]`
+      adb.saveStoUpdates(stoQ, info).isOkOr:        # restore by `stoQ[]`
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # oops, serious error
       bodyRc = typeof(bodyRc).err(error)

@@ -83,14 +83,9 @@ template accountDownload*(
         bodyRc = typeof(bodyRc).err(ECompleted)
         break body                                  # return err()
 
-    trace info & ": Requesting account range", peer, root, number,
-      ivReq=ivReq.flStr, syncState=($buddy.syncState)
-
     let
       data = buddy.fetchAccounts(stateRoot, ivReq).valueOr:
         ctx.accUnproc.commit(ivReq, ivReq)          # registry roll back
-        trace info & ": Account download failed", peer, root, number,
-          ivReq=ivReq.flStr, syncState=($buddy.syncState), `error`=error
         bodyRc = typeof(bodyRc).err(error)
         break body                                  # return err()
 
@@ -150,8 +145,8 @@ template accountDownload*(
     # Update metrics
     ctx.accountDownloadMetricsUpdate()
 
-    debug info & ": Accounts downloaded and cached", peer, root, number,
-      ivResp=(ivReq.minPt,limit).flStr, nAccounts, nProof,
+    chronicles.info info & ": Accounts saved", peer, root,
+      number, ivResp=(ivReq.minPt,limit).flStr, nAccounts, nProof,
       syncState=($buddy.syncState)
 
     bodyRc = typeof(bodyRc).ok()

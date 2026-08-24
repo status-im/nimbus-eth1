@@ -157,8 +157,8 @@ template fetchBlockAccessLists*(
 
     # Evaluate result
     if rc.isErr or buddy.ctrl.stopped:
-      doAssert buddy.only.supportsBal               # supported by `buddy`
-      buddy.maybeSlowPeerError(elapsed, startHash)
+      if buddy.only.supportsBal:                    # supported by `buddy`
+        buddy.maybeSlowPeerError(elapsed, startHash)
       trace recvInfo & " error", peer, startHash=startHash.short, nReq,
         ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.bal
       break body                                    # return err()

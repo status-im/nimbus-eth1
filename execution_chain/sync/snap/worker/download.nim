@@ -22,6 +22,12 @@ logScope:
 export
   account, header
 
+type
+  DownloadInfo = tuple
+    accDone: bool
+    stoDone: bool
+    codeDone: bool
+
 # ------------------------------------------------------------------------------
 # Private function
 # ------------------------------------------------------------------------------
@@ -43,6 +49,17 @@ proc getLastBalNum(ctx: SnapCtxRef): BlockNumber =
   if maybe.isSome():
     return maybe.unsafeGet()
   # BlockNumber(0)
+
+proc downloadReady(
+    buddy: SnapPeerRef;
+    info: static[string];
+      ): Opt[DownloadInfo] =
+  let adb = buddy.ctx.pool.cacheDB
+  var w: DownloadInfo
+  w.accDone = not ?adb.hasAccMissingIntv(info)
+  w.stoDone = not ?adb.hasStoMissingIntv(info)
+  w.codeDone = not ?adb.hasMissingBlob(info)
+  ok(w)
 
 # ------------------------------------------------------------------------------
 # Public function(s)
@@ -121,9 +138,6 @@ template downloadState*(
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = stateRoot.toStr        # logging only
 
-    trace info & ": Start downloading", peer, syncState=($buddy.syncState),
-      nSyncPeers=ctx.nSyncPeers()
-
     # Run through different download entities as long as they are available.
     # Non-availability might also mean tat they are temporarily blocked and
     # might be available later.
@@ -138,36 +152,40 @@ template downloadState*(
 
       if doEntity.testBit(0):
         buddy.accountDownload(stateRoot, number, info).isOkOr:
-          if error == ECompleted:
-            doEntity.clearBit(0)                    # done with accounts
-            continue                                # verify buddy is running
-          bodyRc = typeof(bodyRc).err(error)
-          break
-        doEntity.setBit(1)                          # activate storages & codes
+          if error != ECompleted:
+            bodyRc = typeof(bodyRc).err(error)
+            break
+          doEntity.clearBit(0)                      # done with accounts
+        doEntity.setBit(1)                          # re-activate storage & code
         doEntity.setBit(2)
 
       if doEntity.testBit(1):
         if buddy.ctrl.stopped:
           break
         buddy.storageDownload(stateRoot, number, info).isOkOr:
-          if error == ECompleted:
-            doEntity.clearBit(1)                    # done with storage so far
-            continue
-          bodyRc = typeof(bodyRc).err(error)
-          break
+          if error != ECompleted:
+            bodyRc = typeof(bodyRc).err(error)
+            break
+          doEntity.clearBit(1)                      # done with storage so far
 
       if doEntity.testBit(2):
         if buddy.ctrl.stopped:
           break
         buddy.codeDownload(stateRoot, number, info).isOkOr:
-          if error == ECompleted:
-            doEntity.clearBit(2)                    # done with storage so far
-            continue
-          bodyRc = typeof(bodyRc).err(error)
-          break
+          if error != ECompleted:
+            bodyRc = typeof(bodyRc).err(error)
+            break
+          doEntity.clearBit(2)                      # done with code so far
+      # End `while ..`
 
-    trace info & ": downloaded data", peer, syncState=($buddy.syncState),
-      nSyncPeers=ctx.nSyncPeers()
+    let data {.used.} = buddy.downloadReady(info).valueOr:
+      trace info & ": Error reading cache DB", peer,
+        syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
+      break body
+
+    debug info & ": Downloaded data", peer, accountsDone=data.accDone,
+      storageDone=data.stoDone, codeDone=data.codeDone,
+      syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
 
   bodyRc                                            # return value
 

@@ -75,16 +75,17 @@ const
   lockedBalsLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 
+
+  daemonWaitResumeInterval* = chronos.seconds(5)
+    ## ..
+
+  daemonWaitClearInterval* = chronos.seconds(10)
+    ## ..
+
   daemonWaitReadyInterval* = chronos.seconds(47)
     ## Some polling interval time waiting until the system gets into download
     ## state when the the FCU modue hash provides a finalised header and there
     ## are eth/xx download peers available.
-
-  daemonWaitClearInterval* = chronos.seconds(10)
-    ## Ditto for setup.
-
-  daemonWaitElseInterval* = chronos.seconds(10)
-    ## Ditto for other states.
 
   daemonWaitDownloadInterval* = chronos.seconds(10)
     ## Some waiting time at the end of the daemon task which always lingers
@@ -92,6 +93,9 @@ const
 
   daemonWaitDownloadFinishInterval* = chronos.seconds(5)
     ## Poll waiting for all downloading peers to have stopped
+
+  daemonWaitElseInterval* = chronos.seconds(10)
+    ## Ditto for other states.
 
 
   peerWaitDownloadInterval* = chronos.seconds(5)
@@ -174,12 +178,6 @@ const
 
   fetchCodeBatchMax* = 1024
     ## Maximal batch size for contract codes
-
-  daemonWaitCodesInterval* = chronos.seconds(10)
-    ## Poll waiting for peers to process contract codes
-
-  daemonWaitCodesFinishInterval* = chronos.seconds(5)
-    ## Wait for sync
 
   fetchCodesSnapTimeout* = chronos.seconds(120)
     ## Similar to `fetchAccountSnapTimeout`
