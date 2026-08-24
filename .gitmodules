@@ -249,3 +249,6 @@
 	url = https://github.com/vacp2p/nim-boringssl
 	ignore = dirty
 	branch = master
+[submodule "vendor/nim-async-channels"]
+	path = vendor/nim-async-channels
+	url = https://github.com/status-im/nim-async-channels
