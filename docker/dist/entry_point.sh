@@ -115,10 +115,20 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     USE_CACHED_ROCKSDB=1 \
     deps-common build/generate_makefile
 
-  # We can't use the "arm64.linux.gcc.exe" cross-compilation config vars here,
-  # because Nim ignores those when "--compileOnly" is given (which is what
-  # "compile_nim_program.sh" does), silently falling back to the host "gcc".
-  CROSS_NIMFLAGS="--cpu:arm64 --gcc.exe=${CC} --gcc.linkerexe=${CXX} --gcc.cpp.exe=${CXX} --gcc.cpp.linkerexe=${CXX}"
+  # Both forms of the compiler override are needed, because Nim picks a
+  # different one depending on how it's invoked:
+  # - with "--compileOnly" (what "compile_nim_program.sh" uses) the
+  #   "arm64.linux.gcc.exe" cross-compilation config vars are ignored and the
+  #   plain "gcc.exe" ones are used;
+  # - without it, "arm64.linux.gcc.exe" wins, defaulting to Nim's own
+  #   "aarch64-linux-gnu-gcc" (Debian's toolchain, absent from this image)
+  #   unless we override it. This is the path "libverifproxy" takes, since
+  #   "--app:staticlib" targets aren't built via "compile_nim_program.sh".
+  CROSS_NIMFLAGS="--cpu:arm64"
+  CROSS_NIMFLAGS+=" --gcc.exe=${CC} --gcc.linkerexe=${CXX}"
+  CROSS_NIMFLAGS+=" --gcc.cpp.exe=${CXX} --gcc.cpp.linkerexe=${CXX}"
+  CROSS_NIMFLAGS+=" --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX}"
+  CROSS_NIMFLAGS+=" --arm64.linux.gcc.cpp.exe=${CXX} --arm64.linux.gcc.cpp.linkerexe=${CXX}"
 
   # -j1 will disable parallel build and prevent OOM in github CI
   make \
