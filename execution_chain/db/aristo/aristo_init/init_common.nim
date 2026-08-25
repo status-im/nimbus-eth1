@@ -118,6 +118,7 @@ proc close*(db: AristoDbRef; wipe = false) =
     db.stoLeaves.dispose()
     db.accLeaves.reset()
     db.stoLeaves.reset()
+    db.disposeVtxBufQueues()
 
   db.closeFn wipe
 

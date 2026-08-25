@@ -18,8 +18,6 @@ import
 
 export aristo_desc, results
 
-const MAX_VERTEX_BLOB_SIZE = 117
-
 # Allocation-free version short big-endian encoding that skips the leading
 # zeroes
 type
@@ -30,8 +28,6 @@ type
   RVidBuf* = object
     buf*: array[sizeof(SbeBuf[VertexID]) * 2, byte]
     len*: byte
-  
-  VertexBuf* = ArrayBuf[MAX_VERTEX_BLOB_SIZE, byte]
 
 template `&=`*(x: var VertexBuf, y: VertexBuf) =
   x.add(y.data)

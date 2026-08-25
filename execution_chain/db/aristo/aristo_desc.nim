@@ -30,13 +30,20 @@ import
   ./aristo_desc/desc_backend
 
 when compileOption("threads"):
-  import taskpools, ../../concurrency/lru
-  export taskpools, lru
+  import taskpools, ../../concurrency/[lru, queue]
+  export taskpools, lru, queue
 
 # Not auto-exporting backend
 export
   tables, aristo_constants, desc_error, desc_identifiers, nibbles,
   desc_structural, hashes, heapqueue, PutHdlRef
+
+const MAX_VERTEX_BLOB_SIZE = 117
+
+type VertexBuf* = ArrayBuf[MAX_VERTEX_BLOB_SIZE, byte]
+
+when compileOption("threads"):
+  type ConcurrentVertexBufQueue* = ConcurrentQueue[13, (RootedVertexID, VertexBuf)]
 
 type
   AristoTxRef* = ref object
@@ -166,6 +173,9 @@ type
       taskpool*: Taskpool
         ## Shared task pool for offloading computation to other threads.
 
+      vtxBufQueues*: ptr UncheckedArray[ConcurrentVertexBufQueue]
+        ## Queues used by the parallel state root computation.
+
   Leg* = object
     ## For constructing a `VertexPath`
     wp*: VidVtxPair                ## Vertex ID and data ref
@@ -284,3 +294,22 @@ proc getStaticLevel*(db: AristoDbRef): int =
   db.staticLevel.store(level, moRelaxed)
 
   level
+
+when compileOption("threads"):
+  const vtxBufQueueCount* = 16
+
+  proc getVtxBufQueues*(db: AristoDbRef): ptr UncheckedArray[ConcurrentVertexBufQueue] =
+    if db.vtxBufQueues.isNil:
+      db.vtxBufQueues = cast[ptr UncheckedArray[ConcurrentVertexBufQueue]](
+        allocShared0(sizeof(ConcurrentVertexBufQueue) * vtxBufQueueCount)
+      )
+      for i in 0 ..< vtxBufQueueCount:
+        db.vtxBufQueues[i].init()
+    db.vtxBufQueues
+
+  proc disposeVtxBufQueues*(db: AristoDbRef) =
+    if not db.vtxBufQueues.isNil:
+      for i in 0 ..< vtxBufQueueCount:
+        db.vtxBufQueues[i].dispose()
+      deallocShared(db.vtxBufQueues)
+      db.vtxBufQueues = nil

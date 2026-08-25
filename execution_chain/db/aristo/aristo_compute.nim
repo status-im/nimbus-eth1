@@ -17,7 +17,7 @@ import
   eth/common/hashes_rlp,
   ./[aristo_desc, aristo_get, aristo_layers, aristo_blobify, aristo_serialise],
   ./aristo_desc/desc_backend,
-  ../../concurrency/[queue, shared_types]
+  ../../concurrency/shared_types
 
 export aristo_desc, chronicles, hashes_rlp, shared_types
 
@@ -29,8 +29,6 @@ type
     prefix*: uint64
     tasksCompleted*: int
     tasksTotal*: int
-
-  ConcurrentVertexBufQueue* = ConcurrentQueue[13, (RootedVertexID, VertexBuf)]
 
   KeyWriteBuf* = SharedSeq[(RootedVertexID, HashKey, uint32)]
 
@@ -379,14 +377,11 @@ proc computeKeyImpl(
           futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
           keyBufs: array[16, KeyWriteBuf]
 
-        let vtxBufQueues = cast[ptr UncheckedArray[ConcurrentVertexBufQueue]](
-          allocShared0(sizeof(ConcurrentVertexBufQueue) * 16)
-        )
+        let vtxBufQueues = txRef.db.getVtxBufQueues()
 
         defer:
           for buf in keyBufs.mitems:
             buf.dispose()
-          deallocShared(vtxBufQueues)
 
       # Make sure we have keys computed for each hash
       block keysComputed:
@@ -443,7 +438,6 @@ proc computeKeyImpl(
               vtxPtr = keyvtxs[minIdx][0][1].addr
               level = keyvtxs[minIdx][1]
 
-            vtxBufQueues[minIdx].init()
             futs[minIdx] = txRef.db.taskpool.spawn computeKeyImplTask(
               txRef.addr,
               vid,
@@ -527,7 +521,6 @@ proc computeKeyImpl(
                 ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
 
             (keyvtxs[i][0][0], keyvtxs[i][1]) = ?sync(f)
-            vtxBufQueues[i].dispose()
 
         txRef.mergeKeys(keyBufs, snapshotFrame)
 
