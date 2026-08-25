@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[].}
+
 import
   results,
   chronicles,
@@ -16,12 +18,11 @@ import
   json_rpc/errors,
   ../../core/tx_pool,
   ../../core/focil,
+  ../../db/ledger,
   ../web3_eth_conv,
   ../beacon_engine,
   ../payload_conv,
   ./api_utils
-
-{.push gcsafe, raises:[].}
 
 logScope:
   topics = "beacon engine"
@@ -198,6 +199,19 @@ func validateExecutionRequest(
     previousRequestType = requestType.int
   Opt.none(PayloadStatus)
 
+proc getValidIL(inclusionList: Opt[InclusionList],
+                txFrame: CoreDbTxRef, blk: Block):
+                  Opt[bool] {.raises: [ApplicationError].} =
+  if inclusionList.isNone:
+    return Opt.none(bool)
+
+  let decodedIL = decodeIL(inclusionList.value)
+  if decodedIL.isNil:
+    raise invalidParams("newPayload cannot decode Inclusion List")
+
+  let ledger = LedgerRef.init(txFrame)
+  Opt.some(validateInclusionList(ledger, decodedIL.list, blk))
+
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
@@ -345,7 +359,8 @@ proc newPayload*(ben: BeaconEngineRef,
       let
         txFrame = chain.latestTxFrame()
         blockHash = latestValidHash(txFrame, parent, ttd)
-      return invalidStatus(blockHash, res.error.msg)
+        validIL = getValidIL(inclusionList, txFrame, blk)
+      return invalidStatus(blockHash, res.error.msg, validIL)
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 
@@ -357,12 +372,5 @@ proc newPayload*(ben: BeaconEngineRef,
     gasUsed = header.gasUsed,
     blobGas = header.blobGasUsed.get(0'u64)
 
-  if inclusionList.isSome:
-    let decodedIL = decodeIL(inclusionList.value)
-    if decodedIL.isNil:
-      raise invalidParams("newPayload cannot decode Inclusion List")
-
-    let validIL = validateInclusionList(chain.vmState, decodedIL.list, blk)
-    return validStatus(blockHash, validIL)
-  else:
-    return validStatus(blockHash)
+  let validIL = getValidIL(inclusionList, chain.latestTxFrame(), blk)
+  return validStatus(blockHash, validIL)

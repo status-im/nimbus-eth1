@@ -76,6 +76,7 @@ type
     forkchoiceUpdatedVersion*: Numero
     validationError*: Opt[string]
     errorCode*: Opt[string]
+    inclusionListSatisfied*: Opt[bool]
 
   EnvConfig* = object
     network*: string
@@ -182,6 +183,8 @@ proc readValue*(
         r.readValue(val.parentBeaconBlockRoot)
       of 3:
         r.readValue(val.executionRequests)
+      of 4:
+        r.readValue(val.inclusionList)
       else:
         r.raiseUnexpectedValue("Unexpected element")
 

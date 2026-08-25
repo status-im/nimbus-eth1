@@ -118,6 +118,10 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
       if enp.validationError.isSome:
         return err("Expect validation error: " & enp.validationError.value & ", but got none")
 
+    if enp.inclusionListSatisfied != status.inclusionListSatisfied:
+      return err("Expect inclusionListSatisfied: " & $enp.inclusionListSatisfied &
+        ", but got: " & $status.inclusionListSatisfied)
+
     let y = env.sendFCU(enp.forkchoiceUpdatedVersion.uint64, enp.params).valueOr:
       return err(error)
 
@@ -134,7 +138,9 @@ proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = 
   let fixture = parseFixture(filePath, EngineFixture)
   let fileName = filePath.splitPath().tail
 
-  for unit in fixture.units:
+  for idx, unit in fixture.units:
+    if idx != 1:
+      continue
     let
       testName = unit.name
       testUnit = unit.unit

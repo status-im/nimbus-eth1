@@ -14,12 +14,10 @@ import
   eth/rlp,
   eth/common/[transactions_rlp, blocks],
   chronicles,
-  ../evm/state,
   ../db/ledger,
   ./tx_pool/tx_item
 
 from ../transaction import recoverSenderCached
-from ../evm/types import BaseVMState
 from ../utils/utils import short
 from ./validate import gasCost
 from ./pooled_txs import PooledTransaction
@@ -53,7 +51,7 @@ func missingHashes(list: HashSet[Hash32]): string =
 # ValidateInclusionListTransactions verifies that all transactions in the inclusion list
 # are either included in the block or cannot be appended at the end of the block.
 # Returns true if the block satisfies the inclusion list constraints.
-proc validateInclusionList*(vmState: BaseVMState, decodedIL: openArray[Transaction], blk: Block): bool =
+proc validateInclusionList*(ledger: LedgerRef, decodedIL: openArray[Transaction], blk: Block): bool =
   # Build a set of transaction hashes that are included in the block
   var includedTxs: HashSet[Hash32]
   for tx in blk.transactions:
@@ -63,7 +61,6 @@ proc validateInclusionList*(vmState: BaseVMState, decodedIL: openArray[Transacti
 
   let
     gasLeft = header.gasLimit - header.gasUsed
-    ledger = vmState.readOnlyLedger
 
   # Statistics for logging
   var

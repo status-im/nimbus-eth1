@@ -109,23 +109,25 @@ func validFCU*(id: Opt[Bytes8],
     payloadId: id
   )
 
-func invalidStatus*(validHash: Opt[common.Hash32], msg: string): PayloadStatus =
+func invalidStatus*(validHash: Opt[common.Hash32], msg: string, validIL = Opt.none(bool)): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: validHash,
-    validationError: Opt.some(msg)
+    validationError: Opt.some(msg),
+    inclusionListSatisfied: validIL,
   )
 
-func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatus =
-  invalidStatus(Opt.some(validHash), msg)
+func invalidStatus*(validHash: common.Hash32, msg: string, validIL = Opt.none(bool)): PayloadStatus =
+  invalidStatus(Opt.some(validHash), msg, validIL)
 
-func invalidStatus*(msg: string): PayloadStatus =
-  invalidStatus(Opt.none(Hash32), msg)
+func invalidStatus*(msg: string, validIL = Opt.none(bool)): PayloadStatus =
+  invalidStatus(Opt.none(Hash32), msg, validIL)
 
-func invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
+func invalidStatus*(validHash = default(common.Hash32), validIL = Opt.none(bool)): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.invalid,
-    latestValidHash: toValidHash(validHash)
+    latestValidHash: toValidHash(validHash),
+    inclusionListSatisfied: validIL,
   )
 
 func acceptedStatus*(validHash: common.Hash32): PayloadStatus =
@@ -139,17 +141,11 @@ func acceptedStatus*(): PayloadStatus =
     status: PayloadExecutionStatus.accepted
   )
 
-func validStatus*(validHash: common.Hash32): PayloadStatus =
-  PayloadStatus(
-    status: PayloadExecutionStatus.valid,
-    latestValidHash: toValidHash(validHash)
-  )
-
-func validStatus*(validHash: common.Hash32, validIL: bool): PayloadStatus =
+func validStatus*(validHash: common.Hash32, validIL = Opt.none(bool)): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.valid,
     latestValidHash: toValidHash(validHash),
-    inclusionListSatisfied: Opt.some(validIL)
+    inclusionListSatisfied: validIL,
   )
 
 func invalidParams*(msg: string): ref ApplicationError =
