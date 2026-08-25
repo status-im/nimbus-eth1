@@ -36,12 +36,8 @@ const skipFiles = [
   "invalid_tx_max_fee_per_blob_gas.json",
   "invalid_normal_gas.json",
 
-  # cannot decode
-  "high_gas_price_paris.json",
-
   # BAL
   "tx_gas_limit.json",
-  "block_with_failing_included_il_tx_is_valid.json",
 ]
 
 runEESTSuite(

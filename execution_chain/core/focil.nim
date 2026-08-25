@@ -24,19 +24,28 @@ from ./pooled_txs import PooledTransaction
 from web3/engine_api_types import TypedTransaction
 
 type
+  DecodedILItem* = object
+    tx*: Transaction
+    ok*: bool
+    hash*: Hash32
+
   DecodedIL* = ref object
-    list*: seq[Transaction]
+    list*: seq[DecodedILItem]
 
 proc decodeIL*(list: openArray[TypedTransaction]): DecodedIL =
   let res = DecodedIL()
-  try:
-    for x in list:
-      res.list.add rlp.decode(distinctBase(x), Transaction)
-  except RlpError as exc:
-    warn "[decodeIL] failed to decode Inclusion List transaction",
-      msg = exc.msg
-    return nil
-
+  for x in list:
+    try:
+      res.list.add DecodedILItem(
+        tx: rlp.decode(distinctBase(x), Transaction),
+        ok: true,
+        hash: keccak256(distinctBase(x)),
+      )
+    except RlpError as exc:
+      res.list.add DecodedILItem(
+        ok: false,
+        hash: keccak256(distinctBase(x)),
+      )
   res
 
 func missingHashes(list: HashSet[Hash32]): string =
@@ -51,7 +60,7 @@ func missingHashes(list: HashSet[Hash32]): string =
 # ValidateInclusionListTransactions verifies that all transactions in the inclusion list
 # are either included in the block or cannot be appended at the end of the block.
 # Returns true if the block satisfies the inclusion list constraints.
-proc validateInclusionList*(ledger: LedgerRef, decodedIL: openArray[Transaction], blk: Block): bool =
+proc validateInclusionList*(ledger: LedgerRef, decodedIL: DecodedIL, blk: Block): bool =
   # Build a set of transaction hashes that are included in the block
   var includedTxs: HashSet[Hash32]
   for tx in blk.transactions:
@@ -73,46 +82,47 @@ proc validateInclusionList*(ledger: LedgerRef, decodedIL: openArray[Transaction]
     shouldBeIncluded:  HashSet[Hash32]
 
   # Check each inclusion list transaction
-  for tx in decodedIL:
-    let txHash = tx.computeRlpHash
-
+  for item in decodedIL.list:
     # Transaction is included - constraint satisfied
-    if txHash in includedTxs:
+    if item.hash in includedTxs:
       inc alreadyIncluded
       continue
 
+    if not item.ok:
+      continue
+
     # Blob transactions are not subject to inclusion list constraints
-    if tx.txType == TxEip4844:
+    if item.tx.txType == TxEip4844:
       inc blobTxs
       continue
 
     # Check if transaction cannot be included due to gas limit
-    if tx.gasLimit > gasLeft:
+    if item.tx.gasLimit > gasLeft:
       inc insufficientGas
       continue
 
     # Check sender validity
-    let sender = tx.recoverSenderCached().valueOr:
+    let sender = item.tx.recoverSenderCached().valueOr:
       inc invalidSender
       continue
 
     # Check if transaction cannot be included due to insufficient balance
     let
       balance = ledger.getBalance(sender)
-      cost = tx.gasCost()
+      cost = item.tx.gasCost()
 
-    if balance - cost < tx.value:
+    if balance - cost < item.tx.value:
       inc insufficientFunds
       continue
 
     # Check if transaction cannot be included due to incorrect nonce
     let nonce = ledger.getNonce(sender)
-    if nonce != tx.nonce:
+    if nonce != item.tx.nonce:
       inc invalidNonce
       continue
 
     # Transaction could have been included but wasn't - validation fails
-    shouldBeIncluded.incl txHash
+    shouldBeIncluded.incl item.hash
 
   if shouldBeIncluded.len > 0:
     warn "[FOCIL] Inclusion list validation failed - transactions should have been included",
@@ -127,12 +137,12 @@ proc validateInclusionList*(ledger: LedgerRef, decodedIL: openArray[Transaction]
       invalidNonce,
       shouldBeIncluded=shouldBeIncluded.len,
       gasLeft,
-      totalInclusionList=decodedIL.len,
+      totalInclusionList=decodedIL.list.len,
       blockTxs=blk.transactions.len
     return false
 
   # All transactions are either included or cannot be included
-  if decodedIL.len > 0:
+  if decodedIL.list.len > 0:
     debug "[FOCIL] Inclusion list validation passed",
       blockNumber=header.number,
       hash=computeRlpHash(header).short,
@@ -142,7 +152,7 @@ proc validateInclusionList*(ledger: LedgerRef, decodedIL: openArray[Transaction]
       invalidSender,
       insufficientFunds,
       invalidNonce,
-      totalInclusionList=decodedIL.len
+      totalInclusionList=decodedIL.list.len
   true
 
 type

@@ -200,17 +200,14 @@ func validateExecutionRequest(
   Opt.none(PayloadStatus)
 
 proc getValidIL(inclusionList: Opt[InclusionList],
-                txFrame: CoreDbTxRef, blk: Block):
-                  Opt[bool] {.raises: [ApplicationError].} =
+                txFrame: CoreDbTxRef, blk: Block): Opt[bool] =
   if inclusionList.isNone:
     return Opt.none(bool)
 
-  let decodedIL = decodeIL(inclusionList.value)
-  if decodedIL.isNil:
-    raise invalidParams("newPayload cannot decode Inclusion List")
-
-  let ledger = LedgerRef.init(txFrame)
-  Opt.some(validateInclusionList(ledger, decodedIL.list, blk))
+  let
+    decodedIL = decodeIL(inclusionList.value)
+    ledger = LedgerRef.init(txFrame)
+  Opt.some(validateInclusionList(ledger, decodedIL, blk))
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
@@ -359,8 +356,7 @@ proc newPayload*(ben: BeaconEngineRef,
       let
         txFrame = chain.latestTxFrame()
         blockHash = latestValidHash(txFrame, parent, ttd)
-        validIL = getValidIL(inclusionList, txFrame, blk)
-      return invalidStatus(blockHash, res.error.msg, validIL)
+      return invalidStatus(blockHash, res.error.msg)
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 
