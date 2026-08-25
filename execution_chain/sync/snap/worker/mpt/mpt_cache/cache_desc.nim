@@ -14,9 +14,10 @@ import
   std/paths,
   pkg/[chronos, eth/common, rocksdb],
   pkg/stew/interval_set,
-  ../../../../wire_protocol/snap/snap_types,
-  ../../state_db, #worker_const],
   ../mpt_build/build_desc
+
+export
+  build_desc
 
 type
   CacheDbRef* = ref object
@@ -29,15 +30,10 @@ type
   BlobResult* = Result[seq[byte],string]
     ## Shortcut
 
-  AccountDataResult* = Result[CacheAccountData,string]
-
-  StoSlotDataResult* = Result[CacheStoSlotData,string]
-    ## Shortcut
-
-  ByteCodeDataResult* = Result[CacheByteCodeData,string]
-    ## Shortcut
-
   OptHeaderResult* = Result[Opt[Header],string]
+    ## Shortcut
+
+  OptNumberResult* = Result[Opt[BlockNumber],string]
     ## Shortcut
 
   OptBalResult* = Result[Opt[BlockAccessListRef],string]
@@ -64,36 +60,6 @@ type
   DelResult* = Result[void,string]
     ## Shortcut
 
-  StateDataTag* = enum
-    Untagged = 0                                    # well, still a tag :)
-    OnTrie                                          # assembled and merged
-    PivotOnTrie                                     # ditto, state root here
-    PivotMptAnalysed
-
-  CacheStateData* = tuple
-    hash: BlockHash
-    number: BlockNumber
-    touch: Moment                                   # last data change
-    tag: StateDataTag                               # how this record is used
-    coverage: UInt256                               # account range coverage
-
-  CacheAccountData* = tuple
-    limit: ItemKey
-    accounts: seq[SnapAccount]
-    proof: seq[ProofNode]
-    peerID: Hash
-
-  CacheStoSlotData* = tuple
-    limit: ItemKey
-    slot: seq[StorageItem]
-    proof: seq[ProofNode]
-    peerID: Hash
-
-  CacheByteCodeData* = tuple
-    limit: ItemKey
-    codes: seq[(CodeHash,CodeItem)]
-    peerID: Hash
-
   CacheAccMissingIntvData* = tuple
     number: BlockNumber
     ranges: ItemKeyRangeSet
@@ -105,30 +71,6 @@ type
     dirtyStorage: bool
     dirtyCode: bool
     account: Account
-
-  WalkStateData* = tuple
-    root: StateRoot
-    data: CacheStateData
-    error: string
-
-  WalkAccountData* = tuple
-    root: StateRoot
-    start: ItemKey
-    data: CacheAccountData
-    error: string
-
-  WalkStoSlotData* = tuple
-    root: StateRoot
-    account: ItemKey
-    start: ItemKey                                  # `0` unless incomplete
-    data: CacheStoSlotData
-    error: string
-
-  WalkByteCodeData* = tuple
-    root: StateRoot
-    start: ItemKey
-    data: CacheByteCodeData
-    error: string
 
   WalkHeader* = tuple
     header: Header

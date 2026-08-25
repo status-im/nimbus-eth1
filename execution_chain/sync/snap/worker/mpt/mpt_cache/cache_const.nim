@@ -27,18 +27,6 @@ type
     cHeader                                         # header chain by block num
     cBal                                            # block access lists
 
-    gDownloadData = 20                              # group, not used as column
-    cStateData                                      # root -> block hash/number
-    cAccount                                        # as fetched from network
-    cStoSlot                                        # ditto
-    cByteCode                                       # ditto
-
-    gPartMptAssembly = 30                           # group, not used as column
-    cAccPartMpt                                     # accounts MPT
-    cAccDnglPath                                    # dangling acc node paths
-    cStoPartMpt                                     # storage slots MPT
-    cCodePartMpt                                    # contract codes table
-
     gFlatTables = 40                                # group, not used as column
     cMissingIntv                                    # missing accounts/slots
     cMissingBlob                                    # missing contract codes

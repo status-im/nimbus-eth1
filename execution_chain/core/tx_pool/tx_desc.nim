@@ -16,7 +16,7 @@ import
   std/[times, tables, typetraits],
   eth/eip1559,
   eth/common/transaction_utils,
-  stew/sorted_set,
+  stew/[sorted_set, bitseqs],
   web3/engine_api_types,
   ../../common/common,
   ../../evm/state,
@@ -531,6 +531,52 @@ func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[engine_ssz_types.B
         proofs: getProofs(np.proofs, val.blobIndex)))
 
   Opt.none(engine_ssz_types.BlobAndProofV2)
+
+proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: BitArray[128]): Opt[BlobCellsAndProofsV1] =
+  type
+    KzgProof = engine_api_types.KzgProof
+    KzgCells = eip4844.KzgCells
+
+  func getNumIndices(indices: BitArray[128]): int =
+    for i in 0..<indices.len:
+      if indices[i]:
+        inc result
+
+  func getCellsAndProofs(indices: BitArray[128],
+                         cells: KzgCells,
+                         list: openArray[KzgProof],
+                         index: int,
+                         output: var BlobCellsAndProofsV1) =
+    let
+      startIndex = index * engine_ssz_types.CELLS_PER_EXT_BLOB
+      endIndex   = startIndex + engine_ssz_types.CELLS_PER_EXT_BLOB
+      numIndices = indices.getNumIndices
+
+    doAssert(list.len >= endIndex)
+
+    output.blob_cells = newSeqOfCap[seq[byte]](numIndices)
+    output.proofs = newSeqOfCap[KzgProof](numIndices)
+    for i in 0..<indices.len:
+      if indices[i]:
+        output.blob_cells.add(@(cells[i].bytes))
+        output.proofs.add(list[startIndex + i])
+
+  xp.blobTab.withValue(v, val):
+    let
+      np = val.item.pooledTx.blobsBundle
+      blob = cast[ptr eip4844.KzgBlob](np.blobs[val.blobIndex].addr)
+      cells = computeCells(blob[]).valueOr:
+        return Opt.none(BlobCellsAndProofsV1)
+    if np.wrapperVersion == WrapperVersionEIP7594:
+      var res = Opt.some(BlobCellsAndProofsV1())
+      indicesBitarray.getCellsAndProofs(
+        cells, np.proofs,
+        val.blobIndex,
+        res.value
+      )
+      return res
+
+  Opt.none(BlobCellsAndProofsV1)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters

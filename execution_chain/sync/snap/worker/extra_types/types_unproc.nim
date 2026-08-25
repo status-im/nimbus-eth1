@@ -12,13 +12,13 @@
 
 import
   pkg/[stint, stew/interval_set],
-  ../helpers,
-  ./state_item_key
+  ./types_range
 
 type
   UnprocItemKeys* = object
-    unprocessed*: ItemKeyRangeSet    ## `ItemKey` processing requested
-    borrowed*: ItemKeyRangeSet       ## In-process/locked ranges
+    unprocessed*: ItemKeyRangeSet    # `ItemKey` processing requested
+    borrowed*: ItemKeyRangeSet       # In-process/locked ranges
+    syncedOk: bool                   # no need to re-initialise
 
 # ------------------------------------------------------------------------------
 # Public constructor & friends
@@ -32,11 +32,18 @@ proc init*(udb: var UnprocItemKeys; initRange: ItemKeyRange) =
   udb.init()
   discard udb.unprocessed.merge initRange
 
-
 proc clear*(udb: var UnprocItemKeys) =
   ## Reset argument range sets empty.
-  udb.unprocessed.clear
-  udb.borrowed.clear
+  udb.unprocessed.clear()
+  udb.borrowed.clear()
+
+proc synced*(udb: UnprocItemKeys): bool =
+  ## Getter
+  udb.syncedOk
+
+proc `synced=`*(udb: var UnprocItemKeys, value: bool) =
+  # Setter
+  udb.syncedOk = value
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -68,63 +75,6 @@ proc fetchLeast*(udb: UnprocItemKeys; maxLen: UInt256): Opt[ItemKeyRange] =
   doAssert udb.unprocessed.reduce(iv) == iv.len
   doAssert udb.borrowed.merge(iv) == iv.len
   ok(iv)
-
-proc fetchSubRange*(
-    udb: UnprocItemKeys;
-    iv: ItemKeyRange;
-      ): Opt[ItemKeyRange] =
-  ## Fetch a sub-interval of the argument interval `iv` from the unprocessed
-  ## data ranges.
-  ##
-  var kv: ItemKeyRange
-  block body:
-    # Note that `iv.len` is a represented by the residue class mod `2^256`.
-    # So `iv.len == 0` indicates that the size is 2^256 as interval cannot
-    # be empty by definition.
-    if iv.len.isZero:                               # => 2^256, largest interval
-      kv = udb.unprocessed.ge().valueOr:
-        return err()                                # no data
-      break body
-    let covered = udb.unprocessed.covered(iv)
-    if covered == iv.len:
-      kv = iv                                       # total overlap
-      break body
-    if covered.isZero:
-      return err()                                  # no overlap, at all
-
-    # Now, there us a partial overlap of `iv` with the `unprocessed`
-    # interval set.
-    udb.unprocessed.ge(iv.minPt).isErrOr:
-      # Found closest interval `value` which left point does not start before
-      # the left point of `iv`.
-      #   iv:        [-------..
-      #   value:       [-----..
-
-      if value.maxPt <= iv.maxPt:
-        # iv:        [--------------]
-        # value:       [---------]
-        kv = value
-        break body
-
-      if value.minPt <= iv.maxPt:
-        # iv:        [--------------]
-        # value:       [----------------]
-        kv = ItemKeyRange.new(value.minPt, iv.maxPt)
-        break body
-
-      # Get predecessor interval of `value` interval, `jv` say. Note that
-      # there is an overlap of `iv` with some interval from `unprocessed`.
-      # So `jv` exists and the start `jv` is before `iv`.
-      #   iv:        [--------------]
-      #   value:                      [-----]
-      #   jv:   ..---------]
-      let jv = udb.unprocessed.le(value.minPt).expect "Valid interval"
-      kv = ItemKeyRange.new(iv.minPt,jv.maxPt)
-      # break body
-
-  doAssert udb.unprocessed.reduce(kv) == kv.len
-  doAssert udb.borrowed.merge(kv) == kv.len
-  ok(kv)
 
 
 proc commit*(
@@ -170,23 +120,6 @@ proc overCommit*(
   ##
   if minKey <= maxKey:
     discard udb.unprocessed.reduce(minKey, maxKey)
-
-
-proc append*(udb: UnprocItemKeys; minKey, maxKey: ItemKey) =
-  ## Add some unprocessed range while leaving the borrowed queue untouched.
-  ## The argument range will be curbed by existing `borrowed` entries (so
-  ## it might become a set of ranges.)
-  ##
-  if minKey <= maxKey:
-    # Otherwise `maxKey` would be internally adjusted to `max(minKey,maxKey)`
-    if 0 < udb.borrowed.covered(minKey, maxKey):
-      # Must Reduce by currenty borrowed block numbers
-      for key in minKey.to(UInt256) .. maxKey.to(UInt256):
-        # So this is piecmeal adding to unprocessed numbers
-        if udb.borrowed.covered(ItemKey(key), ItemKey(key)).isZero:
-          discard udb.unprocessed.merge(ItemKey(key), ItemKey(key))
-    else:
-      discard udb.unprocessed.merge(minKey, maxKey)
 
 
 func avail*(udb: UnprocItemKeys): Opt[UInt256] =

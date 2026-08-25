@@ -49,7 +49,7 @@ proc setupComputation(params: CallParams): Computation =
   computation
 
 func sysCallGasUsed(c: Computation): GasInt =
-  c.msg.gas - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft
+  c.msg.gas - c.gasMeter.executionGasLeft - c.gasMeter.stateGasLeft
 
 proc finishRunningComputation(c: Computation, T: type): T =
   let

@@ -29,6 +29,11 @@ const
   emptyRawBal = seq[RawBlockAccessList].default
     ## Shortcut
 
+type
+  FetchBalResult* = tuple
+    bal: seq[RawBlockAccessList]
+    peerID: Hash
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -71,7 +76,7 @@ template fetchBlockAccessLists*(
   ##
   ## Fetch BALs from the network.
   ##
-  var bodyRc = Result[seq[RawBlockAccessList],ErrorType].err(EGeneric)
+  var bodyRc = Result[FetchBalResult,ErrorType].err(EGeneric)
   block body:
     doAssert startInx < request.blockHashes.len
 
@@ -85,7 +90,7 @@ template fetchBlockAccessLists*(
     if nReq <= 0:
       debug sendInfo & " empty request", peer, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bal
-      bodyRc = typeof(bodyRc).ok(emptyRawBal)
+      bodyRc = typeof(bodyRc).ok((emptyRawBal,Hash 0))
       break body
 
     if not buddy.only.supportsBal:
@@ -94,7 +99,7 @@ template fetchBlockAccessLists*(
     let startHash {.inject.} = request.blockHashes[startInx]
     trace sendInfo, peer, startHash=startHash.short, nReq,
       nErrors=buddy.nErrors.fetch.bal,
-      startInx, nHashes=request.blockHashes.len
+      `startInx`=startInx, nHashes=request.blockHashes.len
 
     let
       req = BlockAccessListsRequest(
@@ -143,7 +148,7 @@ template fetchBlockAccessLists*(
           nErrors=buddy.nErrors.fetch.bal
 
         if not buddy.only.supportsBal:              # borrowed from `eth`?
-          buddy.only.failedReq.ethBalHash.put(peerID, zeroHash32)
+          buddy.ctx.pool.failedEthBalId.put(peerID, zeroHash32)
         break body                                  # return err()
 
     let
@@ -163,7 +168,7 @@ template fetchBlockAccessLists*(
     if b.len == 0 or nReq < b.len:
       if not buddy.only.supportsBal:              # borrowed from `eth`?
         # Cannot do musch but ignoring this `eth` peer for `startHash`
-        buddy.only.failedReq.ethBalHash.put(peerID, startHash)
+        buddy.ctx.pool.failedEthBalId.put(peerID, zeroHash32)
       elif nReq < b.len:
         # Bogus peer returning additional rubbish
         buddy.balFetchRegisterError(forceZombie=true)
@@ -192,12 +197,12 @@ template fetchBlockAccessLists*(
         buddy.maybeSlowPeerError(elapsed, startHash)
       else:
         # Request did not fail
-        buddy.only.failedReq.ethBalHash.del(peerID) # reset error count
+        buddy.ctx.pool.failedEthBalId.del(peerID)   # reset error count
 
     trace recvInfo, peer, startHash=startHash.short, nReq, nResp=b.len, ela,
       state, nErrors=buddy.nErrors.fetch.bal
 
-    bodyRc = typeof(bodyRc).ok(b)
+    bodyRc = typeof(bodyRc).ok((b,peerID))
 
   bodyRc
 

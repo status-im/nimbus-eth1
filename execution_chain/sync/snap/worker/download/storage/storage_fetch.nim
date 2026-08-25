@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos, minilru, stew/interval_set],
   ../../../../wire_protocol,
-  ../../[helpers, state_db, worker_desc],
+  ../../[helpers, worker_desc],
   ./storage_helpers
 
 type
@@ -28,7 +28,7 @@ proc registerPeerError(buddy: SnapPeerRef; root: StateRoot; slowPeer=false) =
   ## Do not repeat the same time-consuming failed request for the same state
   ## root.
   buddy.stoFetchRegisterError(slowPeer)
-  buddy.only.failedReq.stateRoot.put(root,0u8)
+  buddy.only.failedReq.stateRoot = root
 
 proc maybeSlowPeerError(buddy: SnapPeerRef; ela: Duration; root: StateRoot) =
   ## Register slow response, definitely not fast enough
@@ -46,7 +46,7 @@ proc getStorage(
   ## Wrapper around `getStorageRanges()`
   let start = Moment.now()
 
-  buddy.only.failedReq.stateRoot.peek(StateRoot(req.rootHash)).isErrOr:
+  if buddy.only.failedReq.stateRoot == StateRoot(req.rootHash):
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
   var resp: StorageRangesPacket
@@ -140,9 +140,9 @@ template fetchStorage*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.stoFetchRegisterError()
-        of EUnusedForFetch:
+        of EMissingEthContext, EUnusedForFetch:
           # Not allowed here -- internal error
-          raiseAssert "Unexpected error " & $rc.error.excp
+          raiseAssert "Unexpected fetch error " & $rc.error.excp
 
         # Debug message for other errors
         debug recvInfo & " error", peer, root, nReqAcc, reqSto, nReqSto,
@@ -293,3 +293,14 @@ template fetchStorage*(
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
+
+proc xxx*(
+    buddy: SnapPeerRef;
+    stateRoot: StateRoot;
+    accounts: seq[ItemKey];
+    ivReq: ItemKeyRange;
+      ): Future[FetchStorageResult]
+      {.async: (raises: []).} =
+  let data = buddy.fetchStorage(stateRoot, accounts, ivReq).valueOr:
+    return err(error)
+  return ok(data)

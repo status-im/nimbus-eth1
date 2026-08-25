@@ -45,7 +45,7 @@ func validateVersionedHashed(txs: openArray[Transaction],
   true
 
 # REMOVE WHEN DROPPING JSON-RPC
-template validateVersionMethod(apiVersion, com, timestamp, payloadVersion) =
+template validateVersionMethod(apiVersion, com, timestamp, payloadVersion, payload) =
   if apiVersion == execution_types.Version.V5:
     if not com.isAmsterdamOrLater(timestamp):
       raise unsupportedFork("newPayloadV5 expect payload timestamp fall within Amsterdam")
@@ -56,7 +56,7 @@ template validateVersionMethod(apiVersion, com, timestamp, payloadVersion) =
 
   elif apiVersion == execution_types.Version.V4:
     if not com.isPragueOrLater(timestamp):
-      raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague")
+      raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague or Osaka")
     if payloadVersion != execution_types.Version.V3:
       raise invalidParams("newPayload" & $apiVersion &
       " expect ExecutionPayloadV3" &
@@ -69,6 +69,89 @@ template validateVersionMethod(apiVersion, com, timestamp, payloadVersion) =
       raise invalidParams("newPayload" & $apiVersion &
       " expect ExecutionPayloadV3" &
       " but got ExecutionPayload" & $payloadVersion)
+
+  if com.isAmsterdamOrLater(timestamp):
+    # TODO: probably blockAccessList field should be a seq[byte] instead of Opt[seq[byte]]
+    if payload.blockAccessList.isNone or payload.blockAccessList.value.len == 0:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing blockAccessList")
+
+    if payload.slotNumber.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing slotNumber")
+
+    if payload.excessBlobGas.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing excessBlobGas")
+
+    if payload.blobGasUsed.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing blobGasUsed")
+
+    if payload.withdrawals.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing withdrawals")
+
+  elif com.isPragueOrLater(timestamp):
+    if payload.excessBlobGas.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing excessBlobGas")
+
+    if payload.blobGasUsed.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing blobGasUsed")
+
+    if payload.withdrawals.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing withdrawals")
+
+  elif com.isCancunOrLater(timestamp):
+    if payload.excessBlobGas.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing excessBlobGas")
+
+    if payload.blobGasUsed.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing blobGasUsed")
+
+    if payload.withdrawals.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing withdrawals")
+
+  elif com.isShanghaiOrLater(timestamp):
+    if payload.withdrawals.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": payload missing withdrawals")
+
+  elif payloadVersion != execution_types.Version.V1:
+    raise invalidParams("if timestamp is earlier than Shanghai, " &
+      "payload must be ExecutionPayloadV1, got ExecutionPayload" & $payloadVersion)
+
+  if payload.withdrawals.isSome:
+    if not com.isShanghaiOrLater(EthTime payload.timestamp):
+      raise invalidParams("newPayload" & $apiVersion &
+        ": withdrawals appear before Shanghai")
+
+  if payload.blobGasUsed.isSome:
+    if not com.isCancunOrLater(EthTime payload.timestamp):
+      raise invalidParams("newPayload" & $apiVersion &
+        ": blobGasUsed appear before Cancun")
+
+  if payload.excessBlobGas.isSome:
+    if not com.isCancunOrLater(EthTime payload.timestamp):
+      raise invalidParams("newPayload" & $apiVersion &
+        ": excessBlobGas appear before Cancun")
+
+  # TODO: probably blockAccessList field should be a seq[byte] instead of Opt[seq[byte]]
+  if payload.blockAccessList.isSome and payload.blockAccessList.value.len > 0:
+    if not com.isAmsterdamOrLater(EthTime payload.timestamp):
+      raise invalidParams("newPayload" & $apiVersion &
+        ": blockAccessList appear before Amsterdam")
+
+  if payload.slotNumber.isSome:
+    if not com.isAmsterdamOrLater(EthTime payload.timestamp):
+      raise invalidParams("newPayload" & $apiVersion &
+        ": slotNumber appear before Amsterdam")
 
 template validateForkTimestamp(fork, com, timestamp) =
   case fork
@@ -100,39 +183,42 @@ template validatePayload(apiVersion, payloadVersion, payload) =
   if payloadVersion >= execution_types.Version.V2:
     if payload.withdrawals.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        "withdrawals is expected from execution payload")
+        ": withdrawals is expected from execution payload")
 
   if apiVersion >= execution_types.Version.V3 or payloadVersion >= execution_types.Version.V3:
     if payload.blobGasUsed.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        "blobGasUsed is expected from execution payload")
+        ": blobGasUsed is expected from execution payload")
     if payload.excessBlobGas.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        "excessBlobGas is expected from execution payload")
+        ": excessBlobGas is expected from execution payload")
 
   if apiVersion >= execution_types.Version.V5 or payloadVersion >= execution_types.Version.V4:
     if payload.blockAccessList.isNone:
       raise invalidParams("newPayload" & $apiVersion &
-        "blockAccessList is expected from execution payload")
+        ": blockAccessList is expected from execution payload")
+    if payload.slotNumber.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": slotNumber is expected from execution payload")
 
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
-func validateExecutionRequest(blockHash: Hash32,
+func validateExecutionRequest(
             requests: openArray[seq[byte]], fork: EngineFork):
               Opt[PayloadStatus] {.raises: [ApplicationError].} =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
       raise invalidParams("newPayload" & $fork &
-        ": " & "Execution request data must not be empty")
+        ": Execution request data must not be empty")
 
     let requestType = request[0]
     if requestType.int <= previousRequestType:
       raise invalidParams("newPayload" & $fork &
-        ": " & "Execution requests are not in strictly ascending order")
+        ": Execution requests are not in strictly ascending order")
 
     if request.len == 1:
       raise invalidParams("newPayload" & $fork &
-        ": " & "Empty data for request type " & $requestType)
+        ": Empty data for request type " & $requestType)
 
     if fork == EngineFork.Amsterdam:
       if requestType notin [
@@ -141,18 +227,18 @@ func validateExecutionRequest(blockHash: Hash32,
         CONSOLIDATION_REQUEST_TYPE,
         BUILDER_DEPOSIT_REQUEST_TYPE,
         BUILDER_EXIT_REQUEST_TYPE]:
-        return Opt.some(invalidStatus(blockHash,
+        return Opt.some(invalidStatus(
           "newPayload" & $fork & ": Invalid execution request type" & $requestType))
     else:
       if requestType notin [
         DEPOSIT_REQUEST_TYPE,
         WITHDRAWAL_REQUEST_TYPE,
         CONSOLIDATION_REQUEST_TYPE]:
-        return Opt.some(invalidStatus(blockHash,
+        return Opt.some(invalidStatus(
           "newPayload" & $fork & ": Invalid execution request type" & $requestType))
 
     previousRequestType = requestType.int
-  err()
+  Opt.none(PayloadStatus)
 
 proc processNewPayload(ben: BeaconEngineRef,
                         fork: EngineFork,
@@ -183,7 +269,7 @@ proc processNewPayload(ben: BeaconEngineRef,
       raise invalidParams("newPayload" & $fork &
         ": executionRequests is expected from execution payload")
 
-    let res = validateExecutionRequest(blockHash, executionRequests.value, fork)
+    let res = validateExecutionRequest(executionRequests.value, fork)
     if res.isSome:
       return res.value
 
@@ -204,9 +290,10 @@ proc processNewPayload(ben: BeaconEngineRef,
     return validStatus(blockHash)
 
   # If this block was rejected previously, keep rejecting it
-  let res = ben.checkInvalidAncestor(blockHash, blockHash)
-  if res.isSome:
-    return res.value
+  block:
+    let res = ben.checkInvalidAncestor(blockHash, blockHash)
+    if res.isSome:
+      return res.value
 
   # If the parent is missing, we - in theory - could trigger a sync, but that
   # would also entail a reorg. That is problematic if multiple sibling blocks
@@ -254,18 +341,19 @@ proc processNewPayload(ben: BeaconEngineRef,
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
 
-  let vres = await chain.queueImportBlock(blk, blockAccessList)
-  if vres.isErr:
-    warn "Error importing block",
-      number = header.number,
-      hash = blockHash.short,
-      parent = header.parentHash.short,
-      error = vres.error.msg
-    ben.setInvalidAncestor(header, blockHash)
-    let
-      txFrame = chain.latestTxFrame()
-      blockHash = latestValidHash(txFrame, parent, ttd)
-    return invalidStatus(blockHash, vres.error.msg)
+  block:
+    let res = await chain.queueImportBlock(blk, blockAccessList)
+    if res.isErr:
+      warn "Error importing block",
+        number = header.number,
+        hash = blockHash.short,
+        parent = header.parentHash.short,
+        error = res.error.msg
+      ben.setInvalidAncestor(header, blockHash)
+      let
+        txFrame = chain.latestTxFrame()
+        blockHash = latestValidHash(txFrame, parent, ttd)
+      return invalidStatus(blockHash, res.error.msg)
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 
@@ -305,7 +393,7 @@ proc newPayload*(ben: BeaconEngineRef,
     payloadVersion = payload.version
 
   validatePayload(apiVersion, payloadVersion, payload)
-  validateVersionMethod(apiVersion, com, timestamp, payloadVersion)
+  validateVersionMethod(apiVersion, com, timestamp, payloadVersion, payload)
 
   if apiFork >= EngineFork.Cancun:
     if versionedHashes.isNone:
@@ -320,15 +408,16 @@ proc newPayload*(ben: BeaconEngineRef,
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        return toWeb3(invalidStatus(Opt.none(Hash32),
-          "Failed to decode block in payload: " & e.msg))
+        return toWeb3(invalidStatus("newPayload" & $apiVersion &
+          ": Failed to decode block in payload: " & e.msg))
     blockAccessList =
       try:
         blockAccessList(payload)
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        raise invalidParams("Failed to decode BAL in payload: " & e.msg)
+        raise invalidParams("newPayload" & $apiVersion &
+          ": Failed to decode BAL in payload: " & e.msg)
 
   toWeb3(await processNewPayload(ben, apiFork, blk, blockAccessList,
     payload.blockHash, versionedHashes, executionRequests))

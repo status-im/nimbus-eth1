@@ -11,7 +11,7 @@
 {.used.}
 
 import
-  std/times,
+  std/[times, cpuinfo],
   unittest2,
   ../../execution_chain/db/aristo/[
     aristo_compute,
@@ -22,10 +22,11 @@ import
   ]
 
 suite "Aristo compute benchmark":
-  const 
-    NUM_THREADS = 16
-    NUM_FRAMES = 1000
+  const
+    NUM_FRAMES = 500
     NUM_ACCOUNTS_PER_FRAME = 10000
+
+  let NUM_THREADS = countProcessors()
 
   setup:
     let db = AristoDbRef.init()
@@ -35,29 +36,29 @@ suite "Aristo compute benchmark":
     for i in 0 ..< NUM_ACCOUNTS_PER_FRAME:
       check:
         txFrame.mergeAccount(
-          cast[Hash32](i), 
+          cast[Hash32](i),
           AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
     txFrame.checkpoint(1, skipSnapshot = true)
 
     let batch = db.putBegFn()[]
     db.persist(batch, txFrame)
     check db.putEndFn(batch).isOk()
-    
+
     txFrame = db.baseTxFrame()
-    
+
     for n in 1 .. NUM_FRAMES:
       txFrame = db.txFrameBegin(txFrame)
 
-      let 
+      let
         startIdx = NUM_ACCOUNTS_PER_FRAME * n
         endIdx = startIdx + NUM_ACCOUNTS_PER_FRAME
 
       for i in startIdx ..< endIdx:
         check:
           txFrame.mergeAccount(
-            cast[Hash32](i * i), 
+            cast[Hash32](i * i),
             AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
-      
+
       txFrame.checkpoint(1, skipSnapshot = false)
 
   test "Serial benchmark - skipLayers = false":
@@ -67,7 +68,7 @@ suite "Aristo compute benchmark":
     let before = cpuTime()
     check txFrame.computeStateRoot(skipLayers = false).isOk()
     let elapsed = cpuTime() - before
-    
+
     debugEcho "Serial benchmark (skipLayers = false) cpu time: ", elapsed
 
   test "Parallel benchmark - skipLayers = false":
@@ -77,6 +78,6 @@ suite "Aristo compute benchmark":
     let before = cpuTime()
     check txFrame.computeStateRoot(skipLayers = false).isOk()
     let elapsed = cpuTime() - before
-    
+
     debugEcho "Parallel benchmark (skipLayers = false) cpu time: ", elapsed
 

@@ -53,7 +53,7 @@ type
   LogResult* = object
     logEntries*: seq[Log]
     gasUsed*: GasInt
-    blockRegularGasUsed*: GasInt
+    blockExecutionGasUsed*: GasInt
     blockStateGasUsed*: GasInt
     txFee*: UInt256
 
@@ -64,8 +64,7 @@ type
   VoidResult* = object
 
   IntrinsicGas* = object
-    regular*: GasInt
-    state*: GasInt
+    execution*: GasInt
     floorDataGas*: GasInt
 
 template isCreate(tx: Transaction): bool =
@@ -86,8 +85,7 @@ func selfTransfer(tx: Transaction, sender: Address): bool =
 const
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7623 = 10
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 = 16
-  TX_VALUE_COST = 4244
-  TRANSFER_LOG_COST = 1756
+  TX_VALUE_COST = 6000
 
 func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit: GasInt, sender: Address): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
@@ -97,30 +95,26 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
     fork = ToEVMFork[hardFork]
 
   var
-    regularGas = if hardFork >= Amsterdam: TX_BASE_COST_2780
-                 else: TX_BASE_COST
-    stateGas = 0.GasInt
-    floorDataGas = regularGas
+    executionGas = if hardFork >= Amsterdam: TX_BASE_COST_2780
+                   else: TX_BASE_COST
+    floorDataGas = executionGas
     tokens = 0
     accessListBytes = 0
-    recipientRegularGas = 0
+    recipientExecutionGas = 0
 
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
   if call.isCreate:
     if hardFork >= Amsterdam:
-      recipientRegularGas += gasFees[fork][GasTXCreate]
-      if call.value.isZero.not:
-        recipientRegularGas += TRANSFER_LOG_COST
+      recipientExecutionGas += gasFees[fork][GasTXCreate]
     else:
-      regularGas += gasFees[fork][GasTXCreate]
+      executionGas += gasFees[fork][GasTXCreate]
     if hardFork >= Shanghai:
-      regularGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
+      executionGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
   elif not call.selfTransfer(sender):
     if hardFork >= Amsterdam:
-      recipientRegularGas += COLD_ACCOUNT_ACCESS_8038
+      recipientExecutionGas += COLD_ACCOUNT_ACCESS_8038
       if call.value.isZero.not:
-        recipientRegularGas += TRANSFER_LOG_COST
-        recipientRegularGas += TX_VALUE_COST
+        recipientExecutionGas += TX_VALUE_COST
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
   let
@@ -130,43 +124,42 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
 
   for b in call.input:
     if b == 0:
-      regularGas += gasZero
+      executionGas += gasZero
       tokens += byteZeroToken
     else:
-      regularGas += gasNonZero
+      executionGas += gasNonZero
       tokens += 4
 
   # EIP-2930 (Berlin) intrinsic gas for transaction access list.
   if hardFork >= Berlin:
     if hardFork >= Amsterdam:
       for account in call.accessList:
-        regularGas += ACCESS_LIST_ADDRESS_COST_8038
-        regularGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST_8038
+        executionGas += ACCESS_LIST_ADDRESS_COST_8038
+        executionGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST_8038
         # Total byte count of addresses(20 bytes each) and storage keys (32 bytes each) in the access list.
         accessListBytes += 20 + account.storageKeys.len * 32
     else:
       for account in call.accessList:
-        regularGas += ACCESS_LIST_ADDRESS_COST_2930
-        regularGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST_2930
+        executionGas += ACCESS_LIST_ADDRESS_COST_2930
+        executionGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST_2930
         # Total byte count of addresses(20 bytes each) and storage keys (32 bytes each) in the access list.
         accessListBytes += 20 + account.storageKeys.len * 32
 
   if hardFork >= Prague:
     if hardFork >= Amsterdam:
-      regularGas += recipientRegularGas
-      floorDataGas += recipientRegularGas
-      regularGas += REGULAR_PER_AUTH_BASE_COST * call.authorizationList.len
+      executionGas += recipientExecutionGas
+      floorDataGas += recipientExecutionGas
+      executionGas += EXECUTION_PER_AUTH_BASE_COST * call.authorizationList.len
       # EIP-7981: Increase Access List Cost
       let floorTokensInAccessList = accessListBytes * 4
       tokens += floorTokensInAccessList
-      regularGas += TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 * floorTokensInAccessList
+      executionGas += TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 * floorTokensInAccessList
       floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7976
     else:
-      regularGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
+      executionGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
       floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7623
 
   IntrinsicGas(
-    regular: regularGas.GasInt,
-    state: stateGas,
+    execution: executionGas.GasInt,
     floorDataGas: floorDataGas.GasInt,
   )

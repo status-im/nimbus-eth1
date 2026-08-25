@@ -11,13 +11,19 @@
 ## Flat leaf tables and range lists
 ## --------------------------------
 ##
-## * Unprocessed leaf ranges
-##   + key33: <col, key>
-##   + value: <root, ranges>
+## * Unprocessed account leaf ranges
+##   + key33: <col>
+##   + value: <number, ranges>
 ##   where
 ##   + col:       `cMissingIntv`
-##   + key:       `Hash32`, zero for accounts, account path for storage slots
-##   * root:      `Hash32`, state root or storage root
+##   + number:    `BlockNumber`, of header containing state root
+##   * ranges:    `ItemKeyRangeSet`
+##
+## * Unprocessed storage leaf ranges
+##   + key33: <col, key>
+##   + value: <ranges>
+##   where
+##   + col:       `cMissingIntv`, same column as above without key
 ##   * ranges:    `ItemKeyRangeSet`
 ##
 ## * Missing contract codes
@@ -56,7 +62,6 @@
 
 import
   pkg/[eth/common, results, stew/interval_set],
-  ../../state_db,
   ./[cache_api1, cache_api33, cache_api65,
      cache_const, cache_desc, cache_iter, cache_rlp]
 
@@ -100,22 +105,6 @@ proc updAccMissingIntv*(
     return err("missing record cannot be updated")
   let res = data.decodeAccMissingIntvData().valueOr:
     return err(error)
-  db.put1(cMissingIntv, encodeAccMissingIntvData(number, res.ranges))
-
-proc addAccMissingIntv*(
-    db: CacheDbRef;
-    number: BlockNumber;
-    iv: ItemKeyRange;
-      ): PutResult =
-  let data = db.get1(cMissingIntv).valueOr:
-    return err(error)
-  var res: CacheAccMissingIntvData
-  if data.len == 0:
-    res.ranges = ItemKeyRangeSet.init()
-  else:
-    res = data.decodeAccMissingIntvData().valueOr:
-      return err(error)
-  discard res.ranges.merge iv
   db.put1(cMissingIntv, encodeAccMissingIntvData(number, res.ranges))
 
 proc delAccMissingIntv*(

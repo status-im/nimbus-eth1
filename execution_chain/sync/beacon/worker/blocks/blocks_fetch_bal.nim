@@ -72,7 +72,7 @@ proc getBals(
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
   let
-    req = BlockAccessListsRequest(blockHashes: req.blockHashes[startInx ..< ^1])
+    req = BlockAccessListsRequest(blockHashes: req.blockHashes[startInx .. ^1])
   var
     resp: BlockAccessListsPacket
   try:

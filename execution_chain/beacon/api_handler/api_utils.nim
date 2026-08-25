@@ -129,6 +129,9 @@ proc invalidStatus*(validHash: Opt[common.Hash32], msg: string): PayloadStatus =
 proc invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatus =
   invalidStatus(Opt.some(validHash), msg)
 
+proc invalidStatus*(msg: string): PayloadStatus =
+  invalidStatus(Opt.none(Hash32), msg)
+
 proc invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
   PayloadStatus(
     status: uint8(PayloadStatusCode.INVALID),

@@ -12,6 +12,7 @@
 
 import
   unittest2,
+  ssz_serialization/bitseqs,
   beacon_chain/spec/engine_types as engine_ssz_types
 
 func digestOf(b: byte): Digest =

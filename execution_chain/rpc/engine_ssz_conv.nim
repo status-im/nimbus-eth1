@@ -70,6 +70,19 @@ func toSsz*(w: WithdrawalV1): engine_ssz_types.Withdrawal =
     address: w.address,
     amount: Gwei(uint64(w.amount)))
 
+func toSsz*(state: ForkchoiceStateV1): engine_ssz_types.ForkchoiceState =
+  engine_ssz_types.ForkchoiceState(
+    head_block_hash: toDigest(state.headBlockHash),
+    safe_block_hash: toDigest(state.safeBlockHash),
+    finalized_block_hash: toDigest(state.finalizedBlockHash))
+
+# assumes the caller has already validated that `b.len == CELLS_PER_EXT_BLOB div 8`
+func toSsz*(b: openArray[byte]): BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB] =
+  var res: BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB]
+  for i in 0 ..< b.len:
+    res.bytes[i] = b[i]
+  res
+
 func toForkedPayloadAttributes*(attrs: web3et.PayloadAttributes): ForkedPayloadAttributes =
   case attrs.version
   of web3et.Version.V1:

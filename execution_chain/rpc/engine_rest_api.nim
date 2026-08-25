@@ -113,7 +113,8 @@ func checkOctetStream*(contentBody: ContentBody): Result[void, RestApiResponse] 
   ok()
 
 proc decodeForkchoiceUpdate(fork: EngineFork, data: seq[byte]):
-    Result[tuple[fcState: ForkchoiceState, attrs: Opt[ForkedPayloadAttributes]], RestApiResponse] =
+    Result[tuple[fcState: ForkchoiceState, attrs: Opt[ForkedPayloadAttributes],
+      custodyColumns: Optional[BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB]]], RestApiResponse] =
   try:
     case fork
     of EngineFork.Paris:
@@ -122,28 +123,28 @@ proc decodeForkchoiceUpdate(fork: EngineFork, data: seq[byte]):
         if body.payload_attributes.isSome:
           Opt.some(ForkedPayloadAttributes(fork: fork, parisData: body.payload_attributes.get))
         else: Opt.none(ForkedPayloadAttributes)
-      ok((body.forkchoice_state, attrs))
+      ok((body.forkchoice_state, attrs, optNone(BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB])))
     of EngineFork.Shanghai:
       let body = SSZ.decode(data, ForkchoiceUpdateShanghai)
       let attrs =
         if body.payload_attributes.isSome:
           Opt.some(ForkedPayloadAttributes(fork: fork, shanghaiData: body.payload_attributes.get))
         else: Opt.none(ForkedPayloadAttributes)
-      ok((body.forkchoice_state, attrs))
+      ok((body.forkchoice_state, attrs, optNone(BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB])))
     of EngineFork.Cancun, EngineFork.Prague, EngineFork.Osaka:
       let body = SSZ.decode(data, ForkchoiceUpdateCancun)
       let attrs =
         if body.payload_attributes.isSome:
           Opt.some(ForkedPayloadAttributes(fork: fork, cancunData: body.payload_attributes.get))
         else: Opt.none(ForkedPayloadAttributes)
-      ok((body.forkchoice_state, attrs))
+      ok((body.forkchoice_state, attrs, optNone(BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB])))
     of EngineFork.Amsterdam:
       let body = SSZ.decode(data, ForkchoiceUpdateAmsterdam)
       let attrs =
         if body.payload_attributes.isSome:
           Opt.some(ForkedPayloadAttributes(fork: fork, amsterdamData: body.payload_attributes.get))
         else: Opt.none(ForkedPayloadAttributes)
-      ok((body.forkchoice_state, attrs))
+      ok((body.forkchoice_state, attrs, body.custody_columns))
   except CatchableError:
     err(sszDecodeErrorResponse())
 
@@ -156,11 +157,11 @@ proc handleForkchoiceUpdate(ben: BeaconEngineRef, request: HttpRequestRef,
     return invalidRequestResponse("missing request body")
   checkOctetStream(contentBody.get()).isOkOr:
     return error
-  let (fcState, attrs) =
+  let (fcState, attrs, custodyColumns) =
     decodeForkchoiceUpdate(fork, contentBody.get().data).valueOr:
       return error
   try:
-    let resp = await ben.forkchoiceUpdated(fork, fcState, attrs)
+    let resp = await ben.forkchoiceUpdated(fork, fcState, attrs, custodyColumns)
     RestApiResponse.response(
       SSZ.encode(resp), Http200, "application/octet-stream")
   except ApplicationError as e:

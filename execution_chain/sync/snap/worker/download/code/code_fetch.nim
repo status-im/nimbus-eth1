@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos, minilru, stew/interval_set],
   ../../../../wire_protocol,
-  ../../[helpers, state_db, worker_desc],
+  ../../[helpers, worker_desc],
   ./code_helpers
 
 type
@@ -120,9 +120,9 @@ template fetchCodes*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.cdeFetchRegisterError()
-        of EUnusedForFetch:
+        of EMissingEthContext, EUnusedForFetch:
           # Not allowed here -- internal error
-          raiseAssert "Unexpected error " & $rc.error.excp
+          raiseAssert "Unexpected fetch error " & $rc.error.excp
 
         # Debug message for other errors
         debug recvInfo & " error", peer, first, nReqCodes,

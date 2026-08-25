@@ -35,7 +35,7 @@ func wdRoot(list: openArray[WithdrawalV1]): Hash32 =
 
 func wdRoot(x: Opt[seq[WithdrawalV1]]): Opt[Hash32] =
   if x.isNone: Opt.none(Hash32)
-  else: Opt.some(wdRoot x.get)
+  else: Opt.some(wdRoot x.value)
 
 func txRoot(list: openArray[Web3Tx]): Hash32 =
   orderedTrieRoot(list)
@@ -44,7 +44,7 @@ func balHash*(bal: Opt[seq[byte]]): Opt[Hash32] =
   if bal.isNone():
     Opt.none(Hash32)
   else:
-    Opt.some(keccak256(bal.get))
+    Opt.some(keccak256(bal.value))
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -71,25 +71,6 @@ func executionPayload*(blk: Block, bal: Opt[BlockAccessListRef]): ExecutionPaylo
     excessBlobGas: w3Qty blk.header.excessBlobGas,
     blockAccessList: w3BlockAccessList bal,
     slotNumber   : w3Qty blk.header.slotNumber,
-  )
-
-func executionPayloadV1V2*(blk: Block): ExecutionPayloadV1OrV2 =
-  ExecutionPayloadV1OrV2(
-    parentHash   : blk.header.parentHash,
-    feeRecipient : blk.header.coinbase,
-    stateRoot    : blk.header.stateRoot,
-    receiptsRoot : blk.header.receiptsRoot,
-    logsBloom    : blk.header.logsBloom,
-    prevRandao   : blk.header.prevRandao,
-    blockNumber  : w3Qty blk.header.number,
-    gasLimit     : w3Qty blk.header.gasLimit,
-    gasUsed      : w3Qty blk.header.gasUsed,
-    timestamp    : w3Qty blk.header.timestamp,
-    extraData    : w3ExtraData blk.header.extraData,
-    baseFeePerGas: blk.header.baseFeePerGas.get(0.u256),
-    blockHash    : blk.header.computeRlpHash,
-    transactions : w3Txs blk.txs,
-    withdrawals  : w3Withdrawals blk.withdrawals,
   )
 
 func blockHeader*(p: ExecutionPayload,
@@ -120,15 +101,6 @@ func blockHeader*(p: ExecutionPayload,
     requestsHash   : requestsHash,
     blockAccessListHash: balHash p.blockAccessList,
     slotNumber     : u64(p.slotNumber),
-  )
-
-func blockBody*(
-  p: ExecutionPayload
-): BlockBody {.gcsafe, raises: [RlpError].} =
-  BlockBody(
-    uncles      : @[],
-    transactions: ethTxs p.transactions,
-    withdrawals : ethWithdrawals p.withdrawals,
   )
 
 template blockAccessList*(

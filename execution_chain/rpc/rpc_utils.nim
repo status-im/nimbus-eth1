@@ -109,7 +109,8 @@ proc populateTransactionObject*(tx: Transaction,
                                 optionalHash: Opt[Hash32] = Opt.none(Hash32),
                                 optionalNumber: Opt[uint64] = Opt.none(uint64),
                                 optionalTimestamp: Opt[EthTime] = Opt.none(EthTime),
-                                txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject =
+                                txIndex: Opt[uint64] = Opt.none(uint64),
+                                chainId: Opt[UInt256] = Opt.none(UInt256)): TransactionObject =
   result = TransactionObject()
   result.`type` = Opt.some Quantity(tx.txType)
   result.blockHash = optionalHash
@@ -130,18 +131,23 @@ proc populateTransactionObject*(tx: Transaction,
   result.v = Quantity(tx.V)
   result.r = tx.R
   result.s = tx.S
-  result.maxFeePerGas = Opt.some Quantity(tx.maxFeePerGas)
-  result.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
 
   if tx.txType >= TxEip2930:
     result.chainId = Opt.some(tx.chainId)
     result.accessList = Opt.some(tx.accessList)
+  else:
+    if chainId.isSome:
+      result.chainId = chainId
 
-  if tx.txType >= TxEip4844:
+  if tx.txType >= TxEip1559:
+    result.maxFeePerGas = Opt.some Quantity(tx.maxFeePerGas)
+    result.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
+
+  if tx.txType == TxEip4844:
     result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
     result.blobVersionedHashes = Opt.some(tx.versionedHashes)
 
-  if tx.txType >= TxEip7702:
+  if tx.txType == TxEip7702:
     result.authorizationList = Opt.some(tx.authorizationList)
 
 proc populateBlockObject*(blockHash: Hash32,

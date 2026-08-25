@@ -19,6 +19,7 @@
 {.push raises: [].}
 
 import
+  ../../opts,
   ../kvt_desc,
   ./rocks_db
 
@@ -31,12 +32,15 @@ export
 
 proc init*(
     T: type KvtDbRef;
+    opts: DbOptions;
     baseDb: RocksDbInstanceRef;
     cf: static[KvtCFs] = KvtGeneric): T =
   ## Generic constructor for `RocksDb` backend
   ##
   let db = rocksDbKvtBackend(baseDb, cf)
-  db.txRef = KvtTxRef(db: db)
+  db.initInstance(
+    threadSafeCaches = opts.threadSafeCaches,
+    blockHashesLruSize = BLOCK_HASH_LRU_SIZE)
   db
 
 # ------------------------------------------------------------------------------

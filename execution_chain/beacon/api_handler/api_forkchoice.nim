@@ -13,6 +13,7 @@ import
   std/[typetraits],
   results,
   chronos,
+  ssz_serialization/bitseqs,
   eth/common/[eth_types_json_serialization, headers, hashes, times],
   web3/[conversions, execution_types],
   json_rpc/errors,
@@ -24,7 +25,7 @@ import
   ./api_utils
 
 import beacon_chain/spec/engine_types as engine_ssz_types
-from ../../rpc/engine_ssz_conv import toWeb3, toForkedPayloadAttributes
+from ../../rpc/engine_ssz_conv import toWeb3, toForkedPayloadAttributes, toSsz
 
 logScope:
   topics = "beacon engine"
@@ -61,14 +62,14 @@ template validateVersion(attr, com, apiVersion) =
         raise invalidAttr("forkChoiceUpdatedV2 with beacon root field is invalid after Cancun")
     elif com.isShanghaiOrLater(timestamp):
       if version < execution_types.Version.V2:
-        raise invalidParams("forkChoiceUpdated" & $apiVersion &
+        raise invalidAttr("forkChoiceUpdated" & $apiVersion &
           " doesn't support payloadAttributesV1 when Shanghai is activated")
       if version > execution_types.Version.V2:
         raise invalidAttr("if timestamp is Shanghai or later," &
           " payloadAttributes must be PayloadAttributesV2")
     else:
       if version != execution_types.Version.V1:
-        raise invalidParams("if timestamp is earlier than Shanghai," &
+        raise invalidAttr("if timestamp is earlier than Shanghai," &
           " payloadAttributes must be PayloadAttributesV1")
 
 template validateAttributes(fork, com, timestamp) =
@@ -99,13 +100,17 @@ template validateHeaderTimestamp(header, com, isParis) =
 
 proc processForkchoiceUpdate(ben: BeaconEngineRef,
                         isParis: bool,
-                        headHash, safeBlockHash, finalizedBlockHash: Hash32,
-                        attrsOpt: Opt[ForkedPayloadAttributes]):
+                        fcState: engine_ssz_types.ForkchoiceState,
+                        attrsOpt: Opt[ForkedPayloadAttributes],
+                        custodyColumns: engine_ssz_types.Optional[BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB]]):
                           Future[engine_ssz_types.ForkchoiceUpdateResponse]
                             {.async: (raises: [CancelledError, ApplicationError]).} =
   let
     com   = ben.com
     chain = ben.chain
+    headHash = toHash32(fcState.head_block_hash)
+    safeBlockHash = toHash32(fcState.safe_block_hash)
+    finalizedBlockHash = toHash32(fcState.finalized_block_hash)
 
   if headHash == zeroHash32:
     warn "Forkchoice requested update to zero hash"
@@ -154,6 +159,13 @@ proc processForkchoiceUpdate(ben: BeaconEngineRef,
     com.headerChainUpdate(header, finalizedBlockHash)
 
     return simpleFCU(PayloadStatusCode.SYNCING)
+
+  if custodyColumns.isSome:
+    # https://github.com/ethereum/execution-apis/blob/742d45db810b31265c8d3c075af324953330d1ed/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
+    if not com.isAmsterdamOrLater(header.timestamp):
+      raise invalidParams("custodyColumns must not appear before Amsterdam")
+
+    # TODO: Add custody set expansion and contraction handler
 
   validateHeaderTimestamp(header, com, isParis)
 
@@ -264,7 +276,8 @@ proc processForkchoiceUpdate(ben: BeaconEngineRef,
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: execution_types.Version,
                         update: ForkchoiceStateV1,
-                        attrsOpt: Opt[PayloadAttributes]):
+                        attrsOpt: Opt[PayloadAttributes],
+                        custodyColumns = Opt.none(seq[byte])):
                           Future[ForkchoiceUpdatedResponse]
                             {.async: (raises: [CancelledError, ApplicationError]).} =
   var forkedAttrsOpt = Opt.none(ForkedPayloadAttributes)
@@ -273,18 +286,24 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     validateVersion(attrs, ben.com, apiVersion)
     forkedAttrsOpt = Opt.some(toForkedPayloadAttributes(attrs))
 
+  var custodyColumnsSsz = engine_ssz_types.optNone(BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB])
+  if custodyColumns.isSome:
+    if custodyColumns.value.len != 16:
+      raise invalidParams("custodyColumns length must be 16 bytes")
+    custodyColumnsSsz = engine_ssz_types.optSome(toSsz(custodyColumns.value))
+
   toWeb3(await processForkchoiceUpdate(ben, apiVersion == execution_types.Version.V1,
-    update.headBlockHash, update.safeBlockHash, update.finalizedBlockHash, forkedAttrsOpt))
+    toSsz(update), forkedAttrsOpt, custodyColumnsSsz))
 
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         fork: EngineFork,
                         fcState: engine_ssz_types.ForkchoiceState,
-                        attrsOpt: Opt[ForkedPayloadAttributes]):
+                        attrsOpt: Opt[ForkedPayloadAttributes],
+                        custodyColumns = engine_ssz_types.optNone(BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB])):
                           Future[engine_ssz_types.ForkchoiceUpdateResponse]
                             {.async: (raises: [CancelledError, ApplicationError]).} =
   if attrsOpt.isSome:
     validateAttributes(fork, ben.com, EthTime(attrsOpt.value.timestamp))
 
   await processForkchoiceUpdate(ben, fork == EngineFork.Paris,
-    toHash32(fcState.head_block_hash), toHash32(fcState.safe_block_hash),
-    toHash32(fcState.finalized_block_hash), attrsOpt)
+    fcState, attrsOpt, custodyColumns)

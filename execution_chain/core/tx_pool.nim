@@ -119,7 +119,8 @@ export
   removeTx,
   removeExpiredTxs,
   getBlobAndProofV1,
-  getBlobAndProofV2
+  getBlobAndProofV2,
+  getBlobCellAndProofV1
 
 # addTx(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError]
 # addTx(xp: TxPoolRef, tx: Transaction): Result[void, TxError]

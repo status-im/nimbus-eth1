@@ -73,21 +73,23 @@ proc forkchoiceUpdatedV3*(client: RpcClient,
 
 proc forkchoiceUpdatedV4*(client: RpcClient,
       update: ForkchoiceStateV1,
-      payloadAttributes = Opt.none(PayloadAttributesV4)):
+      payloadAttributes = Opt.none(PayloadAttributesV4),
+      custodyColumns = Opt.none(FixedBytes[16])):
         Result[ForkchoiceUpdatedResponse, string] =
   wrapTrySimpleRes:
-    client.engine_forkchoiceUpdatedV4(update, payloadAttributes)
+    client.engine_forkchoiceUpdatedV4(update, payloadAttributes, custodyColumns)
 
 proc forkchoiceUpdated*(client: RpcClient,
                         version: Version,
                         update: ForkchoiceStateV1,
-                        attr = Opt.none(PayloadAttributes)):
+                        attr = Opt.none(PayloadAttributes),
+                        custodyColumns = Opt.none(FixedBytes[16])):
                           Result[ForkchoiceUpdatedResponse, string] =
   case version
   of Version.V1: return client.forkchoiceUpdatedV1(update, attr.V1)
   of Version.V2: return client.forkchoiceUpdatedV2(update, attr.V2)
   of Version.V3: return client.forkchoiceUpdatedV3(update, attr.V3)
-  of Version.V4: return client.forkchoiceUpdatedV4(update, attr.V4)
+  of Version.V4: return client.forkchoiceUpdatedV4(update, attr.V4, custodyColumns)
   of Version.V5, Version.V6: discard
 
 proc getPayloadV1*(client: RpcClient, payloadId: Bytes8): Result[ExecutionPayloadV1, string] =

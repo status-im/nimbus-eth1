@@ -30,8 +30,8 @@ import
   ./aristo_desc/desc_backend
 
 when compileOption("threads"):
-  import taskpools, ../../concurrency/lru, ../../concurrency/readwritelock
-  export taskpools, readwritelock, lru
+  import taskpools, ../../concurrency/lru
+  export taskpools, lru
 
 # Not auto-exporting backend
 export
@@ -101,11 +101,6 @@ type
       ## used to order data by age when working with layers.
       ## -1 = stored in database, where relevant though typically should be
       ## compared with the base layer level instead.
-
-    when compileOption("threads"):
-      lock*: ReadWriteLock
-        ## A read-write lock used to support thread safe reads and writes to the
-        ## database from multiple threads.
 
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
@@ -263,15 +258,6 @@ iterator stack*(tx: AristoTxRef, stopAtSnapshot = false): AristoTxRef =
 
   while frames.len > 0:
     yield frames.pop()
-
-proc deltaAtLevel*(db: AristoTxRef, level: int): AristoTxRef =
-  if level < db.db.txRef.level:
-    nil
-  else:
-    for frame in db.rstack():
-      if frame.level == level:
-        return frame
-    nil
 
 proc getStaticLevel*(db: AristoDbRef): int =
   # Retrieve the level where we can expect to find a leaf, updating it based on
