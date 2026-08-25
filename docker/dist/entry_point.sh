@@ -46,12 +46,14 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
 
   make -j$(nproc) init
 
+  # "build/generate_makefile" is a host tool, so it has to be built before
+  # NIMFLAGS starts pointing Nim at the mingw cross compiler.
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
     USE_CACHED_ROCKSDB=1 \
-    deps-common
+    deps-common build/generate_makefile
 
   make \
     -j$(nproc) \
@@ -168,12 +170,14 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
 
   make -j$(nproc) init
 
+  # "build/generate_makefile" is a host tool, so it has to be built before
+  # NIMFLAGS starts pointing Nim at the osxcross compiler.
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
     USE_CACHED_ROCKSDB=1 \
-    deps-common
+    deps-common build/generate_makefile
 
   make \
     -j$(nproc) \
