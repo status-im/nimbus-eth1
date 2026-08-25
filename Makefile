@@ -335,8 +335,10 @@ portal_bridge: | build deps
 # Nimbus Verified Proxy related targets
 
 nimbus_verified_proxy: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) $(NIMC) c -o:build/$@ $(NIM_PARAMS) -d:chronicles_log_level=TRACE nimbus_verified_proxy/nimbus_verified_proxy.nim
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "nimbus_verified_proxy/nimbus_verified_proxy.nim" $(NIM_PARAMS) -d:chronicles_log_level=TRACE && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 nimbus_verified_proxy_test: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
