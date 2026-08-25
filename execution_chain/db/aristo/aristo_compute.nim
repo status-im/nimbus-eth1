@@ -30,7 +30,7 @@ type
     tasksCompleted*: int
     tasksTotal*: int
 
-  ConcurrentVertexBufQueue* = ConcurrentQueue[3, (RootedVertexID, VertexBuf)]
+  ConcurrentVertexBufQueue* = ConcurrentQueue[13, (RootedVertexID, VertexBuf)]
 
   KeyWriteBuf* = SharedSeq[(RootedVertexID, HashKey, uint32)]
 
@@ -378,11 +378,15 @@ proc computeKeyImpl(
         var
           futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
           keyBufs: array[16, KeyWriteBuf]
-          vtxBufQueues: array[16, ConcurrentVertexBufQueue]
+
+        let vtxBufQueues = cast[ptr UncheckedArray[ConcurrentVertexBufQueue]](
+          allocShared0(sizeof(ConcurrentVertexBufQueue) * 16)
+        )
 
         defer:
           for buf in keyBufs.mitems:
             buf.dispose()
+          deallocShared(vtxBufQueues)
 
       # Make sure we have keys computed for each hash
       block keysComputed:
@@ -489,10 +493,13 @@ proc computeKeyImpl(
               continue
 
             if not vtxBufQueues[i].isEmpty():
-              var v: (RootedVertexID, VertexBuf)
-              if vtxBufQueues[i].tryPop(v):
+              var
+                v: (RootedVertexID, VertexBuf)
+                drained = 0
+              while drained < 256 and vtxBufQueues[i].tryPop(v):
                 progressed = true
                 ?batch.putVtxBlob(txRef.db, v[0], v[1].data())
+                inc drained
 
           for i in indexesToRemove:
             runningFutsIndexes.excl(i)
