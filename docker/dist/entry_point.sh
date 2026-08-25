@@ -106,12 +106,19 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
 
   make -j$(nproc) init
 
+  # "build/generate_makefile" is a host tool, so it has to be built before
+  # NIMFLAGS starts pointing Nim at the aarch64 cross compiler.
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
     USE_CACHED_ROCKSDB=1 \
-    deps-common
+    deps-common build/generate_makefile
+
+  # We can't use the "arm64.linux.gcc.exe" cross-compilation config vars here,
+  # because Nim ignores those when "--compileOnly" is given (which is what
+  # "compile_nim_program.sh" does), silently falling back to the host "gcc".
+  CROSS_NIMFLAGS="--cpu:arm64 --gcc.exe=${CC} --gcc.linkerexe=${CXX} --gcc.cpp.exe=${CXX} --gcc.cpp.linkerexe=${CXX}"
 
   # -j1 will disable parallel build and prevent OOM in github CI
   make \
@@ -119,7 +126,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     CXX="${CXX}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --passC:-fPIC --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    NIMFLAGS="${NIMFLAGS_COMMON} ${CROSS_NIMFLAGS} --passC:-fPIC --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     USE_CACHED_ROCKSDB=1 \
     nimbus nimbus_verified_proxy
@@ -129,7 +136,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     CXX="${CXX}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} -d:disableLTO --cpu:arm64 --passC:-fPIC --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    NIMFLAGS="${NIMFLAGS_COMMON} -d:disableLTO ${CROSS_NIMFLAGS} --passC:-fPIC --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     USE_CACHED_ROCKSDB=1 \
     libverifproxy
