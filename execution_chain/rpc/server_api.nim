@@ -11,7 +11,7 @@
 
 import
   chronicles,
-  std/sequtils,
+  std/[sequtils, strutils],
   stint,
   web3/[conversions, eth_api_types],
   eth/common/[base, transaction_utils],
@@ -225,6 +225,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       data: Address, blockTag: BlockTag
     ): Quantity {.raises: [ValueError].} =
       ## Returns the number of transactions ak.s. nonce sent from an address.
+      ## With the "pending" tag the sender's gap-free pooled transactions are
+      ## counted as well.
+      if blockTag.kind == bidAlias and blockTag.alias.toLowerAscii == "pending":
+        return Quantity(api.txPool.getPendingNonce(data))
+
       let
         txFrame = api.frameFromTag(blockTag).valueOr:
           raise newException(ValueError, error)
@@ -620,7 +625,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       ##
       ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
       ## quantity: the transaction index position.
-      ## NOTE : "pending" blockTag is not supported.
       let index = uint64(quantity)
       let blk = api.blockFromTag(quantityTag, noHash = true).valueOr:
         return nil
