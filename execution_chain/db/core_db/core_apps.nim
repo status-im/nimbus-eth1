@@ -255,12 +255,11 @@ proc persistTransactions*(
     blockNumber: BlockNumber;
     txRoot: Hash32;
     transactions: openArray[Transaction];
-      ) =
+      ): seq[Hash32] {.discardable.} =
   const
     info = "persistTransactions()"
 
-  if transactions.len == 0:
-    return
+  var txHashes = newSeqOfCap[Hash32](transactions.len)
 
   for idx, tx in transactions:
     var encodedTx = rlp.encode(tx)
@@ -269,13 +268,17 @@ proc persistTransactions*(
       blockKey = transactionHashToBlockKey(txHash)
       txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
       key = hashIndexKey(txRoot, idx.uint16)
+
+    txHashes.add txHash
+
     db.putMove(key, encodedTx).isOkOr:
-      warn info, idx, error=($$error)
-      return
+      raiseAssert info & ": " & $$error
+
     var encodedTxKey = rlp.encode(txKey)
     db.putMove(blockKey.toOpenArray, encodedTxKey).isOkOr:
-      trace info, blockKey, error=($$error)
-      return
+      raiseAssert info & ": " & $$error
+
+  move(txHashes)
 
 proc getTransactionByIndex*(
     db: CoreDbTxRef;

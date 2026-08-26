@@ -98,7 +98,9 @@ endif
 	t8n \
 	t8n_test \
 	evmstate \
-	evmstate_test
+	evmstate_test \
+	stateless_guest_baremetal \
+	stateless_execution_test
 
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
@@ -335,8 +337,10 @@ portal_bridge: | build deps
 # Nimbus Verified Proxy related targets
 
 nimbus_verified_proxy: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) $(NIMC) c -o:build/$@ $(NIM_PARAMS) -d:chronicles_log_level=TRACE nimbus_verified_proxy/nimbus_verified_proxy.nim
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "nimbus_verified_proxy/nimbus_verified_proxy.nim" $(NIM_PARAMS) -d:chronicles_log_level=TRACE && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 nimbus_verified_proxy_test: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
@@ -402,9 +406,12 @@ nimbus_verified_proxy_wasm_debug: | build deps
 stateless_guest_baremetal: | build deps
 	$(ENV_SCRIPT) $(NIMC) c --hints:off --cpu:riscv64 --os:any --mm:arc -d:useMalloc -d:chronicles_enabled:off -d:keccakCacheEnabled:false -d:senderCacheEnabled:false -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace --compileOnly --genScript "execution_chain/stateless/stateless_guest.nim"
 
+# Two runs: the full suite with standard flags, then the guest specific test
+# with flags closer to the zkVM guest.
+# TODO: add `--threads:off` here, but this causes still a mismatched stateroot
 stateless_execution_test: | build deps
 	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
-	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) --mm:arc -d:useMalloc -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
+	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) --mm:arc -d:useMalloc -d:chronicles_enabled:off -d:keccakCacheEnabled:false -d:senderCacheEnabled:false -u:metrics --stackTrace:off -d:disable_libbacktrace -o:build/$@_guest "tests/test_stateless/test_stateless_execution_guest.nim"
 
 # EEST standalone targets - binary to run individual test vector files
 eest_engine: | build deps

@@ -534,7 +534,8 @@ proc validateBlock(
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  c.processBlock(parent, txFrame, blk, blockAccessList, blkHash, finalized).isOkOr:
+  let txHashes = c.processBlock(
+      parent, txFrame, blk, blockAccessList, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -545,8 +546,8 @@ proc validateBlock(
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame)
 
-  for i, tx in blk.transactions:
-    c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
+  for i, txHash in txHashes:
+    c.txRecords[txHash] = (blkHash, uint64(i))
 
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
