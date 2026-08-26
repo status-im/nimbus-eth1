@@ -486,7 +486,7 @@ proc rpcMain*() =
       # Nothing pooled for the signer: "pending" is the head-state nonce.
       check pendingEmpty == head
 
-      let tx = env.makeTx(acc.privateKey, zeroAddress, 1.u256, 30_000_000_000'u64)
+      let tx = env.makeTx(acc.privateKey, Opt.some(zeroAddress), 1.u256, 30_000_000_000'u64)
       check tx.nonce == AccountNonce(head)
       doAssert env.txPool.addTx(tx).isOk
 
