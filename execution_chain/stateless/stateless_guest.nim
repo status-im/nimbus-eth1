@@ -47,3 +47,13 @@ proc run_stateless_guest*(data: openArray[byte]): seq[byte] =
     return SSZ.encode(FAILED_STATELESS_OUTPUT)
 
   SSZ.encode(verify_stateless_new_payload(input))
+
+when isMainModule:
+  # Guest program entry point: read the schema-prefixed SSZ `StatelessInput`,
+  # validate it, write back the SSZ `StatelessValidationResult`.
+  import ./zkvm_io
+
+  proc main() =
+    writeOutput(run_stateless_guest(readInput().toOpenArray()))
+
+  main()
