@@ -231,6 +231,17 @@ proc delStoMissingIntv*(
   ok()
 
 
+proc hasFlatSlot*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[bool] =
+  var data = db.hasFlatSlot(accPath).valueOr:
+    error info.failedToFetch "any storage slot", accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok(move data)
+
 proc getFlatSlot*(
     db: CacheDbRef;
     accPath: Hash32;
@@ -370,6 +381,17 @@ proc nMissingBlob*(
     nCodes.inc
   ok(move nCodes)
 
+
+proc hasFlatCode*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[bool] =
+  var data = db.hasFlatCode(accPath).valueOr:
+    error info.failedToFetch "contract code", accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok(move data)
 
 proc getFlatCode*(
     db: CacheDbRef;

@@ -275,6 +275,15 @@ iterator walkFlatAcc*(db: CacheDbRef): WalkFlatAccData =
 
 # -------------
 
+proc hasFlatSlot*(db: CacheDbRef, accPath: Hash32): BoolResult =
+  for (key1,_,value) in db.adb.colWalk65 key65(cFlatSlot, accPath):
+    if key1 != accPath:
+      break
+    value.decodeFlatSlotData().isOkOr:
+      return err(error)
+    return ok(true)
+  ok(false)
+
 proc hasFlatSlot*(db: CacheDbRef, accPath, slotKey: Hash32): BoolResult =
   let data = db.get65(cFlatSlot, accPath, slotKey).valueOr:
     return err(error)

@@ -20,17 +20,32 @@ logScope:
 type
   LogNoise* = enum
     minimal
+    smart
     full
 
   FlatStatsWalk = tuple
-    accLeaf: uint
-    accCode: uint
-    dirtyCode: uint
-    dirtyFullStore: uint
-    cleanFullStore: uint
-    stoTrie: uint
-    dirtyStore: uint
-    stoLeaf: uint
+    nAcc: int
+    nDirtyCode: int
+    nDirtyStorage: int
+    nStoSubMpt: int
+    nPartStoRange: int
+    nFullStoRange: int
+    nEmptyStoRange: int
+    nStoSlot: int
+    nContrCode: int
+    nCodeBlob: int
+    nMissCode: int
+
+# ------------------------------------------------------------------------------
+# Private helper
+# ------------------------------------------------------------------------------
+
+func isFullRange(itrs: ItemKeyRangeSet): bool =
+  # Defensive encoding of a full range check. Solely testing `total; == 0`
+  # leaves room for the case that the range is empty which is an illegal
+  # situation but it can handled with savely.
+  itrs.total == 0 and                              # => 0 or 2^256
+  itrs.chunks == 1                                 # => one intv => full MPT
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -49,72 +64,100 @@ proc nMissPartStoRanges(db: CacheDbRef, info: static[string]): (int,int) =
     if 0 < w.error.len:
       error info & ": Error walking flat storage ranges", error=w.error
       return (-1,-1)
-    if w.data.ranges.total == 0 and                 # 0 mod 2^256 => 0 or 2^256
-       w.data.ranges.chunks == 0:                   # empty => 0, full MPT
-      result[0].inc                                 # zero range
+    if w.data.ranges.isFullRange():
+      result[0].inc                                 # full rng => empty sub-MPT
     else:
       result[1].inc                                 # partial range
 
-proc nCode(db: CacheDbRef, info: static[string]): int =
+proc nFlatBlobs(db: CacheDbRef, info: static[string]): int =
   let n = db.nFlatCode(info).valueOr:
     return -1
   n.int
 
-proc nMissCode(db: CacheDbRef, info: static[string]): int =
+proc nFlatMissBlobs(db: CacheDbRef, info: static[string]): int =
   let n = db.nMissingBlob(info).valueOr:
     return -1
   n.int
 
+proc nFlatSlots(db: CacheDbRef, info: static[string]): int =
+  let n = db.nFlatSlot(info).valueOr:
+    return -1
+  n.int
 
-proc statsWalk(db: CacheDbRef, info: static[string]): Opt[FlatStatsWalk] =
+proc statsWalk(
+    db: CacheDbRef;
+    info: static[string];
+    shallowCheck = false;
+      ): Opt[FlatStatsWalk] =
   var stats: FlatStatsWalk
   for w in db.walkFlatAcc():
     if 0 < w.error.len:
       error info & ": Error walking accounts", accPath=w.accPath.toStr,
-        nAccSoFar=stats.accLeaf, `error`=w.error
+        nAccSoFar=stats.nAcc, `error`=w.error
       return err()
 
-    stats.accLeaf.inc
+    stats.nAcc.inc
     if w.data.dirtyCode:
-      stats.dirtyCode.inc
-    if w.data.account.codeHash != EMPTY_CODE_HASH:
-      stats.accCode.inc
-
+      stats.nDirtyCode.inc
     if w.data.dirtyStorage:
-      stats.dirtyStore.inc
+      stats.nDirtyStorage.inc
+
+    if w.data.account.codeHash != EMPTY_CODE_HASH:
+      stats.nContrCode.inc
+
+      if ?db.hasMissingBlob(w.accPath, info):
+        stats.nMissCode.inc
+        if not w.data.dirtyCode:
+          error info & ": Error dirtyCode should be set for missing code",
+            accPath=w.accPath.toStr
+      else:
+        stats.nCodeBlob.inc
+        if w.data.dirtyCode:
+          if shallowCheck:
+            error info & ": Error dirtyCode unexpected",
+              accPath=w.accPath.toStr
+          elif ?db.hasFlatCode(w.accPath, info):
+            error info & ": Error dirtyCode set for exixting code",
+              accPath=w.accPath.toStr
+          else:
+            error info & ": Error missing contract code on cache DB",
+              accPath=w.accPath.toStr
+
     if w.data.account.storageRoot != EMPTY_ROOT_HASH:
-      let stoState = (?db.getStoMissingIntv(w.accPath, info)).valueOr:
-        error info & ": Error missing storage state", accPath=w.accPath.toStr
-        return err()
-      if stoState.ranges.total == 0 and             # 0 mod 2^256 => 0 or 2^256
-       stoState.ranges.chunks == 0:                 # empty => 0, full MPT
-        if w.data.dirtyStorage:
-          stats.dirtyFullStore.inc
+      stats.nStoSubMpt.inc
+
+      let rc = ?db.getStoMissingIntv(w.accPath, info)
+      if rc.isOk:                                   # complete sub-MPT?
+        if rc.value.ranges.isFullRange():
+          stats.nFullStoRange.inc
         else:
-          stats.cleanFullStore.inc
-      stats.stoTrie.inc
-      var nSlots = 0u
-      for w in db.walkFlatSlot(w.accPath):
-        if 0 < w.error.len:
-          error info & ": Error walking storage slots (per account)",
-            accPath=w.accPath.toStr, nSlotsSoFar=nSlots,
-            slotKey=w.slotKey.toStr, `error`=w.error
-          return err()
-        nSlots.inc
-      stats.stoLeaf += nSlots
+          stats.nPartStoRange.inc
+        if not w.data.dirtyStorage:
+          error info & ": Error dirtyStorage ust be set for partial sub-MPT",
+            accPath=w.accPath.toStr
+      else:
+        stats.nEmptyStoRange.inc
+        if w.data.dirtyStorage:
+          if shallowCheck:
+            error info & ": Error dirtyStorage unexpected",
+              accPath=w.accPath.toStr
+          elif ?db.hasFlatSlot(w.accPath, info):
+            error info & ": Error dirtyStorage set for complete sub-MPT",
+              accPath=w.accPath.toStr
+          else:
+            error info & ": Error missing storage slots on cache DB",
+              accPath=w.accPath.toStr
 
-  var nSlots = 0u
-  for w in db.walkFlatSlot():
-    if 0 < w.error.len:
-      error info & ": Error walking storage slots (globally)",
-        accPath=w.accPath.toStr, nSlotsSoFar=nSlots, slotKey=w.slotKey.toStr,
-        `error`=w.error
-      return err()
-    nSlots.inc
-
-  if nSlots != stats.stoLeaf:
-    error info & ": Storage slots counts differ (globally vs per account)",
-      nSlotsGlobally=nSlots, nSlotsPerAccount=stats.stoLeaf
+      if not shallowCheck:
+        var nSlots = 0
+        for w in db.walkFlatSlot(w.accPath):
+          if 0 < w.error.len:
+            error info & ": Error walking storage slots (per account)",
+              accPath=w.accPath.toStr, nSlotsSoFar=nSlots,
+              slotKey=w.slotKey.toStr, `error`=w.error
+            return err()
+          nSlots.inc
+        stats.nStoSlot += nSlots
 
   ok(stats)
 
@@ -125,42 +168,110 @@ proc statsWalk(db: CacheDbRef, info: static[string]): Opt[FlatStatsWalk] =
 proc statsStateLog*(
     ctx: SnapCtxRef;
     info: static[string];
-    logNoise = LogNoise.full;
+    logNoise = LogNoise.smart;
       ) =
   ## Collect statistics
   const
-    info = info & ": Accounts state stats"
+    info2 = info & ": Download state stats"
   let
     start = Moment.now()
     db = ctx.pool.cacheDB
-    stats = db.statsWalk(info).valueOr: FlatStatsWalk.default
     (number, accMissRngPc, nAccMissRngChunk) = db.getAccStats info
-    nCleanStoMpt = (stats.stoTrie - stats.dirtyStore)
-    nDirtyStoMpt = stats.dirtyStore
-    nCleanCodes = (stats.accCode - stats.dirtyCode)
-    nDirtyCodes = stats.dirtyCode
+    nFlatSlots = db.nFlatSlots info
 
   case logNoise:
   of minimal:
-    let
-      ela = Moment.now() - start
-    debug info, number, accMissRngPC=accMissRngPc.pcStr, nAccMissRngChunk,
-      nAcc=stats.accLeaf, nStoSlots=stats.stoLeaf,
-      nCleanStoMpt, nDirtyStoMpt, nCleanCodes, nDirtyCodes, ela=ela.toStr
+    let stats = db.statsWalk(info, shallowCheck=true).valueOr:
+      chronicles.info info & ": Error collecting stats"
+      return
 
-  of full:
+    debug info2, number, accMissRngPC=accMissRngPc.pcStr, nAccMissRngChunk,
+      nAcc = stats.nAcc,
+
+      nStoMpt = stats.nStoSubMpt,
+      nFullStoMpt = stats.nEmptyStoRange,
+      nPartStoMpt = stats.nPartStoRange,
+      nEmptyStoMpt = stats.nFullStoRange,
+      nStoSlot = nFlatSlots,
+
+      nContrCodes = stats.nContrCode,
+      nCodeBlob = (stats.nContrCode - stats.nDirtyCode),
+      nMissBlob = stats.nDirtyCode,
+
+      ela=(Moment.now() - start).toStr
+
+  of smart, full:
     let
-      (nFullStoMpt, nPartStoMpt) = db.nMissPartStoRanges info
-      nDirtyFullStoMpt = stats.dirtyFullStore
-      nCleanFullStoMpt = stats.cleanFullStore
-      nFullCode = db.nCode info
-      nMissCode = db.nMissCode info
-      ela = Moment.now() - start
-    debug info, number, accMissRngPC=accMissRngPc.pcStr, nAccMissRngChunk,
-      nAcc=stats.accLeaf, nStoSlots=stats.stoLeaf, nFullStoMpt, nPartStoMpt,
-      nCleanStoMpt, nCleanFullStoMpt, nDirtyStoMpt, nDirtyFullStoMpt,
-      nFullCode, nMissCode, nCleanCodes, nDirtyCodes,
-      ela=ela.toStr
+      stats = db.statsWalk(info, shallowCheck=false).valueOr:
+        chronicles.info info & ": Error collecting stats"
+        return
+
+      (nEmptyStoMpt, nPartStoMpt) = db.nMissPartStoRanges info
+      nStoSlot = stats.nStoSlot
+
+      nStoMpt = stats.nStoSubMpt
+      nDirtyStoMpt = stats.nDirtyStorage
+
+      nFullStoRange = stats.nFullStoRange
+      nPartStoRange = stats.nPartStoRange
+      nEmptyStoRange = stats.nEmptyStoRange
+
+      nFlatBlob = db.nFlatBlobs info
+      nFlatMissBlob = db.nFlatMissBlobs info
+      nContrCode = stats.nContrCode
+      nCodeBlob = stats.nCodeBlob
+      nMissBlob = stats.nMissCode
+
+    case logNoise:
+    of smart:
+      if nEmptyStoMpt + nPartStoMpt != nDirtyStoMpt:
+        chronicles.info info & ": Storage sub-MPT counts do not add up",
+          nEmptyStoMpt, nPartStoMpt, nDirtyStoMpt
+
+      if nFullStoRange + nPartStoRange + nEmptyStoRange != nStoMpt:
+        chronicles.info info & ": Storage range sub-MPT counts do not add up",
+          nFullStoRange, nPartStoRange, nEmptyStoRange, nStoMpt
+
+      if nPartStoRange != nPartStoMpt:
+        chronicles.info info & ": Partial storage sub-MPT counts do not match",
+          nPartStoMpt, nPartStoRange
+
+      if nFullStoRange != nEmptyStoMpt:
+        chronicles.info info & ": Empty storage sub-MPT counts do not match",
+          nFullStoRange, nEmptyStoMpt
+
+      if nFlatSlots != nStoSlot:
+        chronicles.info info & ": Storage slot counts do not match",
+          nFlatSlots, nStoSlot
+
+      if nFlatBlob != nCodeBlob:
+        chronicles.info info & ":  Contract code counts counts do not add up",
+          nFlatBlob, nCodeBlob
+
+      if nFlatMissBlob != nMissBlob:
+        chronicles.info info & ":  Missing code counts counts do not add up",
+          nFlatMissBlob, nMissBlob
+
+      debug info2, number, accMissRngPC=accMissRngPc.pcStr, nAccMissRngChunk,
+        nAcc=stats.nAcc,
+
+        nStoMpt, nFullStoMpt=nEmptyStoRange, nPartStoMpt, nEmptyStoMpt,
+        nStoSlot,
+
+        nContrCode, nCodeBlob, nMissBlob,
+        ela=(Moment.now() - start).toStr
+
+    else:
+      debug info2, number, accMissRngPC=accMissRngPc.pcStr, nAccMissRngChunk,
+        nAcc=stats.nAcc,
+
+        nStoMpt, nPartStoMpt, nEmptyStoMpt, nStoSlot,
+        nEmptyStoMpt, nPartStoMpt, nFullStoRange, nPartStoRange, nEmptyStoRange,
+
+        nContrCode, nCodeBlob, nMissBlob,
+        nFlatBlob, nFlatMissBlob,
+
+        ela=(Moment.now() - start).toStr
 
 # ------------------------------------------------------------------------------
 # End
