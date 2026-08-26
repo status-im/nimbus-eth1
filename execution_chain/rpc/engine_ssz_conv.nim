@@ -135,3 +135,18 @@ func toWeb3*(b: engine_ssz_types.BlobAndProofV2): web3eat.BlobAndProofV2 =
   for i in 0 ..< engine_ssz_types.CELLS_PER_EXT_BLOB:
     proofs[i] = web3eat.KzgProof(sszProofs[i].bytes)
   web3eat.BlobAndProofV2(blob: web3eat.Blob(array[131072, byte](b.blob)), proofs: proofs)
+
+func toWeb3*(b: engine_ssz_types.BlobCellsAndProofs): web3eat.BlobCellsAndProofsV1 =
+  var
+    blobCells: seq[seq[byte]]
+    proofs: seq[web3eat.KzgProof]
+  let
+    sszBlobCells = asSeq(b.blob_cells)
+    sszProofs = asSeq(b.proofs)
+  doAssert(sszBlobCells.len == engine_ssz_types.CELLS_PER_EXT_BLOB)
+  doAssert(sszProofs.len == engine_ssz_types.CELLS_PER_EXT_BLOB)
+  for i in 0 ..< engine_ssz_types.CELLS_PER_EXT_BLOB:
+    if sszBlobCells[i].isSome:
+      blobCells.add(@(sszBlobCells[i].get))
+      proofs.add(web3eat.KzgProof(sszProofs[i].get.bytes))
+  web3eat.BlobCellsAndProofsV1(blob_cells: blobCells, proofs: proofs)

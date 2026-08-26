@@ -12,15 +12,15 @@
 import
   std/sequtils,
   results,
-  stew/[bitseqs, assign2],
   json_rpc/errors,
   web3/engine_api_types,
   ../../core/tx_pool,
   ../beacon_engine,
   ./api_utils
 
+import ssz_serialization/bitseqs
 import beacon_chain/spec/engine_types as engine_ssz_types
-from ../../rpc/engine_ssz_conv import toWeb3
+from ../../rpc/engine_ssz_conv import toWeb3, toSsz
 
 proc processGetBlobsV1(ben: BeaconEngineRef,
                versionedHashes: openArray[VersionedHash]):
@@ -68,10 +68,10 @@ proc processGetBlobsV3(ben: BeaconEngineRef,
 
   versionedHashes.mapIt(ben.txPool.getBlobAndProofV2(it))
 
-proc getBlobsV4*(ben: BeaconEngineRef,
+proc processGetBlobsV4(ben: BeaconEngineRef,
                versionedHashes: openArray[VersionedHash],
-               indicesBitarray: seq[byte]):
-                  seq[Opt[BlobCellsAndProofsV1]] =
+               indices: BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB]):
+                  seq[Opt[engine_ssz_types.BlobCellsAndProofs]] =
   # https://github.com/ethereum/execution-apis/blob/742d45db810b31265c8d3c075af324953330d1ed/src/engine/amsterdam.md#engine_getblobsv4
   if versionedHashes.len > 128:
     raise tooLargeRequest("the number of requested blobs is too large")
@@ -80,15 +80,7 @@ proc getBlobsV4*(ben: BeaconEngineRef,
     raise unsupportedFork(
       "getBlobsV4 called before Amsterdam has been activated")
 
-  if indicesBitarray.len != 16:
-    raise invalidParams("indicesBitarray length must be 16 bytes")
-
-  var indices {.noinit.}: BitArray[128]
-  assign(indices.bytes, indicesBitarray)
-
-  versionedHashes.mapIt(
-    ben.txPool.getBlobCellAndProofV1(it, indices)
-  )
+  versionedHashes.mapIt(ben.txPool.getBlobCellAndProofV1(it, indices))
 
 proc getBlobsAndProofsV1*(ben: BeaconEngineRef,
                versionedHashes: openArray[VersionedHash]): BlobsV1Response =
@@ -113,6 +105,15 @@ proc getBlobsAndProofsV3*(ben: BeaconEngineRef,
       else: BlobV3Entry(available: false))
   BlobsV3Response(entries: List[BlobV3Entry, Limit MAX_BLOBS_REQUEST].init(entries))
 
+proc getBlobsAndProofsV4*(ben: BeaconEngineRef,
+               versionedHashes: openArray[VersionedHash],
+               indices: BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB]): BlobsV4Response =
+  let entries = ben.processGetBlobsV4(versionedHashes, indices).mapIt(
+    block:
+      if it.isSome: BlobV4Entry(available: true, contents: it.get)
+      else: BlobV4Entry(available: false))
+  BlobsV4Response(entries: List[BlobV4Entry, Limit MAX_BLOBS_REQUEST].init(entries))
+
 # REMOVE WHEN DROPPING JSON-RPC
 proc getBlobsV1*(ben: BeaconEngineRef,
                versionedHashes: openArray[VersionedHash]):
@@ -136,3 +137,15 @@ proc getBlobsV3*(ben: BeaconEngineRef,
   ben.processGetBlobsV3(versionedHashes).mapIt(
     if it.isSome: Opt.some(toWeb3(it.get))
     else: Opt.none(engine_api_types.BlobAndProofV2))
+
+# REMOVE WHEN DROPPING JSON-RPC
+proc getBlobsV4*(ben: BeaconEngineRef,
+               versionedHashes: openArray[VersionedHash],
+               indicesBitarray: seq[byte]):
+                  seq[Opt[BlobCellsAndProofsV1]] =
+  if indicesBitarray.len != 16:
+    raise invalidParams("indicesBitarray length must be 16 bytes")
+
+  ben.processGetBlobsV4(versionedHashes, toSsz(indicesBitarray)).mapIt(
+    if it.isSome: Opt.some(toWeb3(it.get))
+    else: Opt.none(BlobCellsAndProofsV1))

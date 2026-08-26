@@ -16,8 +16,9 @@ import
   std/[times, tables, typetraits],
   eth/eip1559,
   eth/common/transaction_utils,
-  stew/[sorted_set, bitseqs],
+  stew/sorted_set,
   web3/engine_api_types,
+  beacon_chain/spec/datatypes/deneb,
   ../../common/common,
   ../../evm/state,
   ../../evm/types,
@@ -532,51 +533,47 @@ func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[engine_ssz_types.B
 
   Opt.none(engine_ssz_types.BlobAndProofV2)
 
-proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: BitArray[128]): Opt[BlobCellsAndProofsV1] =
-  type
-    KzgProof = engine_api_types.KzgProof
-    KzgCells = eip4844.KzgCells
+proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash,
+    indices: BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB]):
+      Opt[engine_ssz_types.BlobCellsAndProofs] =
+  type KzgCells = eip4844.KzgCells
 
-  func getNumIndices(indices: BitArray[128]): int =
-    for i in 0..<indices.len:
-      if indices[i]:
-        inc result
-
-  func getCellsAndProofs(indices: BitArray[128],
+  func getCellsAndProofs(indices: BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB],
                          cells: KzgCells,
-                         list: openArray[KzgProof],
-                         index: int,
-                         output: var BlobCellsAndProofsV1) =
+                         list: openArray[engine_api_types.KzgProof],
+                         index: int): engine_ssz_types.BlobCellsAndProofs =
     let
       startIndex = index * engine_ssz_types.CELLS_PER_EXT_BLOB
       endIndex   = startIndex + engine_ssz_types.CELLS_PER_EXT_BLOB
-      numIndices = indices.getNumIndices
-
     doAssert(list.len >= endIndex)
 
-    output.blob_cells = newSeqOfCap[seq[byte]](numIndices)
-    output.proofs = newSeqOfCap[KzgProof](numIndices)
+    var
+      blobCells = newSeq[engine_ssz_types.Optional[array[BYTES_PER_CELL, byte]]](
+        engine_ssz_types.CELLS_PER_EXT_BLOB)
+      proofs = newSeq[engine_ssz_types.Optional[deneb.KzgProof]](
+        engine_ssz_types.CELLS_PER_EXT_BLOB)
     for i in 0..<indices.len:
       if indices[i]:
-        output.blob_cells.add(@(cells[i].bytes))
-        output.proofs.add(list[startIndex + i])
+        blobCells[i] = optSome(cells[i].bytes)
+        proofs[i] = optSome(deneb.KzgProof(bytes: distinctBase(list[startIndex + i])))
+      else:
+        blobCells[i] = optNone(array[BYTES_PER_CELL, byte])
+        proofs[i] = optNone(deneb.KzgProof)
+
+    engine_ssz_types.BlobCellsAndProofs(
+      blob_cells: typeof(default(engine_ssz_types.BlobCellsAndProofs).blob_cells).init(blobCells),
+      proofs: typeof(default(engine_ssz_types.BlobCellsAndProofs).proofs).init(proofs))
 
   xp.blobTab.withValue(v, val):
     let
       np = val.item.pooledTx.blobsBundle
       blob = cast[ptr eip4844.KzgBlob](np.blobs[val.blobIndex].addr)
       cells = computeCells(blob[]).valueOr:
-        return Opt.none(BlobCellsAndProofsV1)
+        return Opt.none(engine_ssz_types.BlobCellsAndProofs)
     if np.wrapperVersion == WrapperVersionEIP7594:
-      var res = Opt.some(BlobCellsAndProofsV1())
-      indicesBitarray.getCellsAndProofs(
-        cells, np.proofs,
-        val.blobIndex,
-        res.value
-      )
-      return res
+      return Opt.some(getCellsAndProofs(indices, cells, np.proofs, val.blobIndex))
 
-  Opt.none(BlobCellsAndProofsV1)
+  Opt.none(engine_ssz_types.BlobCellsAndProofs)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters

@@ -370,6 +370,15 @@ proc decodeBlobsRequest(data: seq[byte]): Result[seq[VersionedHash], RestApiResp
   except CatchableError:
     err(sszDecodeErrorResponse())
 
+proc decodeBlobsV4Request(data: seq[byte]):
+    Result[tuple[hashes: seq[VersionedHash],
+      indices: BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB]], RestApiResponse] =
+  try:
+    let body = SSZ.decode(data, BlobsV4Request)
+    ok((asSeq(body.versioned_hashes).mapIt(toHash32(it)), body.indices_bitarray))
+  except CatchableError:
+    err(sszDecodeErrorResponse())
+
 proc handleBlobsV1(ben: BeaconEngineRef, contentBody: Option[ContentBody]): RestApiResponse =
   if contentBody.isNone:
     return invalidRequestResponse("missing request body")
@@ -409,6 +418,20 @@ proc handleBlobsV3(ben: BeaconEngineRef, contentBody: Option[ContentBody]): Rest
   try:
     RestApiResponse.response(
       SSZ.encode(ben.getBlobsAndProofsV3(hashes)),
+      Http200, "application/octet-stream")
+  except ApplicationError as e:
+    applicationErrorToRest(e)
+
+proc handleBlobsV4(ben: BeaconEngineRef, contentBody: Option[ContentBody]): RestApiResponse =
+  if contentBody.isNone:
+    return invalidRequestResponse("missing request body")
+  checkOctetStream(contentBody.get()).isOkOr:
+    return error
+  let (hashes, indices) = decodeBlobsV4Request(contentBody.get().data).valueOr:
+    return error
+  try:
+    RestApiResponse.response(
+      SSZ.encode(ben.getBlobsAndProofsV4(hashes, indices)),
       Http200, "application/octet-stream")
   except ApplicationError as e:
     applicationErrorToRest(e)
@@ -488,6 +511,10 @@ proc newEngineRestRouter*(ben: BeaconEngineRef): RestRouter =
   router.api2(MethodPost, "/engine/v1/blobs/v3") do (
       contentBody: Option[ContentBody]) -> RestApiResponse:
     handleBlobsV3(ben, contentBody)
+
+  router.api2(MethodPost, "/engine/v1/blobs/v4") do (
+      contentBody: Option[ContentBody]) -> RestApiResponse:
+    handleBlobsV4(ben, contentBody)
 
   router
 
