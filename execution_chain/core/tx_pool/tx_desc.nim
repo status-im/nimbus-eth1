@@ -197,6 +197,19 @@ func excessBlobGas(xp: TxPoolRef): GasInt =
 proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
 
+proc getPendingNonce*(xp: TxPoolRef; account: Address): AccountNonce =
+  ## Next nonce `account` can use once its pooled transactions are mined: the
+  ## head-state nonce advanced over the gap-free run of pooled transactions.
+  ## This is what `eth_getTransactionCount(account, "pending")` returns on
+  ## other clients.
+  var nonce = xp.getNonce(account)
+  let sn = xp.senderTab.getOrDefault(account)
+  if sn.isNil:
+    return nonce
+  while sn.list.eq(nonce).isOk:
+    inc nonce
+  nonce
+
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
     let

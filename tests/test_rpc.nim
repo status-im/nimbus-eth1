@@ -477,6 +477,24 @@ proc rpcMain*() =
       let res = await client.eth_getTransactionCount(signer, blockId(1'u64))
       check res == w3Qty(3'u64)
 
+    test "eth_getTransactionCount pending":
+      let
+        acc = env.am[].getAccount(signer).tryGet()
+        head = await client.eth_getTransactionCount(signer, blockId("latest"))
+        pendingEmpty = await client.eth_getTransactionCount(signer, blockId("pending"))
+
+      # Nothing pooled for the signer: "pending" is the head-state nonce.
+      check pendingEmpty == head
+
+      let tx = env.makeTx(acc.privateKey, zeroAddress, 1.u256, 30_000_000_000'u64)
+      check tx.nonce == AccountNonce(head)
+      doAssert env.txPool.addTx(tx).isOk
+
+      let pending = await client.eth_getTransactionCount(signer, blockId("pending"))
+      check pending == w3Qty(uint64(head) + 1)
+
+      env.txPool.removeTx(tx.computeRlpHash)
+
     test "eth_getBlockTransactionCountByHash":
       let res = await client.eth_getBlockTransactionCountByHash(env.blockHash)
       check res == w3Qty(3'u64)
