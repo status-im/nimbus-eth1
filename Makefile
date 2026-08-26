@@ -408,10 +408,9 @@ stateless_guest_baremetal: | build deps
 
 # Two runs: the full suite with standard flags, then the guest specific test
 # with flags closer to the zkVM guest.
-# TODO: add `--threads:off` here, but this causes still a mismatched stateroot
 stateless_execution_test: | build deps
 	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
-	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) --mm:arc -d:useMalloc -d:chronicles_enabled:off -d:keccakCacheEnabled:false -d:senderCacheEnabled:false -u:metrics --stackTrace:off -d:disable_libbacktrace -o:build/$@_guest "tests/test_stateless/test_stateless_execution_guest.nim"
+	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) --mm:arc -d:useMalloc -d:chronicles_enabled:off -d:keccakCacheEnabled:false -d:senderCacheEnabled:false -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace -o:build/$@_guest "tests/test_stateless/test_stateless_execution_guest.nim"
 
 # EEST standalone targets - binary to run individual test vector files
 eest_engine: | build deps
