@@ -49,26 +49,14 @@ template validateVersionMethod(apiVersion, com, timestamp, payloadVersion, paylo
   if apiVersion == execution_types.Version.V5:
     if not com.isAmsterdamOrLater(timestamp):
       raise unsupportedFork("newPayloadV5 expect payload timestamp fall within Amsterdam")
-    if payloadVersion != execution_types.Version.V4:
-      raise invalidParams("newPayload" & $apiVersion &
-      " expect ExecutionPayloadV4" &
-      " but got ExecutionPayload" & $payloadVersion)
 
   elif apiVersion == execution_types.Version.V4:
     if not com.isPragueOrLater(timestamp):
       raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague or Osaka")
-    if payloadVersion != execution_types.Version.V3:
-      raise invalidParams("newPayload" & $apiVersion &
-      " expect ExecutionPayloadV3" &
-      " but got ExecutionPayload" & $payloadVersion)
 
   elif apiVersion == execution_types.Version.V3:
     if not com.isCancunOrLater(timestamp):
       raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
-    if payloadVersion != execution_types.Version.V3:
-      raise invalidParams("newPayload" & $apiVersion &
-      " expect ExecutionPayloadV3" &
-      " but got ExecutionPayload" & $payloadVersion)
 
   if com.isAmsterdamOrLater(timestamp):
     # TODO: probably blockAccessList field should be a seq[byte] instead of Opt[seq[byte]]
@@ -185,7 +173,7 @@ template validatePayload(apiVersion, payloadVersion, payload) =
       raise invalidParams("newPayload" & $apiVersion &
         ": withdrawals is expected from execution payload")
 
-  if apiVersion >= execution_types.Version.V3 or payloadVersion >= execution_types.Version.V3:
+  if apiVersion >= execution_types.Version.V3:
     if payload.blobGasUsed.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         ": blobGasUsed is expected from execution payload")
@@ -193,7 +181,7 @@ template validatePayload(apiVersion, payloadVersion, payload) =
       raise invalidParams("newPayload" & $apiVersion &
         ": excessBlobGas is expected from execution payload")
 
-  if apiVersion >= execution_types.Version.V5 or payloadVersion >= execution_types.Version.V4:
+  if apiVersion >= execution_types.Version.V5:
     if payload.blockAccessList.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         ": blockAccessList is expected from execution payload")
