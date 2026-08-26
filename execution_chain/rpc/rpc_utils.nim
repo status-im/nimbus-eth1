@@ -124,7 +124,7 @@ proc populateTransactionObject*(tx: Transaction,
   result.hash = tx.computeRlpHash
   result.input = tx.payload
   result.nonce = Quantity(tx.nonce)
-  result.to = Opt.some(tx.destination)
+  result.to = tx.to
   if txIndex.isSome:
     result.transactionIndex = Opt.some(Quantity(txIndex.get))
   result.value = tx.value
