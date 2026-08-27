@@ -114,6 +114,7 @@ proc toTxReceipt(receipt: StoredReceipt,
   let
     contractAddress = genAddress(tx, sender)
     rec = receipt.to(Receipt)
+
   TxReceipt(
     txType: tx.txType,
     root: if rec.isHash: rec.hash else: default(Hash32),

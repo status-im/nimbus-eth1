@@ -95,8 +95,9 @@ proc processTransactions*(
       vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
 
     if not skipReceipts:
-      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
-      vmState.receiptBlooms[txIndex] = calcLogsBloom(vmState.receipts[txIndex].logs)
+      # calc logs bloom first, because makeReceipt will swallow vmState.txLogs
+      vmState.receiptBlooms[txIndex] = calcLogsBloom(vmState.txLogs)
+      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)      
 
   ok()
 

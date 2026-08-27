@@ -32,6 +32,10 @@ export results, call_types
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
+func isError(res: TxResult): bool =
+  res.gasUsed == 0 and
+    res.blockExecutionGasUsed == 0 and
+    res.blockStateGasUsed == 0
 
 proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
@@ -43,6 +47,12 @@ proc commitOrRollbackDependingOnGasUsed(
   # set in the vmState.blockCtx. Again, the EIP-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
+  if tx.txType == TxEip8141 and callResult.isError:
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.rollbackCallFrame()
+    vmState.ledger.rollback(savePoint)
+    return err("invalid frame tx: " & vmState.frameCtx.error)
+
   let gasUsed = callResult.gasUsed
 
   # EIP-8037: block validity is max(blockExecutionGas, blockStateGas) <= gasLimit
@@ -84,26 +94,57 @@ proc commitOrRollbackDependingOnGasUsed(
 
   ok()
 
+func gasReservation(tx: Transaction, intrinsic: IntrinsicGas): (GasInt, GasInt) =
+  if tx.txType != TxEip8141:
+    let
+      stateReservation = tx.gasLimit
+      executionReservation = min(TX_MAX_GAS_LIMIT.GasInt, stateReservation)
+    (executionReservation, stateReservation)
+  else:
+    # The frames' total gas budget in each dimension. The execution
+    # total becomes the grant the frames draw from; frame transactions
+    # declare their state gas budgets explicitly per frame, so the
+    # reservoir model of the regular flow does not apply and the
+    # reservoir is empty.
+    var
+      executionGasGrant = 0.GasInt
+      stateReservation = 0.GasInt
+
+    for frame in tx.frames:
+      executionGasGrant += frame.gasLimit
+      stateReservation += frame.stateGasLimit
+
+    # Explicit budgets make the block reservations exact per
+    # dimension; the execution reservation carries the calldata floor,
+    # which binds the execution dimension.
+    let
+      executionReservation = max(
+        intrinsic.execution + executionGasGrant,
+        intrinsic.floorDataGas
+      )
+    (executionReservation, stateReservation)
+
 template checkBlockGasCapacity*(
     vmState: BaseVMState;
     tx: Transaction;
     intrinsic: IntrinsicGas;
     fail: untyped) =
-  let txGasLimit = tx.gasLimit
 
   if vmState.fork >= FkAmsterdam:
     let
       executionGasAvailable = vmState.blockCtx.gasLimit - vmState.blockExecutionGasUsed
       stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
-      want = min(TX_MAX_GAS_LIMIT.GasInt, txGasLimit)
+      (executionReservation, stateReservation) = gasReservation(tx, intrinsic)
 
-    if want > executionGasAvailable:
-      fail("execution gas used exceeds limit, want: " & $want & ", available: " & $executionGasAvailable)
+    if executionReservation > executionGasAvailable:
+      fail("execution gas used exceeds limit, want: " & $executionReservation & ", available: " & $executionGasAvailable)
 
-    if txGasLimit > stateGasAvailable:
-      fail("state gas used exceeds limit, want: " & $txGasLimit & ", available: " & $stateGasAvailable)
+    if stateReservation > stateGasAvailable:
+      fail("state gas used exceeds limit, want: " & $stateReservation & ", available: " & $stateGasAvailable)
   else:
-    let gasAvailable = vmState.blockCtx.gasLimit - vmState.cumulativeGasUsed
+    let
+      txGasLimit = tx.gasLimit
+      gasAvailable = vmState.blockCtx.gasLimit - vmState.cumulativeGasUsed
     if txGasLimit > gasAvailable:
       fail("gas used exceeds limit, want: " & $txGasLimit & ", available: " & $gasAvailable)
 

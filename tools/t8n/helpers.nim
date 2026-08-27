@@ -174,6 +174,7 @@ proc parseTxJson*(txo: TxObject, chainId: ChainId): Result[Transaction, string] 
     required(sender)
     required(frames)
     required(signatures)
+    required(nonceKeys)
     required(maxPriorityFeePerGas)
     required(maxFeePerGas)
     required(maxFeePerBlobGas)
@@ -289,16 +290,11 @@ func to0xHex(x: UInt256): string =
   "0x" & x.toHex
 
 func `@@`(x: uint64 | uint8 | int64 | int): JsonNode =
-<<<<<<< HEAD
   let
     hex = x.toHex.stripLeadingZeros
     output = if hex.len mod 2 == 0: "0x" & hex
              else: "0x0" & hex
   %(output.toLowerAscii)
-=======
-  let hex = x.toHex.stripLeadingZeros
-  %("0x" & hex.toLowerAscii)
->>>>>>> 0ecd71b88 (Add Frame Transaction parser to t8n)
 
 func `@@`(x: UInt256): JsonNode =
   %("0x" & x.toHex)
@@ -351,16 +347,11 @@ func `@@`(x: Log): JsonNode =
   }
 
 func `@@`(x: FrameReceipt): JsonNode =
-  let
-    gasUsed = %{
-      "execution": @@(x.gasUsed),
-      "state"    : @@(x.stateGasUsed),
-    }
-
   %{
-    "status" : @@(x.status),
-    "gasUsed": gasUsed,
-    "logs"   : @@(x.logs),
+    "status"      : @@(x.status),
+    "gasUsed"     : @@(x.gasUsed),
+    "stateGasUsed": @@(x.stateGasUsed),
+    "logs"        : @@(x.logs),
   }
 
 func `@@`(x: TxReceipt): JsonNode =
@@ -382,10 +373,6 @@ func `@@`(x: TxReceipt): JsonNode =
     result = %{
       "cumulativeGasUsed": @@(x.cumulativeGasUsed),
       "transactionHash"  : @@(x.transactionHash),
-      "contractAddress"  : @@(x.contractAddress),
-      "gasUsed"          : @@(x.gasUsed),
-      "blockHash"        : @@(x.blockHash),
-      "transactionIndex" : @@(x.transactionIndex),
       "payer"            : @@(x.payer),
       "frameReceipts"    : @@(x.frameReceipts),
     }

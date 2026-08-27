@@ -84,6 +84,9 @@ template data*[E](s: SharedSeq[E], asOpenArray: static bool = false): auto =
   else:
     s.toSeq()
 
+template toOpenArray*[E](s: SharedSeq[E], offset: int): openArray[E] =
+  s.data.toOpenArray(offset, s.count - 1)
+  
 proc `[]`*[E](s: SharedSeq[E], i: int): lent E =
   s.data[i]
 

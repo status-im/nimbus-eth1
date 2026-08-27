@@ -84,6 +84,7 @@ type
     sender*    : Opt[Address]
     frames*    : Opt[seq[TransactionFrame]]
     signatures*: Opt[seq[FrameSignature]]
+    nonceKeys* : Opt[seq[UInt256]]
 
   TxList* = seq[Result[Transaction, string]]
 

@@ -113,6 +113,7 @@ func parseTx*(n: Txo, index: Index): Result[Transaction, string] =
     defaultZero(tx.sender, n.sender)
     defaultZero(tx.signatures, n.signatures)
     defaultZero(tx.frames, n.frames)
+    defaultZero(tx.nonceKeys, n.nonceKeys)
     ok(tx)
   else:
     required(tx.gasLimit, n.gasLimit, index.gas)

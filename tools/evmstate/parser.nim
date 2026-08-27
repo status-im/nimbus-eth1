@@ -61,6 +61,7 @@ type
     sender*              : Opt[Address]
     signatures*          : Opt[seq[FrameSignature]]
     frames*              : Opt[seq[TransactionFrame]]
+    nonceKeys*           : Opt[seq[UInt256]]
 
   TxoReceipt* = object
     transactionHash*  : Hash32
