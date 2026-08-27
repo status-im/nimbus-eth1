@@ -243,7 +243,7 @@ proc sstore8038Impl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasI
   if res.creditStateGas > 0:
     c.gasMeter.creditStateGasRefund(res.creditStateGas)
   if res.stateGas > 0:
-    ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
+    ? c.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
 
   c.gasMeter.refundGas(res.gasRefund)
 

@@ -687,6 +687,17 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Log3:           memExpansion `prefix gasLog3`,
           Log4:           memExpansion `prefix gasLog4`,
 
+          # aa: Approve
+          Approve:        memExpansion `prefix gasHalt`,
+
+          # b0s: Frame Transaction Operations
+          TxParam:        fixed GasBase,
+          FrameDataLoad:  fixed GasVeryLow,
+          FrameDataCopy:  memExpansion `prefix gasCopy`,
+          FrameParam:     fixed GasBase,
+          SigParam:       fixed GasBase,
+          SigDataCopy:    memExpansion `prefix gasCopy`,
+
           # e0s
           DupN:           fixed GasVeryLow,
           SwapN:          fixed GasVeryLow,

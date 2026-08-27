@@ -143,6 +143,74 @@ func getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
       return res
     cpt = cpt.parent
 
+template getSignaturesLen*(c: Computation): int =
+  if c.vmState.txCtx.tx.isNil:
+    0
+  else:
+    c.vmState.txCtx.tx.signatures.len
+
+template getSignature*(c: Computation, index: int): ptr FrameSignature =
+  c.vmState.txCtx.tx.signatures[index].addr
+
+template getFramesLen*(c: Computation): int =
+  if c.vmState.txCtx.tx.isNil:
+    0
+  else:
+    c.vmState.txCtx.tx.frames.len
+
+template getFrame*(c: Computation, index: int): ptr TransactionFrame =
+  c.vmState.txCtx.tx.frames[index].addr
+
+func resolveFrameTarget*(c: Computation, frame: ptr TransactionFrame): Address =
+  if frame.target.isNone:
+    return c.vmState.txCtx.tx.sender
+  frame.target.value
+
+template getResolvedSigner*(c: Computation, sigIndex: int): Address =
+  c.vmState.frameCtx.resolvedSigners[sigIndex]
+
+template getFrameStatus*(c: Computation, frameIndex: int): bool =
+  c.vmState.frameCtx.receipts[frameIndex].status
+
+template getFrameGasUsed*(c: Computation, frameIndex: int): GasInt =
+  c.vmState.frameCtx.receipts[frameIndex].gasUsed
+
+template getFrameStateGasUsed*(c: Computation, frameIndex: int): GasInt =
+  c.vmState.frameCtx.receipts[frameIndex].stateGasUsed
+
+template getCurrentFrameIndex*(c: Computation): int =
+  c.vmState.frameCtx.currentFrameIndex
+
+template getMaxCost*(c: Computation): GasInt =
+  c.vmState.frameCtx.maxCost
+
+template getTransaction*(c: Computation): ptr Transaction =
+  c.vmState.txCtx.tx
+
+template senderApproved*(c: Computation): bool =
+  c.vmState.frameCtx.senderApproved
+
+template senderApproved*(c: Computation, val: bool) =
+  c.vmState.frameCtx.senderApproved = val
+
+template payer*(c: Computation): Opt[common.Address] =
+  c.vmState.frameCtx.payer
+
+template payer*(c: Computation, address: common.Address) =
+  c.vmState.frameCtx.payer = Opt.some(address)
+
+func chargeFrameStateGas*(c: Computation, amount: GasInt, reason: string): EvmResultVoid =
+  if c.vmState.frameCtx.stateGasLeft < amount:
+    return err(gasErr(OutOfGas))
+  c.vmState.frameCtx.stateGasLeft -= amount
+  ok()
+
+func chargeStateGas*(c: Computation, amount: GasInt, reason: string): EvmResultVoid =
+  if c.vmState.frameCtx.isSome:
+    c.chargeFrameStateGas(amount, reason)
+  else:
+    c.gasMeter.chargeStateGas(amount, reason)
+
 func setCode*(c: Computation, code = CodeBytesRef(nil)) =
   # If we call setCode when c.stack already set to something,
   # it means c.code has been set before.
@@ -305,7 +373,7 @@ proc writeContract*(c: Computation) =
       c.gasMeter.consumeGas(codeHashGas, reason = "Code hash gas").isOkOr:
         break writeContractCode
 
-      c.gasMeter.chargeStateGas(codeDepositStateGas, reason = "Deposit state gas").isOkOr:
+      c.chargeStateGas(codeDepositStateGas, reason = "Deposit state gas").isOkOr:
         break writeContractCode
     else:
       let

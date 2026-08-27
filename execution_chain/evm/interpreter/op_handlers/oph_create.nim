@@ -80,7 +80,7 @@ proc execSubCreate(c: Computation; childMsg: Message;
   if c.fork >= FkAmsterdam:
     newAccountCharged = not c.accountExistsOrAlive(child.msg.contractAddress)
     if newAccountCharged:
-      c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "Create op new account").isOkOr:
+      c.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "Create op new account").isOkOr:
         child.dispose()
         return err(error)
 

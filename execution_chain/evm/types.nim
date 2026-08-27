@@ -11,7 +11,8 @@
 {.push raises: [].}
 
 import
-  "."/[stack, memory, code_stream, evm_errors],
+  eth/common/addresses,
+  ./[stack, memory, code_stream, evm_errors],
   ./interpreter/[gas_costs, op_codes],
   ./transient_storage,
   ../db/ledger,
@@ -43,12 +44,23 @@ type
     blobBaseFee*: UInt256
     tx*         : ptr Transaction
 
+  FrameContext* = object
+    resolvedSigners*  : seq[Address]
+    receipts*         : seq[FrameReceipt]
+    payer*            : Opt[addresses.Address]
+    currentFrameIndex*: int
+    maxCost*          : GasInt
+    stateGasLeft*     : GasInt
+    senderApproved*   : bool
+    isSome*           : bool
+
   BaseVMState* = ref object of RootObj
     com*              : CommonRef
     ledger*           : LedgerRef
     parent*           : Header
     blockCtx*         : BlockContext
     txCtx*            : TxContext
+    frameCtx*         : FrameContext
     flags*            : set[VMFlag]
     fork*             : EVMFork
     hardFork*         : HardFork

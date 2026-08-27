@@ -14,7 +14,7 @@ import
   eth/common/transactions,
   results,
   ../common/common,
-  ../evm/[types, state, evm_errors, internals],
+  ../evm/[types, state, evm_errors, internals, computation],
   ../db/ledger,
   ../core/[eip4844, eip7702, eip8037],
    ./call_types
@@ -105,7 +105,7 @@ proc setDelegation*(params: CallParams, c: Computation): EvmResultVoid =
       continue
 
     if not ledger.accountExists(authority):
-      ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "setDelegation new account")
+      ? c.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "setDelegation new account")
 
     if authority notin writtenAccounts:
       ? c.gasMeter.consumeGas(ACCOUNT_WRITE_8038, "setDelegation account write")
@@ -120,7 +120,7 @@ proc setDelegation*(params: CallParams, c: Computation): EvmResultVoid =
         @[]
       else:
         if not delegatedBeforeTx and authority notin delegationSetFor:
-          ? c.gasMeter.chargeStateGas(AUTH_BASE_STATE_GAS, "setDelegation auth base")
+          ? c.chargeStateGas(AUTH_BASE_STATE_GAS, "setDelegation auth base")
         delegationSetFor.incl authority
         @(addressToDelegation(auth.address))
 
