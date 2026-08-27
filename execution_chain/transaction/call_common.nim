@@ -94,6 +94,9 @@ proc setupEVM(params: CallParams, keepStack: bool): Computation =
     tx               : params.tx,
   )
 
+  # non Frame Transaction should not use frame related features
+  vmState.disableFrame()
+
   # reset global refundCounter counter each time
   # EVM called for a new transaction
   vmState.refundCounter = 0
@@ -264,11 +267,11 @@ proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
     code =
       if params.isCreate:
         if ledger.originalAccountEmpty(c.msg.currentTarget):
-          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
+          ? c.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
         CodeBytesRef.initCopy(tx.payload)
       else:
         if tx.value.isZero.not and not ledger.isAccountAlive(c.msg.currentTarget):
-          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
+          ? c.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
         assign(c.msg.data, tx.payload)
         getRecipientCode(vmState, c.msg)
 

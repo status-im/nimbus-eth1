@@ -143,6 +143,28 @@ func getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
       return res
     cpt = cpt.parent
 
+func chargeStateGas*(c: Computation, amount: GasInt, reason: string): EvmResultVoid =
+  if c.vmState.frameEnabled:
+    c.vmState.chargeFrameStateGas(amount, reason)
+  else:
+    c.gasMeter.chargeStateGas(amount, reason)
+
+func creditStateGasRefund*(c: Computation, amount: GasInt, slot = Opt.none(UInt256)) =
+  func getOwner(vmState: BaseVMState, slot: Opt[UInt256]): int =
+    if slot.isSome:
+      let key = OCOwnerKey(address: c.msg.currentTarget, slot: slot.value)
+      var val: int = 0
+      doAssert vmState.frameCtx.snapshot.ocOwners.pop(key, val)
+      val
+    else:
+      vmState.frameCtx.snapshot.currentFrameIndex
+
+  if c.vmState.frameEnabled:
+    let owner = c.vmState.getOwner(slot)
+    c.vmState.creditFrameStateGasRefund(owner, amount)
+  else:
+    c.gasMeter.creditStateGasRefund(amount)
+
 func setCode*(c: Computation, code = CodeBytesRef(nil)) =
   # If we call setCode when c.stack already set to something,
   # it means c.code has been set before.
@@ -166,6 +188,19 @@ func newComputation*(vmState: BaseVMState,
   result.balTrackerEnabled = vmState.balTrackerEnabled
   result.setCode(code)
 
+func newComputation*(vmState: BaseVMState,
+                     keepStack: bool,
+                     message: Message,
+                     gasMeter: GasMeter,
+                     code = CodeBytesRef(nil)): Computation =
+  new result
+  result.vmState = vmState
+  result.msg = message
+  result.gasMeter = gasMeter
+  result.keepStack = keepStack
+  result.balTrackerEnabled = vmState.balTrackerEnabled
+  result.setCode(code)
+
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
 
@@ -182,6 +217,8 @@ func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
 proc beginSavePoint*(c: Computation) =
+  if c.vmState.frameEnabled:
+    c.frameSnapshot = c.vmState.copyFrameContext()
   if c.balTrackerEnabled:
     c.vmState.balTracker.beginCallFrame()
   c.savePoint = c.vmState.ledger.beginSavePoint()
@@ -191,8 +228,13 @@ proc commit*(c: Computation) =
     c.vmState.balTracker.commitCallFrame()
   c.vmState.ledger.commit(c.savePoint)
   c.savePoint = nil
+  c.frameSnapshot = nil
 
 proc dispose*(c: Computation) =
+  if c.frameSnapshot != nil:
+    c.vmState.restoreFrameContext(c.frameSnapshot)
+    c.frameSnapshot = nil
+
   if c.savePoint != nil:
     c.vmState.ledger.dispose(c.savePoint)
     c.savePoint = nil
@@ -209,6 +251,8 @@ proc rollback*(c: Computation) =
     c.vmState.balTracker.rollbackCallFrame()
   c.vmState.ledger.rollback(c.savePoint)
   c.savePoint = nil
+  c.vmState.restoreFrameContext(c.frameSnapshot)
+  c.frameSnapshot = nil
 
 func setError*(c: Computation, msg: sink string, burnsGas = false) =
   c.error = Error(status: StatusCode.Failure, info: move(msg), burnsGas: burnsGas)
@@ -305,7 +349,7 @@ proc writeContract*(c: Computation) =
       c.gasMeter.consumeGas(codeHashGas, reason = "Code hash gas").isOkOr:
         break writeContractCode
 
-      c.gasMeter.chargeStateGas(codeDepositStateGas, reason = "Deposit state gas").isOkOr:
+      c.chargeStateGas(codeDepositStateGas, reason = "Deposit state gas").isOkOr:
         break writeContractCode
     else:
       let
