@@ -505,7 +505,7 @@ proc processTransactionsParallel*(
       vmState.receipts[i] =
         vmState.makeReceipt(transactions[i].txType, callResult)
       if collectLogs:
-        vmState.blockLogs.add vmState.receipts[i].logs
+        vmState.blockLogs.addLogsFromReceipt vmState.receipts[i]
 
   let maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.hardFork)
   if vmState.blobGasUsed > maxBlobGasPerBlock:

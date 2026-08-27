@@ -1090,6 +1090,18 @@ func getAccessList*(ledger: LedgerRef): transactions.AccessList =
   doAssert(ledger.savePoint.parentSavePoint.isNil)
   ledger.savePoint.accessList.getAccessList()
 
+func copyAccessList*(ledger: LedgerRef): ac_access_list.AccessList =
+  ledger.savePoint.accessList
+
+func restoreAccessList*(ledger: LedgerRef, accessList: sink ac_access_list.AccessList) =
+  ledger.savePoint.accessList = move(accessList)
+
+func copySelfDestruct*(ledger: LedgerRef): HashSet[Address] =
+  ledger.savePoint.selfDestruct
+
+func restoreSelfDestruct*(ledger: LedgerRef, selfDestruct: sink HashSet[Address]) =
+  ledger.savePoint.selfDestruct = move(selfDestruct)
+
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
 # ------------------------------------------------------------------------------

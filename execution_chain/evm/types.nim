@@ -11,16 +11,19 @@
 {.push raises: [].}
 
 import
-  "."/[stack, memory, code_stream, evm_errors],
+  std/[tables, hashes],
+  eth/common/addresses,
+  ./[stack, memory, code_stream, evm_errors],
   ./interpreter/[gas_costs, op_codes],
   ./transient_storage,
   ../db/ledger,
   ../common/[common, evmforks],
   ../block_access_list/bal_tracker
 
+from eth/common/receipts import FrameReceipt
 from ../common/hardforks import HardFork
 
-export stack, memory, transient_storage, bal_tracker
+export stack, memory, transient_storage, bal_tracker, hashes
 
 type
   VMFlag* = enum
@@ -43,12 +46,32 @@ type
     blobBaseFee*      : UInt256
     tx*               : ptr Transaction
 
+  OCOwnerKey* = object
+    address*: Address
+    slot*   : UInt256
+
+  FrameSnapshot* = ref object
+    currentFrameIndex*: int
+    receipts*         : seq[FrameReceipt]
+    payer*            : Opt[addresses.Address]
+    senderApproved*   : bool
+    stateGasLeft*     : GasInt
+    ocOwners*         : Table[OCOwnerKey, int]
+
+  FrameContext* = object
+    signatureHash*   : Hash32
+    resolvedSigners* : seq[Address]
+    standardGasLimit*: GasInt
+    maxCost*         : UInt256
+    snapshot*        : FrameSnapshot
+
   BaseVMState* = ref object of RootObj
     com*              : CommonRef
     ledger*           : LedgerRef
     parent*           : Header
     blockCtx*         : BlockContext
     txCtx*            : TxContext
+    frameCtx*         : FrameContext
     flags*            : set[VMFlag]
     fork*             : EVMFork
     hardFork*         : HardFork
@@ -78,6 +101,7 @@ type
     transientStorage*:      TransientStorage
     error*:                 Error
     savePoint*:             LedgerSpRef
+    frameSnapshot*:         FrameSnapshot
     instr*:                 Op
     opIndex*:               int
     parent* {.cursor.}:     Computation  # non-owning back pointer
@@ -145,6 +169,12 @@ type
 
   TracerRef* = ref object of RootObj
     flags*: set[TracerFlags]
+
+func hash*(v: OCOwnerKey): Hash {.inline.} =
+  var h: Hash = 0
+  h = h !& hash(v.address)
+  h = h !& hash(v.slot)
+  result = !$h
 
 # Transaction level
 # This is called once fo each transaction

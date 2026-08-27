@@ -361,6 +361,9 @@ proc toTransaction(tx: TransactionObject): Transaction =
     R               : tx.r,
     S               : tx.s,
     authorizationList: authList(tx.authorizationList),
+    sender          : tx.`from`,
+    frames          : tx.frames.get(@[]),
+    signatures      : tx.signatures.get(@[]),
   )
 
 proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =

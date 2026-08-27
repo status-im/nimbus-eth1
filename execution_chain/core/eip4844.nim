@@ -109,10 +109,10 @@ func fakeExponential*(factor, numerator, denominator: UInt256): UInt256 =
 
   output div denominator
 
-proc getTotalBlobGas*(tx: Transaction): uint64 =
+func getTotalBlobGas*(tx: Transaction): uint64 =
   GAS_PER_BLOB * tx.versionedHashes.len.uint64
 
-proc getTotalBlobGas*(versionedHashesLen: int): uint64 =
+func getTotalBlobGas*(versionedHashesLen: int): uint64 =
   GAS_PER_BLOB * versionedHashesLen.uint64
 
 # getBlobBaseFee implements get_data_gas_price from EIP-4844
@@ -127,7 +127,7 @@ func getBlobBaseFee*(excessBlobGas: uint64, com: CommonRef, fork: HardFork): UIn
   else:
     0.u256
 
-proc blobGasFee*(versionedHashesLen: int,
+func blobGasFee*(versionedHashesLen: int,
                   excessBlobGas: uint64,
                   com: CommonRef, fork: HardFork): UInt256 =
   getTotalBlobGas(versionedHashesLen).u256 *
@@ -138,7 +138,7 @@ func blobGasUsed(txs: openArray[Transaction]): uint64 =
     result += tx.getTotalBlobGas
 
 # calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
-proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: HardFork): uint64 =
+func calcExcessBlobGas*(com: CommonRef, parent: Header, fork: HardFork): uint64 =
   let
     excessBlobGas = parent.excessBlobGas.get(0'u64)
     blobGasUsed = parent.blobGasUsed.get(0'u64)

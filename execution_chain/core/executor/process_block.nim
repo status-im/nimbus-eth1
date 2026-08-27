@@ -108,7 +108,7 @@ proc processTransactions*(
     else:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType, rc.value)
       if collectLogs:
-        vmState.blockLogs.add vmState.receipts[txIndex].logs
+        vmState.blockLogs.addLogsFromReceipt vmState.receipts[txIndex]
   ok()
 
 proc procBlkPreamble(

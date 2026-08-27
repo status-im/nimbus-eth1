@@ -318,6 +318,144 @@ template blockAccessList*(vmState: BaseVMState): Opt[BlockAccessListRef] =
   else:
     Opt.none(BlockAccessListRef)
 
+template enableFrame*(vmState: BaseVMState) =
+  vmState.frameCtx.snapshot = FrameSnapshot()
+
+template disableFrame*(vmState: BaseVMState) =
+  vmState.frameCtx.snapshot = nil
+
+template frameEnabled*(vmState: BaseVMState): bool =
+  vmState.frameCtx.snapshot.isNil.not
+
+func clone(snapshot: FrameSnapshot): FrameSnapshot =
+  FrameSnapshot(
+    currentFrameIndex: snapshot.currentFrameIndex,
+    receipts         : snapshot.receipts,
+    payer            : snapshot.payer,
+    senderApproved   : snapshot.senderApproved,
+    stateGasLeft     : snapshot.stateGasLeft,
+    ocOwners         : snapshot.ocOwners,
+  )
+
+func copyFrameContext*(vmState: BaseVMState): FrameSnapshot =
+  if vmState.frameEnabled:
+    vmState.frameCtx.snapshot.clone()
+  else:
+    nil
+
+func restoreFrameContext*(vmState: BaseVMState, snapshot: FrameSnapshot) =
+  vmState.frameCtx.snapshot = snapshot
+
+template getSignaturesLen*(vmState: BaseVMState): int =
+  if vmState.txCtx.tx.isNil:
+    0
+  else:
+    vmState.txCtx.tx.signatures.len
+
+template getSignature*(vmState: BaseVMState, index: int): ptr FrameSignature =
+  vmState.txCtx.tx.signatures[index].addr
+
+template getFramesLen*(vmState: BaseVMState): int =
+  if vmState.txCtx.tx.isNil:
+    0
+  else:
+    vmState.txCtx.tx.frames.len
+
+template getFrame*(vmState: BaseVMState, index: int): ptr TransactionFrame =
+  vmState.txCtx.tx.frames[index].addr
+
+template getResolvedSigner*(vmState: BaseVMState, sigIndex: int): Address =
+  vmState.frameCtx.resolvedSigners[sigIndex]
+
+template getFrameStatus*(vmState: BaseVMState, frameIndex: int): uint8 =
+  vmState.frameCtx.snapshot.receipts[frameIndex].status
+
+template getFrameGasUsed*(vmState: BaseVMState, frameIndex: int): GasInt =
+  vmState.frameCtx.snapshot.receipts[frameIndex].gasUsed
+
+template getFrameStateGasUsed*(vmState: BaseVMState, frameIndex: int): GasInt =
+  vmState.frameCtx.snapshot.receipts[frameIndex].stateGasUsed
+
+template getCurrentFrameIndex*(vmState: BaseVMState): int =
+  vmState.frameCtx.snapshot.currentFrameIndex
+
+template getMaxCost*(vmState: BaseVMState): UInt256 =
+  vmState.frameCtx.maxCost
+
+template getTransaction*(vmState: BaseVMState): ptr Transaction =
+  vmState.txCtx.tx
+
+template senderApproved*(vmState: BaseVMState): bool =
+  vmState.frameCtx.snapshot.senderApproved
+
+template senderApproved*(vmState: BaseVMState, val: bool) =
+  vmState.frameCtx.snapshot.senderApproved = val
+
+template payer*(vmState: BaseVMState): Opt[common.Address] =
+  vmState.frameCtx.snapshot.payer
+
+template payer*(vmState: BaseVMState, address: common.Address) =
+  vmState.frameCtx.snapshot.payer = Opt.some(address)
+
+func chargeFrameStateGas*(vmState: BaseVMState, amount: GasInt, reason: string): EvmResultVoid =
+  if vmState.frameCtx.snapshot.stateGasLeft < amount:
+    return err(gasErr(OutOfGas))
+  vmState.frameCtx.snapshot.stateGasLeft -= amount
+  ok()
+
+func creditFrameStateGasRefund*(vmState: BaseVMState, owner: int, amount: GasInt) =
+  if owner == vmState.frameCtx.snapshot.currentFrameIndex:
+    vmState.frameCtx.snapshot.stateGasLeft += amount
+    # A refund only ever undoes a charge, so the pool never
+    # exceeds the frame's declared budget.
+    let
+      frame = vmState.getFrame(owner)
+    doAssert vmState.frameCtx.snapshot.stateGasLeft <= frame.stateGasLimit
+  else:
+    let
+      receipt = vmState.frameCtx.snapshot.receipts[owner].addr
+    receipt.stateGasUsed -= amount
+
+template frameStateGasLeft*(vmState: BaseVMState): GasInt =
+  vmState.frameCtx.snapshot.stateGasLeft
+
+const
+  FRAME_STATUS_FAILURE* = 0
+  FRAME_STATUS_SUCCESS* = 1
+  FRAME_STATUS_SKIPPED* = 2
+
+func frameOutcomeFailure*(vmState: BaseVMState, executionGas: GasInt) =
+  vmState.frameCtx.snapshot.receipts.add FrameReceipt(
+    status: FRAME_STATUS_FAILURE,
+    gasUsed: executionGas,
+  )
+
+func frameOutcome*(vmState: BaseVMState, status: bool, executionGas: GasInt, stateGas: GasInt) =
+  vmState.frameCtx.snapshot.receipts.add FrameReceipt(
+    status: if status: FRAME_STATUS_SUCCESS
+            else: FRAME_STATUS_FAILURE,
+    gasUsed: executionGas,
+    stateGasUsed: stateGas,
+  )
+
+func frameOutcomeSuccess*(vmState: BaseVMState, executionGas: GasInt, stateGas: GasInt, logs: sink seq[Log]) =
+  vmState.frameCtx.snapshot.receipts.add FrameReceipt(
+    status: FRAME_STATUS_SUCCESS,
+    gasUsed: executionGas,
+    stateGasUsed: stateGas,
+    logs: move(logs),
+  )
+
+func frameOutcomeFailure*(vmState: BaseVMState, executionGas: GasInt, stateGas: GasInt) =
+  vmState.frameCtx.snapshot.receipts.add FrameReceipt(
+    status: FRAME_STATUS_FAILURE,
+    gasUsed: executionGas,
+    stateGasUsed: stateGas,
+  )
+
+func frameOutcomeSkipped*(vmState: BaseVMState) =
+  vmState.frameCtx.snapshot.receipts.add FrameReceipt(status: FRAME_STATUS_SKIPPED)
+
 proc captureTxStart*(vmState: BaseVMState, gasLimit: GasInt) =
   if vmState.tracingEnabled:
     vmState.tracer.captureTxStart(gasLimit)
@@ -384,3 +522,10 @@ proc captureFault*(vmState: BaseVMState, comp: Computation, pc: int,
 proc capturePrepare*(vmState: BaseVMState, comp: Computation, depth: int) =
   if vmState.tracingEnabled:
     vmState.tracer.capturePrepare(comp, depth)
+
+func addLogsFromReceipt*(logs: var seq[Log], rec: StoredReceipt) =
+  if rec.receiptType == Eip8141Receipt:
+    for frame in rec.frameReceipts:
+      logs.add frame.logs
+  else:
+    logs.add rec.logs
