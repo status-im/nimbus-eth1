@@ -94,7 +94,6 @@ proc processTransactions*(
 
     if not skipReceipts:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
-
   ok()
 
 proc procBlkPreamble(

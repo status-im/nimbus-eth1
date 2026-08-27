@@ -48,18 +48,28 @@ func createBloom*(receipts: openArray[StoredReceipt]): Bloom =
 
 proc makeReceipt*(
     vmState: BaseVMState; txType: TxType): StoredReceipt =
-  if vmState.com.isByzantiumOrLater(vmState.blockNumber, vmState.blockCtx.timestamp):
-    result.isHash = false
-    result.status = vmState.status
+  if txType == TxEip8141:
+    result.receiptType = txType
+    result.cumulativeGasUsed = vmState.cumulativeGasUsed
+    result.payer = vmState.payer().get()
+    result.frameReceipts = move(vmState.frameCtx.snapshot.receipts)
+    # txLogs are appended to blockLogs.
+    # although txLogs are not consumed here, we set it to zero to match
+    # the behavior of other transaction types
+    vmState.txLogs.setLen(0)
   else:
-    result.isHash = true
-    result.hash   = vmState.ledger.getStateRoot()
-    # we set the status for the t8n output consistency
-    result.status = vmState.status
+    if vmState.com.isByzantiumOrLater(vmState.blockNumber, vmState.blockCtx.timestamp):
+      result.isHash = false
+      result.status = vmState.status
+    else:
+      result.isHash = true
+      result.hash   = vmState.ledger.getStateRoot()
+      # we set the status for the t8n output consistency
+      result.status = vmState.status
 
-  result.receiptType = txType
-  result.cumulativeGasUsed = vmState.cumulativeGasUsed
-  result.logs = move(vmState.txLogs)
+    result.receiptType = txType
+    result.cumulativeGasUsed = vmState.cumulativeGasUsed
+    result.logs = move(vmState.txLogs)
 
 # ------------------------------------------------------------------------------
 # End
