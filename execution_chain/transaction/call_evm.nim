@@ -45,6 +45,11 @@ proc callParamsForTx(tx: Transaction, sender: Address,
   if tx.txType == TxEip7702:
     assign(result.authorizationList, tx.authorizationList)
 
+  if tx.txType == TxEip8141:
+    assign(result.frames, tx.frames)
+    assign(result.signatures, tx.signatures)
+    result.sender = tx.sender
+
 proc txCallEvm*(tx: Transaction,
                 sender: Address,
                 vmState: BaseVMState,

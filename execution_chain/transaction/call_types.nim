@@ -37,6 +37,8 @@ type
     versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
     authorizationList*: seq[Authorization] # EIP-7702 (Prague) authorization list
     intrinsic*:    IntrinsicGas
+    frames*:       seq[TransactionFrame]# EIP-8141
+    signatures*:   seq[FrameSignature]  # EIP-8141
 
   # Standard call result.
   CallResult* = object of RootObj
@@ -86,6 +88,85 @@ const
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7623 = 10
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 = 16
   TX_VALUE_COST = 6000
+
+const
+  SCHEME_ARBITRARY* = 0x0
+  SCHEME_SECP256K1* = 0x1
+  SCHEME_P256*      = 0x2
+
+const
+  FRAME_SIGNATURE_SCHEME_SECP256K1 = 2800
+  FRAME_SIGNATURE_SCHEME_P256      = 6700
+  FRAME_SIGNATURE_SCHEME_ARBITRARY = 100
+
+const
+  TX_DATA_TOKEN_STANDARD = 4
+  TX_FRAME_INTRINSIC = TX_BASE_COST_2780
+  TX_PER_FRAME = 475
+  TX_DATA_TOKEN_FLOOR = 16
+
+func signatureVerificationGas(sig: FrameSignature): GasInt =
+  if sig.scheme == SCHEME_SECP256K1:
+    return FRAME_SIGNATURE_SCHEME_SECP256K1
+
+  if sig.scheme == SCHEME_P256:
+    return FRAME_SIGNATURE_SCHEME_P256
+
+  if sig.scheme == SCHEME_ARBITRARY:
+    return FRAME_SIGNATURE_SCHEME_ARBITRARY
+
+func countTokensInData(data: openArray[byte]): int =
+  # Count the data tokens in arbitrary input bytes.
+  # Zero bytes count as 1 token; non-zero bytes count as 4 tokens.
+  var
+    numZeros = 0
+
+  for x in data:
+    if x == 0:
+      inc numZeros
+
+  let
+    numNonZeros = data.len - numZeros
+
+  numZeros + numNonZeros * 4
+
+func frameTransactionIntrinsicCost*(call: CallParams | Transaction): IntrinsicGas =
+  var
+    tokens = 0
+    dataLength = 0
+    valueTransferGas = 0.GasInt
+
+  for frame in call.frames:
+    tokens += countTokensInData(frame.data)
+    dataLength += frame.data.len
+    if frame.value.isZero.not and
+       frame.target.isSome and
+       frame.target != call.sender:
+      valueTransferGas += TX_VALUE_COST
+
+  var
+    signatureGas = 0.GasInt
+
+  for sig in call.signatures:
+    signatureGas += signatureVerificationGas(sig)
+    tokens += countTokensInData(sig.signer)
+    tokens += countTokensInData(sig.msg)
+    tokens += countTokensInData(sig.signature)
+    dataLength += sig.signer.len
+    dataLength += sig.msg.len
+    dataLength += sig.signature.len
+
+  # EIP-7976 floor tokens: all charged bytes count uniformly.
+  let
+    floorTokens = dataLength * TX_DATA_TOKEN_STANDARD
+    baseExecutionGas = TX_FRAME_INTRINSIC +
+      call.frames.len * TX_PER_FRAME +
+      signatureGas + valueTransferGas
+
+  IntrinsicGas(
+    execution: baseExecutionGas + tokens * TX_DATA_TOKEN_STANDARD,
+    floorDataGas: baseExecutionGas + floorTokens * TX_DATA_TOKEN_FLOOR
+  )
 
 func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit: GasInt, sender: Address): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount

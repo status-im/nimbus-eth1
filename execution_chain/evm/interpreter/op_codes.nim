@@ -176,9 +176,20 @@ type
 
     Log4 =           0xa4, ## Append log record with four topics.
 
-    Nop0xA5, Nop0xA6, Nop0xA7, Nop0xA8, Nop0xA9, Nop0xAA,
-    Nop0xAB, Nop0xAC, Nop0xAD, Nop0xAE, Nop0xAF, Nop0xB0,
-    Nop0xB1, Nop0xB2, Nop0xB3, Nop0xB4, Nop0xB5, Nop0xB6,
+    Nop0xA5, Nop0xA6, Nop0xA7, Nop0xA8, Nop0xA9,
+
+    Approve =        0xaa, ## Exits current EVM call frame successfully.
+
+    Nop0xAB, Nop0xAC, Nop0xAD, Nop0xAE, Nop0xAF,
+
+    TxParam =        0xb0, ## Gives access to transaction-scoped information.
+    FrameDataLoad =  0xb1, ## Loads one 32-byte word of data from frame input.
+    FrameDataCopy =  0xb2, ## Copies data frame input into the contract’s memory.
+    FrameParam =     0xb3, ## Gives access to frame-scoped information.
+    SigParam =       0xb4, ## Gives access to signature-scoped metadata.
+    SigDataCopy =    0xb5, ## Copies a signature’s raw signature bytes into the contract’s memory.
+
+    Nop0xB6,
     Nop0xB7, Nop0xB8, Nop0xB9, Nop0xBA, Nop0xBB, Nop0xBC,
     Nop0xBD, Nop0xBE, Nop0xBF, Nop0xC0, Nop0xC1, Nop0xC2,
     Nop0xC3, Nop0xC4, Nop0xC5, Nop0xC6, Nop0xC7, Nop0xC8,
