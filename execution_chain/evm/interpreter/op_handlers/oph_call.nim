@@ -295,7 +295,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
       # And it also make EVM tracer produce two traces of call or weird result.
       # So we check it here before actually charging state gas and keep the tracer produce single trace of call.
       ? cpt.gasMeter.checkGas(gasCost1, CREATE_ACCOUNT_STATE_GAS)
-      ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
+      ? cpt.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
         reason = "CALL: State gas new account")
 
   let

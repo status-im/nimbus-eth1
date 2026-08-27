@@ -52,6 +52,9 @@ proc recoverSenderCached*(msgHash: Hash32, sig: Signature): Opt[Address] =
     res
 
 proc recoverSenderCached*(tx: Transaction): Opt[Address] =
+  if tx.txType == TxEip8141:
+    return Opt.some(tx.sender)
+
   let
     sig = ?tx.signature()
     msgHash = tx.rlpHashForSigning(tx.isEip155())

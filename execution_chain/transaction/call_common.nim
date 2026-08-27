@@ -262,11 +262,11 @@ proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
     code =
       if params.isCreate:
         if ledger.originalAccountEmpty(c.msg.contractAddress):
-          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
+          ? c.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
         CodeBytesRef.init(tx.payload)
       else:
         if tx.value.isZero.not and not ledger.isAccountAlive(c.msg.contractAddress):
-          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
+          ? c.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
         assign(c.msg.data, tx.payload)
         getRecipientCode(vmState, c.msg)
 

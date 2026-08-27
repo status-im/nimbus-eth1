@@ -26,6 +26,8 @@ func sender*(args: TransactionArgs): Address =
   args.source.get(ZeroAddr)
 
 func txType(n: TransactionArgs): TxType =
+  if n.frames.isSome or n.signatures.isSome:
+    return TxEip8141
   if n.authorizationList.isSome:
     return TxEip7702
   if n.blobVersionedHashes.isSome:
@@ -81,6 +83,9 @@ proc toTransaction*(vmState: BaseVMState,
     maxFeePerBlobGas:     args.maxFeePerBlobGas.get(0.u256),
     versionedHashes:      args.versionedHashes,
     authorizationList:    args.authorizationList.get(@[]),
+    sender:               args.sender,
+    frames:               args.frames.get(@[]),
+    signatures:           args.signatures.get(@[]),
   ))
 
 {.pop.}

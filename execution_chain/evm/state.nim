@@ -318,6 +318,68 @@ template blockAccessList*(vmState: BaseVMState): Opt[BlockAccessListRef] =
   else:
     Opt.none(BlockAccessListRef)
 
+template getSignaturesLen*(vmState: BaseVMState): int =
+  if vmState.txCtx.tx.isNil:
+    0
+  else:
+    vmState.txCtx.tx.signatures.len
+
+template getSignature*(vmState: BaseVMState, index: int): ptr FrameSignature =
+  vmState.txCtx.tx.signatures[index].addr
+
+template getFramesLen*(vmState: BaseVMState): int =
+  if vmState.txCtx.tx.isNil:
+    0
+  else:
+    vmState.txCtx.tx.frames.len
+
+template getFrame*(vmState: BaseVMState, index: int): ptr TransactionFrame =
+  vmState.txCtx.tx.frames[index].addr
+
+func resolveFrameTarget*(vmState: BaseVMState, frame: ptr TransactionFrame): Address =
+  if frame.target.isNone:
+    return vmState.txCtx.tx.sender
+  frame.target.value
+
+template getResolvedSigner*(vmState: BaseVMState, sigIndex: int): Address =
+  vmState.frameCtx.resolvedSigners[sigIndex]
+
+template getFrameStatus*(vmState: BaseVMState, frameIndex: int): bool =
+  vmState.frameCtx.receipts[frameIndex].status
+
+template getFrameGasUsed*(vmState: BaseVMState, frameIndex: int): GasInt =
+  vmState.frameCtx.receipts[frameIndex].gasUsed
+
+template getFrameStateGasUsed*(vmState: BaseVMState, frameIndex: int): GasInt =
+  vmState.frameCtx.receipts[frameIndex].stateGasUsed
+
+template getCurrentFrameIndex*(vmState: BaseVMState): int =
+  vmState.frameCtx.currentFrameIndex
+
+template getMaxCost*(vmState: BaseVMState): GasInt =
+  vmState.frameCtx.maxCost
+
+template getTransaction*(vmState: BaseVMState): ptr Transaction =
+  vmState.txCtx.tx
+
+template senderApproved*(vmState: BaseVMState): bool =
+  vmState.frameCtx.senderApproved
+
+template senderApproved*(vmState: BaseVMState, val: bool) =
+  vmState.frameCtx.senderApproved = val
+
+template payer*(vmState: BaseVMState): Opt[common.Address] =
+  vmState.frameCtx.payer
+
+template payer*(vmState: BaseVMState, address: common.Address) =
+  vmState.frameCtx.payer = Opt.some(address)
+
+func chargeFrameStateGas*(vmState: BaseVMState, amount: GasInt, reason: string): EvmResultVoid =
+  if vmState.frameCtx.stateGasLeft < amount:
+    return err(gasErr(OutOfGas))
+  vmState.frameCtx.stateGasLeft -= amount
+  ok()
+
 proc captureTxStart*(vmState: BaseVMState, gasLimit: GasInt) =
   if vmState.tracingEnabled:
     vmState.tracer.captureTxStart(gasLimit)

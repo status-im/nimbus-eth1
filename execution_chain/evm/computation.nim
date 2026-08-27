@@ -143,6 +143,12 @@ func getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
       return res
     cpt = cpt.parent
 
+func chargeStateGas*(c: Computation, amount: GasInt, reason: string): EvmResultVoid =
+  if c.vmState.frameCtx.isSome:
+    c.vmState.chargeFrameStateGas(amount, reason)
+  else:
+    c.gasMeter.chargeStateGas(amount, reason)
+
 func setCode*(c: Computation, code = CodeBytesRef(nil)) =
   # If we call setCode when c.stack already set to something,
   # it means c.code has been set before.
@@ -305,7 +311,7 @@ proc writeContract*(c: Computation) =
       c.gasMeter.consumeGas(codeHashGas, reason = "Code hash gas").isOkOr:
         break writeContractCode
 
-      c.gasMeter.chargeStateGas(codeDepositStateGas, reason = "Deposit state gas").isOkOr:
+      c.chargeStateGas(codeDepositStateGas, reason = "Deposit state gas").isOkOr:
         break writeContractCode
     else:
       let
