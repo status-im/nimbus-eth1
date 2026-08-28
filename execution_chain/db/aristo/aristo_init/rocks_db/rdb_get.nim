@@ -20,10 +20,6 @@ import
   ./rdb_desc,
   std/concurrency/atomics
 
-from rocksdb/lib/librocksdb import
-  rocksdb_slice_t, rocksdb_pinnableslice_t, rocksdb_batched_multi_get_cf_slice,
-  rocksdb_pinnableslice_value, rocksdb_pinnableslice_destroy, rocksdb_free
-
 const extraTraceMessages = false ## Enable additional logging noise
 
 when extraTraceMessages:
@@ -231,79 +227,49 @@ proc getKeys*(
 
   var
     keyBufs {.noinit.}: array[MaxKeysFetch, RVidBuf]
-    keySlices {.noinit.}: array[MaxKeysFetch, rocksdb_slice_t]
-    valueSlices {.noinit.}: array[MaxKeysFetch, ptr rocksdb_pinnableslice_t]
-    errs: array[MaxKeysFetch, cstring]
+    keySlices {.noinit.}: array[MaxKeysFetch, RocksDbSlice]
+    vtxBufs {.noinit.}: array[MaxKeysFetch, VertexBuf]
+    valueSlices {.noinit.}: array[MaxKeysFetch, RocksDbMutSlice]
 
   for j in 0 ..< nFetch:
     keyBufs[j] = rvids[int fetchIdxs[j]].blobify()
-    keySlices[j] = rocksdb_slice_t(
-      data: cast[cstring](addr keyBufs[j].buf[0]), size: csize_t(keyBufs[j].len)
-    )
+    keySlices[j] =
+      RocksDbSlice.init(keyBufs[j].buf.toOpenArray(0, int(keyBufs[j].len) - 1))
+    valueSlices[j] = RocksDbMutSlice.init(vtxBufs[j].buf)
 
-  rocksdb_batched_multi_get_cf_slice(
-    rdb.vtxCol.db.cPtr,
-    rdb.readOpts.cPtr,
-    rdb.vtxCol.handle.cPtr,
-    csize_t(nFetch),
-    addr keySlices[0],
-    addr valueSlices[0],
-    cast[cstringArray](addr errs[0]),
-    false,
-  )
-
-  block errCheck:
-    var errMsg: string
-    for j in 0 ..< nFetch:
-      if not errs[j].isNil:
-        if errMsg.len == 0:
-          errMsg = $errs[j]
-        rocksdb_free(errs[j])
-
-    if errMsg.len > 0:
-      for j in 0 ..< nFetch:
-        if not valueSlices[j].isNil:
-          rocksdb_pinnableslice_destroy(valueSlices[j])
-      return err((RdbBeDriverGetKeyError, errMsg))
+  rdb.vtxCol.multiGet(
+    keySlices.toOpenArray(0, nFetch - 1), valueSlices.toOpenArray(0, nFetch - 1)
+  ).isOkOr:
+    return err((RdbBeDriverGetKeyError, error))
 
   for j in 0 ..< nFetch:
     let i = int fetchIdxs[j]
-    if valueSlices[j].isNil:
+
+    if not valueSlices[j].found:
       keyvtxs[i] = (VOID_HASH_KEY, VertexRef(nil))
       continue
 
-    var
-      vtxBuf {.noinit.}: VertexBuf
-      valLen: csize_t
-    let valPtr = rocksdb_pinnableslice_value(valueSlices[j], valLen.addr)
-
-    if int(valLen) > vtxBuf.buf.len:
-      for k in j ..< nFetch:
-        if not valueSlices[k].isNil:
-          rocksdb_pinnableslice_destroy(valueSlices[k])
-      return err((RdbBeDriverGetKeyError, "vertex record does not fit buffer"))
-
-    if valLen > 0:
-      copyMem(addr vtxBuf.buf[0], valPtr, int valLen)
-    vtxBuf.n = typeof(vtxBuf.n)(valLen)
-    rocksdb_pinnableslice_destroy(valueSlices[j])
+    vtxBufs[j].n = typeof(vtxBufs[j].n)(valueSlices[j].len)
 
     let
       rvid = rvids[i]
-      res = vtxBuf.data().deblobify(HashKey)
+      res = vtxBufs[j].data().deblobify(HashKey)
 
     if res.isSome() and
         (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
       rdb.rdKeyLru.put(rvid.vid, res.value())
 
     if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-      rdb.rdVtxLru.put(rvid.vid, vtxBuf)
+      rdb.rdVtxLru.put(rvid.vid, vtxBufs[j])
 
     keyvtxs[i] =
       if res.isSome():
         (res.value(), VertexRef(nil))
       else:
-        (VOID_HASH_KEY, vtxBuf.data().deblobify(VertexRef).expect("valid data in db"))
+        (
+          VOID_HASH_KEY,
+          vtxBufs[j].data().deblobify(VertexRef).expect("valid data in db"),
+        )
 
   ok()
 
