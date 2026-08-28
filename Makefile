@@ -403,14 +403,27 @@ nimbus_verified_proxy_wasm_debug: | build deps
 
 # Stateless related targets
 
+# The environment a zkVM guest runs in: single-threaded, no signals, no C++
+# runtime. Deliberately says nothing about which machine it targets, so a native
+# build can use the same set.
+STATELESS_GUEST_FLAGS := \
+	--hints:off --mm:arc -d:useMalloc \
+	-d:chronicles_enabled:off -d:keccakCacheEnabled:false -d:senderCacheEnabled:false \
+	-u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace \
+	-d:enable_mcl_lib=false -d:noSignalHandler
+
+# Kept separate from the flags above since it differs per zkVM, eg:
+#   make STATELESS_GUEST_CPU=riscv32 stateless_guest_baremetal
+STATELESS_GUEST_CPU ?= riscv64
+
 stateless_guest_baremetal: | build deps
-	$(ENV_SCRIPT) $(NIMC) c --hints:off --cpu:riscv64 --os:any --mm:arc -d:useMalloc -d:chronicles_enabled:off -d:keccakCacheEnabled:false -d:senderCacheEnabled:false -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace --compileOnly --genScript "execution_chain/stateless/stateless_guest.nim"
+	$(ENV_SCRIPT) $(NIMC) c $(STATELESS_GUEST_FLAGS) --cpu:$(STATELESS_GUEST_CPU) --os:any --compileOnly --genScript "execution_chain/stateless/stateless_guest.nim"
 
 # Two runs: the full suite with standard flags, then the guest specific test
 # with flags closer to the zkVM guest.
 stateless_execution_test: | build deps
 	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
-	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) --mm:arc -d:useMalloc -d:chronicles_enabled:off -d:keccakCacheEnabled:false -d:senderCacheEnabled:false -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace -o:build/$@_guest "tests/test_stateless/test_stateless_execution_guest.nim"
+	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) -o:build/$@_guest "tests/test_stateless/test_stateless_execution_guest.nim"
 
 # EEST standalone targets - binary to run individual test vector files
 eest_engine: | build deps
