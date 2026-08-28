@@ -10,8 +10,6 @@
 {.push raises: [].}
 
 import
-  ../../../../wire_protocol/snap/snap_types,
-  ../../state_db,
   ./[build_desc, build_export, build_finalise, build_init, build_merge]
 
 const

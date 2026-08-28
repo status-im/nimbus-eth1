@@ -15,7 +15,7 @@
 
 import
   pkg/[chronicles, eth/common, stew/interval_set],
-  ../../[helpers, state_db, worker_desc],
+  ../../[helpers, worker_desc],
   ./[cache_desc, cache_flat]
 
 logScope:
@@ -339,6 +339,15 @@ proc delMissingBlob*(
       `error`=error
     return err()
   ok()
+
+proc nMissingBlob*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[uint] =
+  var nCodes = 0u
+  for _ in db.walkMissingBlob():
+    nCodes.inc
+  ok(move nCodes)
 
 
 proc getFlatCode*(

@@ -15,7 +15,7 @@ import
   ../../../core/chain,
   ../../sync_desc,
   ../../wire_protocol/types as wire_types,
-  ./[state_db, worker_const]
+  ./[extra_types, worker_const]
 
 from ./mpt/mpt_cache/cache_desc
   import CacheDbRef
@@ -28,8 +28,7 @@ from ../../beacon/worker/worker_const as beacon_const
 
 export
   BeaconState,
-  chain, common, results, state_db, sync_desc, wire_types, worker_const
-
+  chain, common, results, extra_types, sync_desc, wire_types, worker_const
 
 type
   SnapPeerRef* = SyncPeerRef[SnapCtxData,SnapPeerData]

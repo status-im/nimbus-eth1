@@ -246,7 +246,8 @@ proc addBlockNumberToHashLookup*(
   # TODO: Once we remove the kvt frame layers, this function should
   # write to the kvt block hashes cache.
   let blockNumberKey = blockNumberToHashKey(blockNumber)
-  db.put(blockNumberKey.toOpenArray, rlp.encode(blockHash)).isOkOr:
+  var encodedHash = rlp.encode(blockHash)
+  db.putMove(blockNumberKey.toOpenArray, encodedHash).isOkOr:
     warn "addBlockNumberToHashLookup", blockNumberKey, error=($$error)
 
 proc persistTransactions*(
@@ -254,26 +255,30 @@ proc persistTransactions*(
     blockNumber: BlockNumber;
     txRoot: Hash32;
     transactions: openArray[Transaction];
-      ) =
+      ): seq[Hash32] {.discardable.} =
   const
     info = "persistTransactions()"
 
-  if transactions.len == 0:
-    return
+  var txHashes = newSeqOfCap[Hash32](transactions.len)
 
   for idx, tx in transactions:
+    var encodedTx = rlp.encode(tx)
     let
-      encodedTx = rlp.encode(tx)
       txHash = keccak256(encodedTx)
       blockKey = transactionHashToBlockKey(txHash)
       txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
       key = hashIndexKey(txRoot, idx.uint16)
-    db.put(key, encodedTx).isOkOr:
-      warn info, idx, error=($$error)
-      return
-    db.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
-      trace info, blockKey, error=($$error)
-      return
+
+    txHashes.add txHash
+
+    db.putMove(key, encodedTx).isOkOr:
+      raiseAssert info & ": " & $$error
+
+    var encodedTxKey = rlp.encode(txKey)
+    db.putMove(blockKey.toOpenArray, encodedTxKey).isOkOr:
+      raiseAssert info & ": " & $$error
+
+  move(txHashes)
 
 proc getTransactionByIndex*(
     db: CoreDbTxRef;
@@ -318,10 +323,10 @@ proc persistWithdrawals*(
   if withdrawals.len == 0:
     return
 
-  db.put(withdrawalsKey(withdrawalsRoot).toOpenArray,
-    rlp.encode(withdrawals)).isOkOr:
-      warn info, error=($$error)
-      return
+  var encodedWds = rlp.encode(withdrawals)
+  db.putMove(withdrawalsKey(withdrawalsRoot).toOpenArray, encodedWds).isOkOr:
+    warn info, error=($$error)
+    return
 
   when false:
     # Ol withdrawals format
@@ -371,7 +376,8 @@ proc getTransactions*(
 
 proc persistBlockAccessList*(
     db: CoreDbTxRef, blockHash: Hash32, bal: BlockAccessListRef) =
-  db.put(blockHashToBlockAccessListKey(blockHash).toOpenArray, bal[].encode())
+  var encodedBal = bal[].encode()
+  db.putMove(blockHashToBlockAccessListKey(blockHash).toOpenArray, encodedBal)
     .expect("persistBlockAccessList should succeed")
 
 proc getBlockAccessList*(
@@ -519,7 +525,8 @@ proc setHead*(
     blockHash: Hash32;
       ): Result[void, string] =
   let canonicalHeadHash = canonicalHeadHashKey()
-  db.put(canonicalHeadHash.toOpenArray, rlp.encode(blockHash)).isOkOr:
+  var encodedHash = rlp.encode(blockHash)
+  db.putMove(canonicalHeadHash.toOpenArray, encodedHash).isOkOr:
     return err($$error)
   ok()
 
@@ -528,10 +535,12 @@ proc setHead*(
     header: Header;
     headerHash: Hash32;
       ): Result[void, string] =
-  db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
+  var encodedHeader = rlp.encode(header)
+  db.putMove(genericHashKey(headerHash).toOpenArray, encodedHeader).isOkOr:
     return err($$error)
   let canonicalHeadHash = canonicalHeadHashKey()
-  db.put(canonicalHeadHash.toOpenArray, rlp.encode(headerHash)).isOkOr:
+  var encodedHash = rlp.encode(headerHash)
+  db.putMove(canonicalHeadHash.toOpenArray, encodedHash).isOkOr:
     return err($$error)
   ok()
 
@@ -546,7 +555,8 @@ proc persistReceipts*(
 
   for idx, rec in receipts:
     let key = hashIndexKey(receiptsRoot, idx.uint16)
-    db.put(key, rlp.encode(rec)).isOkOr:
+    var encodedRec = rlp.encode(rec)
+    db.putMove(key, encodedRec).isOkOr:
       warn info, idx, error=($$error)
 
 proc getReceipts*(
@@ -585,7 +595,8 @@ proc persistScore(
     info = "persistScore"
   let
     scoreKey = blockHashToScoreKey(blockHash)
-  db.put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
+  var encodedScore = rlp.encode(score)
+  db.putMove(scoreKey.toOpenArray, encodedScore).isOkOr:
     return err(info & ": " & $$error)
   ok()
 
@@ -603,7 +614,8 @@ proc persistHeader*(
   if not isStartOfHistory and not db.headerExists(header.parentHash):
     return err(info & ": parent header missing number " & $header.number)
 
-  db.put(genericHashKey(blockHash).toOpenArray, rlp.encode(header)).isOkOr:
+  var encodedHeader = rlp.encode(header)
+  db.putMove(genericHashKey(blockHash).toOpenArray, encodedHeader).isOkOr:
     return err(info & ": " & $$error)
 
   let
@@ -657,9 +669,9 @@ proc persistHeaderAndSetHead*(
 proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.
-  let enc = rlp.encode(uncles)
+  var enc = rlp.encode(uncles)
   result = keccak256(enc)
-  db.put(genericHashKey(result).toOpenArray, enc).isOkOr:
+  db.putMove(genericHashKey(result).toOpenArray, enc).isOkOr:
     warn "persistUncles()", unclesHash=result, error=($$error)
     return EMPTY_ROOT_HASH
 
@@ -668,7 +680,8 @@ proc persistWitness*(
     blockHash: Hash32;
     witness: Witness;
       ): Result[void, string] =
-  db.put(blockHashToWitnessKey(blockHash).toOpenArray, witness.encode()).isOkOr:
+  var encodedWitness = witness.encode()
+  db.putMove(blockHashToWitnessKey(blockHash).toOpenArray, encodedWitness).isOkOr:
     return err("persistWitness: " & $$error)
   ok()
 

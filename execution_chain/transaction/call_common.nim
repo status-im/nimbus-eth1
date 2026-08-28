@@ -308,6 +308,7 @@ proc preExecComputation(c: Computation, params: CallParams) =
         return
 
     if not c.accountDeployable():
+      c.refillFrameStateGas()
       return
 
     return

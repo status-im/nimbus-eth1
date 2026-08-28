@@ -62,7 +62,6 @@
 
 import
   pkg/[eth/common, results, stew/interval_set],
-  ../../state_db,
   ./[cache_api1, cache_api33, cache_api65,
      cache_const, cache_desc, cache_iter, cache_rlp]
 
@@ -106,22 +105,6 @@ proc updAccMissingIntv*(
     return err("missing record cannot be updated")
   let res = data.decodeAccMissingIntvData().valueOr:
     return err(error)
-  db.put1(cMissingIntv, encodeAccMissingIntvData(number, res.ranges))
-
-proc addAccMissingIntv*(
-    db: CacheDbRef;
-    number: BlockNumber;
-    iv: ItemKeyRange;
-      ): PutResult =
-  let data = db.get1(cMissingIntv).valueOr:
-    return err(error)
-  var res: CacheAccMissingIntvData
-  if data.len == 0:
-    res.ranges = ItemKeyRangeSet.init()
-  else:
-    res = data.decodeAccMissingIntvData().valueOr:
-      return err(error)
-  discard res.ranges.merge iv
   db.put1(cMissingIntv, encodeAccMissingIntvData(number, res.ranges))
 
 proc delAccMissingIntv*(

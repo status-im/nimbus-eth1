@@ -115,6 +115,7 @@ export
   addTx,
   getItem,
   getNonce,
+  getPendingNonce,
   contains,
   removeTx,
   removeExpiredTxs,
@@ -126,6 +127,7 @@ export
 # addTx(xp: TxPoolRef, tx: Transaction): Result[void, TxError]
 # getItem(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError]
 # getNonce(xp: TxPoolRef; account: Address): AccountNonce
+# getPendingNonce(xp: TxPoolRef; account: Address): AccountNonce
 # contains(xp: TxPoolRef, id: Hash32): bool
 # removeTx(xp: TxPoolRef, id: Hash32)
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)

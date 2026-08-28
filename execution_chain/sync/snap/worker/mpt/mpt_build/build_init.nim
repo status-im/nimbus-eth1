@@ -12,8 +12,6 @@
 import
   std/[sequtils, strutils, tables, typetraits],
   pkg/[eth/trie/nibbles, stew/byteutils],
-  ../../../../wire_protocol/snap/snap_types,
-  ../../state_db,
   ./build_desc
 
 # ------------------------------------------------------------------------------
