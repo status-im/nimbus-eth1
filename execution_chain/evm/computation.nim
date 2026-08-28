@@ -87,6 +87,12 @@ proc getBlockHash*(c: Computation, number: BlockNumber): Hash32 =
     return default(Hash32)
   c.vmState.getAncestorHash(number)
 
+template accountExists*(c: Computation, address: Address): bool =
+  if c.fork >= FkSpurious:
+    not c.vmState.readOnlyLedger.isDeadAccount(address)
+  else:
+    c.vmState.readOnlyLedger.accountExists(address)
+
 template accountAlive*(c: Computation, address: Address): bool =
   if c.balTrackerEnabled:
     c.vmState.balTracker.trackAddressAccess(address)

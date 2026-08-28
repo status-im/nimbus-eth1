@@ -96,7 +96,7 @@ proc selfDestructEIP150Op(cpt: VmCpt): EvmResultVoid =
   ## selfDestructEip150 (auto generated comment)
   let
     beneficiary = ? cpt.stack.popAddress()
-    condition = not cpt.accountAlive(beneficiary)
+    condition = not cpt.accountExists(beneficiary)
     gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
   ? cpt.opcodeGasCost(SelfDestruct,
