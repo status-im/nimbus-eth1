@@ -38,7 +38,7 @@ jobs:
 
       - name: 'Run Nix build for ${{ matrix.nixpkg }}'
         shell: bash
-        run: nix build --fallback -L '.?submodules=1#${{ matrix.nixpkg }}'
+        run: nix build --fallback -L '.?shallow=1&submodules=1#${{ matrix.nixpkg }}'
 
       - name: 'Run NixOS service check for ${{ matrix.nixpkg }}'
         if: ${{ matrix.nixpkg == 'execution-client' }}
