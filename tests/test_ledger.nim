@@ -374,31 +374,26 @@ proc runLedgerBasicOperationsTests() =
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         stateRoot {.used.} : Hash32
 
-    test "accountExists and isDeadAccount and accountAlive":
+    test "accountExists and isDeadAccount":
       check ledger.accountExists(address) == false
       check ledger.isDeadAccount(address) == true
-      check ledger.accountAlive(address) == false
 
       ledger.setBalance(address, 1000.u256)
 
       check ledger.accountExists(address) == true
       check ledger.isDeadAccount(address) == false
-      check ledger.accountAlive(address) == true
 
       ledger.setBalance(address, 0.u256)
       ledger.setNonce(address, 1)
       check ledger.isDeadAccount(address) == false
-      check ledger.accountAlive(address) == true
 
       ledger.setCode(address, code)
       ledger.setNonce(address, 0)
       check ledger.isDeadAccount(address) == false
-      check ledger.accountAlive(address) == true
 
       ledger.setCode(address, newSeq[byte]())
       check ledger.isDeadAccount(address) == true
       check ledger.accountExists(address) == true
-      check ledger.accountAlive(address) == false
 
     test "clone storage":
       # give access to private fields of AccountRef
