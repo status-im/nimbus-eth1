@@ -28,7 +28,10 @@ import
   ../transaction,
   eth/common/[base, addresses]
 
-from boringssl as bssl import nil
+when enable_boringssl:
+  from boringssl as bssl import nil
+else:
+  import nimcrypto/sha2
 
 when enable_mcl_lib:
   import ./bncurve_mcl
@@ -205,12 +208,15 @@ func sha256(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
 
-  # Skip zero-filling since SHA256 overwrites all 32 bytes
-  c.output.setLenUninit(32)
-  {.cast(noSideEffect).}:
-    let data = if c.msg.data.len > 0: addr c.msg.data[0] else: nil
-    discard bssl.SHA256(data, csize_t(c.msg.data.len),
-      cast[ptr array[32, byte]](addr c.output[0])[])
+  when enable_boringssl:
+    # Skip zero-filling since SHA256 overwrites all 32 bytes
+    c.output.setLenUninit(32)
+    {.cast(noSideEffect).}:
+      let data = if c.msg.data.len > 0: addr c.msg.data[0] else: nil
+      discard bssl.SHA256(data, csize_t(c.msg.data.len),
+        cast[ptr array[32, byte]](addr c.output[0])[])
+  else:
+    assign(c.output, sha2.sha256.digest(c.msg.data).data)
   ok()
 
 func ripemd160(c: Computation): EvmResultVoid =
