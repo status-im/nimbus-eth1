@@ -700,12 +700,6 @@ proc accountExists*(ledger: LedgerRef, address: Address): bool =
     return
   acc.exists()
 
-proc accountAlive*(ledger: LedgerRef, address: Address): bool =
-  let acc = ledger.getAccount(address, false)
-  if acc.isNil:
-    return
-  acc.exists() and not acc.isEmpty()
-
 proc isEmptyAccount*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
   doAssert not acc.isNil
@@ -1090,7 +1084,6 @@ proc getCode*(ledger: ReadOnlyLedger, address: Address): CodeBytesRef = getCode(
 proc getCodeSize*(ledger: ReadOnlyLedger, address: Address): int = getCodeSize(distinctBase ledger, address)
 proc contractCollision*(ledger: ReadOnlyLedger, address: Address): bool = contractCollision(distinctBase ledger, address)
 proc accountExists*(ledger: ReadOnlyLedger, address: Address): bool = accountExists(distinctBase ledger, address)
-proc accountAlive*(ledger: ReadOnlyLedger, address: Address): bool = accountAlive(distinctBase ledger, address)
 proc isDeadAccount*(ledger: ReadOnlyLedger, address: Address): bool = isDeadAccount(distinctBase ledger, address)
 proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAccount(distinctBase ledger, address)
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)

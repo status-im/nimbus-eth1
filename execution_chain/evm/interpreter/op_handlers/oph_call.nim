@@ -270,7 +270,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   ?cpt.callParams(p)
 
   let
-    isNewAccount = proc(): bool = not cpt.accountAlive(p.contractAddress)
+    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     params1 = GasParamsCall1(
       kind:            Call,
       nonZeroVal:      p.value.isZero.not,
@@ -369,6 +369,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   ?cpt.callCodeParams(p)
 
   let
+    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     params1 = GasParamsCall1(
       kind:            CallCode,
       nonZeroVal:      p.value.isZero.not,
@@ -384,6 +385,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
         kind:            params1.kind,
         nonZeroVal:      params1.nonZeroVal,
         gasCost1:        gasCost1,
+        isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.executionGasLeft,
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
         contractGas:     p.gas))
@@ -444,6 +446,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   var p: LocalParams
   ? cpt.delegateCallParams(p)
   let
+    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     params1 = GasParamsCall1(
       kind:            DelegateCall,
       nonZeroVal:      p.value.isZero.not,
@@ -459,6 +462,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
         kind:            params1.kind,
         nonZeroVal:      params1.nonZeroVal,
         gasCost1:        gasCost1,
+        isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.executionGasLeft,
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
         contractGas:     p.gas))
@@ -513,6 +517,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   var p: LocalParams
   ?cpt.staticCallParams(p)
   let
+    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
     params1 = GasParamsCall1(
       kind:            StaticCall,
       nonZeroVal:      p.value.isZero.not,
@@ -528,6 +533,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
         kind:            params1.kind,
         nonZeroVal:      params1.nonZeroVal,
         gasCost1:        gasCost1,
+        isNewAccount:    isNewAccount,
         gasLeft:         cpt.gasMeter.executionGasLeft,
         gasCallDelegate: cpt.gasCallDelegate(p.codeAddress, p.flags),
         contractGas:     p.gas))
