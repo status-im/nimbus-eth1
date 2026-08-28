@@ -46,7 +46,7 @@ proc hasAccMissingIntv*(
     info: static[string];
       ): Opt[bool] =
   let data = db.getAccMissingIntv.valueOr:
-    error info.failedToFetch "missing accounts state", `error`=error
+    error info.failedToFetch "missing account ranges", `error`=error
     return err()
   if data.isNone():
     return ok(false)
@@ -57,11 +57,11 @@ proc getAccMissingIntv*(
     info: static[string];
       ): Opt[CacheAccMissingIntvData] =
   var data = db.getAccMissingIntv.valueOr:
-    error info.failedToFetch "missing accounts state", `error`=error
+    error info.failedToFetch "missing account ranges", `error`=error
     return err()
   if data.isNone():
     # This record must always exist
-    error info & ": Missing accounts state, not on cache DB"
+    error info & ": Missing account ranges not on cache DB"
     return err()
   move data
 
@@ -72,7 +72,7 @@ proc putAccMissingIntv*(
     info: static[string];
       ): Opt[void] =
   db.putAccMissingIntv(number, ranges).isOkOr:
-    error info.failedRangeUpd "storage slot", `error`=error
+    error info.failedRangeUpd "missing account ranges", `error`=error
     return err()
   ok()
 
@@ -82,7 +82,7 @@ proc putAccMissingIntv*(
     info: static[string];
       ): Opt[void] =
   db.putAccMissingIntv(data.number, data.ranges).isOkOr:
-    error info.failedRangeUpd "storage slot", `error`=error
+    error info.failedRangeUpd "missing account ranges", `error`=error
     return err()
   ok()
 
@@ -173,17 +173,12 @@ proc nFlatAcc*(
 
 proc hasStoMissingIntv*(
     db: CacheDbRef;
-    accPath: Hash32;
     info: static[string];
       ): Opt[bool] =
-  let data = db.getStoMissingIntv(accPath).valueOr:
-    error info.failedToFetch "missing storage slots", `error`=error
+  var data = db.hasStoMissingIntv().valueOr:
+    error info.failedToFetch "missing storage slots ranges", `error`=error
     return err()
-  if data.isNone():
-    # Storage slots missing intv records need not exixts, contrary to the
-    # missing intv record for accounts.
-    return ok(false)
-  ok(0 < data.value.ranges.chunks)
+  ok(move data)
 
 proc getStoMissingIntv*(
     db: CacheDbRef;
@@ -191,7 +186,8 @@ proc getStoMissingIntv*(
     info: static[string];
       ): Opt[Opt[CacheStoMissingIntvData]] =
   var data = db.getStoMissingIntv(accPath).valueOr:
-    error info.failedToFetch "missing storage slots", `error`=error
+    error info.failedToFetch "missing storage slot ranges",
+      accPath=accPath.toStr, `error`=error
     return err()
   if data.isNone():
     # Storage slots missing intv records need not exixts. This differs from
@@ -206,7 +202,8 @@ proc putStoMissingIntv*(
     info: static[string];
       ): Opt[void] =
   db.putStoMissingIntv(accPath, ranges).isOkOr:
-    error info.failedRangeUpd "storage slot", `error`=error
+    error info.failedRangeUpd "missing storage slot ranges",
+      accPath=accPath.toStr, `error`=error
     return err()
   ok()
 
@@ -217,7 +214,8 @@ proc putStoMissingIntv*(
     info: static[string];
       ): Opt[void] =
   db.putStoMissingIntv(accPath, data.ranges).isOkOr:
-    error info.failedRangeUpd "storage slot", `error`=error
+    error info.failedRangeUpd "missing storage slot ranges",
+      accPath=accPath.toStr, `error`=error
     return err()
   ok()
 
@@ -227,7 +225,8 @@ proc delStoMissingIntv*(
     info: static[string];
       ): Opt[void] =
   db.delStoMissingIntv(accPath).isOkOr:
-    error info.failedDeleting "storage slot", `error`=error
+    error info.failedDeleting "missing storage slot ranges",
+      accPath=accPath.toStr, `error`=error
     return err()
   ok()
 
@@ -322,11 +321,20 @@ proc clearMissingIntv*(
 
 proc hasMissingBlob*(
     db: CacheDbRef;
+    info: static[string];
+      ): Opt[bool] =
+  var data = db.hasMissingBlob().valueOr:
+    error info.failedToFetch "missing code blobs", `error`=error
+    return err()
+  ok(move data)
+
+proc hasMissingBlob*(
+    db: CacheDbRef;
     accPath: Hash32;
     info: static[string];
       ): Opt[bool] =
   var data = db.hasMissingBlob(accPath).valueOr:
-    error info.failedToFetch "missing contract code", accPath=accPath.toStr,
+    error info.failedToFetch "missing code blobs", accPath=accPath.toStr,
       `error`=error
     return err()
   ok(move data)
@@ -337,7 +345,7 @@ proc putMissingBlob*(
     info: static[string];
       ): Opt[void] =
   db.putMissingBlob(accPath).isOkOr:
-    error info.failedUpdating "missing contract code", accPath=accPath.toStr,
+    error info.failedUpdating "missing code blob", accPath=accPath.toStr,
       `error`=error
     return err()
   ok()
@@ -348,7 +356,7 @@ proc delMissingBlob*(
     info: static[string];
       ): Opt[void] =
   db.delMissingBlob(accPath).isOkOr:
-    error info.failedDeleting "missing contract code", accPath=accPath.toStr,
+    error info.failedDeleting "missing code blob", accPath=accPath.toStr,
       `error`=error
     return err()
   ok()
