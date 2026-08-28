@@ -21,10 +21,10 @@ EEST_MAINNET_ARCHIVE="fixtures.tar.gz"
 EEST_MAINNET_URL="https://github.com/ethereum/execution-specs/releases/download/tests%40${EEST_MAINNET_VERSION}/${EEST_MAINNET_ARCHIVE}"
 
 # --- Devnet Release ---
-EEST_DEVNET_NAME="tests-glamsterdam-devnet"
-EEST_DEVNET_VERSION="v8.1.4"
+EEST_DEVNET_NAME="tests-frames-devnet"
+EEST_DEVNET_VERSION="v0.2.0"
 EEST_DEVNET_DIR="${FIXTURES_DIR}/eest_devnet"
-EEST_DEVNET_ARCHIVE="fixtures_glamsterdam-devnet.tar.gz"
+EEST_DEVNET_ARCHIVE="fixtures_frames-devnet.tar.gz"
 EEST_DEVNET_URL="https://github.com/ethereum/execution-specs/releases/download/${EEST_DEVNET_NAME}%40${EEST_DEVNET_VERSION}/${EEST_DEVNET_ARCHIVE}"
 
 # --- zkevm Release ---
@@ -70,7 +70,7 @@ download_and_extract() {
   echo "Downloading and extracting EEST test vectors for ${name} ${version}"
 
   cd "${FIXTURES_DIR}"
-  curl -L "${url}" -o "${archive}"
+  curl --http1.1 -L "${url}" -o "${archive}"
   tar -xzf "${archive}" -C "${dest_dir}" --strip-components=1
 
   rm -rf "${dest_dir}/.meta"
