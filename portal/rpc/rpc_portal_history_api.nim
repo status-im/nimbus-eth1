@@ -156,7 +156,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
         headerBytes: string
     ): string {.async: (raises: [RpcResponseError, ValueError, CancelledError]).} =
       let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
-        raise RpcResponseError((code: -39010, msg: "Failed to decode header: " & error))
+        raise applicationError((code: -39010, msg: "Failed to decode header: " & error))
 
       let blockBody = (await n.getBlockBody(header)).valueOr:
         raise contentNotFoundErr()
