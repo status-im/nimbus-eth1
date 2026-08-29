@@ -26,6 +26,12 @@
 # * 32-byte alignment helps vector instruction optimization
 #
 # After calling `init`, the stack must be freed manually using `dispose`!
+#
+# `dispose` hands the allocation to a small thread-local pool rather than
+# releasing it, so that a short-lived call frame - which on mainnet includes
+# every plain value transfer - does not pay a 32kb malloc/free round trip. A
+# disposed stack may therefore be handed straight back out to the next frame:
+# callers must drop their reference, as `Computation.dispose` does.
 
 {.push raises: [].}
 
@@ -38,14 +44,21 @@ import
   ./evm_errors,
   ./interpreter/utils/utils_numeric
 
-const evmStackSize = 1024
-  ## https://ethereum.org/en/developers/docs/evm/#evm-instructions
+const
+  evmStackSize = 1024
+    ## https://ethereum.org/en/developers/docs/evm/#evm-instructions
+
+  evmStackPoolMax = 32
+    ## Number of stack allocations kept alive per thread by `dispose` for reuse
+    ## by a later `init`, ie roughly 1mb. Frames beyond this bound fall back to
+    ## plain malloc/free.
 
 type
   EvmStack* = ref object
     values: ptr EvmStackElement
     memory: pointer
     len*: int
+    pooled: bool
 
   EvmStackElement = object
     data {.align: 32.}: UInt256
@@ -147,19 +160,42 @@ template pop*(stack: EvmStack): EvmResult[void] =
     s.len -= 1
     EvmResultVoid.ok()
 
-proc init*(_: type EvmStack): EvmStack =
-  let memory = c_malloc(evmStackSize * sizeof(EvmStackElement) + 31)
+var
+  stackPool {.threadvar.}: array[evmStackPoolMax, EvmStack]
+    ## Thread-local because the EVM runs on taskpool workers and refc uses
+    ## thread-local heaps. `execCallOrCreate` is synchronous, so a stack is
+    ## always released on the thread that acquired it.
+  stackPoolLen {.threadvar.}: int
+    ## Slots below this hold a stack, slots at or above it are nil.
 
-  EvmStack(
-    values: cast[ptr EvmStackElement](((cast[uint](memory) + 31) div 32) * 32) ,
-    memory: memory, # Need to free the same pointer that we got from malloc
-    len: 0,
-  )
+proc init*(_: type EvmStack): EvmStack =
+  {.cast(noSideEffect).}:
+    if stackPoolLen > 0:
+      dec stackPoolLen
+      result = stackPool[stackPoolLen]
+      stackPool[stackPoolLen] = nil
+      result.len = 0
+      result.pooled = false
+    else:
+      let memory = c_malloc(evmStackSize * sizeof(EvmStackElement) + 31)
+
+      result = EvmStack(
+        values: cast[ptr EvmStackElement](((cast[uint](memory) + 31) div 32) * 32) ,
+        memory: memory, # Need to free the same pointer that we got from malloc
+        len: 0,
+      )
 
 proc dispose*(stack: EvmStack) =
-  if stack[].memory != nil:
-    c_free(stack[].memory)
-    stack[].reset()
+  {.cast(noSideEffect).}:
+    if stack[].memory != nil and not stack[].pooled:
+      if stackPoolLen < evmStackPoolMax:
+        stack[].len = 0
+        stack[].pooled = true
+        stackPool[stackPoolLen] = stack
+        inc stackPoolLen
+      else:
+        c_free(stack[].memory)
+        stack[].reset()
 
 template swap*(stack: EvmStack, position: static int): EvmResultVoid =
   ## Swap the `top` and `top - position` items

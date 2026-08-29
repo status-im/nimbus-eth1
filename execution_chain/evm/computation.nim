@@ -201,6 +201,11 @@ proc dispose*(c: Computation) =
     c.stack.dispose()
     c.stack = nil
 
+  # `keepStack` marks the DebugCallResult path, the only caller that reads
+  # `c.memory` after the computation has been disposed.
+  if not c.keepStack:
+    c.memory.dispose()
+
 proc rollback*(c: Computation) =
   if c.balTrackerEnabled:
     c.vmState.balTracker.rollbackCallFrame()

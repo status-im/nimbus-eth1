@@ -15,14 +15,48 @@ import
   ./evm_errors,
   ./interpreter/utils/utils_numeric
 
+const
+  evmMemoryPoolMax = 32
+    ## Number of memory buffers kept alive per thread by `dispose` for reuse by a
+    ## later `init`.
+
+  evmMemoryRetainMax = 64 * 1024
+    ## Buffers grown past this are released rather than pooled, so that a single
+    ## memory hungry transaction cannot pin megabytes per thread.
+
 type
   EvmMemory* = object
     bytes*:  seq[byte]
 
+var
+  memoryPool {.threadvar.}: array[evmMemoryPoolMax, seq[byte]]
+    ## Thread-local for the same reasons as the EVM stack pool, see `stack.nim`.
+    ## Buffers are moved in and out with `swap`: under refc, assigning a seq into
+    ## a container deep copies it, which costs more than the allocation the pool
+    ## is there to avoid.
+  memoryPoolLen {.threadvar.}: int
+    ## Slots below this hold a buffer, slots at or above it are empty.
+
 func init*(_: type EvmMemory): EvmMemory =
-  EvmMemory(
-    bytes: newSeqOfCap[byte](1024)
-  )
+  {.cast(noSideEffect).}:
+    if memoryPoolLen > 0:
+      dec memoryPoolLen
+      swap(result.bytes, memoryPool[memoryPoolLen])
+      result.bytes.setLen(0)
+    else:
+      result.bytes = newSeqOfCap[byte](1024)
+
+func dispose*(memory: var EvmMemory) =
+  ## Return the buffer to the pool. `extend` re-zeroes whatever it exposes, both
+  ## under refc (`setLengthSeqImpl`) and arc (`setLen`), so a recycled buffer
+  ## never leaks the previous frame's bytes.
+  {.cast(noSideEffect).}:
+    let cap = memory.bytes.capacity
+    if cap > 0 and cap <= evmMemoryRetainMax and memoryPoolLen < evmMemoryPoolMax:
+      swap(memoryPool[memoryPoolLen], memory.bytes)
+      inc memoryPoolLen
+    else:
+      memory.bytes = @[]
 
 template len*(memory: EvmMemory): int =
   memory.bytes.len
