@@ -307,7 +307,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         )
         return SyncingStatus(syncing: true, syncObject: sync)
 
-    proc eth_getLogs(filterOptions: FilterOptions): seq[FilterLog] {.raises: [ApplicationError, ValueError].} =
+    proc eth_getLogs(filterOptions: FilterOptions): seq[FilterLog] {.raises: [RpcResponseError, ValueError].} =
       ## filterOptions: settings for this filter.
       ## Returns a list of all logs matching a given filter object.
       ## TODO: Current implementation is pretty naive and not efficient
@@ -405,7 +405,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       return populateReceipt(receipt, receipt.cumulativeGasUsed - prevGasUsed,
                             tx, txid, header, api.com)
 
-    proc eth_estimateGas(args: TransactionArgs): Quantity {.raises: [ApplicationError, ValueError].} =
+    proc eth_estimateGas(args: TransactionArgs): Quantity {.raises: [RpcResponseError, ValueError].} =
       ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
       ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
       ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
@@ -420,8 +420,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         txFrame = api.chain.txFrame(headerHash)
         # TODO: change 0 to configureable gas cap
         gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
-          let data = Opt.some(EthJson.encode(error[1].output.to0xHex()).JsonString)
-          raise (ref ApplicationError)(
+          let data = EthJson.encode(error[1].output.to0xHex()).JsonString
+          raise (ref RpcResponseError)(
             code: 3,
             msg: $error[1].error,
             data: data,
