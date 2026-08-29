@@ -783,7 +783,7 @@ proc rpcMain*() =
         check:
           exc.code == -32000
           exc.msg == "`debug_getRawBlockAccessList` raised an exception"
-          exc.data.string == JsonString("\"Resource not found\"")
+          exc.data == JsonString("\"Resource not found\"")
 
       # Unknown block tag must raise an error.
       expect RpcResponseError:
