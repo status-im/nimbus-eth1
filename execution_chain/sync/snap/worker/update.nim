@@ -18,6 +18,18 @@ logScope:
   topics = "snap sync"
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc allDownloaded(ctx: SnapCtxRef; info: static[string]): Opt[void] =
+  let adb = ctx.pool.cacheDB
+  if not ?adb.hasAccMissingIntv(info) and           # accounts not ready yet?
+     not ?adb.hasStoMissingIntv(info) and           # storage left (or error)?
+     not ?adb.hasMissingBlob(info):                 # codes left (or error)?
+    return ok()
+  err()
+
+# ------------------------------------------------------------------------------
 # Private FSA transition functions
 # ------------------------------------------------------------------------------
 
@@ -60,19 +72,24 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
 
 # -------------------------
 
-func downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
+proc downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   # Check whether one should forward the downloaded partial state
   let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
   if ctx.pool.pivotNum + consHeadSupportWindowSize < consHeadNum:
     ctx.poolMode = true
-    return SnapDownloadFinish
+    return SnapDownloadFinish                       # => sync peers
+  ctx.allDownloaded(info).isErrOr:                  # download is complete?
+    ctx.poolMode = true
+    return SnapDownloadFinish                       # => sync peers
   SnapDownload                                      # keep downloading
 
 proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
     return SnapDownloadFinish
+  ctx.allDownloaded(info).isErrOr:                  # download is complete?
+    ctx.poolMode = true
   SnapBalsFetch
 
 proc balsFetchNext(ctx: SnapCtxRef, info: static[string]): SnapState =

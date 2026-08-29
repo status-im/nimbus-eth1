@@ -114,6 +114,13 @@ proc delAccMissingIntv*(
 
 # -------------
 
+proc hasStoMissingIntv*(db: CacheDbRef): BoolResult =
+  for (key,value) in db.adb.colWalk33 key33(cMissingIntv, zeroHash32):
+    value.decodeStoMissingIntvData().isOkOr:
+      return err(error)
+    return ok(true)
+  ok(false)
+
 proc hasStoMissingIntv*(db: CacheDbRef, accPath: Hash32): BoolResult =
   let data = db.get33(cMissingIntv, accPath).valueOr:
     return err(error)
@@ -176,6 +183,11 @@ proc clearMissingIntv*(db: CacheDbRef): DelResult =
   db.clr1 cMissingIntv
 
 # -------------
+
+proc hasMissingBlob*(db: CacheDbRef): BoolResult =
+  for (_,_) in db.adb.colWalk33 [byte cMissingBlob]:
+    return ok(true)
+  ok(false)
 
 proc hasMissingBlob*(db: CacheDbRef, accPath: Hash32): BoolResult =
   let data = db.get33(cMissingBlob, accPath).valueOr:
@@ -262,6 +274,15 @@ iterator walkFlatAcc*(db: CacheDbRef): WalkFlatAccData =
     yield (key, w, "")
 
 # -------------
+
+proc hasFlatSlot*(db: CacheDbRef, accPath: Hash32): BoolResult =
+  for (key1,_,value) in db.adb.colWalk65 key65(cFlatSlot, accPath):
+    if key1 != accPath:
+      break
+    value.decodeFlatSlotData().isOkOr:
+      return err(error)
+    return ok(true)
+  ok(false)
 
 proc hasFlatSlot*(db: CacheDbRef, accPath, slotKey: Hash32): BoolResult =
   let data = db.get65(cFlatSlot, accPath, slotKey).valueOr:

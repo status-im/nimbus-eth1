@@ -225,6 +225,10 @@ func covered*(ikrs: ItemKeyRangeSet, pt: ItemKey): bool =
   ## Missing functionality from `interval_set` API.
   0 < ikrs.covered(pt, pt)
 
+proc merge*(ikrs: ItemKeyRangeSet, pt: ItemKey): bool {.discardable.} =
+  ## Missing functionality from `interval_set` API.
+  0 < ikrs.merge(pt, pt)
+
 func `+=`*(a, b: ItemKeyRangeSet) =
   ## Missing functionality from `interval_set` API.
   for iv in b.increasing:

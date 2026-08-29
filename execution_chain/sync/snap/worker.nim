@@ -95,8 +95,8 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       discard
 
     of SnapResume:
-      ctx.downloadInit(info).isOkOr:                # get ready
-        bodyRc = daemonWaitReadyInterval            # take a nap
+      ctx.downloadInit(info).isOkOr:                # get cache DB ready
+        bodyRc = daemonWaitResumeInterval           # not yet? take a nap
 
     of SnapClear:
       # Clear cache DB if needed.
@@ -106,11 +106,16 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         break body
 
       # Start headers download on the beacon sync server to run
-      # quasi-parallel mode to the snap sync.
+      # in quasi-parallel mode to the snap sync daemon & peers.
       ctx.headerDownloadTrigger(info).isOkOr:
         bodyRc = daemonWaitClearInterval            # take a nap
 
     of SnapReady:
+      # Re-trigger headers fetch. This is effective only if the last attempt
+      # was unsuccessful (maybe due to missing FC updates.)
+      ctx.headerDownloadTrigger(info).isOkOr:
+        bodyRc = daemonWaitClearInterval            # take a nap
+
       if ctx.pool.headersSynced:
         ctx.downloadInit(info).isOkOr:              # get ready
           bodyRc = daemonWaitReadyInterval          # take a nap
@@ -163,11 +168,21 @@ proc runPool*(
   ## argument `laps` (starting with `0`) indicated the currend lap of the
   ## repeated loops.
   ##
+  ## If there was no peer available when `buddy.ctx.poolMode` wass set, the
+  ## scheduler will wait until at least one peer is running. Then the
+  ## `runPool()` cycle will be executed (with the single peer.)
+  ##
   ## The argument `last` is set `true` if the last entry is reached.
   ##
   ## Note that this function does not run in `async` mode.
   ##
-  buddy.ctx.statsStateLog info
+  let ctx = buddy.ctx
+
+  if ctx.pool.syncState == SnapDownloadFinish:
+    ctx.downloadCommit(info).isOkOr:                # write back ranges to DB
+      error info & ": Error storing progress", `error`=error
+
+  ctx.statsStateLog info                            # print statistics
   true                                              # stop
 
 template runPeer*(
