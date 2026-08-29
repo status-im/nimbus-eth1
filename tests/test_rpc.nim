@@ -779,8 +779,8 @@ proc rpcMain*() =
         discard await client.call("debug_getRawBlockAccessList",
           %[%"latest"], EthJson)
         check false
-      except JsonRpcError as exc:
-        check "Resource not found" in exc.msg
+      except RpcResponseError as exc:
+        check "Resource not found" in exc.data.string
 
       # Unknown block tag must raise an error.
       expect JsonRpcError:

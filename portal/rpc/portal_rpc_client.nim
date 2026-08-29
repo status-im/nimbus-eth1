@@ -8,7 +8,6 @@
 {.push raises: [], gcsafe.}
 
 import
-  json_serialization,
   chronos,
   stew/byteutils,
   results,
@@ -38,10 +37,7 @@ proc init*(T: type PortalRpcClient, rpcClient: RpcClient): T =
   T(rpcClient)
 
 func toPortalRpcError*(error: string): PortalErrorResponse =
-  try:
-    Json.decode(error, PortalErrorResponse)
-  except SerializationError:
-    PortalErrorResponse(code: InvalidJsonRpcError, message: error)
+  PortalErrorResponse(code: InvalidJsonRpcError, message: error)
 
 template toBytes(content: string): seq[byte] =
   try:
@@ -51,7 +47,7 @@ template toBytes(content: string): seq[byte] =
 
 proc historyGetBlockBody*(
     client: PortalRpcClient, header: Header
-): Future[Result[BlockBody, PortalErrorResponse]] {.async: (raises: []).} =
+): Future[Result[BlockBody, PortalErrorResponse]] {.async: (raises: [CancelledError]).} =
   ## Fetches the block body for the given block header from the Portal History
   ## Network. The data is first looked up in the node's local database before
   ## trying to fetch it from the network. The block header needs to be passed
@@ -61,7 +57,9 @@ proc historyGetBlockBody*(
     content =
       try:
         await RpcClient(client).portal_historyGetBlockBody(headerBytes)
-      except CatchableError as e:
+      except RpcResponseError as e:
+        return err(PortalErrorResponse(code: e.code, message: e.msg))
+      except JsonRpcError as e:
         return err(e.msg.toPortalRpcError())
     blockBody = decodeRlp(content.toBytes(), BlockBody).valueOr:
       return err(
@@ -75,7 +73,9 @@ proc historyGetBlockBody*(
 
 proc historyGetReceipts*(
     client: PortalRpcClient, header: Header
-): Future[Result[StoredReceipts, PortalErrorResponse]] {.async: (raises: []).} =
+): Future[Result[StoredReceipts, PortalErrorResponse]] {.
+    async: (raises: [CancelledError])
+.} =
   ## Fetches the receipts for the given block header from the Portal History
   ## Network. The data is first looked up in the node's local database before
   ## trying to fetch it from the network. The block header needs to be passed
@@ -85,7 +85,9 @@ proc historyGetReceipts*(
     content =
       try:
         await RpcClient(client).portal_historyGetReceipts(headerBytes)
-      except CatchableError as e:
+      except RpcResponseError as e:
+        return err(PortalErrorResponse(code: e.code, message: e.msg))
+      except JsonRpcError as e:
         return err(e.msg.toPortalRpcError())
     receipts = decodeRlp(content.toBytes(), StoredReceipts).valueOr:
       return err(
