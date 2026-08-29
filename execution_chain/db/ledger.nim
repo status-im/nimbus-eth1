@@ -706,13 +706,13 @@ proc isEmptyAccount*(ledger: LedgerRef, address: Address): bool =
   doAssert acc.exists()
   acc.isEmpty()
 
-proc isDeadAccount*(ledger: LedgerRef, address: Address): bool =
+proc isAccountAlive*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
-    return true
+    return false
   if not acc.exists():
-    return true
-  acc.isEmpty()
+    return false
+  not acc.isEmpty()
 
 proc originalAccountEmpty*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
@@ -1084,7 +1084,7 @@ proc getCode*(ledger: ReadOnlyLedger, address: Address): CodeBytesRef = getCode(
 proc getCodeSize*(ledger: ReadOnlyLedger, address: Address): int = getCodeSize(distinctBase ledger, address)
 proc contractCollision*(ledger: ReadOnlyLedger, address: Address): bool = contractCollision(distinctBase ledger, address)
 proc accountExists*(ledger: ReadOnlyLedger, address: Address): bool = accountExists(distinctBase ledger, address)
-proc isDeadAccount*(ledger: ReadOnlyLedger, address: Address): bool = isDeadAccount(distinctBase ledger, address)
+proc isAccountAlive*(ledger: ReadOnlyLedger, address: Address): bool = isAccountAlive(distinctBase ledger, address)
 proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAccount(distinctBase ledger, address)
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase ledger, address)

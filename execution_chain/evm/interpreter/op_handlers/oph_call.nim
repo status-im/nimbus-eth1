@@ -270,7 +270,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   ?cpt.callParams(p)
 
   let
-    isNewAccount = proc(): bool = not cpt.accountExists(p.contractAddress)
+    isNewAccount = proc(): bool = not cpt.accountExistsOrAlive(p.contractAddress)
     params1 = GasParamsCall1(
       kind:            Call,
       nonZeroVal:      p.value.isZero.not,
