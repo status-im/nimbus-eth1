@@ -37,11 +37,11 @@ const
   # Errors used by Nimbus Portal but that are not part of current Portal JSON-RPC spec
   InvalidContentKeyError* = (code: -39008, msg: "Invalid content key")
 
-template applicationError*(error: (int, string)): auto =
+template rpcResponseError*(error: (int, string)): auto =
   (ref RpcResponseError)(code: error.code, msg: error.msg)
 
 template contentNotFoundErr*(): auto =
-  ContentNotFoundError.applicationError()
+  ContentNotFoundError.rpcResponseError()
 
 template contentNotFoundErrWithTrace*(data: typed): auto =
   (ref RpcResponseError)(
@@ -58,16 +58,16 @@ template payloadTypeNotSupportedError*(): auto =
   )
 
 template failedToDecodePayloadError*(): auto =
-  FailedToDecodePayloadError.applicationError()
+  FailedToDecodePayloadError.rpcResponseError()
 
 template payloadTypeRequiredError*(): auto =
-  PayloadTypeRequiredError.applicationError()
+  PayloadTypeRequiredError.rpcResponseError()
 
 template userSpecifiedPayloadBlockedByClientError*(): auto =
-  UserSpecifiedPayloadBlockedByClientError.applicationError()
+  UserSpecifiedPayloadBlockedByClientError.rpcResponseError()
 
 template invalidContentKeyError*(): auto =
-  InvalidContentKeyError.applicationError()
+  InvalidContentKeyError.rpcResponseError()
 
 type
   NodeInfo* = object
