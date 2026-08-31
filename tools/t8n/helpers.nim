@@ -126,18 +126,20 @@ proc parseTxJson*(txo: TxObject, chainId: ChainId): Result[Transaction, string] 
   var tx: Transaction
   tx.txType = txo.`type`.get(0'u64).TxType
   required(nonce)
-  required(gasLimit, gas, gasLimit)
-  required(value)
-  required(payload, input, data)
-  if txo.to.isSome:
-    if txo.to.value.len == 0:
-      tx.to = Opt.none(Address)
-    else:
-      if txo.to.value.len != 20:
-        return err("Invalid transaction 'to' address")
-      var address {.noinit.}: Address
-      assign(address.data, txo.to.value)
-      tx.to = Opt.some(address)
+
+  if tx.txType != TxEip8141:
+    required(gasLimit, gas, gasLimit)
+    required(value)
+    required(payload, input, data)
+    if txo.to.isSome:
+      if txo.to.value.len == 0:
+        tx.to = Opt.none(Address)
+      else:
+        if txo.to.value.len != 20:
+          return err("Invalid transaction 'to' address")
+        var address {.noinit.}: Address
+        assign(address.data, txo.to.value)
+        tx.to = Opt.some(address)
 
   case tx.txType
   of TxLegacy:
@@ -165,10 +167,24 @@ proc parseTxJson*(txo: TxObject, chainId: ChainId): Result[Transaction, string] 
     required(maxFeePerGas)
     optional(accessList)
     required(authorizationList)
+  of TxType5:
+    return err("Unsupported tx type 5")
+  of TxEip8141:
+    required(chainId)
+    required(sender)
+    required(frames)
+    required(signatures)
+    required(maxPriorityFeePerGas)
+    required(maxFeePerGas)
+    required(maxFeePerBlobGas)
+    required(versionedHashes, blobVersionedHashes)
 
   # Ignore chainId if txType == TxLegacy
   if tx.txType > TxLegacy and tx.chainId != chainId:
     return err("invalid chain id: have " & $tx.chainId & " want " & $chainId)
+
+  if tx.txType == TxEip8141:
+    return ok(tx)
 
   let eip155 = txo.protected.get(true)
   if txo.secretKey.isSome:
@@ -273,11 +289,16 @@ func to0xHex(x: UInt256): string =
   "0x" & x.toHex
 
 func `@@`(x: uint64 | uint8 | int64 | int): JsonNode =
+<<<<<<< HEAD
   let
     hex = x.toHex.stripLeadingZeros
     output = if hex.len mod 2 == 0: "0x" & hex
              else: "0x0" & hex
   %(output.toLowerAscii)
+=======
+  let hex = x.toHex.stripLeadingZeros
+  %("0x" & hex.toLowerAscii)
+>>>>>>> 0ecd71b88 (Add Frame Transaction parser to t8n)
 
 func `@@`(x: UInt256): JsonNode =
   %("0x" & x.toHex)
@@ -329,19 +350,46 @@ func `@@`(x: Log): JsonNode =
     "data"   : @@(x.data)
   }
 
-func `@@`(x: TxReceipt): JsonNode =
-  result = %{
-    "root"             : if x.root == default(Hash32): %("0x") else: @@(x.root),
-    "status"           : @@(x.status),
-    "cumulativeGasUsed": @@(x.cumulativeGasUsed),
-    "logsBloom"        : @@(x.logsBloom),
-    "logs"             : if x.logs.len == 0: newJNull() else: @@(x.logs),
-    "transactionHash"  : @@(x.transactionHash),
-    "contractAddress"  : @@(x.contractAddress),
-    "gasUsed"          : @@(x.gasUsed),
-    "blockHash"        : @@(x.blockHash),
-    "transactionIndex" : @@(x.transactionIndex)
+func `@@`(x: FrameReceipt): JsonNode =
+  let
+    gasUsed = %{
+      "execution": @@(x.gasUsed),
+      "state"    : @@(x.stateGasUsed),
+    }
+
+  %{
+    "status" : @@(x.status),
+    "gasUsed": gasUsed,
+    "logs"   : @@(x.logs),
   }
+
+func `@@`(x: TxReceipt): JsonNode =
+  if x.txType < TxEip8141:
+    result = %{
+      "root"             : if x.root == default(Hash32): %("0x") else: @@(x.root),
+      "status"           : @@(x.status),
+      "cumulativeGasUsed": @@(x.cumulativeGasUsed),
+      "logsBloom"        : @@(x.logsBloom),
+      "logs"             : if x.logs.len == 0: newJNull() else: @@(x.logs),
+      "transactionHash"  : @@(x.transactionHash),
+      "contractAddress"  : @@(x.contractAddress),
+      "gasUsed"          : @@(x.gasUsed),
+      "blockHash"        : @@(x.blockHash),
+      "transactionIndex" : @@(x.transactionIndex),
+    }
+
+  if x.txType == TxEip8141:
+    result = %{
+      "cumulativeGasUsed": @@(x.cumulativeGasUsed),
+      "transactionHash"  : @@(x.transactionHash),
+      "contractAddress"  : @@(x.contractAddress),
+      "gasUsed"          : @@(x.gasUsed),
+      "blockHash"        : @@(x.blockHash),
+      "transactionIndex" : @@(x.transactionIndex),
+      "payer"            : @@(x.payer),
+      "frameReceipts"    : @@(x.frameReceipts),
+    }
+
   if x.txType > TxLegacy:
     result["type"] = @@(x.txType.int)
 
