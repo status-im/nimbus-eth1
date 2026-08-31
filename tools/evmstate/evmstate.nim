@@ -41,7 +41,7 @@ type
     expectedLogs: Hash32
     postState: JsonNode
     forkStr: string
-    chainConfig: ChainConfig
+    com: CommonRef
     index: int
     tracerFlags: set[TracerFlags]
     error: string
@@ -216,7 +216,7 @@ proc runExecution(ctx: var StateContext,
                   receipt: Opt[TxoReceipt],
                   txBytes: openArray[byte]): Result[StateResult, string] =
   let
-    com     = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
+    com     = ctx.com
     stream  = newFileStream(stderr)
     tracer  = if conf.jsonEnabled:
                 newJsonTracer(stream, ctx.tracerFlags, conf.pretty)
@@ -288,7 +288,7 @@ proc toTracerFlags(conf: StateConf): set[TracerFlags] =
 
 proc parseTx(ctx: var StateContext, txo: Txo, subTest: SubTest): Result[void, string] =
   try:
-    if txo.secretKey.isSome:
+    if txo.secretKey.isSome or txo.signatures.isSome:
       ctx.tx = ? parseTx(txo, subTest.indexes)
       return ok()
 
@@ -300,9 +300,10 @@ proc parseTx(ctx: var StateContext, txo: Txo, subTest: SubTest): Result[void, st
   except RlpError as exc:
     return err(exc.msg)
 
-func prepareFork(ctx: var StateContext, forkName: string): Result[void, string] =
+proc prepareFork(ctx: var StateContext, forkName: string): Result[void, string] =
   ctx.forkStr = forkName
-  ctx.chainConfig = ? getChainConfig(forkName)
+  let chainConfig = ? getChainConfig(forkName)
+  ctx.com = CommonRef.new(newCoreDbRef DefaultDbMemory, chainConfig)
   inc ctx.index
   ok()
 
@@ -455,3 +456,4 @@ proc evmStateMain*() {.raises: [IOError].} =
 
 when isMainModule:
   evmStateMain()
+
