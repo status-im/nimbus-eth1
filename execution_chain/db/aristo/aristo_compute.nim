@@ -215,7 +215,7 @@ proc getKeys(
       rvids.toOpenArray(0, nFetch - 1), keyvtxsBe.toOpenArray(0, nFetch - 1), flags
     )
     for j in 0 ..< nFetch:
-      keyvtxs[int nibbles[j]] = (keyvtxsBe[j], dbLevel)
+      keyvtxs[nibbles[j].int] = (keyvtxsBe[j], dbLevel)
 
   ok()
 

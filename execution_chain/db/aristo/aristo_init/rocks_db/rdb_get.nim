@@ -143,7 +143,7 @@ proc getKey*(
         return ok((VOID_HASH_KEY, vtx))
 
   # Otherwise fetch from backend database
-  var 
+  var
     vtxBuf {.noinit.}: VertexBuf
     dataLen: int
 
@@ -155,7 +155,7 @@ proc getKey*(
 
   if not gotData:
     return ok((VOID_HASH_KEY, nil))
-  
+
   vtxBuf.n = typeof(vtxBuf.n)(dataLen)
 
   let res = vtxBuf.data().deblobify(HashKey)
@@ -178,7 +178,7 @@ proc getKey*(
 
   ok (res.valueOr(VOID_HASH_KEY), vtx)
 
-const MaxKeysFetch* = 16
+const MAX_KEYS_FETCH* = 16
 
 proc getKeys*(
     rdb: var RdbInst,
@@ -186,10 +186,10 @@ proc getKeys*(
     keyvtxs: var openArray[(HashKey, VertexRef)],
     flags: set[GetVtxFlag],
 ): Result[void, (AristoError, string)] =
-  doAssert rvids.len <= MaxKeysFetch and keyvtxs.len >= rvids.len
+  doAssert rvids.len <= MAX_KEYS_FETCH and keyvtxs.len == rvids.len
 
   var
-    fetchIdxs {.noinit.}: array[MaxKeysFetch, uint8]
+    fetchIdxs {.noinit.}: array[MAX_KEYS_FETCH, uint8]
     nFetch = 0
 
   for i, rvid in rvids:
@@ -226,10 +226,10 @@ proc getKeys*(
     return ok()
 
   var
-    keyBufs {.noinit.}: array[MaxKeysFetch, RVidBuf]
-    keySlices {.noinit.}: array[MaxKeysFetch, RocksDbSlice]
-    vtxBufs {.noinit.}: array[MaxKeysFetch, VertexBuf]
-    valueSlices {.noinit.}: array[MaxKeysFetch, RocksDbMutSlice]
+    keyBufs {.noinit.}: array[MAX_KEYS_FETCH, RVidBuf]
+    keySlices {.noinit.}: array[MAX_KEYS_FETCH, RocksDbSlice]
+    vtxBufs {.noinit.}: array[MAX_KEYS_FETCH, VertexBuf]
+    valueSlices {.noinit.}: array[MAX_KEYS_FETCH, RocksDbMutSlice]
 
   for j in 0 ..< nFetch:
     keyBufs[j] = rvids[int fetchIdxs[j]].blobify()
@@ -303,7 +303,7 @@ proc getVtx*(
       return ok(vtx)
 
   # Otherwise fetch from backend database
-  var 
+  var
     vtxBuf {.noinit.}: VertexBuf
     dataLen: int
 
@@ -316,7 +316,7 @@ proc getVtx*(
   if not gotData:
     rdbVtxLruStats[rvid.to(RdbStateType)][RdbVertexType.Empty].inc(false)
     return ok(VertexRef(nil))
-  
+
   vtxBuf.n = typeof(vtxBuf.n)(dataLen)
 
   let res = vtxBuf.data().deblobify(VertexRef)

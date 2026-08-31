@@ -9,7 +9,7 @@
 # distributed except according to those terms.
 
 import
-  std/[algorithm, monotimes, os, strformat, times],
+  std/[algorithm, cpuinfo, monotimes, os, strformat, times],
   tempfile,
   ../../execution_chain/db/opts,
   ../../execution_chain/db/aristo/[
@@ -20,13 +20,17 @@ import
   ../../execution_chain/db/core_db/backend/[aristo_rocksdb, rocksdb_desc]
 
 const
-  BASE_ACCOUNTS = 250_000
+  BASE_ACCOUNTS = 2_000_000
   STEADY_BLOCKS = 50
   STEADY_WARMUP = 10
   STEADY_ACCOUNTS_PER_BLOCK = 2_000
   COLD_REPEATS = 3
 
-proc makeOpts(): DbOptions =
+let NUM_THREADS = max(countProcessors(), 2)
+
+var benchTaskpool: Taskpool
+
+proc makeOpts(parallel = false): DbOptions =
   DbOptions.init(
     maxOpenFiles = 512,
     writeBufferSize = 64 * 1024 * 1024,
@@ -36,8 +40,8 @@ proc makeOpts(): DbOptions =
     rdbKeyCacheSize = 128 * 1024 * 1024,
     rdbBranchCacheSize = 64 * 1024 * 1024,
     maxSnapshots = 2,
-    parallelStateRootComputation = false,
-    threadSafeCaches = false,
+    parallelStateRootComputation = parallel,
+    threadSafeCaches = parallel,
   )
 
 proc openBaseDb(basePath: string, opts: DbOptions, wipe = false): RocksDbInstanceRef =
@@ -52,7 +56,11 @@ proc openBaseDb(basePath: string, opts: DbOptions, wipe = false): RocksDbInstanc
     .expect("open benchmark RocksDB")
 
 proc openAristoDb(basePath: string, opts: DbOptions, wipe = false): AristoDbRef =
-  AristoDbRef.init(opts, openBaseDb(basePath, opts, wipe)).expect("aristo db")
+  let db = AristoDbRef.init(opts, openBaseDb(basePath, opts, wipe)).expect("aristo db")
+  if opts.parallelStateRootComputation:
+    doAssert not benchTaskpool.isNil()
+    db.taskpool = benchTaskpool
+  db
 
 proc mix(x: uint64): uint64 =
   var z = x + 0x9E3779B97F4A7C15'u64
@@ -100,12 +108,12 @@ proc median(xs: var seq[float]): float =
   xs.sort()
   xs[xs.len div 2]
 
-proc withDbCopy(srcPath: string, body: proc(db: AristoDbRef)) =
+proc withDbCopy(srcPath: string, opts: DbOptions, body: proc(db: AristoDbRef)) =
   let dir = mkdtemp()
   try:
     removeDir(dir)
     copyDir(srcPath, dir)
-    let db = openAristoDb(dir, makeOpts())
+    let db = openAristoDb(dir, opts)
     body(db)
     db.closeFn(wipe = false)
   finally:
@@ -114,11 +122,11 @@ proc withDbCopy(srcPath: string, body: proc(db: AristoDbRef)) =
     except CatchableError:
       discard
 
-proc runCold(srcPath: string, useMultiGet: bool): (float, Hash32) =
+proc runCold(srcPath: string, opts: DbOptions, useMultiGet: bool): (float, Hash32) =
   var
     elapsed: float
     root: Hash32
-  withDbCopy(srcPath) do (db: AristoDbRef):
+  withDbCopy(srcPath, opts) do (db: AristoDbRef):
     if not useMultiGet:
       db.getKeysFn = nil
     let t0 = getMonoTime()
@@ -128,11 +136,11 @@ proc runCold(srcPath: string, useMultiGet: bool): (float, Hash32) =
     root = res[].to(Hash32)
   (elapsed, root)
 
-proc runSteady(srcPath: string, useMultiGet: bool): (float, Hash32) =
+proc runSteady(srcPath: string, opts: DbOptions, useMultiGet: bool): (float, Hash32) =
   var
     meanMs: float
     root: Hash32
-  withDbCopy(srcPath) do (db: AristoDbRef):
+  withDbCopy(srcPath, opts) do (db: AristoDbRef):
     if not useMultiGet:
       db.getKeysFn = nil
     pathCounter = BASE_ACCOUNTS
@@ -157,17 +165,18 @@ proc runSteady(srcPath: string, useMultiGet: bool): (float, Hash32) =
 proc runScenario(
     name: string,
     srcPath: string,
+    opts: DbOptions,
     repeats: int,
-    scenario: proc(srcPath: string, useMultiGet: bool): (float, Hash32),
-) =
+    scenario: proc(srcPath: string, opts: DbOptions, useMultiGet: bool): (float, Hash32),
+): (float, float) =
   var
     singleTimes, multiTimes: seq[float]
     singleRoot, multiRoot: Hash32
   for _ in 0 ..< repeats:
-    let (t, r) = scenario(srcPath, false)
+    let (t, r) = scenario(srcPath, opts, false)
     singleTimes.add t
     singleRoot = r
-    let (t2, r2) = scenario(srcPath, true)
+    let (t2, r2) = scenario(srcPath, opts, true)
     multiTimes.add t2
     multiRoot = r2
   doAssert singleRoot == multiRoot, "single-get and multi-get roots differ!"
@@ -175,26 +184,46 @@ proc runScenario(
     s = median(singleTimes)
     m = median(multiTimes)
   echo &"{name}: single-get {s:9.2f} ms | multiget {m:9.2f} ms | speedup {s / m:5.2f}x"
+  (s, m)
 
 let
-  benchOpts = makeOpts()
+  serialOpts = makeOpts()
+  parallelOpts = makeOpts(parallel = true)
   coldPath = mkdtemp()
   steadyPath = mkdtemp()
+  coldName = "cold full-trie root (skipLayers)   "
+  steadyName = &"steady-state (mean/root, {STEADY_BLOCKS - STEADY_WARMUP} blocks) "
 
 try:
   echo &"building base db without keys ({BASE_ACCOUNTS} accounts)..."
-  buildBaseDb(coldPath, benchOpts, withKeys = false)
+  buildBaseDb(coldPath, serialOpts, withKeys = false)
   echo &"building base db with keys ({BASE_ACCOUNTS} accounts)..."
-  buildBaseDb(steadyPath, benchOpts, withKeys = true)
+  buildBaseDb(steadyPath, serialOpts, withKeys = true)
 
-  runScenario(
-    "cold full-trie root (skipLayers)   ", coldPath, COLD_REPEATS, runCold
-  )
-  runScenario(
-    &"steady-state (mean/root, {STEADY_BLOCKS - STEADY_WARMUP} blocks) ",
-    steadyPath, 1, runSteady,
-  )
+  echo "\nserial state root computation"
+  let
+    (coldSerialSingle, coldSerialMulti) =
+      runScenario(coldName, coldPath, serialOpts, COLD_REPEATS, runCold)
+    (steadySerialSingle, steadySerialMulti) =
+      runScenario(steadyName, steadyPath, serialOpts, 1, runSteady)
+
+  benchTaskpool = Taskpool.new(numThreads = NUM_THREADS)
+
+  echo &"\nparallel state root computation ({NUM_THREADS} threads)"
+  let
+    (coldParSingle, coldParMulti) =
+      runScenario(coldName, coldPath, parallelOpts, COLD_REPEATS, runCold)
+    (steadyParSingle, steadyParMulti) =
+      runScenario(steadyName, steadyPath, parallelOpts, 1, runSteady)
+
+  echo "\nparallel speedup over serial"
+  echo &"{coldName}: single-get {coldSerialSingle / coldParSingle:5.2f}x" &
+    &" | multiget {coldSerialMulti / coldParMulti:5.2f}x"
+  echo &"{steadyName}: single-get {steadySerialSingle / steadyParSingle:5.2f}x" &
+    &" | multiget {steadySerialMulti / steadyParMulti:5.2f}x"
 finally:
+  if not benchTaskpool.isNil():
+    benchTaskpool.shutdown()
   try:
     removeDir(coldPath)
     removeDir(steadyPath)
