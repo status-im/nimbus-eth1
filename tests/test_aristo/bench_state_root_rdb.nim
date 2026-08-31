@@ -28,7 +28,7 @@ const
 
 let NUM_THREADS = max(countProcessors(), 2)
 
-let benchTmpDir = getAppDir() / "bench_tmp"
+let benchTmpDir = mkdtemp(prefix = "bench_tmp_", dir = getAppDir())
 
 var benchTaskpool: Taskpool
 
@@ -227,8 +227,6 @@ finally:
   if not benchTaskpool.isNil():
     benchTaskpool.shutdown()
   try:
-    removeDir(coldPath)
-    removeDir(steadyPath)
     removeDir(benchTmpDir)
   except CatchableError:
     discard

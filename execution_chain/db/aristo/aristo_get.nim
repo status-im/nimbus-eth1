@@ -49,6 +49,9 @@ proc getKeysBe*(
     keyvtxs: var openArray[(HashKey, VertexRef)];
     flags: set[GetVtxFlag];
       ): Result[void,AristoError] =
+  ## Get a batch of Merkle hashes/keys from the backend if available.
+  doAssert rvids.len <= MAX_KEYS_FETCH and keyvtxs.len == rvids.len
+
   if db.getKeysFn.isNil:
     for i, rvid in rvids:
       keyvtxs[i] = ?db.getKeyFn(rvid, flags)

@@ -178,8 +178,6 @@ proc getKey*(
 
   ok (res.valueOr(VOID_HASH_KEY), vtx)
 
-const MAX_KEYS_FETCH* = 16
-
 func cmpKeyBuf(a, b: RVidBuf): int =
   let n = min(int(a.len), int(b.len))
   for i in 0 ..< n:
