@@ -12,7 +12,7 @@
 
 import
   std/[strutils, tables],
-  stew/byteutils,
+  stew/[byteutils, assign2],
   stint,
   json_serialization,
   json_serialization/pkg/results,
@@ -95,18 +95,29 @@ proc readValue*(r: var JsonReader[Fixture], val: var TransContext)
     of "txs"    : r.readValue(val.txsJson)
     of "txsRlp" : r.readValue(val.txsRlp)
 
-proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
+proc parseTxJson*(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
   template required(field) =
     const fName = astToStr(field)
     if txo.field.isNone:
       return err("missing required field '" & fName & "' in transaction")
     tx.field = txo.field.get
 
-  template required(field, alias) =
-    const fName = astToStr(field)
-    if txo.field.isNone:
-      return err("missing required field '" & fName & "' in transaction")
-    tx.alias = txo.field.get
+  template required(field, src) =
+    const srcName = astToStr(src)
+    if txo.src.isNone:
+      return err("missing required field '" & srcName & "' in transaction")
+    tx.field = txo.src.get
+
+  template required(field, src1, src2) =
+    const
+      src1Name = astToStr(src1)
+      src2Name = astToStr(src2)
+    if txo.src1.isNone and txo.src2.isNone:
+      return err("missing required field '" & src1Name & "' or '" & src2Name & "' in transaction")
+    if txo.src1.isSome:
+      tx.field = txo.src1.value
+    else:
+      tx.field = txo.src2.value
 
   template optional(field) =
     if txo.field.isSome:
@@ -115,10 +126,20 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
   var tx: Transaction
   tx.txType = txo.`type`.get(0'u64).TxType
   required(nonce)
-  required(gas, gasLimit)
-  required(value)
-  required(input, payload)
-  tx.to = txo.to
+
+  if tx.txType != TxEip8141:
+    required(gasLimit, gas, gasLimit)
+    required(value)
+    required(payload, input, data)
+    if txo.to.isSome:
+      if txo.to.value.len == 0:
+        tx.to = Opt.none(Address)
+      else:
+        if txo.to.value.len != 20:
+          return err("Invalid transaction 'to' address")
+        var address {.noinit.}: Address
+        assign(address.data, txo.to.value)
+        tx.to = Opt.some(address)
 
   case tx.txType
   of TxLegacy:
@@ -139,17 +160,31 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
     required(maxFeePerGas)
     optional(accessList)
     required(maxFeePerBlobGas)
-    required(blobVersionedHashes, versionedHashes)
+    required(versionedHashes, blobVersionedHashes)
   of TxEip7702:
     required(chainId)
     required(maxPriorityFeePerGas)
     required(maxFeePerGas)
     optional(accessList)
     required(authorizationList)
+  of TxType5:
+    return err("Unsupported tx type 5")
+  of TxEip8141:
+    required(chainId)
+    required(sender)
+    required(frames)
+    required(signatures)
+    required(maxPriorityFeePerGas)
+    required(maxFeePerGas)
+    required(maxFeePerBlobGas)
+    required(versionedHashes, blobVersionedHashes)
 
   # Ignore chainId if txType == TxLegacy
   if tx.txType > TxLegacy and tx.chainId != chainId:
     return err("invalid chain id: have " & $tx.chainId & " want " & $chainId)
+
+  if tx.txType == TxEip8141:
+    return ok(tx)
 
   let eip155 = txo.protected.get(true)
   if txo.secretKey.isSome:
@@ -157,9 +192,9 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
       return err($error)
     ok(signTransaction(tx, secretKey, eip155))
   else:
-    required(v, V)
-    required(r, R)
-    required(s, S)
+    required(V, v)
+    required(R, r)
+    required(S, s)
     ok(tx)
 
 func readNestedTx(rlp: var Rlp, chainId: ChainId): Result[Transaction, string] =

@@ -20,11 +20,12 @@ import
   json_serialization,
   json_serialization/pkg/results,
   ../../execution_chain/common/chain_config,
+  ../../execution_chain/utils/utils,
   ../../tools/t8n/[
     helpers,
     types,
     config,
-    transition,
+    #transition,
     serialize_bal
   ],
   ./chain_config_wrapper,
@@ -35,6 +36,7 @@ type
     rlp*: seq[byte]
     blockAccessList*: Opt[JsonString]
     expectException*: Opt[string]
+    transactions*   : seq[TxObject]
 
   BCData* = object
     blocks*: seq[BCBlock]
@@ -255,6 +257,32 @@ proc compareResult(res: ExecOutput,
 
   ok()
 
+proc validateTransactions(txs: openArray[TxObject], blk: Block): Result[void, string] =
+  # This function purpose is to test `parseTxJson`
+  # Although `parseTxJson` itself is not used by eest_t8n
+  var transactions: seq[Transaction]
+  for i, n in txs:
+    let
+      tx = ? parseTxJson(n, MainNet)
+      txHash = tx.computeRlpHash()
+      expected = blk.transactions[i].computeRlpHash()
+
+    if txHash != expected:
+      return err("txHash mismatch: " & $txHash &
+        ", want: " & $expected)
+
+    transactions.add tx
+
+  let
+    txRoot = calcTxRoot(transactions)
+    expected = blk.header.transactionsRoot
+
+  if txRoot != expected:
+    return err("txRoot mismatch: " & $txRoot &
+      ", want: " & $expected)
+
+  ok()
+
 proc runTest(bcdata: BCData, filePath: string, unitIndex: int): Result[void, string] =
   var
     prevAlloc = bcdata.pre
@@ -270,6 +298,8 @@ proc runTest(bcdata: BCData, filePath: string, unitIndex: int): Result[void, str
   for i, currBlock in blocks:
     if bcdata.blocks[i].expectException.isSome:
       continue
+
+    ? validateTransactions(bcdata.blocks[i].transactions, currBlock)
 
     let
       conf = T8NConf(

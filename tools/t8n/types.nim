@@ -63,9 +63,11 @@ type
     `type`*: Opt[uint64]
     nonce* : Opt[AccountNonce]
     gas*   : Opt[GasInt]
+    gasLimit*: Opt[GasInt]
     value* : Opt[UInt256]
     input* : Opt[seq[byte]]
-    to*    : Opt[Address]
+    data*  : Opt[seq[byte]]
+    to*    : Opt[seq[byte]]
     v*     : Opt[uint64]
     r*     : Opt[UInt256]
     s*     : Opt[UInt256]
@@ -79,6 +81,9 @@ type
     maxFeePerBlobGas*    : Opt[UInt256]
     blobVersionedHashes* : Opt[seq[Hash32]]
     authorizationList*   : Opt[seq[Authorization]]
+    sender*    : Opt[Address]
+    frames*    : Opt[seq[TransactionFrame]]
+    signatures*: Opt[seq[FrameSignature]]
 
   TxList* = seq[Result[Transaction, string]]
 
