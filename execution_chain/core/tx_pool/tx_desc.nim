@@ -16,8 +16,9 @@ import
   std/[times, tables, typetraits],
   eth/eip1559,
   eth/common/transaction_utils,
-  stew/[sorted_set, bitseqs],
+  stew/sorted_set,
   web3/engine_api_types,
+  beacon_chain/spec/datatypes/deneb,
   ../../common/common,
   ../../evm/state,
   ../../evm/types,
@@ -34,7 +35,10 @@ import
   ./tx_tabs,
   ./tx_item
 
+import beacon_chain/spec/engine_types as engine_ssz_types
+
 from eth/common/eth_types_rlp import rlpHash
+from std/sequtils import mapIt
 
 logScope:
   topics = "txpool"
@@ -51,7 +55,7 @@ type
     feeRecipient: Address
     timestamp   : EthTime
     prevRandao  : Bytes32
-    withdrawals : seq[Withdrawal] ## EIP-4895
+    withdrawals : seq[blocks.Withdrawal] ## EIP-4895
     beaconRoot  : Hash32 ## EIP-4788
     slotNumber  : uint64 ## EIP-7843
     targetGasLimit: Opt[uint64]
@@ -364,7 +368,7 @@ proc removeTx*(xp: TxPoolRef, id: Hash32) =
   nec_txpool_removed_total.inc()
   xp.updatePoolSizeMetrics()
 
-proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
+proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: times.Duration = TX_ITEM_LIFETIME) =
   var expired = newSeqOfCap[Hash32](xp.idTab.len div 4)
   let now = utcNow()
 
@@ -509,81 +513,80 @@ func isOrdered*(xp: TxPoolRef): bool =
 func senderCount*(xp: TxPoolRef): int =
   xp.senderTab.len
 
-func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1] =
+func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[engine_ssz_types.BlobAndProofV1] =
   xp.blobTab.withValue(v, val):
     let np = val.item.pooledTx.blobsBundle
     if np.wrapperVersion == WrapperVersionEIP4844:
-      return Opt.some(BlobAndProofV1(
-        blob: np.blobs[val.blobIndex],
-        proof: np.proofs[val.blobIndex]))
+      return Opt.some(engine_ssz_types.BlobAndProofV1(
+        blob: engine_ssz_types.Blob(distinctBase(np.blobs[val.blobIndex])),
+        proof: engine_ssz_types.KzgProof(bytes: distinctBase(np.proofs[val.blobIndex]))))
 
-  Opt.none(BlobAndProofV1)
+  Opt.none(engine_ssz_types.BlobAndProofV1)
 
-func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2] =
-  type KzgProof = engine_api_types.KzgProof
-  func getProofs(list: openArray[KzgProof], index: int): array[CELLS_PER_EXT_BLOB, KzgProof] =
+func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[engine_ssz_types.BlobAndProofV2] =
+  type ProofsList =
+    engine_ssz_types.List[engine_ssz_types.KzgProof, engine_ssz_types.Limit engine_ssz_types.CELLS_PER_EXT_BLOB]
+
+  func getProofs(list: openArray[pooled_txs.KzgProof], index: int): ProofsList =
     let
-      startIndex = index * CELLS_PER_EXT_BLOB
-      endIndex   = startIndex + CELLS_PER_EXT_BLOB
+      startIndex = index * engine_ssz_types.CELLS_PER_EXT_BLOB
+      endIndex   = startIndex + engine_ssz_types.CELLS_PER_EXT_BLOB
     doAssert(list.len >= endIndex)
 
-    for i in 0..<CELLS_PER_EXT_BLOB:
-      result[i] = list[startIndex + i]
+    ProofsList.init(
+      list[startIndex ..< endIndex].mapIt(
+        engine_ssz_types.KzgProof(bytes: distinctBase(it))))
 
   xp.blobTab.withValue(v, val):
     let np = val.item.pooledTx.blobsBundle
     if np.wrapperVersion == WrapperVersionEIP7594:
-      return Opt.some(BlobAndProofV2(
-        blob: np.blobs[val.blobIndex],
+      return Opt.some(engine_ssz_types.BlobAndProofV2(
+        blob: engine_ssz_types.Blob(distinctBase(np.blobs[val.blobIndex])),
         proofs: getProofs(np.proofs, val.blobIndex)))
 
-  Opt.none(BlobAndProofV2)
+  Opt.none(engine_ssz_types.BlobAndProofV2)
 
-proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: BitArray[128]): Opt[BlobCellsAndProofsV1] =
-  type
-    KzgProof = engine_api_types.KzgProof
-    KzgCells = eip4844.KzgCells
+proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash,
+    indices: BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB]):
+      Opt[engine_ssz_types.BlobCellsAndProofs] =
+  type KzgCells = eip4844.KzgCells
 
-  func getNumIndices(indices: BitArray[128]): int =
-    for i in 0..<indices.len:
-      if indices[i]:
-        inc result
-
-  func getCellsAndProofs(indices: BitArray[128],
+  func getCellsAndProofs(indices: BitArray[engine_ssz_types.CELLS_PER_EXT_BLOB],
                          cells: KzgCells,
-                         list: openArray[KzgProof],
-                         index: int,
-                         output: var BlobCellsAndProofsV1) =
+                         list: openArray[engine_api_types.KzgProof],
+                         index: int): engine_ssz_types.BlobCellsAndProofs =
     let
-      startIndex = index * CELLS_PER_EXT_BLOB
-      endIndex   = startIndex + CELLS_PER_EXT_BLOB
-      numIndices = indices.getNumIndices
-
+      startIndex = index * engine_ssz_types.CELLS_PER_EXT_BLOB
+      endIndex   = startIndex + engine_ssz_types.CELLS_PER_EXT_BLOB
     doAssert(list.len >= endIndex)
 
-    output.blob_cells = newSeqOfCap[seq[byte]](numIndices)
-    output.proofs = newSeqOfCap[KzgProof](numIndices)
+    var
+      blobCells = newSeq[engine_ssz_types.Optional[array[BYTES_PER_CELL, byte]]](
+        engine_ssz_types.CELLS_PER_EXT_BLOB)
+      proofs = newSeq[engine_ssz_types.Optional[deneb.KzgProof]](
+        engine_ssz_types.CELLS_PER_EXT_BLOB)
     for i in 0..<indices.len:
       if indices[i]:
-        output.blob_cells.add(@(cells[i].bytes))
-        output.proofs.add(list[startIndex + i])
+        blobCells[i] = optSome(cells[i].bytes)
+        proofs[i] = optSome(deneb.KzgProof(bytes: distinctBase(list[startIndex + i])))
+      else:
+        blobCells[i] = optNone(array[BYTES_PER_CELL, byte])
+        proofs[i] = optNone(deneb.KzgProof)
+
+    engine_ssz_types.BlobCellsAndProofs(
+      blob_cells: typeof(default(engine_ssz_types.BlobCellsAndProofs).blob_cells).init(blobCells),
+      proofs: typeof(default(engine_ssz_types.BlobCellsAndProofs).proofs).init(proofs))
 
   xp.blobTab.withValue(v, val):
     let
       np = val.item.pooledTx.blobsBundle
       blob = cast[ptr eip4844.KzgBlob](np.blobs[val.blobIndex].addr)
       cells = computeCells(blob[]).valueOr:
-        return Opt.none(BlobCellsAndProofsV1)
+        return Opt.none(engine_ssz_types.BlobCellsAndProofs)
     if np.wrapperVersion == WrapperVersionEIP7594:
-      var res = Opt.some(BlobCellsAndProofsV1())
-      indicesBitarray.getCellsAndProofs(
-        cells, np.proofs,
-        val.blobIndex,
-        res.value
-      )
-      return res
+      return Opt.some(getCellsAndProofs(indices, cells, np.proofs, val.blobIndex))
 
-  Opt.none(BlobCellsAndProofsV1)
+  Opt.none(engine_ssz_types.BlobCellsAndProofs)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters
@@ -598,7 +601,7 @@ func timestamp*(xp: TxPoolRef): EthTime =
 func prevRandao*(xp: TxPoolRef): Bytes32 =
   xp.pos.prevRandao
 
-func withdrawals*(xp: TxPoolRef): seq[Withdrawal] =
+func withdrawals*(xp: TxPoolRef): seq[blocks.Withdrawal] =
   xp.pos.withdrawals
 
 func parentBeaconBlockRoot*(xp: TxPoolRef): Hash32 =
@@ -620,7 +623,7 @@ func `timestamp=`*(xp: TxPoolRef, val: EthTime) =
 func `prevRandao=`*(xp: TxPoolRef, val: Bytes32) =
   xp.pos.prevRandao = val
 
-func `withdrawals=`*(xp: TxPoolRef, val: sink seq[Withdrawal]) =
+func `withdrawals=`*(xp: TxPoolRef, val: sink seq[blocks.Withdrawal]) =
   xp.pos.withdrawals = system.move(val)
 
 func `parentBeaconBlockRoot=`*(xp: TxPoolRef, val: Hash32) =
