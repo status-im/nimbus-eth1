@@ -33,6 +33,9 @@ createJsonFlavor Fixture,
 AccessPair.useDefaultSerializationIn Fixture
 Authorization.useDefaultSerializationIn Fixture
 Log.useDefaultSerializationIn Fixture
+TransactionFrame.useDefaultSerializationIn Fixture
+FrameSignature.useDefaultSerializationIn Fixture
+FrameReceipt.useDefaultSerializationIn Fixture
 
 template wrapValueError(body: untyped) =
   try:

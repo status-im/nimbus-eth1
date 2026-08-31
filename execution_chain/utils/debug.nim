@@ -120,6 +120,31 @@ proc `$`(acl: transactions.AccessList): string =
       if i < ap.storageKeys.len - 1:
         result.add "\n"
 
+proc debug(n: openArray[FrameSignature]): string =
+  if n.len == 0:
+    return "-"
+
+  result.add "\n"
+  for x in n:
+    result.add "   - scheme: " & $x.scheme & "\n"
+    result.add "     signer: " & $x.signer & "\n"
+    result.add "     msg   : " & x.msg.toHex & "\n"
+    result.add "     sig   : " & x.signature.toHex & "\n"
+
+proc debug(n: openArray[TransactionFrame]): string =
+  if n.len == 0:
+    return "-"
+
+  result.add "\n"
+  for x in n:
+    result.add "   - mode  : " & $x.mode & "\n"
+    result.add "     flags : " & $x.flags & "\n"
+    result.add "     target: " & $x.target & "\n"
+    result.add "     limit : " & $x.gasLimit & "\n"
+    result.add "     state : " & $x.stateGasLimit & "\n"
+    result.add "     value : " & x.value.toHex & "\n"
+    result.add "     data  : " & x.data.toHex & "\n"
+
 proc debug*(tx: Transaction): string =
   result.add "txType        : " & $tx.txType         & "\n"
   result.add "chainId       : " & $tx.chainId        & "\n"
@@ -138,6 +163,10 @@ proc debug*(tx: Transaction): string =
   result.add "V             : " & $tx.V              & "\n"
   result.add "R             : " & $tx.R              & "\n"
   result.add "S             : " & $tx.S              & "\n"
+  result.add "sender        : " & $tx.sender         & "\n"
+  result.add "signatures    : " & debug(tx.signatures) & "\n"
+  result.add "frames        : " & debug(tx.frames)     & "\n"
+  result.add "hash          : " & $computeRlpHash(tx)& "\n"
 
 proc debug*(tx: PooledTransaction): string =
   result.add debug(tx.tx)
