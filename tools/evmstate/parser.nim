@@ -58,6 +58,9 @@ type
     blobVersionedHashes* : Opt[seq[Hash32]]
     authorizationList*   : Opt[seq[Authorization]]
     secretKey*           : Opt[PrivateKey]
+    sender*              : Opt[Address]
+    signatures*          : Opt[seq[FrameSignature]]
+    frames*              : Opt[seq[TransactionFrame]]
 
   TxoReceipt* = object
     transactionHash*  : Hash32
@@ -68,6 +71,8 @@ type
     status*           : Opt[bool]
     postState*        : Opt[Hash32]
     rlp*              : seq[byte]
+    payer*            : Opt[Address]
+    frameReceipts*    : seq[FrameReceipt]
 
   Index* = object
     data* : int
