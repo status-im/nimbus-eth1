@@ -28,6 +28,8 @@ const
 
 let NUM_THREADS = max(countProcessors(), 2)
 
+let benchTmpDir = getAppDir() / "bench_tmp"
+
 var benchTaskpool: Taskpool
 
 proc makeOpts(parallel = false): DbOptions =
@@ -109,7 +111,7 @@ proc median(xs: var seq[float]): float =
   xs[xs.len div 2]
 
 proc withDbCopy(srcPath: string, opts: DbOptions, body: proc(db: AristoDbRef)) =
-  let dir = mkdtemp()
+  let dir = mkdtemp(dir = benchTmpDir)
   try:
     removeDir(dir)
     copyDir(srcPath, dir)
@@ -189,8 +191,8 @@ proc runScenario(
 let
   serialOpts = makeOpts()
   parallelOpts = makeOpts(parallel = true)
-  coldPath = mkdtemp()
-  steadyPath = mkdtemp()
+  coldPath = mkdtemp(dir = benchTmpDir)
+  steadyPath = mkdtemp(dir = benchTmpDir)
   coldName = "cold full-trie root (skipLayers)   "
   steadyName = &"steady-state (mean/root, {STEADY_BLOCKS - STEADY_WARMUP} blocks) "
 
@@ -227,5 +229,6 @@ finally:
   try:
     removeDir(coldPath)
     removeDir(steadyPath)
+    removeDir(benchTmpDir)
   except CatchableError:
     discard
