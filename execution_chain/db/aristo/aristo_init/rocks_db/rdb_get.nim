@@ -180,6 +180,13 @@ proc getKey*(
 
 const MAX_KEYS_FETCH* = 16
 
+func cmpKeyBuf(a, b: RVidBuf): int =
+  let n = min(int(a.len), int(b.len))
+  for i in 0 ..< n:
+    if a.buf[i] != b.buf[i]:
+      return int(a.buf[i]) - int(b.buf[i])
+  int(a.len) - int(b.len)
+
 proc getKeys*(
     rdb: var RdbInst,
     rvids: openArray[RootedVertexID],
@@ -233,12 +240,30 @@ proc getKeys*(
 
   for j in 0 ..< nFetch:
     keyBufs[j] = rvids[int fetchIdxs[j]].blobify()
+
+  # Keys must be in comparator order because multiGet is called with sortedInput = true.
+  # Insertion sort keeps this allocation free, unlike `algorithm.sort`.
+  for j in 1 ..< nFetch:
+    let
+      keyBuf = keyBufs[j]
+      fetchIdx = fetchIdxs[j]
+    var k = j
+    while k > 0 and cmpKeyBuf(keyBufs[k - 1], keyBuf) > 0:
+      keyBufs[k] = keyBufs[k - 1]
+      fetchIdxs[k] = fetchIdxs[k - 1]
+      dec k
+    keyBufs[k] = keyBuf
+    fetchIdxs[k] = fetchIdx
+
+  for j in 0 ..< nFetch:
     keySlices[j] =
       RocksDbSlice.init(keyBufs[j].buf.toOpenArray(0, int(keyBufs[j].len) - 1))
     valueSlices[j] = RocksDbMutSlice.init(vtxBufs[j].buf)
 
   rdb.vtxCol.multiGet(
-    keySlices.toOpenArray(0, nFetch - 1), valueSlices.toOpenArray(0, nFetch - 1)
+    keySlices.toOpenArray(0, nFetch - 1),
+    valueSlices.toOpenArray(0, nFetch - 1),
+    sortedInput = true,
   ).isOkOr:
     return err((RdbBeDriverGetKeyError, error))
 
