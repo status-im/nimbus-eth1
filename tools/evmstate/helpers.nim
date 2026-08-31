@@ -38,7 +38,10 @@ template optional(res, n: untyped) =
 
 template defaultZero(res, n: untyped) =
   if n.isSome:
-    res = n.value
+    when typeof(n.value) isnot typeof(res):
+      res = to(n.value, typeof(res))
+    else:
+      res = n.value
   else:
     res = default(typeof(res))
 
@@ -49,6 +52,8 @@ template defaultZero(res, n: untyped, i: int) =
     res = default(typeof(res))
 
 func txType(n: Txo): TxType =
+  if n.frames.isSome or n.signatures.isSome:
+    return TxEip8141
   if n.authorizationList.isSome:
     return TxEip7702
   if n.blobVersionedHashes.isSome:
@@ -92,9 +97,6 @@ func parseTx*(n: Txo, index: Index): Result[Transaction, string] =
     txType  : txType(n)
   )
   required(tx.nonce, n.nonce)
-  required(tx.gasLimit, n.gasLimit, index.gas)
-  required(tx.value, n.value, index.value)
-  required(tx.payload, n.data, index.data)
   defaultZero(tx.chainId, n.chainId)
   defaultZero(tx.gasPrice, n.gasPrice)
   defaultZero(tx.maxFeePerGas, n.maxFeePerGas)
@@ -104,17 +106,34 @@ func parseTx*(n: Txo, index: Index): Result[Transaction, string] =
   defaultZero(tx.versionedHashes, n.blobVersionedHashes)
   defaultZero(tx.authorizationList, n.authorizationList)
 
-  try:
-    if n.to != "":
-      tx.to = Opt.some(Address.fromHex(n.to))
-  except ValueError as exc:
-    return err("Field 'to' error: " & exc.msg)
+  if tx.txType == TxEip8141:
+    defaultZero(tx.sender, n.sender)
+    defaultZero(tx.signatures, n.signatures)
+    defaultZero(tx.frames, n.frames)
+    ok(tx)
+  else:
+    required(tx.gasLimit, n.gasLimit, index.gas)
+    required(tx.value, n.value, index.value)
+    required(tx.payload, n.data, index.data)
+    try:
+      if n.to != "":
+        tx.to = Opt.some(Address.fromHex(n.to))
+    except ValueError as exc:
+      return err("Field 'to' error: " & exc.msg)
 
-  let secretKey = n.secretKey.valueOr:
-    return err("missing secretKey field")
-  ok(signTransaction(tx, secretKey, n.chainId.isSome))
+    let secretKey = n.secretKey.valueOr:
+      return err("missing secretKey field")
+    ok(signTransaction(tx, secretKey, n.chainId.isSome))
 
 func parseReceipt*(rec: TxoReceipt): Receipt =
+  if rec.`type` == 6:
+    return Receipt(
+      receiptType      : ReceiptType(rec.`type`),
+      cumulativeGasUsed: rec.cumulativeGasUsed,
+      payer            : rec.payer.expect("payer isSome"),
+      frameReceipts    : rec.frameReceipts,
+    )
+
   if rec.postState.isSome:
     Receipt(
       receiptType      : ReceiptType(rec.`type`),
