@@ -125,7 +125,9 @@ proc toTxReceipt(receipt: StoredReceipt,
     contractAddress: contractAddress,
     gasUsed: gasUsed,
     blockHash: default(Hash32),
-    transactionIndex: txIndex
+    transactionIndex: txIndex,
+    payer: rec.payer,
+    frameReceipts: rec.frameReceipts,
   )
 
 proc calcLogsHash(receipts: openArray[StoredReceipt]): Hash32 =
@@ -220,6 +222,13 @@ proc closeTrace(vmState: BaseVMState, closeStream: bool): Result[void, T8NErr] =
     if tracer.isNil.not and closeStream:
       tracer.close()
     ok()
+
+func addLogsFromReceipt(logs: var seq[Log], rec: TxReceipt) =
+  if rec.txType == TxEip8141:
+    for frame in rec.frameReceipts:
+      logs.add frame.logs
+  else:
+    logs.add rec.logs
 
 proc exec(ctx: TransContext,
           vmState: BaseVMState,
@@ -401,7 +410,7 @@ proc exec(ctx: TransContext,
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     var blockLogs: seq[Log]
     for rec in output.result.receipts:
-      blockLogs.add rec.logs
+      blockLogs.addLogsFromReceipt rec
     var
       depositReqs = parseDepositLogs(blockLogs, vmState.com.depositContractAddress).valueOr:
         return err(t8nerr(ErrorEVM, error))
