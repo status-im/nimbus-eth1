@@ -23,6 +23,7 @@ import
   ../../execution_chain/db/ledger,
   ../../execution_chain/transaction,
   ../../execution_chain/core/executor,
+  ../../execution_chain/core/executor/executor_helpers,
   ../../execution_chain/common/common,
   ../../execution_chain/evm/tracer/json_tracer,
   ../../execution_chain/utils/state_dump,
@@ -90,6 +91,71 @@ proc verifyResult(ctx: var StateContext,
       $ctx.expectedLogs
     return
 
+proc verifyReceipt(ctx: var StateContext,
+                   generatedReceipt: StoredReceipt,
+                   rec: TxoReceipt,
+                   tx: Transaction,
+                   txBytes: openArray[byte]) =
+  let
+    generatedHash = generatedReceipt.to(Receipt).computeRlpHash()
+    expectedHash = keccak256(rec.rlp)
+
+  if generatedHash != expectedHash:
+    ctx.error = "generated receipt hash mismatch: got " &
+      ($generatedHash).toLowerAscii &
+      ", want " &
+      $expectedHash
+    return
+
+  let
+    decodedTx = try: rlp.decode(txBytes, Transaction)
+                except RlpError as exc:
+                  ctx.error = "verifyReceipt: " & exc.msg
+                  return
+    decodedTxHash = decodedTx.computeRlpHash()
+
+  if decodedTxHash != rec.transactionHash:
+    ctx.error = "receipt tx hash mismatch: got " &
+      ($decodedTxHash).toLowerAscii &
+      ", want " &
+      $rec.transactionHash
+    return
+
+  let
+    txHash = tx.computeRlpHash()
+
+  if txHash != rec.transactionHash:
+    ctx.error = "receipt tx hash mismatch: got " &
+      ($txHash).toLowerAscii &
+      ", want " &
+      $rec.transactionHash
+    return
+
+  let
+    receipt = rec.parseReceipt()
+    receiptHash = receipt.computeRlpHash()
+
+  if receiptHash != expectedHash:
+    ctx.error = "parsed receipt hash mismatch: got " &
+      ($receiptHash).toLowerAscii &
+      ", want " &
+      $expectedHash
+    return
+
+  let
+    decodedReceipt = try: rlp.decode(rec.rlp, Receipt)
+                     except RlpError as exc:
+                       ctx.error = "verifyReceipt: " & exc.msg
+                       return
+    decodedHash = decodedReceipt.computeRlpHash()
+
+  if decodedHash != expectedHash:
+    ctx.error = "decoded receipt hash mismatch: got " &
+      ($decodedHash).toLowerAscii &
+      ", want " &
+      $expectedHash
+    return
+
 proc writeResultToStdout(stateRes: seq[StateResult]): Result[void, string] =
   var n = newJArray()
   for res in stateRes:
@@ -144,7 +210,11 @@ func sanitizeHeader(com: CommonRef, h: Header): Header =
     result.blockAccessListHash = Opt.none(Hash32)
     result.slotNumber = Opt.none(uint64)
 
-proc runExecution(ctx: var StateContext, conf: StateConf, pre: GenesisAlloc): Result[StateResult, string] =
+proc runExecution(ctx: var StateContext,
+                  conf: StateConf,
+                  pre: GenesisAlloc,
+                  receipt: Opt[TxoReceipt],
+                  txBytes: openArray[byte]): Result[StateResult, string] =
   let
     com     = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
     stream  = newFileStream(stderr)
@@ -180,11 +250,14 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: GenesisAlloc): Re
       fork : ctx.forkStr
     ))
 
-  let callResult = vmState.processTransaction(ctx.tx, sender).valueOr(LogResult())
+  var callResult = vmState.processTransaction(ctx.tx, sender).valueOr(LogResult())
   coinbaseStateClearing(vmState, ctx.header.coinbase)
 
   let stateRoot = vmState.readOnlyLedger.getStateRoot()
   ctx.verifyResult(vmState, stateRoot, callResult)
+  if receipt.isSome and ctx.error.len == 0:
+    let generatedReceipt = vmState.makeReceipt(ctx.tx.txType, callResult)
+    ctx.verifyReceipt(generatedReceipt, receipt.value, ctx.tx, txBytes)
 
   let res = StateResult(
     name : ctx.name,
@@ -216,7 +289,7 @@ proc toTracerFlags(conf: StateConf): set[TracerFlags] =
 proc parseTx(ctx: var StateContext, txo: Txo, subTest: SubTest): Result[void, string] =
   try:
     if txo.secretKey.isSome:
-      ctx.tx = ? parseTx(txo, subTest.indexes, ctx.chainConfig.eip155Block.isSome)
+      ctx.tx = ? parseTx(txo, subTest.indexes)
       return ok()
 
     if subTest.txbytes.len > 0:
@@ -224,8 +297,6 @@ proc parseTx(ctx: var StateContext, txo: Txo, subTest: SubTest): Result[void, st
       return ok()
 
     return err("Unsupported fixture format")
-  #except KeyError as exc:
-  #  return err(exc.msg)
   except RlpError as exc:
     return err(exc.msg)
 
@@ -244,7 +315,7 @@ proc runSubTest(ctx: var StateContext,
   if subTest.state.isNil.not:
     ctx.postState  = subTest.state
   ? ctx.parseTx(unit.txo, subTest)
-  ctx.runExecution(conf, unit.pre)
+  ctx.runExecution(conf, unit.pre, subTest.receipt, subTest.txbytes)
 
 proc executeTest(resList: var seq[StateResult], unit: StateUnit, conf: StateConf): Result[void, string] =
   var
