@@ -225,8 +225,8 @@ proc runExecution(ctx: var StateContext,
 
   let vmState = TestVMState()
   vmState.init(
-    parent  = com.sanitizeHeader(ctx.parent),
-    header  = com.sanitizeHeader(ctx.header),
+    parent  = if conf.sanitizeEnv: com.sanitizeHeader(ctx.parent) else: ctx.parent,
+    header  = if conf.sanitizeEnv: com.sanitizeHeader(ctx.header) else: ctx.header,
     com     = com,
     txFrame = com.db.baseTxFrame(),
     tracer  = tracer)
