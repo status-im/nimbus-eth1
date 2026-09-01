@@ -249,7 +249,7 @@ proc newPayload*(ben: BeaconEngineRef,
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        raise invalidParams("newPayload" & $apiVersion &
+        return invalidStatus("newPayload" & $apiVersion &
           ": Failed to decode BAL in payload: " & e.msg)
 
   if apiVersion >= Version.V3:
