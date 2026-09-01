@@ -9,7 +9,7 @@
 
 SHELL := bash
 
-IMAGE_TAG := dist_base_eth1_v3
+IMAGE_TAG := dist_base_eth1_v2
 IMAGE_NAME := statusim/nimbus-eth1:$(IMAGE_TAG)
 
 .PHONY: \
