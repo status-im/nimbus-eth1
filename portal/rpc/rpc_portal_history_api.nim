@@ -44,7 +44,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
   rpcServer.rpc(EthJson):
     proc portal_historyGetContent(
         contentKeyBytes: string
-    ): ContentInfo {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
+    ): ContentInfo {.async: (raises: [RpcResponseError, ValueError, CancelledError]).} =
       let
         contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
         contentKey = decode(contentKeyByteList).valueOr:
@@ -66,7 +66,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
     proc portal_historyTraceGetContent(
         contentKeyBytes: string
     ): TraceContentLookupResult {.
-        async: (raises: [ApplicationError, ValueError, CancelledError])
+        async: (raises: [RpcResponseError, ValueError, CancelledError])
     .} =
       let
         contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
@@ -90,7 +90,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
       let
         res = await n.portalProtocol.traceContentLookup(contentKeyByteList, contentId)
         valueBytes = res.content.valueOr:
-          let data = Opt.some(EthJson.encode(res.trace).JsonString)
+          let data = EthJson.encode(res.trace).JsonString
           raise contentNotFoundErrWithTrace(data)
 
       res
@@ -98,7 +98,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
     proc portal_historyPutContent(
         contentKeyBytes: string, contentValueBytes: string
     ): PutContentResult {.
-        async: (raises: [ApplicationError, ValueError, CancelledError])
+        async: (raises: [RpcResponseError, ValueError, CancelledError])
     .} =
       let
         contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
@@ -130,7 +130,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
     proc portal_historyStore(
         contentKeyBytes: string, contentValueBytes: string
-    ): bool {.raises: [ApplicationError, ValueError].} =
+    ): bool {.raises: [RpcResponseError, ValueError].} =
       let
         contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
         offerValueBytes = hexToSeqByte(contentValueBytes)
@@ -141,7 +141,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
     proc portal_historyLocalContent(
         contentKeyBytes: string
-    ): string {.raises: [ApplicationError, ValueError].} =
+    ): string {.raises: [RpcResponseError, ValueError].} =
       let
         contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
         contentId = n.portalProtocol.toContentId(contentKeyByteList).valueOr:
@@ -154,9 +154,9 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
     proc portal_historyGetBlockBody(
         headerBytes: string
-    ): string {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
+    ): string {.async: (raises: [RpcResponseError, ValueError, CancelledError]).} =
       let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
-        raise applicationError((code: -39010, msg: "Failed to decode header: " & error))
+        raise rpcResponseError((code: -39010, msg: "Failed to decode header: " & error))
 
       let blockBody = (await n.getBlockBody(header)).valueOr:
         raise contentNotFoundErr()
@@ -165,9 +165,9 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
 
     proc portal_historyGetReceipts(
         headerBytes: string
-    ): string {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
+    ): string {.async: (raises: [RpcResponseError, ValueError, CancelledError]).} =
       let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
-        raise applicationError((code: -39010, msg: "Failed to decode header: " & error))
+        raise rpcResponseError((code: -39010, msg: "Failed to decode header: " & error))
 
       let receipts = (await n.getReceipts(header)).valueOr:
         raise contentNotFoundErr()
