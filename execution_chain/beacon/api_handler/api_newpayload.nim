@@ -55,7 +55,7 @@ template validateVersion(com, timestamp, payloadVersion, apiVersion, payload) =
 
   if com.isAmsterdamOrLater(timestamp):
     # TODO: probably blockAccessList field should be a seq[byte] instead of Opt[seq[byte]]
-    if payload.blockAccessList.isNone or payload.blockAccessList.value.len == 0:
+    if payload.blockAccessList.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         ": payload missing blockAccessList")
 
