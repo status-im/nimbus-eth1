@@ -230,6 +230,62 @@ proc delStoMissingIntv*(
     return err()
   ok()
 
+# -------------
+
+const StoLockInfo = "locked storage sub-Mpt"
+
+proc hasStoLock*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[bool] =
+  var data = db.hasStoLock().valueOr:
+    error info.failedToFetch StoLockInfo, `error`=error
+    return err()
+  ok(move data)
+
+proc hasStoLock*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[bool] =
+  var data = db.hasStoLock(accPath).valueOr:
+    error info.failedToFetch StoLockInfo, accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok(move data)
+
+proc putStoLock*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.putStoLock(accPath).isOkOr:
+    error info.failedUpdating StoLockInfo, accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc delStoLock*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.delStoLock(accPath).isOkOr:
+    error info.failedDeleting StoLockInfo, accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc nStoLock*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[uint] =
+  var n = 0u
+  for _ in db.walkStoLock():
+    n.inc
+  ok(move n)
+
+# -------------
 
 proc hasFlatSlot*(
     db: CacheDbRef;
@@ -381,6 +437,62 @@ proc nMissingBlob*(
     nCodes.inc
   ok(move nCodes)
 
+# -------------
+
+const CodeLockInfo = "locked contract code"
+
+proc hasCodeLock*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[bool] =
+  var data = db.hasCodeLock().valueOr:
+    error info.failedToFetch CodeLockInfo, `error`=error
+    return err()
+  ok(move data)
+
+proc hasCodeLock*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[bool] =
+  var data = db.hasCodeLock(accPath).valueOr:
+    error info.failedToFetch CodeLockInfo, accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok(move data)
+
+proc putCodeLock*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.putCodeLock(accPath).isOkOr:
+    error info.failedUpdating CodeLockInfo, accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc delCodeLock*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.delCodeLock(accPath).isOkOr:
+    error info.failedDeleting CodeLockInfo, accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc nCodeLock*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[uint] =
+  var n = 0u
+  for _ in db.walkCodeLock():
+    n.inc
+  ok(move n)
+
+# -------------
 
 proc hasFlatCode*(
     db: CacheDbRef;
