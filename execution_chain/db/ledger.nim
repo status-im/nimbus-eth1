@@ -99,6 +99,12 @@ type
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
 
+    slotMerges: seq[(Hash32, UInt256)]
+    slotDeletes: seq[Hash32]
+      ## Scratch buffers used by `persistStorage` to group the slot writes of
+      ## one account into a single batched trie update. Kept on the ledger so
+      ## that grouping does not cost an allocation per account.
+
     collectWitness*: bool
 
     witnessKeys: WitnessTable
@@ -400,7 +406,11 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
     return err(info & $$error)
 
-  # Save `overlayStorage[]` on database
+  # Group `overlayStorage[]` into one batch per account so that the trie code
+  # resolves the account leaf once for the whole group rather than once per slot
+  ledger.slotMerges.setLen(0)
+  ledger.slotDeletes.setLen(0)
+
   let original = acc.original
   for slot, value in acc.overlayStorage:
     original.storage.withValue(slot, v):
@@ -415,15 +425,13 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
       slotKey
 
     if value > 0:
-      ledger.txFrame.mergeSlot(acc.accPath, slotKey, value).isOkOr:
-        return err(info & $$error)
+      ledger.slotMerges.add((slotKey, value))
 
       # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
       original.storage[slot] = value
 
     else:
-      ledger.txFrame.deleteSlot(acc.accPath, slotKey).isOkOr:
-        return err(info & $$error)
+      ledger.slotDeletes.add(slotKey)
       original.storage.del(slot)
 
     if ledger.storeSlotHash and not cached:
@@ -434,6 +442,16 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
         rc = ledger.txFrame.put(key.toOpenArray, blobify(slot).data)
       if rc.isErr:
         warn logTxt "persistStorage()", slot, error=($$rc.error)
+
+  # Merges run before the deletions: emptying the storage trie de-registers it
+  # from the account, so deleting last avoids re-creating it under a fresh
+  # vertex id for the slots that survive.
+  ledger.txFrame.mergeSlots(acc.accPath, ledger.slotMerges).isOkOr:
+    return err(info & $$error)
+
+  for slotKey in ledger.slotDeletes:
+    ledger.txFrame.deleteSlot(acc.accPath, slotKey).isOkOr:
+      return err(info & $$error)
 
   acc.overlayStorage.clear()
   ok()

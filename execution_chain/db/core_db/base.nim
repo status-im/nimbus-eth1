@@ -447,6 +447,17 @@ proc mergeSlot*(
 
   ok()
 
+proc mergeSlots*(
+    acc: CoreDbTxRef;
+    accPath: Hash32;
+    slots: openArray[(Hash32, UInt256)];
+      ): CoreDbRc[void] =
+  ## Batched variant of `mergeSlot()` for several slots of the same account.
+  acc.aTx.mergeSlots(accPath, slots).isOkOr:
+    return err(error.toError(""))
+
+  ok()
+
 iterator slotPairs*(acc: CoreDbTxRef; accPath: Hash32): (Hash32, UInt256) =
   for a in acc.aTx.rightPairsStorage accPath:
     yield a

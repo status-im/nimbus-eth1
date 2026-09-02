@@ -278,16 +278,24 @@ proc mergeAccount*(
 
   ok true
 
-proc mergeSlot*(
+proc mergeSlots*(
     db: AristoTxRef;                   # Database, top layer
     accPath: Hash32;                   # Needed for accounts payload
-    stoPath: Hash32;                   # Storage data path (aka key)
-    stoData: UInt256;                  # Storage data payload value
+    slots: openArray[(Hash32, UInt256)]; # Storage paths and payload values
       ): Result[void,AristoError] =
-  ## Store the `stoData` data argument on the storage area addressed by
-  ## `(accPath,stoPath)` where `accPath` is the account key (into the MPT)
-  ## and `stoPath`  is the slot path of the corresponding storage area.
+  ## Store all the `(stoPath,stoData)` pairs given in `slots` on the storage
+  ## area addressed by `accPath` where `accPath` is the account key (into the
+  ## MPT) and `stoPath` is the slot path of the corresponding storage area.
   ##
+  ## Batching the slots of one account means the account leaf is resolved once
+  ## for the whole group instead of once per slot - the storage tries live
+  ## under their own root so merging a slot never touches the account trie,
+  ## which is only revisited at the end to invalidate the Merkle keys along
+  ## the account path.
+  ##
+  if slots.len == 0:
+    return ok()
+
   var accHike: Hike
   db.fetchAccountHike(accPath,accHike).isOkOr:
     return err(MergeStoAccMissing)
@@ -301,29 +309,38 @@ proc mergeSlot*(
       if stoID.isValid: stoID                     # Use as is
       elif stoID.vid.isValid: (true, stoID.vid)   # Re-use previous vid
       else: (true, db.vidFetch())                 # Create new vid
-    mixPath = mixUp(accPath, stoPath)
-    # Call merge
-    updated = db.mergePayloadImpl(
-      useID.vid, stoPath, db.cachedStoLeaf(mixPath), stoData
-    ).valueOr:
-      if error == MergeNoAction:
-        assert stoID.isValid         # debugging only
-        return ok()
 
-      return err(error)
+  var merged = false
+  for (stoPath, stoData) in slots:
+    let
+      mixPath = mixUp(accPath, stoPath)
+      # Call merge
+      updated = db.mergePayloadImpl(
+        useID.vid, stoPath, db.cachedStoLeaf(mixPath), stoData
+      ).valueOr:
+        if error == MergeNoAction:
+          assert stoID.isValid         # debugging only
+          continue
+
+        return err(error)
+
+    merged = true
+
+    # Update leaf cache both of the merged value and potentially the displaced
+    # leaf resulting from splitting a leaf into a branch with two leaves
+    db.layersPutStoLeaf(mixPath, updated[0])
+
+    if updated[1].isValid:
+      let otherPath =
+        Hash32(getBytes(NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated[1].pfx)))
+      db.layersPutStoLeaf(mixUp(accPath, otherPath), updated[2])
+
+  if not merged:
+    return ok()
 
   # Mark account path Merkle keys for update - the leaf key is not stored so no
   # need to mark it
   db.layersResKeys(accHike, skip = 1)
-
-  # Update leaf cache both of the merged value and potentially the displaced
-  # leaf resulting from splitting a leaf into a branch with two leaves
-  db.layersPutStoLeaf(mixPath, updated[0])
-
-  if updated[1].isValid:
-    let otherPath =
-      Hash32(getBytes(NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated[1].pfx)))
-    db.layersPutStoLeaf(mixUp(accPath, otherPath), updated[2])
 
   if not stoID.isValid:
     # Make sure that there is an account that refers to that storage trie
@@ -332,6 +349,18 @@ proc mergeSlot*(
     db.layersPutAccLeaf(accPath, leaf)
 
   ok()
+
+proc mergeSlot*(
+    db: AristoTxRef;                   # Database, top layer
+    accPath: Hash32;                   # Needed for accounts payload
+    stoPath: Hash32;                   # Storage data path (aka key)
+    stoData: UInt256;                  # Storage data payload value
+      ): Result[void,AristoError] =
+  ## Store the `stoData` data argument on the storage area addressed by
+  ## `(accPath,stoPath)` where `accPath` is the account key (into the MPT)
+  ## and `stoPath`  is the slot path of the corresponding storage area.
+  ##
+  db.mergeSlots(accPath, [(stoPath, stoData)])
 
 # ------------------------------------------------------------------------------
 # End
