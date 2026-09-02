@@ -12,6 +12,8 @@
 
 import
   pkg/[chronicles, chronos, stew/interval_set],
+  ../../../../../networking/[p2p, peer_pool],
+  ../../download/download_helpers,
   ../../[helpers, mpt, worker_desc]
 
 logScope:
@@ -30,33 +32,26 @@ type
     nStoSubMpt: int
     nPartStoRange: int
     nFullStoRange: int
+    nLockStoRange: int
     nEmptyStoRange: int
     nStoSlot: int
     nContrCode: int
     nCodeBlob: int
+    nLockCode: int
     nMissCode: int
-
-# ------------------------------------------------------------------------------
-# Private helper
-# ------------------------------------------------------------------------------
-
-func isFullRange(itrs: ItemKeyRangeSet): bool =
-  # Defensive encoding of a full range check. Solely testing `total; == 0`
-  # leaves room for the case that the range is empty which is an illegal
-  # situation but it can handled with savely.
-  itrs.total == 0 and                              # => 0 or 2^256
-  itrs.chunks == 1                                 # => one intv => full MPT
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc getAccStats(
-    db: CacheDbRef;
+    ctx: SnapCtxRef;
     info: static[string];
       ): (BlockNumber,float,int) =
-  let stats = db.getAccMissingIntv(info).valueOr:
+  let stats = ctx.pool.cacheDB.getAccMissingIntv(info).valueOr:
     return (0,-1f,-1)
+  if ctx.accUnproc.synced:
+    return (stats.number, ctx.accUnproc.totalRatio, ctx.accUnproc.chunks())
   (stats.number, stats.ranges.total().per256(),stats.ranges.chunks())
 
 proc nMissPartStoRanges(db: CacheDbRef, info: static[string]): (int,int) =
@@ -110,6 +105,11 @@ proc statsWalk(
         if not w.data.dirtyCode:
           error info & ": Error dirtyCode should be set for missing code",
             accPath=w.accPath.toStr
+      elif ?db.hasCodeLock(w.accPath, info):
+        stats.nLockCode.inc
+        if not w.data.dirtyCode:
+          error info & ": Error dirtyCode must be set for locked sub-MPT",
+            accPath=w.accPath.toStr
       else:
         stats.nCodeBlob.inc
         if w.data.dirtyCode:
@@ -133,7 +133,15 @@ proc statsWalk(
         else:
           stats.nPartStoRange.inc
         if not w.data.dirtyStorage:
-          error info & ": Error dirtyStorage ust be set for partial sub-MPT",
+          error info & ": Error dirtyStorage must be set for partial sub-MPT",
+            accPath=w.accPath.toStr
+        elif ?db.hasStoLock(w.accPath, info):
+          error info & ": Error partial sub-MPT must not be locked",
+            accPath=w.accPath.toStr
+      elif ?db.hasStoLock(w.accPath, info):
+        stats.nLockStoRange.inc
+        if not w.data.dirtyStorage:
+          error info & ": Error dirtyStorage must be set for locked sub-MPT",
             accPath=w.accPath.toStr
       else:
         stats.nEmptyStoRange.inc
@@ -161,6 +169,135 @@ proc statsWalk(
 
   ok(stats)
 
+# ----------------
+
+proc statsStateImpl(
+    ctx: SnapCtxRef;
+    peer: Opt[Peer];
+    logNoise: LogNoise;
+    info: static[string];
+      ) =
+  ## Collect statistics
+  const
+    info2 = info & ": Download state stats"
+  let
+    peer = if peer.isSome(): $peer else: "n/a"
+    start = Moment.now()
+    db = ctx.pool.cacheDB
+    (number, accMissRngPc, nAccMissRngChunk) = ctx.getAccStats info
+    nFlatSlots = db.nFlatSlots info
+
+  case logNoise:
+  of minimal:
+    let stats = db.statsWalk(info, shallowCheck=true).valueOr:
+      chronicles.info info & ": Error collecting stats", peer
+      return
+
+    debug info2, peer, number,
+      accMissRngPC=accMissRngPc.pcStr, nAccMissRngChunk,
+      nAcc = stats.nAcc,
+
+      nStoMpt = stats.nStoSubMpt,
+      nLockStoRange = stats.nLockStoRange,
+      nFullStoMpt = stats.nEmptyStoRange,
+      nPartStoMpt = stats.nPartStoRange,
+      nEmptyStoMpt = stats.nFullStoRange,
+      nStoSlot = nFlatSlots,
+
+      nContrCodes = stats.nContrCode,
+      nCodeBlob = (stats.nContrCode - stats.nDirtyCode),
+      nMissCode = stats.nDirtyCode,
+
+      ela=(Moment.now() - start).toStr
+
+  of smart, full:
+    let
+      stats = db.statsWalk(info, shallowCheck=false).valueOr:
+        chronicles.info info & ": Error collecting stats", peer
+        return
+
+      (nEmptyStoMpt, nPartStoMpt) = db.nMissPartStoRanges info
+      nStoSlot = stats.nStoSlot
+
+      nStoMpt = stats.nStoSubMpt
+      nDirtyStoMpt = stats.nDirtyStorage
+
+      nLockStoRange = stats.nLockStoRange
+      nFullStoRange = stats.nFullStoRange
+      nPartStoRange = stats.nPartStoRange
+      nEmptyStoRange = stats.nEmptyStoRange
+
+      nFlatBlob = db.nFlatBlobs info
+      nMissBlob = db.nFlatMissBlobs info
+
+      nDirtyCode = stats.nDirtyCode
+      nContrCode = stats.nContrCode
+      nCodeBlob = stats.nCodeBlob
+      nMissCode = stats.nMissCode
+      nLockCode = stats.nLockCode
+
+    case logNoise:
+    of smart:
+      if nLockStoRange + nEmptyStoMpt + nPartStoMpt != nDirtyStoMpt:
+        error info & ": Storage sub-MPT counts do not add up", peer,
+          number, nLockStoRange, nEmptyStoMpt, nPartStoMpt, nDirtyStoMpt
+
+      if nLockStoRange+nFullStoRange+nPartStoRange+nEmptyStoRange != nStoMpt:
+        error info & ": Storage range sub-MPT counts do not add up", peer,
+          number, nLockStoRange, nFullStoRange, nPartStoRange,
+          nEmptyStoRange, nStoMpt
+
+      if nPartStoRange != nPartStoMpt:
+        error info & ": Partial storage sub-MPT counts do not match", peer,
+          number, nPartStoMpt, nPartStoRange
+
+      if nFullStoRange != nEmptyStoMpt:
+        error info & ": Empty storage sub-MPT counts do not match", peer,
+          number, nFullStoRange, nEmptyStoMpt
+
+      if nFlatSlots != nStoSlot:
+        error info & ": Storage slot counts do not match", peer,
+          number, nFlatSlots, nStoSlot
+
+      # --------------
+
+      if nCodeBlob != nFlatBlob:
+        error info & ": Contract code counts do not match", peer,
+          number, nCodeBlob, nFlatBlob
+
+      if nMissCode != nMissBlob:
+        error info & ": Missing code counts do not match", peer,
+          number, nMissCode, nMissBlob
+
+      if nLockCode + nMissCode != nDirtyCode:
+        error info & ": Missing code counts do not add up", peer,
+          number, nLockCode, nMissCode, nDirtyCode
+
+      # --------------
+
+      debug info2, peer, number,
+        accMissRngPC=accMissRngPc.pcStr, nAccMissRngChunk,
+        nAcc=stats.nAcc,
+
+        nStoMpt, nLockStoMpt=nLockStoRange, nFullStoMpt=nEmptyStoRange,
+        nPartStoMpt, nEmptyStoMpt, nStoSlot,
+
+        nContrCode, nCodeBlob, nMissCode,
+        ela=(Moment.now() - start).toStr
+
+    else:
+      debug info2, peer, number,
+        accMissRngPC=accMissRngPc.pcStr, nAccMissRngChunk,
+        nAcc=stats.nAcc,
+
+        nStoMpt, nPartStoMpt, nEmptyStoMpt, nStoSlot,
+        nEmptyStoMpt, nPartStoMpt, nFullStoRange, nPartStoRange, nEmptyStoRange,
+
+        nContrCode, nCodeBlob, nMissCode,
+        nFlatBlob, nMissBlob,
+
+        ela=(Moment.now() - start).toStr
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -170,108 +307,14 @@ proc statsStateLog*(
     info: static[string];
     logNoise = LogNoise.smart;
       ) =
-  ## Collect statistics
-  const
-    info2 = info & ": Download state stats"
-  let
-    start = Moment.now()
-    db = ctx.pool.cacheDB
-    (number, accMissRngPc, nAccMissRngChunk) = db.getAccStats info
-    nFlatSlots = db.nFlatSlots info
+  ctx.statsStateImpl(Opt.none(Peer), logNoise, info)
 
-  case logNoise:
-  of minimal:
-    let stats = db.statsWalk(info, shallowCheck=true).valueOr:
-      chronicles.info info & ": Error collecting stats"
-      return
-
-    debug info2, number, accMissRngPC=accMissRngPc.pcStr, nAccMissRngChunk,
-      nAcc = stats.nAcc,
-
-      nStoMpt = stats.nStoSubMpt,
-      nFullStoMpt = stats.nEmptyStoRange,
-      nPartStoMpt = stats.nPartStoRange,
-      nEmptyStoMpt = stats.nFullStoRange,
-      nStoSlot = nFlatSlots,
-
-      nContrCodes = stats.nContrCode,
-      nCodeBlob = (stats.nContrCode - stats.nDirtyCode),
-      nMissBlob = stats.nDirtyCode,
-
-      ela=(Moment.now() - start).toStr
-
-  of smart, full:
-    let
-      stats = db.statsWalk(info, shallowCheck=false).valueOr:
-        chronicles.info info & ": Error collecting stats"
-        return
-
-      (nEmptyStoMpt, nPartStoMpt) = db.nMissPartStoRanges info
-      nStoSlot = stats.nStoSlot
-
-      nStoMpt = stats.nStoSubMpt
-      nDirtyStoMpt = stats.nDirtyStorage
-
-      nFullStoRange = stats.nFullStoRange
-      nPartStoRange = stats.nPartStoRange
-      nEmptyStoRange = stats.nEmptyStoRange
-
-      nFlatBlob = db.nFlatBlobs info
-      nFlatMissBlob = db.nFlatMissBlobs info
-      nContrCode = stats.nContrCode
-      nCodeBlob = stats.nCodeBlob
-      nMissBlob = stats.nMissCode
-
-    case logNoise:
-    of smart:
-      if nEmptyStoMpt + nPartStoMpt != nDirtyStoMpt:
-        chronicles.info info & ": Storage sub-MPT counts do not add up",
-          nEmptyStoMpt, nPartStoMpt, nDirtyStoMpt
-
-      if nFullStoRange + nPartStoRange + nEmptyStoRange != nStoMpt:
-        chronicles.info info & ": Storage range sub-MPT counts do not add up",
-          nFullStoRange, nPartStoRange, nEmptyStoRange, nStoMpt
-
-      if nPartStoRange != nPartStoMpt:
-        chronicles.info info & ": Partial storage sub-MPT counts do not match",
-          nPartStoMpt, nPartStoRange
-
-      if nFullStoRange != nEmptyStoMpt:
-        chronicles.info info & ": Empty storage sub-MPT counts do not match",
-          nFullStoRange, nEmptyStoMpt
-
-      if nFlatSlots != nStoSlot:
-        chronicles.info info & ": Storage slot counts do not match",
-          nFlatSlots, nStoSlot
-
-      if nFlatBlob != nCodeBlob:
-        chronicles.info info & ":  Contract code counts counts do not add up",
-          nFlatBlob, nCodeBlob
-
-      if nFlatMissBlob != nMissBlob:
-        chronicles.info info & ":  Missing code counts counts do not add up",
-          nFlatMissBlob, nMissBlob
-
-      debug info2, number, accMissRngPC=accMissRngPc.pcStr, nAccMissRngChunk,
-        nAcc=stats.nAcc,
-
-        nStoMpt, nFullStoMpt=nEmptyStoRange, nPartStoMpt, nEmptyStoMpt,
-        nStoSlot,
-
-        nContrCode, nCodeBlob, nMissBlob,
-        ela=(Moment.now() - start).toStr
-
-    else:
-      debug info2, number, accMissRngPC=accMissRngPc.pcStr, nAccMissRngChunk,
-        nAcc=stats.nAcc,
-
-        nStoMpt, nPartStoMpt, nEmptyStoMpt, nStoSlot,
-        nEmptyStoMpt, nPartStoMpt, nFullStoRange, nPartStoRange, nEmptyStoRange,
-
-        nContrCode, nCodeBlob, nMissBlob,
-        nFlatBlob, nFlatMissBlob,
-
-        ela=(Moment.now() - start).toStr
+proc statsStateLog*(
+    buddy: SnapPeerRef;
+    info: static[string];
+    logNoise = LogNoise.smart;
+      ) =
+  buddy.ctx.statsStateImpl(Opt.some(buddy.peer), logNoise, info)
 
 # ------------------------------------------------------------------------------
 # End
