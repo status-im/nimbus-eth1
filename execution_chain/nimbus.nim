@@ -463,8 +463,8 @@ proc runCombinedClient() =
         tcpPort: bnTcpPort, 
         udpPort: bnUdpPort, 
         elSync: config.elSync
-      ),
-  )
+      )
+    )
 
 
   var ecThread: Thread[ExecutionThreadConfig]
