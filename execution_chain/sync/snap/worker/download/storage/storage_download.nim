@@ -19,41 +19,11 @@
 import
   pkg/[chronicles, chronos, stew/interval_set],
   ../../[helpers, mpt, worker_desc],
+  ../download_helpers,
   ./storage_fetch
 
 const
   emptyProof = seq[ProofNode].default
-
-# ------------------------------------------------------------------------------
-# Private helpers for `storageDownloadCommit()`
-# ------------------------------------------------------------------------------
-
-proc deleteAccount(
-    adb: CacheDbRef;
-    accPath: Hash32;
-    info: static[string];
-      ): Opt[void] =
-  ?adb.delFlatAcc(accPath, info)                    # remove account record
-  ?adb.delFlatSlot(accPath, info)                   # delete all slots
-  ?adb.delMissingBlob(accPath, info)                # delete code accounting
-  ?adb.delFlatCode(accPath, info)                   # delete contract code
-  ok()
-
-proc replaceMissingIntv(
-    adb: CacheDbRef;
-    accState: CacheAccMissingIntvData;
-    info: static[string];
-      ): Opt[void] =
-  ?adb.clearMissingIntv(info)                       # clears acc and sto lists
-  ?adb.putAccMissingIntv(accState, info)            # update accounts list
-  ok()
-
-func isFullRange(itrs: ItemKeyRangeSet): bool =
-  # Defensive encoding of a full range check. Solely testing `total; == 0`
-  # leaves room for the case that the range is empty which is an illegal
-  # situation but it can handled with savely.
-  itrs.total == 0 and                              # => 0 or 2^256
-  itrs.chunks == 1                                 # => one intv => full MPT
 
 # ------------------------------------------------------------------------------
 # Private helpers for `downloadImpl()`
@@ -110,6 +80,7 @@ proc storeValidatedSlots(
       buddy.ctrl.zombie = true                      # peer not useful
       debug info & ": Storage full sub-MPT validation failed", peer,
         stoRoot=stoRoot.toStr, nth=n, syncState=($buddy.syncState)
+      # Stop here. Inevitably, the sub-MPT entries following will be lost.
       return err(EValidationError)
 
     # Store validated full sub-MPT slot entries.
@@ -117,9 +88,12 @@ proc storeValidatedSlots(
       let accPath = stoQ[qStart + n].accPath
       adb.putFlatSlot(accPath, w.slotHash, w.slotData, info).isOkOr:
         return err(ECacheError)
+
+    # Mark the current sub-MPT complete in the local batch/cache.
     stoQ[qStart + n].data.ranges.clear()            # set MPT complete
 
-  # Validate partial sub-MPT data with non-empty proof.
+  # Validate single last partial sub-MPT data with non-empty proof. This
+  # entry `data.slot` is separate from the list `data.slots[]`.
   if 0 < data.proof.len:
     let
       topInx = data.slots.len
@@ -152,7 +126,7 @@ proc storeValidatedSlots(
 # ------------------------------------------------------------------------------
 
 proc fetchAndLockStoList(
-    adb: CacheDbRef;
+    buddy: SnapPeerRef;
     info: static[string];                           # Log message prefix
       ): Result[seq[WalkStoMissingIntvData],ErrorType] =
   ## Collect storage sub-MPT missing slot intervals records from the cache
@@ -169,6 +143,8 @@ proc fetchAndLockStoList(
   ## The intended effect is, that peers workin in quasi-parallel will clean
   ## up/complete these kind of missing sub-MPTs first.
   ##
+  let
+    adb = buddy.ctx.pool.cacheDB
   var
     stoFullQ = newSeqOfCap[WalkStoMissingIntvData](fetchStorageBatchMax)
     stoPartQ = newSeqOfCap[WalkStoMissingIntvData](1)
@@ -191,52 +167,57 @@ proc fetchAndLockStoList(
   # this peer. To work savely, this needs to be done outside the above
   # iterator over `walkStoMissingIntv()`.
   if 0 < stoPartQ.len:
-    adb.delStoMissingIntv(stoPartQ[0].accPath, info).isOkOr:
+    let accPath = stoPartQ[0].accPath
+    adb.putStoLock(accPath, info).isOkOr:           # mark sub-MPT in-use
+      return err(ECacheError)                       # cannot do much, here
+    adb.delStoMissingIntv(accPath, info).isOkOr:    # remove sub-MPT record
       return err(ECacheError)                       # cannot do much, here
     return ok(stoPartQ)
 
   if stoFullQ.len == 0:                             # empty batch
-    return err(ECompleted)                         # done so far
+    return err(ECompleted)                          # done so far
 
-  # Same as for `stoPartQ`.
+  # Same as for `stoPartQ[]`.
   for w in stoFullQ:
-    adb.delStoMissingIntv(w.accPath, info).isOkOr:
+    adb.putStoLock(w.accPath, info).isOkOr:         # mark sub-MPT in-use
+      return err(ECacheError)                       # cannot do much, here
+    adb.delStoMissingIntv(w.accPath, info).isOkOr:  # remove sub-MPT record
       return err(ECacheError)                       # cannot do much, here
 
   ok(stoFullQ)
 
 proc saveStoUpdates(
-    adb: CacheDbRef;
+    buddy: SnapPeerRef;
     stoQueue: openArray[WalkStoMissingIntvData];
     info: static[string];                           # Log message prefix
       ): Result[int,ErrorType] =
   ## Post process updated storage sub-MPT. The corresponding accounting data
   ## are updated on the cache DB.
   ##
+  let adb = buddy.ctx.pool.cacheDB
   var (nPartial, nErrors) = (0,0)
   for w in stoQueue:
-
-    # Save back incomplete sub-MPT. Store updated interval of missing slots.
-    # The corresounding accounts record needs not to be updated.
-    # The `dirtyStorage` flag just remains `true`.
     if 0 < w.data.ranges.chunks():
+      # Save back incomplete sub-MPT. Store updated interval of missing slots.
+      # The corresounding accounts record needs not to be updated.
+      # The `dirtyStorage` flag just remains `true`.
       nPartial.inc
       adb.putStoMissingIntv(w.accPath, w.data, info).isOkOr:
         nErrors.inc                                 # cannot do much, here
-      continue
+    else:
+      # Save/update complete sub-MPT. There is no updated interval of
+      # missing slots record to save back. The records are omitted. Reset
+      # the corresounding accounts record flag `StoMissingIntv`.
+      var data = adb.getFlatAcc(w.accPath, info).valueOr:
+        nErrors.inc                                 # cannot do much, here
+        continue
+      data.dirtyStorage = false
+      adb.putFlatAcc(w.accPath, data, info).isOkOr: # save update acc record
+        nErrors.inc                                 # cannot do much, here
 
-    # Save/update complete sub-MPT. There is no updated interval of
-    # missing slots record to save back. The records are omitted. Reset
-    # the corresounding accounts record flag `StoMissingIntv`.
-    var data = adb.getFlatAcc(w.accPath, info).valueOr:
+    adb.delStoLock(w.accPath, info).isOkOr:         # clear sub-MPT lock
       nErrors.inc                                   # cannot do much, here
-      continue
-    data.dirtyStorage = false
-
-    # Save update
-    adb.putFlatAcc(w.accPath, data, info).isOkOr:
-      nErrors.inc                                   # cannot do much, here
-      continue
+    # End `for ..`
 
   if 0 < nErrors:
     return err(ECacheError)
@@ -306,14 +287,12 @@ template queueAndDownload(
   var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
     let
-      adb = buddy.ctx.pool.cacheDB
-
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = stateRoot.toStr        # logging only
 
     # Collect some missing storage intervals from cache. If the function
     # `fetchAndLockStoList()` succeeds, it will return a non-empty list.
-    var stoQ = adb.fetchAndLockStoList(info).valueOr:
+    var stoQ = buddy.fetchAndLockStoList(info).valueOr:
       bodyRc = typeof(bodyRc).err(error)            # maybe completed, already
       break body
 
@@ -335,14 +314,14 @@ template queueAndDownload(
     # The `downloadImpl()` directive below will store any success in the
     # `stoQ[]` list.
     buddy.downloadImpl(stateRoot, number, stoQ, ivReq, info).isOkOr:
-      adb.saveStoUpdates(stoQ, info).isOkOr:        # restore by `stoQ[]`
+      buddy.saveStoUpdates(stoQ, info).isOkOr:      # restore by `stoQ[]`
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # oops, serious error
       bodyRc = typeof(bodyRc).err(error)
       break body
 
     # Save rest if there is any (i.e. partially completes storage tries)
-    let nPartial {.inject,used.} = adb.saveStoUpdates(stoQ, info).valueOr:
+    let nPartial {.inject,used.} = buddy.saveStoUpdates(stoQ, info).valueOr:
       trace info & ": Storage processing failed", peer, root, number,
         syncState=($buddy.syncState), `error`=bodyRc.error
       bodyRc = typeof(bodyRc).err(error)
@@ -365,14 +344,14 @@ proc storageDownloadCommit*(
     ctx: SnapCtxRef;
     info: static[string];
       ): Result[void,ErrorType] =
-  ## Get ready for state froward procedure using BAL forwarding.
+  ## Get ready for state forward procedure using BAL.
   ##
-  ## In particular, partial storage sub-MPTs, its correspnding accounts,
-  ## and contract codes are deleted.
+  ## In particular, for partial storage sub-MPTs and lock records, its
+  ## correspnding accounts and contract code are deleted.
   ##
   let adb = ctx.pool.cacheDB
 
-  # Collect paths for partial subMPTs.
+  # Collect paths for partial sub-MPTs.
   var accPaths: seq[Hash32]
   for w in adb.walkStoMissingIntv:
     if 0 < w.error.len:
@@ -380,20 +359,17 @@ proc storageDownloadCommit*(
       return err(ECacheError)
     accPaths.add w.accPath
 
-  if 0 < accPaths.len:
-    # Delete all partial sub-MPTs.
-    var accState = adb.getAccMissingIntv(info).valueOr:
+  let nPartMpt = accPaths.len
+  for key in adb.walkStoLock:
+    accPaths.add key
+
+  # Delete all accounts for partial sub-MPTs and obsolete storage locks.
+  for accPath in accPaths:
+    ctx.deleteAccount(accPath, info).isOkOr:
       return err(ECacheError)
 
-    for accPath in accPaths:
-      adb.deleteAccount(accPath, info).isOkOr:
-        return err(ECacheError)
-      accState.ranges.merge(accPath.to(ItemKey))    # update range
-
-    adb.replaceMissingIntv(accState, info).isOkOr:  # update accounting
-      return err(ECacheError)
-
-  chronicles.info info & ": Cleared storage sub-MPTs", nMpt=accPaths.len
+  chronicles.info info & ": Cleared partial storage sub-MPTs",
+    nPartMpt, nStoLock=(accPaths.len-nPartMpt)
   ok()
 
 template storageDownload*(
