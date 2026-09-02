@@ -78,7 +78,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     proc portal_beaconGetContent(
         contentKey: string
-    ): ContentInfo {.async: (raises: [ApplicationError, ValueError, CancelledError]).} =
+    ): ContentInfo {.async: (raises: [RpcResponseError, ValueError, CancelledError]).} =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         contentId = p.toContentId(keyBytes).valueOr:
@@ -93,7 +93,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     proc portal_beaconTraceGetContent(
         contentKey: string
     ): TraceContentLookupResult {.
-        async: (raises: [ApplicationError, ValueError, CancelledError])
+        async: (raises: [RpcResponseError, ValueError, CancelledError])
     .} =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
@@ -105,14 +105,14 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       let
         res = await p.traceContentLookup(keyBytes, contentId)
         _ = res.content.valueOr:
-          let data = Opt.some(EthJson.encode(res.trace).JsonString)
+          let data = EthJson.encode(res.trace).JsonString
           raise contentNotFoundErrWithTrace(data)
 
       res
 
     proc portal_beaconStore(
         contentKey: string, contentValue: string
-    ): bool {.raises: [ApplicationError, ValueError].} =
+    ): bool {.raises: [RpcResponseError, ValueError].} =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         offerValueBytes = hexToSeqByte(contentValue)
@@ -124,7 +124,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     proc portal_beaconLocalContent(
         contentKey: string
-    ): string {.raises: [ApplicationError, ValueError].} =
+    ): string {.raises: [RpcResponseError, ValueError].} =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
         contentId = p.toContentId(keyBytes).valueOr:
@@ -138,7 +138,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     proc portal_beaconPutContent(
         contentKey: string, contentValue: string
     ): PutContentResult {.
-        async: (raises: [ApplicationError, ValueError, CancelledError])
+        async: (raises: [RpcResponseError, ValueError, CancelledError])
     .} =
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))

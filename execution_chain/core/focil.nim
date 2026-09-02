@@ -41,7 +41,7 @@ proc decodeIL*(list: openArray[TypedTransaction]): DecodedIL =
         ok: true,
         hash: keccak256(distinctBase(x)),
       )
-    except RlpError as exc:
+    except RlpError:
       res.list.add DecodedILItem(
         ok: false,
         hash: keccak256(distinctBase(x)),

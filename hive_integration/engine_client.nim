@@ -38,6 +38,8 @@ template wrapTry(body: untyped) =
     body
   except ValueError as e:
     return err(e.msg)
+  except RpcResponseError as ex:
+    return err(toJsonError(ex))
   except JsonRpcError as ex:
     return err(ex.msg)
   except JsonReaderError as ex:

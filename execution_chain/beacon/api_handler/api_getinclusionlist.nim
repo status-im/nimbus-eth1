@@ -17,7 +17,7 @@ import
 {.push gcsafe, raises:[].}
 
 proc getInclusionList*(ben: BeaconEngineRef,
-                       apiVersion: Version): InclusionList  {.raises: [ApplicationError].} =
+                       apiVersion: Version): InclusionList  {.raises: [RpcResponseError].} =
 
   if apiVersion == Version.V1:
     return ben.txPool.getInclusionListV1()

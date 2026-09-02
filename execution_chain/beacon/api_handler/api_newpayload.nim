@@ -57,7 +57,7 @@ template validateVersion(com, timestamp, payloadVersion, apiVersion, payload) =
 
   if com.isAmsterdamOrLater(timestamp):
     # TODO: probably blockAccessList field should be a seq[byte] instead of Opt[seq[byte]]
-    if payload.blockAccessList.isNone or payload.blockAccessList.value.len == 0:
+    if payload.blockAccessList.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         ": payload missing blockAccessList")
 
@@ -163,7 +163,7 @@ template validatePayload(apiVersion, payload) =
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
 func validateExecutionRequest(
             requests: openArray[seq[byte]], apiVersion: Version):
-              Opt[PayloadStatus] {.raises: [ApplicationError].} =
+              Opt[PayloadStatus] {.raises: [RpcResponseError].} =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
@@ -216,8 +216,7 @@ proc newPayload*(ben: BeaconEngineRef,
                  beaconRoot = Opt.none(Hash32),
                  executionRequests = Opt.none(seq[seq[byte]]),
                  inclusionList = Opt.none(InclusionList)):
-                   Future[PayloadStatus] {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
-
+                   Future[PayloadStatus] {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
   trace "Engine API request received",
     meth = "newPayload",
     number = payload.blockNumber,
@@ -267,7 +266,7 @@ proc newPayload*(ben: BeaconEngineRef,
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        raise invalidParams("newPayload" & $apiVersion &
+        return invalidStatus("newPayload" & $apiVersion &
           ": Failed to decode BAL in payload: " & e.msg)
 
   if apiVersion >= Version.V3:

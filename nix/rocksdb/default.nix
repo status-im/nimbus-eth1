@@ -7,6 +7,7 @@ let
   inherit (pkgs) stdenv lib writeScriptBin callPackage;
 
   version = callPackage ./version.nix { };
+  liburing = callPackage ./liburing.nix { };
 in stdenv.mkDerivation rec {
   pname = "rocksdb";
   inherit version;
@@ -20,6 +21,9 @@ in stdenv.mkDerivation rec {
   in with pkgs; [
     which perl fakeHostname
   ];
+
+  # Required for RocksDB to detect io_uring, which nim-rocksdb expects on Linux.
+  buildInputs = lib.optionals stdenv.isLinux [ liburing ];
 
   makeFlags = [
     # Compression libraries required for nimbus-eth1.
@@ -46,9 +50,19 @@ in stdenv.mkDerivation rec {
     cp -v ${lz4}  ${lz4.name}
   '';
 
-  # Nimbus build requires compression libs too.
+  # Match the check done by nim-rocksdb's build_static_deps.sh script.
+  postBuild = lib.optionalString stdenv.isLinux ''
+    if ! grep -q ROCKSDB_IOURING_PRESENT make_config.mk; then
+      echo "io_uring support was not detected by the RocksDB build."
+      exit 1
+    fi
+  '';
+
+  # Nimbus build requires compression and io_uring libs too.
   postInstall = ''
     cp -v liblz4.a libzstd.a $out/lib
+  '' + lib.optionalString stdenv.isLinux ''
+    cp -v ${liburing}/lib/liburing.a $out/lib
   '';
 
   meta = with lib; {

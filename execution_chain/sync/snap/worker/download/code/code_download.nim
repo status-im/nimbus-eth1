@@ -13,7 +13,6 @@
 import
   std/[sequtils, typetraits],
   pkg/[chronicles, chronos],
-  ../../../../../db/aristo/aristo_constants,
   ../../[helpers, mpt, worker_desc],
   ./code_fetch
 
@@ -24,38 +23,50 @@ type
   AccCodeItem = tuple
     accPath: Hash32
     codeHash: Hash32
-    data: seq[byte]
+    processed: bool
 
 # ------------------------------------------------------------------------------
-# Private helpers(s) for `queueAndDownload()`
+# Private helper(s) for `downloadImpl()`
 # ------------------------------------------------------------------------------
 
-proc storeCdeUpdated(
-    adb: CacheDbRef;
-    cdeQ: openArray[AccCodeItem];
-    info: static[string];                           # Log message prefix
-      ): Result[int,ErrorType] =
-  ## Store or restore contract data on cache DB
-  var nMissing = 0
-  for w in cdeQ:
-    if w.data.len == 0:
-      adb.putMissingBlob(w.accPath, info).isOkOr:
-        return err(ECacheError)                     # cannot do much, here
-      nMissing.inc
+proc storeValidatedCodes(
+    buddy: SnapPeerRef;
+    cdeQ: var seq[AccCodeItem];                     # will be updated
+    qStart: int;                                    # first queue item
+    data: ByteCodesPacket;
+    info: static[string];
+      ): Result[void,ErrorType] =
+  ## Process a contract codes reply message data from the fetch utility.
+  ##
+  let adb = buddy.ctx.pool.cacheDB
 
-    else:
-      # Need to fetch account now for updating latest record
-      var accData = adb.getFlatAcc(w.accPath, info).valueOr:
-        return err(ECacheError)                     # cannot do much, here
-      accData.dirtyCode = false                     # update account flag
-      adb.putFlatAcc(w.accPath, accData, info).isOkOr:
+  # Verify and save contract codes
+  for n in 0 ..< data.codes.len:                    # length at most `reqQ.len`
+    let
+      code = data.codes[n].distinctBase
+      hash = code.keccak256
+    template cdeItem: untyped =
+      cdeQ[qStart + n]
+
+    if hash != cdeItem.codeHash:
+      error info & ": Code hash mismatch", peer=buddy.peer,
+        codeHash=cdeItem.codeHash.toStr, fromResp=hash.toStr
+      buddy.ctrl.zombie = true                      # peer not useful
+      return err(EValidationError)
+
+    # Store contract code
+    if 0 < code.len:
+      adb.putFlatCode(cdeItem.accPath, code, info).isOkOr:
         return err(ECacheError)                     # cannot do much, here
 
-      # Store contract code
-      adb.putFlatCode(w.accPath, w.data, info).isOkOr:
-        return err(ECacheError)                     # cannot do much, here
+    cdeItem.processed = true
+    # End `for..`
 
-  ok(nMissing)
+  ok()
+
+# ------------------------------------------------------------------------------
+# Private helpers for `queueAndDownload()`
+# ------------------------------------------------------------------------------
 
 proc fetchAndLockCodeList(
     adb: CacheDbRef;
@@ -68,7 +79,7 @@ proc fetchAndLockCodeList(
     let accData = adb.getFlatAcc(accPath, info).valueOr:
       return err(ECacheError)                       # cannot do much, here
 
-    cdeQ.add (accPath, accData.account.codeHash, EmptyBlob)
+    cdeQ.add (accPath, accData.account.codeHash, false)
     if fetchCodeBatchMax <= cdeQ.len:
       break                                         # enough collected
 
@@ -81,6 +92,34 @@ proc fetchAndLockCodeList(
       return err(ECacheError)                      # cannot do much, here
 
   ok(move cdeQ)
+
+proc saveCodeUpdates(
+    adb: CacheDbRef;
+    cdeQ: openArray[AccCodeItem];
+    info: static[string];                           # Log message prefix
+      ): Result[int,ErrorType] =
+  ## Post process updated contract code items. The corresponding accounting
+  ## data are updated on the cache DB.
+  ##
+  var nUnprocessed = 0
+  for w in cdeQ:
+
+    # Check whether contract code was updated.
+    if w.processed:
+      # Need to fetch account now for updating latest record
+      var accData = adb.getFlatAcc(w.accPath, info).valueOr:
+        return err(ECacheError)                      # cannot do much, here
+      accData.dirtyCode = false                      # update account flag
+      adb.putFlatAcc(w.accPath, accData, info).isOkOr:
+        return err(ECacheError)                      # cannot do much, here
+      continue
+
+    # Otherwise store missing contract code record
+    adb.putMissingBlob(w.accPath, info).isOkOr:
+      return err(ECacheError)                        # cannot do much, here
+    nUnprocessed.inc
+
+  ok(move nUnprocessed)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -112,25 +151,16 @@ template downloadImpl(
     while start < req.len:
       let codeLeft: seq[CodeHash] = req[start .. ^1]
 
-      trace info & ": Requesting contract codes", peer, root, number,
-        start, nCodeLeft=codeLeft.len
-
       let data = buddy.fetchCodes(codeLeft).valueOr:
-        trace info & ": Fetching codes failed", peer, root, number,
-          start=start, nCodeLeft=codeLeft.len, `error`=error
+        if 0 < start:
+          break
         bodyRc = typeof(bodyRc).err(error)
         break body                                  # error => return
 
-      # Verify contracts
-      for n in 0 ..< data.codes.len:                # length at most `req.len`
-        let hash = data.codes[n].distinctBase.keccak256
-        if hash != cdeQ[n].codeHash:
-          error info & ": Code hash mismatch", peer, root, number, nth=n,
-            codeHash=cdeQ[n].codeHash.toStr, fromResp=hash.toStr
-        else:
-          # Accept for storage
-          cdeQ[n].data = data.codes[n].distinctBase
-        # End `for..`
+      # Store and validate data
+      buddy.storeValidatedCodes(cdeQ, start, data, info).isOkOr:
+        bodyRc = typeof(bodyRc).err(error)
+        break body                                  # exit => error
 
       start += data.codes.len                       # next round?
       # End `while..`
@@ -156,30 +186,31 @@ template queueAndDownload(
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = stateRoot.toStr        # logging only
 
-    # Collect some missing storage intervals from cache
+    # Collect some missing contract code addresses from cache DB
     var cdeQ = adb.fetchAndLockCodeList(info).valueOr:
       bodyRc = typeof(bodyRc).err(error)
       break body
 
     trace info & ": Requesting contract codes", peer, root, number,
-      nItems=cdeQ.len
+      nCode=cdeQ.len
 
-    let
-      # Fetch data from network
-      rc = buddy.downloadImpl(stateRoot, number, cdeQ, info)
-
-      # Save or restore accordingly
-      nMissing = adb.storeCdeUpdated(cdeQ, info).valueOr:
-        bodyRc = typeof(bodyRc).err(error)          # cannot do much, here
-        break body
-
-    # Check download result
-    if rc.isErr:
-      bodyRc = typeof(bodyRc).err(rc.error)
+    # Fetch data from network, validate and store it. The  `downloadImpl()`
+    # directive will store any success in the `cdeQ[]` list.
+    buddy.downloadImpl(stateRoot, number, cdeQ, info).isOkOr:
+      adb.saveCodeUpdates(cdeQ, info).isOkOr:       # restore by `stoQ[]`
+        bodyRc = typeof(bodyRc).err(ECacheError)
+        break body                                  # oops, serious error
+      bodyRc = typeof(bodyRc).err(error)
       break body
 
-    trace info & ": Code processing ok", peer, root, number,
-      nComplete=(cdeQ.len - nMissing), nMissing, syncState=($buddy.syncState)
+    let nUnprocessed {.inject,used.} = adb.saveCodeUpdates(cdeQ, info).valueOr:
+      trace info & ": Contract code processing failed", peer, root, number,
+        syncState=($buddy.syncState), `error`=bodyRc.error
+      bodyRc = typeof(bodyRc).err(error)
+      break body
+
+    chronicles.info info & ": Contract codes saved", peer, root, number,
+      nCodes=(cdeQ.len-nUnprocessed), nUnprocessed, syncState=($buddy.syncState)
 
     bodyRc = typeof(bodyRc).ok()
     # End `block body`
@@ -203,14 +234,10 @@ template codeDownload*(
 
     while not buddy.ctrl.stopped:
       buddy.queueAndDownload(stateRoot, number, info).isOkOr:
-        if error != ECompleted:
-          bodyRc = typeof(bodyRc).err(error)
-          break body                                # return error
-        break                                       # done so far
+        bodyRc = typeof(bodyRc).err(error)
+        break body                                  # return error
 
-    trace info & ": Contract code done", peer=buddy.peer, root=stateRoot.toStr,
-      number, syncState=($buddy.syncState)
-
+    bodyRc = typeof(bodyRc).ok()
     # End `block body`
 
   bodyRc

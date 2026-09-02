@@ -44,8 +44,8 @@ func median(prices: var openArray[GasInt]): GasInt =
 
   prices[middle]
 
-proc invalidParams*(msg: string): ref ApplicationError =
-  (ref ApplicationError)(
+proc invalidParams*(msg: string): ref RpcResponseError =
+  (ref RpcResponseError)(
     code: -32602,
     msg: msg,
   )
@@ -124,7 +124,7 @@ proc populateTransactionObject*(tx: Transaction,
   result.hash = tx.computeRlpHash
   result.input = tx.payload
   result.nonce = Quantity(tx.nonce)
-  result.to = Opt.some(tx.destination)
+  result.to = tx.to
   if txIndex.isSome:
     result.transactionIndex = Opt.some(Quantity(txIndex.get))
   result.value = tx.value
@@ -454,7 +454,9 @@ proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, s
   of bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
-    of "latest":
+    of "latest", "pending":
+      # No pending block is assembled outside of payload building, so resolve
+      # "pending" to the head like erigon does instead of rejecting it.
       ok(chain.latestHeader)
     of "finalized":
       ok(chain.finalizedHeader)
@@ -475,7 +477,7 @@ proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag, noHash: bool = fal
   of bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
-    of "latest":
+    of "latest", "pending":
       ok(chain.latestBlock)
     of "finalized":
       ok(chain.finalizedBlock)
