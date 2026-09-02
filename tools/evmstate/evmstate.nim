@@ -189,6 +189,27 @@ proc writeRootHashToStderr(stateRoot: Hash32): Result[void, string] =
   except IOError as exc:
     err(exc.msg)
 
+func sanitizeHeader(com: CommonRef, h: Header): Header =
+  result = h
+
+  if not com.isLondonOrLater(h.number, h.timestamp):
+    result.baseFeePerGas = Opt.none(UInt256)
+
+  if not com.isShanghaiOrLater(h.timestamp):
+    result.withdrawalsRoot = Opt.none(Hash32)
+
+  if not com.isCancunOrLater(h.timestamp):
+    result.blobGasUsed = Opt.none(uint64)
+    result.excessBlobGas = Opt.none(uint64)
+    result.parentBeaconBlockRoot = Opt.none(Hash32)
+
+  if not com.isPragueOrLater(h.timestamp):
+    result.requestsHash = Opt.none(Hash32)
+
+  if not com.isAmsterdamOrLater(h.timestamp):
+    result.blockAccessListHash = Opt.none(Hash32)
+    result.slotNumber = Opt.none(uint64)
+
 proc runExecution(ctx: var StateContext,
                   conf: StateConf,
                   pre: GenesisAlloc,
@@ -204,8 +225,8 @@ proc runExecution(ctx: var StateContext,
 
   let vmState = TestVMState()
   vmState.init(
-    parent  = ctx.parent,
-    header  = ctx.header,
+    parent  = if conf.sanitizeEnv: com.sanitizeHeader(ctx.parent) else: ctx.parent,
+    header  = if conf.sanitizeEnv: com.sanitizeHeader(ctx.header) else: ctx.header,
     com     = com,
     txFrame = com.db.baseTxFrame(),
     tracer  = tracer)

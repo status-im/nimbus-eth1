@@ -55,7 +55,7 @@ template validateVersion(com, timestamp, payloadVersion, apiVersion, payload) =
 
   if com.isAmsterdamOrLater(timestamp):
     # TODO: probably blockAccessList field should be a seq[byte] instead of Opt[seq[byte]]
-    if payload.blockAccessList.isNone or payload.blockAccessList.value.len == 0:
+    if payload.blockAccessList.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         ": payload missing blockAccessList")
 
@@ -249,7 +249,7 @@ proc newPayload*(ben: BeaconEngineRef,
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        raise invalidParams("newPayload" & $apiVersion &
+        return invalidStatus("newPayload" & $apiVersion &
           ": Failed to decode BAL in payload: " & e.msg)
 
   if apiVersion >= Version.V3:
