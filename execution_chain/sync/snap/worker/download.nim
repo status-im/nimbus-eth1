@@ -51,14 +51,14 @@ proc getLastBalNum(ctx: SnapCtxRef): BlockNumber =
   # BlockNumber(0)
 
 proc downloadReady(
-    buddy: SnapPeerRef;
+    ctx: SnapCtxRef;
     info: static[string];
       ): Opt[DownloadInfo] =
-  let adb = buddy.ctx.pool.cacheDB
+  let adb = ctx.pool.cacheDB
   var w: DownloadInfo
-  w.accDone = not ?adb.hasAccMissingIntv(info)
-  w.stoDone = not ?adb.hasStoMissingIntv(info)
-  w.codeDone = not ?adb.hasMissingBlob(info)
+  w.accDone = ctx.accUnproc.synced() and ctx.accUnproc.chunks() == 0
+  w.stoDone = not ?adb.hasStoMissingIntv(info) and not ?adb.hasStoLock(info)
+  w.codeDone = not ?adb.hasMissingBlob(info) and not ?adb.hasCodeLock(info)
   ok(w)
 
 # ------------------------------------------------------------------------------
@@ -100,11 +100,12 @@ proc downloadCommit*(
       ): Result[void,ErrorType] =
   ## Finish downloading.
   ##
-  ?ctx.accountDownloadCommit(info)
-
   # This directive should come after storing `accountDownloadCommit()`
   # updates. It will update the tables and delete partial MPTs.
   ?ctx.storageDownloadCommit(info)
+  ?ctx.codeDownloadCommit(info)
+
+  ?ctx.accountDownloadCommit(info)
 
   ok()
 
@@ -178,7 +179,7 @@ template downloadState*(
           doEntity.clearBit(2)                      # done with code so far
       # End `while ..`
 
-    let data {.used.} = buddy.downloadReady(info).valueOr:
+    let data {.used.} = ctx.downloadReady(info).valueOr:
       trace info & ": Error reading cache DB", peer,
         syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
       break body
@@ -186,6 +187,7 @@ template downloadState*(
     debug info & ": Downloaded data", peer, accountsDone=data.accDone,
       storageDone=data.stoDone, codeDone=data.codeDone,
       syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
+    # End `block body`
 
   bodyRc                                            # return value
 
