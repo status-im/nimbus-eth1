@@ -9,7 +9,7 @@
 # according to those terms.
 
 # The build is reproducible only if this base image stays the same.
-FROM statusim/nimbus-eth1:dist_base_eth1_v2_linux_amd64@sha256:468cae93bf70700da8a1814d473fa10e984a70ee7073c7b7227f1d717a5902fc
+FROM statusim/nimbus-eth1:dist_base_eth1_v2_linux_amd64@sha256:8b9442cd1f66518635b355529e4b44eb89a9ebad513dc9015c96c7cd1dd82a24
 
 SHELL ["/bin/bash", "-c"]
 
