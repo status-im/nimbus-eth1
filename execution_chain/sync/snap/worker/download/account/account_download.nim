@@ -55,6 +55,7 @@ proc accountDownloadCommit*(
     return err(ECacheError)
 
   accState.ranges = ItemKeyRangeSet(nil)            # force GC to release ref
+  ctx.accUnproc.clear()                             # reset global account
   ok()
 
 template accountDownload*(

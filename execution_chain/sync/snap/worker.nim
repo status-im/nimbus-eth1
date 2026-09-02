@@ -138,6 +138,10 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapStateForward:
       ctx.sessionForward(info).isOkOr:
         break body
+
+      # Prepare for next download cyle
+      discard ctx.downloadInit(info)                # get cache DB ready
+
       debug info & ": Forwarded state", pivotNum=ctx.pool.pivotNum,
         forwardNum=ctx.pool.forwardNum
 

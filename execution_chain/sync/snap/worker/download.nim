@@ -100,12 +100,12 @@ proc downloadCommit*(
       ): Result[void,ErrorType] =
   ## Finish downloading.
   ##
-  ?ctx.accountDownloadCommit(info)
-
   # This directive should come after storing `accountDownloadCommit()`
   # updates. It will update the tables and delete partial MPTs.
   ?ctx.storageDownloadCommit(info)
+  ?ctx.codeDownloadCommit(info)
 
+  ?ctx.accountDownloadCommit(info)                  # commit/reset accounting
   ok()
 
 template downloadState*(
