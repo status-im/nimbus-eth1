@@ -221,6 +221,13 @@ proc justWait(tsp: ThreadSignalPtr) {.async: (raises: [CancelledError]).} =
   except AsyncError as exc:
     notice "Waiting failed", err = exc.msg
 
+proc stopOnSignal(tsp: ThreadSignalPtr) {.async: (raises: [CancelledError]).} =
+  ## `runLightClient` drives its own `poll()` loop until `ProcessState` says
+  ## stop - it takes no stop future - so relay the thread stop signal into the
+  ## process-wide flag instead. The light client's poll loop runs this future.
+  await tsp.justWait()
+  ProcessState.scheduleStop("nimbus")
+
 proc elSyncLoop(
     dag: ChainDAGRef, url: EngineApiUrl
 ) {.async: (raises: [CancelledError]).} =
@@ -306,8 +313,12 @@ proc runLightClientThread(p: LightThreadConfig) {.thread.} =
   info "Launching light client",
     version = fullVersionStr, cmdParams = commandLineParams(), config
 
+  let stopper = stopOnSignal(p.tsp)
+
   dynamicLogScope(comp = "lc"):
-    runLightClient(config, p.tsp.justWait())
+    runLightClient(config)
+
+  waitFor noCancel stopper.cancelAndWait()
 
   # Stop the other thread as well, in case the light client stopped early
   waitFor p.tsp.fire()
