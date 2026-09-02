@@ -561,12 +561,12 @@ proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: Bi
 
     doAssert(list.len >= endIndex)
 
-    output.blob_cells = newSeqOfCap[seq[byte]](numIndices)
-    output.proofs = newSeqOfCap[KzgProof](numIndices)
+    output.blob_cells = newSeqOfCap[Opt[seq[byte]]](numIndices)
+    output.proofs = newSeqOfCap[Opt[KzgProof]](numIndices)
     for i in 0..<indices.len:
       if indices[i]:
-        output.blob_cells.add(@(cells[i].bytes))
-        output.proofs.add(list[startIndex + i])
+        output.blob_cells.add(Opt.some(@(cells[i].bytes)))
+        output.proofs.add(Opt.some(list[startIndex + i]))
 
   xp.blobTab.withValue(v, val):
     let
