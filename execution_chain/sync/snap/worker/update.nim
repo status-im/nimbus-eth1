@@ -23,9 +23,18 @@ logScope:
 
 proc allDownloaded(ctx: SnapCtxRef; info: static[string]): Opt[void] =
   let adb = ctx.pool.cacheDB
-  if not ?adb.hasAccMissingIntv(info) and           # accounts not ready yet?
-     not ?adb.hasStoMissingIntv(info) and           # storage left (or error)?
-     not ?adb.hasMissingBlob(info):                 # codes left (or error)?
+  if ctx.accUnproc.synced():                        # accounting cache active?
+    if 0 < ctx.accUnproc.chunks():
+      return err()
+  else:
+    if ?adb.hasAccMissingIntv(info):
+      return err()
+
+  # So, either the accounting cache is complete, od the cache DB.
+  if not ?adb.hasStoMissingIntv(info) and           # storage left (or error)?
+     not ?adb.hasStoLock(info) and
+     not ?adb.hasMissingBlob(info) and              # codes left (or error)?
+     not ?adb.hasCodeLock(info):
     return ok()
   err()
 
@@ -89,7 +98,7 @@ proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   if ctx.poolMode:                                  # wait for peers to sync
     return SnapDownloadFinish
   ctx.allDownloaded(info).isErrOr:                  # download is complete?
-    ctx.poolMode = true
+    return SnapStop                                 # FIXME, must change
   SnapBalsFetch
 
 proc balsFetchNext(ctx: SnapCtxRef, info: static[string]): SnapState =
