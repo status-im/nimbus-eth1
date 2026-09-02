@@ -44,8 +44,8 @@ func median(prices: var openArray[GasInt]): GasInt =
 
   prices[middle]
 
-proc invalidParams*(msg: string): ref ApplicationError =
-  (ref ApplicationError)(
+proc invalidParams*(msg: string): ref RpcResponseError =
+  (ref RpcResponseError)(
     code: -32602,
     msg: msg,
   )
@@ -109,39 +109,45 @@ proc populateTransactionObject*(tx: Transaction,
                                 optionalHash: Opt[Hash32] = Opt.none(Hash32),
                                 optionalNumber: Opt[uint64] = Opt.none(uint64),
                                 optionalTimestamp: Opt[EthTime] = Opt.none(EthTime),
-                                txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject =
+                                txIndex: Opt[uint64] = Opt.none(uint64),
+                                chainId: Opt[UInt256] = Opt.none(UInt256)): TransactionObject =
   result = TransactionObject()
   result.`type` = Opt.some Quantity(tx.txType)
   result.blockHash = optionalHash
   result.blockNumber = w3Qty(optionalNumber)
   result.blockTimestamp = w3Qty(optionalTimestamp)
 
-  if (let sender = tx.recoverSender(); sender.isOk):
+  if (let sender = tx.recoverSenderCached(); sender.isOk):
     result.`from` = sender[]
   result.gas = Quantity(tx.gasLimit)
   result.gasPrice = Quantity(tx.gasPrice)
   result.hash = tx.computeRlpHash
   result.input = tx.payload
   result.nonce = Quantity(tx.nonce)
-  result.to = Opt.some(tx.destination)
+  result.to = tx.to
   if txIndex.isSome:
     result.transactionIndex = Opt.some(Quantity(txIndex.get))
   result.value = tx.value
   result.v = Quantity(tx.V)
   result.r = tx.R
   result.s = tx.S
-  result.maxFeePerGas = Opt.some Quantity(tx.maxFeePerGas)
-  result.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
 
   if tx.txType >= TxEip2930:
     result.chainId = Opt.some(tx.chainId)
     result.accessList = Opt.some(tx.accessList)
+  else:
+    if chainId.isSome:
+      result.chainId = chainId
 
-  if tx.txType >= TxEip4844:
+  if tx.txType >= TxEip1559:
+    result.maxFeePerGas = Opt.some Quantity(tx.maxFeePerGas)
+    result.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
+
+  if tx.txType == TxEip4844:
     result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
     result.blobVersionedHashes = Opt.some(tx.versionedHashes)
 
-  if tx.txType >= TxEip7702:
+  if tx.txType == TxEip7702:
     result.authorizationList = Opt.some(tx.authorizationList)
 
 proc populateBlockObject*(blockHash: Hash32,
@@ -205,7 +211,7 @@ proc populateBlockObject*(blockHash: Hash32,
 proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
   let
-    sender = tx.recoverSender()
+    sender = tx.recoverSenderCached()
     receipt = rec.to(Receipt)
   var res = ReceiptObject()
   res.transactionHash = tx.computeRlpHash
@@ -296,6 +302,9 @@ proc createAccessList*(header: Header,
               else: generateAddress(sender, nonce)
     precompiles = activePrecompilesList(fork)
 
+  defer:
+    vmState.dispose()
+
   var
     prevTracer = AccessListTracer.new(
       args.accessList.get(@[]),
@@ -317,9 +326,11 @@ proc createAccessList*(header: Header,
       tracer  = AccessListTracer.new(accessList, sender, to, precompiles)
       vmState = BaseVMState.new(parent, header, com, txFrame, tracer)
       res     = rpcCallEvm(args, header, vmState).valueOr:
+                  vmState.dispose()
                   txFrame.dispose()
                   handleError("failed to call evm: " & $error.code)
 
+    vmState.dispose()
     txFrame.dispose()
 
     if res.isError:
@@ -443,7 +454,9 @@ proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, s
   of bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
-    of "latest":
+    of "latest", "pending":
+      # No pending block is assembled outside of payload building, so resolve
+      # "pending" to the head like erigon does instead of rejecting it.
       ok(chain.latestHeader)
     of "finalized":
       ok(chain.finalizedHeader)
@@ -464,7 +477,7 @@ proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag, noHash: bool = fal
   of bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
-    of "latest":
+    of "latest", "pending":
       ok(chain.latestBlock)
     of "finalized":
       ok(chain.finalizedBlock)

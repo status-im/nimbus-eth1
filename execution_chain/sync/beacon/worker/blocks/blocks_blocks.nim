@@ -18,7 +18,7 @@ import
   ../../../../block_access_list/bal_utils,
   ../../../wire_protocol/types,
   ../[helpers, update, worker_desc],
-  ./[blocks_bal, blocks_fetch, blocks_helpers, blocks_unproc]
+  ./[blocks_fetch_bal, blocks_fetch_body, blocks_helpers, blocks_unproc]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -137,7 +137,7 @@ template blocksFetchCheckImpl(
 
       # The response is served in request order and may be truncated by the
       # peer's soft response size limit.
-      let raws = (await buddy.fetchRawBlockAccessLists(balRequest)).valueOr:
+      let raws = buddy.fetchBlockAccessListsAll(balRequest).valueOr:
         default(seq[RawBlockAccessList])
       var nBals = 0
       for j in 0 ..< min(raws.len, blocks.len):
@@ -241,13 +241,15 @@ template blocksImport*(
         base=ctx.chain.baseNumber, head=ctx.chain.latestNumber
 
       for n in 0 ..< blocks.len:
-        let nthBn = blocks[n].header.number
+        let nthBn {.inject.} = blocks[n].header.number
 
         # Skip blocks at or below the current base — `FC` would otherwise
         # quarantine them as orphans and abort the batch.
         if nthBn <= ctx.chain.baseNumber:
           trace "Ignoring block less eq. base", peer, blk=nthBn,
             B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
+          ctx.updateLastBlockImported nthBn          # block already imported
+          ctx.updateEtaBlocks()
           blocks[n].reset()
           continue
 
@@ -315,7 +317,7 @@ template blocksImport*(
             ctx.subState.procFailNum = nthBn         # OK, this is a new block
             ctx.subState.procFailCount = 1
           else:
-            ctx.subState.procFailCount.inc           # block num was seen, already
+            ctx.subState.procFailCount.inc           # block # was seen, already
 
             # Cancel the whole download if needed
             if nImportBlocksErrThreshold < ctx.subState.procFailCount:

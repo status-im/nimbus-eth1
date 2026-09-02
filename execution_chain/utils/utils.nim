@@ -12,22 +12,20 @@
 
 import
   std/math,
-  eth/[common/eth_types_rlp, trie/ordered_trie],
+  eth/[bloom, common/eth_types_rlp, trie/ordered_trie],
   stew/byteutils,
   stew/assign2,
   nimcrypto/sha2,
   ../constants
 
 from beacon_chain/spec/datatypes/constants import
-  DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE
+  DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE,
+  BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_EXIT_REQUEST_TYPE
 
 export
   eth_types_rlp, DEPOSIT_REQUEST_TYPE, WITHDRAWAL_REQUEST_TYPE,
-  CONSOLIDATION_REQUEST_TYPE
-
-const
-  BUILDER_DEPOSIT_REQUEST_TYPE* = 0x03.byte
-  BUILDER_EXIT_REQUEST_TYPE*    = 0x04.byte
+  CONSOLIDATION_REQUEST_TYPE, BUILDER_DEPOSIT_REQUEST_TYPE,
+  BUILDER_EXIT_REQUEST_TYPE
 
 template calcTxRoot*(transactions: openArray[Transaction]): Root =
   orderedTrieRoot(transactions)
@@ -35,9 +33,40 @@ template calcTxRoot*(transactions: openArray[Transaction]): Root =
 template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Root =
   orderedTrieRoot(withdrawals)
 
-template calcReceiptsRoot*(receipts: openArray[StoredReceipt]): Root =
-  let recs = receipts.to(seq[Receipt])
-  orderedTrieRoot(recs)
+type NetworkFormatReceipt = distinct StoredReceipt
+  ## Encodes as the network `Receipt` wire format (bloom included) while
+  ## borrowing the stored receipt's logs instead of copying them
+
+proc append(w: var RlpWriter, rec: NetworkFormatReceipt) =
+  template r(): StoredReceipt = StoredReceipt(rec)
+  if r.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt}:
+    w.appendDetached(r.receiptType.uint8)
+  w.startList(4)
+  if r.isHash:
+    w.append(r.hash)
+  else:
+    w.append(r.status.uint8)
+  w.append(r.cumulativeGasUsed)
+
+  when w is RlpLengthTracker:
+    # The length pass only needs the encoded size, identical for any bloom
+    w.append(default(Bloom))
+  else:
+    var bloom: bloom.BloomFilter
+    for log in r.logs:
+      bloom.incl log.address
+      for topic in log.topics:
+        bloom.incl topic
+    w.append(bloom.value.to(Bloom))
+
+  w.append(r.logs)
+
+func calcReceiptsRoot*(receipts: openArray[StoredReceipt]): Root =
+  if receipts.len == 0:
+    return EMPTY_ROOT_HASH
+  orderedTrieRoot(
+    cast[ptr UncheckedArray[NetworkFormatReceipt]](addr receipts[0])
+      .toOpenArray(0, receipts.high))
 
 template calcReceiptsRoot*(receipts: openArray[Receipt]): Root =
   orderedTrieRoot(receipts)

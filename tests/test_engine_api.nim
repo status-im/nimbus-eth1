@@ -73,11 +73,10 @@ proc setupConfig(genesisFile: string): ExecutionClientConf =
     "--listen-address: 127.0.0.1",
   ])
 
-proc setupCom(config: ExecutionClientConf): CommonRef =
+proc setupCom(config: ExecutionClientConf, params: NetworkParams): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
-    config.networkId,
-    config.networkParams
+    params
   )
 
 proc setupClient(port: Port): RpcHttpClient =
@@ -90,37 +89,38 @@ proc setupEnv(envFork: HardFork = MergeFork,
   doAssert(envFork >= MergeFork)
 
   let
-    config  = setupConfig(genesisFile)
+    config = setupConfig(genesisFile)
+    params = config.computeNetworkParams()
 
   if envFork >= Shanghai:
-    config.networkParams.config.shanghaiTime = Opt.some(0.EthTime)
+    params.config.shanghaiTime = Opt.some(0.EthTime)
 
   if envFork >= Cancun:
-    config.networkParams.config.cancunTime = Opt.some(0.EthTime)
+    params.config.cancunTime = Opt.some(0.EthTime)
 
   if envFork >= Prague:
-    config.networkParams.config.pragueTime = Opt.some(0.EthTime)
+    params.config.pragueTime = Opt.some(0.EthTime)
 
   if envFork >= Osaka:
-    config.networkParams.config.osakaTime = Opt.some(0.EthTime)
+    params.config.osakaTime = Opt.some(0.EthTime)
 
   if envFork >= Amsterdam:
-    config.networkParams.config.bpo1Time = Opt.some(0.EthTime)
-    config.networkParams.config.bpo2Time = Opt.some(0.EthTime)
-    config.networkParams.config.amsterdamTime = Opt.some(0.EthTime)
-    config.networkParams.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
-    config.networkParams.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
+    params.config.bpo1Time = Opt.some(0.EthTime)
+    params.config.bpo2Time = Opt.some(0.EthTime)
+    params.config.amsterdamTime = Opt.some(0.EthTime)
+    params.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderDepositRequestCode)
+    params.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] = GenesisAccount(code: builderExitRequestCode)
 
   # Fund the test signer only for the default genesis, so tests that rely on a
   # fixed genesis/block hash (e.g. the mekong canonical test) are unaffected.
   if genesisFile == defaultGenesisFile:
-    config.networkParams.genesis.alloc[testSender] =
+    params.genesis.alloc[testSender] =
       GenesisAccount(balance: 1_000_000_000_000_000_000.u256)
-    config.networkParams.genesis.alloc[wdAddress] =
+    params.genesis.alloc[wdAddress] =
       GenesisAccount(balance: 1_000_000_000_000_000_000.u256)
 
   let
-    com   = setupCom(config)
+    com   = setupCom(config, params)
     chain = ForkedChainRef.init(com, enableQueue = true)
     txPool = TxPoolRef.new(chain)
 
@@ -464,12 +464,60 @@ proc newPayloadInvalidRLP(env: TestEnv): Result[void, string] =
       params.parentBeaconBlockRoot,
       params.executionRequests)
 
-  if res.isOk:
-    return err("res should error on undecodable payload")
+  # An undecodable payload is an invalid block, not an invalid request, so it
+  # is reported as an invalid payload status.
+  if res.isErr:
+    return err("res should not error on undecodable payload: " & res.error)
 
-  if $engineApiInvalidParams notin res.error:
-    return err("invalid error code: " & res.error &
-      " expect: " & $engineApiInvalidParams)
+  if res.get.status != PayloadExecutionStatus.invalid:
+    return err("res.status should be equal to PayloadExecutionStatus.invalid")
+
+  if res.get.latestValidHash.isSome:
+    return err("latestValidHash should be none for an undecodable payload")
+
+  ok()
+
+proc newPayloadV5UndecodableBAL(env: TestEnv): Result[void, string] =
+  let
+    client = env.client
+    header = ? client.latestHeader()
+    update = ForkchoiceStateV1(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+      parentBeaconBlockRoot: Opt.some(default(Hash32)),
+      slotNumber:            Opt.some(w3Qty(9'u64)),
+      targetGasLimit:        Opt.some(w3Qty(60_000_000'u64)),
+    )
+
+  let
+    fcuRes = ? client.forkchoiceUpdated(Version.V4, update, Opt.some(attr))
+    bundle = ? client.getPayload(Version.V6, fcuRes.payloadId.get)
+
+  var payload = bundle.executionPayload
+  payload.blockAccessList = Opt.some(@[0xde'u8, 0xad'u8, 0xbe'u8, 0xef'u8])
+
+  # An undecodable blockAccessList is an invalid block, not an invalid request,
+  # so it is reported as an invalid payload status.
+  let res = client.newPayloadV5(
+    payload,
+    Opt.some(newSeq[Hash32]()),
+    Opt.some(default(Hash32)),
+    bundle.executionRequests)
+
+  if res.isErr:
+    return err("res should not error on undecodable BAL: " & res.error)
+
+  if res.get.status != PayloadExecutionStatus.invalid:
+    return err("res.status should be equal to PayloadExecutionStatus.invalid")
+
+  if res.get.latestValidHash.isSome:
+    return err("latestValidHash should be none for an undecodable BAL")
 
   ok()
 
@@ -491,6 +539,11 @@ proc newPayloadV4InvalidRequestType(env: TestEnv): Result[void, string] =
 
   if res.get.status != PayloadExecutionStatus.invalid:
     return err("res.status should be equal to PayloadExecutionStatus.invalid")
+
+  # The payload is rejected before its ancestry is known, so the most recent
+  # valid block cannot be determined. It must never be the rejected block itself.
+  if res.get.latestValidHash.isSome:
+    return err("latestValidHash should be none for an invalid request type")
 
   ok()
 
@@ -600,6 +653,11 @@ const testList = [
     name: "newPayload undecodable RLP payload",
     fork: Prague,
     testProc: newPayloadInvalidRLP
+  ),
+  TestSpec(
+    name: "newPayloadV5 undecodable block access list",
+    fork: Amsterdam,
+    testProc: newPayloadV5UndecodableBAL
   ),
   TestSpec(
     name: "PayloadAttributesV4 preserve withdrawals",

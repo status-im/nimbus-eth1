@@ -68,7 +68,7 @@ proc parseFork(x: string): string =
 proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   let
     label = fixtures["func"].getStr
-    conf  = getChainConfig(parseFork(fixtures["fork"].getStr))
+    conf  = getChainConfig(parseFork(fixtures["fork"].getStr)).expect("ok")
     data  = fixtures["data"]
     privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
     com = CommonRef.new(newCoreDbRef DefaultDbMemory, config = conf)
@@ -78,6 +78,9 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
       com,
       com.db.baseTxFrame()
     )
+
+  defer:
+    vmState.dispose()
 
   case toLowerAscii(label)
   of "ecrecover": data.doTest(vmState, paEcRecover)

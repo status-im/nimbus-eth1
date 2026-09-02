@@ -199,10 +199,12 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
     b.index = uint i
     inc i
 
-  ?txFrame.put(FcStateKey.toOpenArray, rlp.encode(fc))
+  var encodedState = rlp.encode(fc)
+  ?txFrame.putMove(FcStateKey.toOpenArray, encodedState)
 
   for b in fc.hashToBlock.values:
-    ?txFrame.put(blockIndexKey(b.index), rlp.encode(b))
+    var encodedBlock = rlp.encode(b)
+    ?txFrame.putMove(blockIndexKey(b.index), encodedBlock)
     # Persist the per-block txFrame delta (Aristo + KVT) so deserialize can
     # restore the in-memory frame without re-executing the block.  The base
     # block shares its frame with the on-disk base and needs no blob.
@@ -283,6 +285,11 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
 
   for b in blocks:
     if b.index > 0:
+      # `index` is the parent slot as read from disk, it cannot be trusted
+      if b.index > state.numBlocks:
+        fc.reset(prevBase)
+        return err("corrupted FC: block " & $b.number &
+          " has out of range parent index " & $b.index)
       let parentCandidate = blocks[b.index-1]
       # Check fc corruption
       if parentCandidate.number + 1 != b.number:

@@ -196,7 +196,19 @@ type
     tcpPort: Port
     udpPort: Port
 
-var jwtKey: JwtSharedKey
+var
+  jwtKey: JwtSharedKey
+
+  natExtIp: Opt[IpAddress]
+    ## Resolved once by the main thread - see `setupSharedNat`
+
+proc sharedNatConfig(): NatConfig =
+  ## A fixed external IP makes `setupAddress` return without port mapping, so
+  ## the bn/ec threads stay out of `nim-eth`'s single-caller NAT globals.
+  if natExtIp.isSome():
+    NatConfig(hasExtIp: true, extIp: natExtIp.get())
+  else:
+    NatConfig(hasExtIp: false, nat: NatNone)
 
 proc dataDir*(config: NimbusConf): string =
   string config.dataDirFlag.get(
@@ -239,6 +251,7 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
   config.statusBarEnabled = false # Multi-threading issues due to logging
   config.tcpPort = p.tcpPort
   config.udpPort = p.udpPort
+  config.nat = sharedNatConfig() # NAT is done once, on the main thread
 
   config.rpcEnabled.reset() # --rpc is meant for the EL
 
@@ -310,19 +323,21 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
   config.agentString = "nimbus"
   config.tcpPort = p.tcpPort
   config.udpPortFlag = p.udpPort
+  config.nat = sharedNatConfig() # NAT is done once, on the main thread
 
   info "Launching execution client", version = FullVersionStr, config
 
+  let params = config.computeNetworkParams()
   when compileOption("threads"):
     let
       # TODO https://github.com/status-im/nim-taskpools/issues/6
       #      share taskpool between bn and ec
       taskpool = setupTaskpool(int config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config, taskpool.numThreads)
+      (com, keyCacheEnabled) = setupCommonRef(config, params, taskpool.numThreads)
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config, 0)
+    let (com, keyCacheEnabled) = setupCommonRef(config, params, 0)
 
   if keyCacheEnabled:
     # Make sure key cache isn't empty
@@ -330,8 +345,11 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
       fatal "Cannot compute root keys", msg = error
       quit(QuitFailure)
 
+  defer:
+    com.db.close()
+
   dynamicLogScope(comp = "ec"):
-    nimbus_execution_client.runExeClient(config, com, p.tsp.justWait())
+    nimbus_execution_client.runExeClient(config, com, params, p.tsp.justWait())
 
   # Stop the other thread as well, in case `runExeClient` stopped early
   waitFor p.tsp.fire()
@@ -386,12 +404,43 @@ proc runCombinedClient() =
   var
     bnThread: Thread[BeaconThreadConfig]
     lightThread: Thread[LightThreadConfig]
+
+  # NEW
   let
-    bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
-    beaconTcpPort =
-      config.beaconTcpPort.get(config.tcpPort.get(Port defaultEth2TcpPort))
-    beaconUdpPort =
-      config.beaconUdpPort.get(config.udpPort.get(Port defaultEth2TcpPort))
+    bnTcpPort = config.beaconTcpPort.get(config.tcpPort.get(Port defaultEth2TcpPort))
+    bnUdpPort = config.beaconUdpPort.get(config.udpPort.get(Port defaultEth2TcpPort))
+    ecTcpPort =
+      # -1/+1 to make sure global default is respected but +1 is applied to --tcp-port
+      config.executionTcpPort.get(
+        Port(uint16(config.tcpPort.get(Port(defaultExecutionPort - 1))) + 1)
+      )
+    ecUdpPort =
+      if config.executionUdpPort.isSome:
+        config.executionUdpPort
+      elif config.udpPort.isSome:
+        some(Port(uint16(config.udpPort.get()) + 1))
+      else:
+        none(Port)
+
+  # `nim-eth` NAT keeps its renewal thread, close channel and `addQuitProc` in
+  # process-wide globals, so entering it from both threads orphans a thread
+  # handle and joins it twice at exit, hanging shutdown. Map all four ports once.
+  block setupSharedNat:
+    let ecConfig = ecconf.makeConfig(ignoreUnknown = true)
+    natExtIp = setupAddress(
+      ecConfig.nat,
+      ecConfig.listenAddress,
+      @[
+        (port: bnTcpPort, protocol: PortProtocol.TCP),
+        (port: bnUdpPort, protocol: PortProtocol.UDP),
+        (port: ecTcpPort, protocol: PortProtocol.TCP),
+        (port: ecUdpPort.get(ecTcpPort), protocol: PortProtocol.UDP),
+      ],
+      NimbusName & " " & NimbusVersion,
+    ).ip
+
+  let bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
+
   if config.light:
     # The light client drives the EL directly via the Engine API, so the
     # beacon-node CL-driven EL sync loop (`elSyncLoop`/`--el-sync`) must not run.
@@ -401,42 +450,29 @@ proc runCombinedClient() =
       runLightClientThread,
       LightThreadConfig(
         tsp: bnStop,
-        tcpPort: beaconTcpPort,
-        udpPort: beaconUdpPort,
-      ),
+        tcpPort: bnTcpPort,
+        udpPort: bnUdpPort,
+      )
     )
   else:
     createThread(
       bnThread,
       runBeaconNode,
       BeaconThreadConfig(
-        tsp: bnStop,
-        tcpPort: beaconTcpPort,
-        udpPort: beaconUdpPort,
-        elSync: config.elSync,
+        tsp: bnStop, 
+        tcpPort: bnTcpPort, 
+        udpPort: bnUdpPort, 
+        elSync: config.elSync
       ),
-    )
+  )
+
 
   var ecThread: Thread[ExecutionThreadConfig]
   let ecStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
   createThread(
     ecThread,
     runExecutionClient,
-    ExecutionThreadConfig(
-      tsp: ecStop,
-      tcpPort:
-        # -1/+1 to make sure global default is respected but +1 is applied to --tcp-port
-        config.executionTcpPort.get(
-          Port(uint16(config.tcpPort.get(Port(defaultExecutionPort - 1))) + 1)
-        ),
-      udpPort:
-        if config.executionUdpPort.isSome:
-          config.executionUdpPort
-        elif config.udpPort.isSome:
-          some(Port(uint16(config.udpPort.get()) + 1))
-        else:
-          none(Port),
-    ),
+    ExecutionThreadConfig(tsp: ecStop, tcpPort: ecTcpPort, udpPort: ecUdpPort),
   )
 
   # Shut the whole process down if either worker thread exits on its own (e.g. an

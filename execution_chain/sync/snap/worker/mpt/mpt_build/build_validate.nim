@@ -10,8 +10,6 @@
 {.push raises: [].}
 
 import
-  ../../../../wire_protocol/snap/snap_types,
-  ../../state_db,
   ./[build_desc, build_export, build_finalise, build_init, build_merge]
 
 const
@@ -59,6 +57,10 @@ proc validate*[T: SnapAccount|StorageItem](
     if db.isComplete():
       return ok(db)
   err()
+
+proc rightMost*(db: NodeTrieRef): bool =
+  ## Returns `true` if there can be no more leafs to the right
+  db.atRightEnd
 
 # ------------------------------------------------------------------------------
 # End

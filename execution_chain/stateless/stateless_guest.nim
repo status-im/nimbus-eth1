@@ -15,7 +15,7 @@ export stateless_types, stateless_execution
 
 ## Stateless guest interfaces
 ## Spec:
-## https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless_guest.py#L1
+## https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless_guest.py#L1
 
 func deserialize_stateless_input*(
     data: openArray[byte]
@@ -38,7 +38,8 @@ func deserialize_stateless_input*(
 const FAILED_STATELESS_OUTPUT = StatelessValidationResult(
   new_payload_request_root: default(Digest),
   successful_validation: false,
-  chain_config: default(StatelessChainConfig),
+  chain_id: 0,
+  schema_id: 0,
 )
 
 proc run_stateless_guest*(data: openArray[byte]): seq[byte] =
@@ -46,3 +47,13 @@ proc run_stateless_guest*(data: openArray[byte]): seq[byte] =
     return SSZ.encode(FAILED_STATELESS_OUTPUT)
 
   SSZ.encode(verify_stateless_new_payload(input))
+
+when isMainModule:
+  # Guest program entry point: read the schema-prefixed SSZ `StatelessInput`,
+  # validate it, write back the SSZ `StatelessValidationResult`.
+  import ./zkvm_io
+
+  proc main() =
+    writeOutput(run_stateless_guest(readInput().toOpenArray()))
+
+  main()

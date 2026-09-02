@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos, minilru, stew/interval_set],
   ../../../../wire_protocol,
-  ../../[helpers, state_db, worker_desc],
+  ../../[helpers, worker_desc],
   ./storage_helpers
 
 type
@@ -28,7 +28,7 @@ proc registerPeerError(buddy: SnapPeerRef; root: StateRoot; slowPeer=false) =
   ## Do not repeat the same time-consuming failed request for the same state
   ## root.
   buddy.stoFetchRegisterError(slowPeer)
-  buddy.only.failedReq.stateRoot.put(root,0u8)
+  buddy.only.failedReq.stateRoot = root
 
 proc maybeSlowPeerError(buddy: SnapPeerRef; ela: Duration; root: StateRoot) =
   ## Register slow response, definitely not fast enough
@@ -46,13 +46,13 @@ proc getStorage(
   ## Wrapper around `getStorageRanges()`
   let start = Moment.now()
 
-  buddy.only.failedReq.stateRoot.peek(StateRoot(req.rootHash)).isErrOr:
+  if buddy.only.failedReq.stateRoot == StateRoot(req.rootHash):
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
   var resp: StorageRangesPacket
   try:
-    resp = (await buddy.peer.getStorageRanges(
-                    req, fetchStorageSnapTimeout)).valueOr:
+    resp = (await snap.getStorageRanges(
+                      buddy.peer, req, fetchStorageSnapTimeout)).valueOr:
         return err((EGeneric,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
@@ -105,18 +105,18 @@ template fetchStorage*(
         responseBytes: fetchStorageSnapBytesLimit)
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = stateRoot.toStr        # logging only
-      reqSto {.inject,used.} = ivReq.flStr          # logging only
-      nReqSto {.inject,used.} = ivReq.lenStr        # logging only
+      reqRng {.inject,used.} = ivReq.flStr          # logging only
+      nReqRng {.inject,used.} = ivReq.lenStr        # logging only
 
     # Verify consistency as received from caller
     doAssert 0 < accounts.len
     if ivReq != ItemKeyRangeMax and accounts.len != 1:
       raiseAssert "Oops" &
-        ", iv=" & reqSto &
-        ", iv.len=" & nReqSto &
+        ", iv=" & reqRng &
+        ", iv.len=" & nReqRng &
         ", nAccounts=" & $accounts.len
 
-    trace sendInfo, peer, root, nReqAcc, reqSto, nReqSto,
+    trace sendInfo, peer, root, nReqAcc, reqRng, nReqRng,
       syncState=($buddy.syncState), nErrors=buddy.nErrors.fetch.sto
 
     let rc = await buddy.getStorage(fetchReq)
@@ -131,7 +131,7 @@ template fetchStorage*(
         of EGeneric:
           break evalError
         of EAlreadyTriedAndFailed:
-          trace recvInfo & " error", peer, root, nReqAcc, reqSto, nReqSto,
+          trace recvInfo & " error", peer, root, nReqAcc, reqRng, nReqRng,
             ela=elapsed.toStr, syncState=($buddy.syncState), error=rc.errStr,
             nErrors=buddy.nErrors.fetch.sto
           break body                                # return err()
@@ -140,13 +140,12 @@ template fetchStorage*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.stoFetchRegisterError()
-        of ENoDataAvailable, EMissingEthContext, ETrieError, ELockError,
-           ECacheError, ECompleted:
+        of EMissingEthContext, EUnusedForFetch:
           # Not allowed here -- internal error
-          raiseAssert "Unexpected error " & $rc.error.excp
+          raiseAssert "Unexpected fetch error " & $rc.error.excp
 
         # Debug message for other errors
-        debug recvInfo & " error", peer, root, nReqAcc, reqSto, nReqSto,
+        debug recvInfo & " error", peer, root, nReqAcc, reqRng, nReqRng,
           ela=elapsed.toStr, syncState=($buddy.syncState), error=rc.errStr,
           nErrors=buddy.nErrors.fetch.sto
         break body                                  # return err()
@@ -158,26 +157,26 @@ template fetchStorage*(
     # Evaluate error result (if any)
     if rc.isErr or buddy.ctrl.stopped:
       buddy.maybeSlowPeerError(elapsed, stateRoot)
-      trace recvInfo & " error", peer, root, nReqAcc, reqSto, nReqSto,
+      trace recvInfo & " error", peer, root, nReqAcc, reqRng, nReqRng,
         ela, syncState, error=rc.errStr, nErrors=buddy.nErrors.fetch.sto
       break body                                    # return err()
 
     # Check against obvious protocol violations
     let
-      nRespSlots {.inject.} = rc.value.packet.slots.len
+      nRespSto {.inject.} = rc.value.packet.slots.len
       nRespProof {.inject.} = rc.value.packet.proof.len
 
-    if 0 < nRespSlots:
-      if nReqAcc < nRespSlots:
+    if 0 < nRespSto:
+      if nReqAcc < nRespSto:
         # Protocol violation
         buddy.registerPeerError(stateRoot)
         trace recvInfo & " more slots than requested", peer, root, nReqAcc,
-          reqSto, nReqSto, nRespSlots, nRespProof,
+          reqRng, nReqRng, nRespSto, nRespProof,
           ela, syncState, nErrors=buddy.nErrors.fetch.sto
         break body                                  # return err()
 
       let
-        nTop = nRespSlots - 1                       # Index of last slot
+        nTop = nRespSto - 1                        # Index of last slot
         slot = rc.value.packet.slots[nTop]          # Last slot
 
       # Check by item. Only the last slot might be incomplete and needs a
@@ -187,26 +186,26 @@ template fetchStorage*(
         if rc.value.packet.slots[n].len == 0:
           # Protocol violation
           buddy.registerPeerError(stateRoot)
-          trace recvInfo & " error empty slot", peer, root, nReqAcc,
-            reqSto, inx=n, nReqSto, nRespSlots=($nRespSlots & "+1"), nRespProof,
+          trace recvInfo & " error empty slots", peer, root, nReqAcc, stoInx=n,
+            reqRng, nReqRng, nRespSto=($nRespSto & "+1"), nRespProof,
             ela, syncState, nErrors=buddy.nErrors.fetch.sto
           break body                                # return err()
         stoData.slots[n] = rc.value.packet.slots[n]
 
       # There was a `doAssert` at the beginning of this template that made
       # sure that there is a range request only when `nRespSlots == 1`.
-      if nRespSlots == 1:                           # => `nTop == 0`
+      if nRespSto == 1:                             # => `nTop == 0`
         if 0 < slot.len:
           let
             slMin = slot[0].slotHash.to(ItemKey)
             slMax = slot[^1].slotHash.to(ItemKey)
-            respSlot {.inject,used.} = (slMin,slMax).flStr # logging only
+            nRespSlot {.inject,used.} = (slMin,slMax).flStr # logging only
 
           if slMin < ivReq.minPt:
             trace recvInfo & " min slot item too low", peer, root, nReqAcc,
-              reqSto, nReqSto, nRespSlots="0+1", nRespProof,
+              reqRng, nReqRng, nRespSto="0+1", nRespProof,
               ela, syncState, nErrors=buddy.nErrors.fetch.sto
-            break body                            # return err()
+            break body                              # return err()
 
           # According to specs, the peer must respond with at least one slot
           # value. If there is no account in the requested range, then the next
@@ -219,20 +218,20 @@ template fetchStorage*(
               # Bogus peer returning additional rubbish
               buddy.stoFetchRegisterError(forceZombie=true)
               trace recvInfo & " excess slots", peer, root, nReqAcc,
-                reqSto, nReqSto, nRespSlots="0+1", respSlot,
+                reqRng, nReqRng, nRespSto="0+1", nRespSlot,
                 respSlotPreMax=respPreMax.flStr, nRespProof,
                 ela, syncState, nErrors=buddy.nErrors.fetch.sto
-              break body                          # return err()
+              break body                            # return err()
 
         elif nRespProof == 0:
           # Protocol violation. It is not allowed to return an empty
           # slot + empty proof. The caller is obliged to make sure that the
           # account has a non-empty storage root.
           buddy.registerPeerError(stateRoot)
-          trace recvInfo & " error empty slot & proof", peer, root, nReqAcc,
-            reqSto, nReqSto, nRespSlots, nRespProof,
+          trace recvInfo & " error empty slots & proof", peer, root, nReqAcc,
+            reqRng, nReqRng, nRespSto, nRespProof,
             ela, syncState, nErrors=buddy.nErrors.fetch.sto
-          break body                              # return err()
+          break body                                # return err()
 
       # Add last item and proof
       if rc.value.packet.proof.len == 0:
@@ -245,8 +244,8 @@ template fetchStorage*(
       # Both, proof + slots are empty. This means that there is no storage
       # data available for this state root.
       buddy.registerPeerError(stateRoot)
-      trace recvInfo & " not available", peer, root, nReqAcc, reqSto,
-        nReqSto, ela, syncState, nErrors=buddy.nErrors.fetch.sto
+      trace recvInfo & " not available", peer, root, nReqAcc, reqRng,
+        nReqRng, ela, syncState, nErrors=buddy.nErrors.fetch.sto
       bodyRc = typeof(bodyRc).err(ENoDataAvailable)
       break body                                  # return err()
 
@@ -272,7 +271,7 @@ template fetchStorage*(
       #
       buddy.registerPeerError(stateRoot)
       trace recvInfo & " protocol violation", peer, root, nReqAcc,
-        reqSto, nReqSto, nRespSlots, nRespProof,
+        reqRng, nReqRng, nRespSto, nRespProof,
         ela, syncState, nErrors=buddy.nErrors.fetch.sto
       break body                                  # return err()
 
@@ -283,8 +282,8 @@ template fetchStorage*(
       buddy.nErrors.fetch.sto = 0                   # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one/error
 
-    trace recvInfo, peer, root, nReqAcc, reqSto, nReqSto,
-      nRespSlots=($stoData.slots.len & "+" & $(0 < stoData.slot.len).ord),
+    trace recvInfo, peer, root, nReqAcc, reqRng, nReqRng,
+      nRespSto=($stoData.slots.len & "+" & $(0 < stoData.slot.len).ord),
       nRespProof, ela, syncState, nErrors=buddy.nErrors.fetch.sto
 
     bodyRc = typeof(bodyRc).ok(stoData)

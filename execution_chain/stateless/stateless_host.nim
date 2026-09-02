@@ -14,26 +14,22 @@ import
   secp256k1,
   stew/[endians2, sequtils2],
   eth/common/[blocks, eth_types_rlp, hashes, keys, transaction_utils],
-  ../common/chain_config,
   ./stateless_types
 
-from beacon_chain/spec/datatypes/gloas import ExecutionPayload
-from beacon_chain/spec/datatypes/electra import ExecutionRequests
+from beacon_chain/spec/datatypes/gloas import ExecutionPayload, ExecutionRequests
 from beacon_chain/spec/datatypes/capella import Withdrawal
 from beacon_chain/spec/datatypes/bellatrix import BloomLogs
 from beacon_chain/spec/datatypes/base import Gwei
 from beacon_chain/spec/beacon_time import Slot
-from beacon_chain/spec/presets import
-  MAX_BYTES_PER_TRANSACTION, MAX_EXTRA_DATA_BYTES, MAX_TRANSACTIONS_PER_PAYLOAD,
-  MAX_WITHDRAWALS_PER_PAYLOAD
+from beacon_chain/spec/presets import MAX_EXTRA_DATA_BYTES
 
 export stateless_types, results
 
 ## Stateless host interfaces
 ## Spec:
-## https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless_host.py#L1
+## https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless_host.py#L1
 
-## https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/transactions.py#L779
+## https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/transactions.py#L882
 func recover_transaction_public_key*(
     tx: Transaction
 ): Opt[ByteVector[PUBLIC_KEY_BYTES]] =
@@ -63,24 +59,6 @@ func deserialize_stateless_output*(
   except SerializationError as e:
     err("Failed to deserialize StatelessValidationResult: " & e.msg)
 
-func build_chain_config*(chain_id: uint64): StatelessChainConfig =
-  ## Build the chain configuration supported by this host.
-  ##
-  ## For now the Amsterdam stateless host only describes the Amsterdam fork.
-  var activation: ForkActivation
-  discard activation.timestamp.add(0'u64)
-
-  var blobSchedule: List[BlobSchedule, MAX_BLOB_SCHEDULES_PER_FORK]
-  discard blobSchedule.add(
-    defaultBlobSchedule()[Amsterdam].expect("Amsterdam blob schedule is defined")
-  )
-
-  StatelessChainConfig(
-    chain_id: chain_id,
-    active_fork: ForkConfig(
-      fork: PROTOCOL_FORK_AMSTERDAM, activation: activation, blob_schedule: blobSchedule
-    ),
-  )
 
 func build_stateless_input*(
     blk: Block,
@@ -120,11 +98,11 @@ func build_stateless_input*(
   # Encode transactions to bytes, recover public keys, and collect the
   # versioned hashes.
   var
-    transactions = newSeqOfCap[bellatrix.Transaction](blk.transactions.len)
-    public_keys: List[ByteVector[PUBLIC_KEY_BYTES], MAX_PUBLIC_KEYS]
-    versioned_hashes: List[Digest, MAX_BLOB_COMMITMENTS_PER_BLOCK]
+    transactions = newSeqOfCap[gloas.Transaction](blk.transactions.len)
+    public_keys: seq[ByteVector[PUBLIC_KEY_BYTES]]
+    versioned_hashes: seq[Digest]
   for tx in blk.transactions:
-    transactions.add(bellatrix.Transaction.init(rlp.encode(tx)))
+    transactions.add(gloas.Transaction.init(rlp.encode(tx)))
 
     let public_key = recover_transaction_public_key(tx).valueOr:
       # Skip transactions without a recoverable key (invalid signature values).
@@ -132,13 +110,11 @@ func build_stateless_input*(
       # decode. However, our block already holds the decoded transaction objects,
       # so invalid signature is the only failure that can occur here still.
       continue
-    if not public_keys.add(public_key):
-      return err("Too many public keys for the stateless input")
+    public_keys.add(public_key)
 
     if tx.txType == TxEip4844:
       for versioned_hash in tx.versionedHashes:
-        if not versioned_hashes.add(Digest(data: versioned_hash.data)):
-          return err("Too many versioned hashes for the payload request")
+        versioned_hashes.add(Digest(data: versioned_hash.data))
 
   var withdrawals = newSeqOfCap[capella.Withdrawal](blk.withdrawals.get.len)
   for withdrawal in blk.withdrawals.get:
@@ -165,12 +141,11 @@ func build_stateless_input*(
     extra_data: List[byte, MAX_EXTRA_DATA_BYTES].init(header.extraData),
     base_fee_per_gas: base_fee_per_gas,
     block_hash: Digest(data: block_hash.data),
-    transactions:
-      List[bellatrix.Transaction, MAX_TRANSACTIONS_PER_PAYLOAD].init(transactions),
-    withdrawals: List[capella.Withdrawal, MAX_WITHDRAWALS_PER_PAYLOAD].init(withdrawals),
+    transactions: transactions,
+    withdrawals: withdrawals,
     blob_gas_used: blob_gas_used,
     excess_blob_gas: excess_blob_gas,
-    block_access_list: List[byte, MAX_BYTES_PER_TRANSACTION].init(@block_access_list),
+    block_access_list: gloas.BlockAccessList.init(@block_access_list),
     slot_number: Slot(slot_number),
   )
 
@@ -185,7 +160,7 @@ func build_stateless_input*(
     StatelessInput(
       new_payload_request: new_payload,
       witness: execution_witness,
-      chain_config: build_chain_config(chain_id),
+      chain_id: chain_id,
       public_keys: public_keys,
     )
   )

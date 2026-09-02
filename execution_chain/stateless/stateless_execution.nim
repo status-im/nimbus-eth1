@@ -27,7 +27,8 @@ import
 
 from beacon_chain/spec/datatypes/electra import
   DepositRequest, WithdrawalRequest, ConsolidationRequest
-from beacon_chain/spec/datatypes/gloas import ExecutionPayload
+from beacon_chain/spec/datatypes/gloas import
+  ExecutionPayload, BuilderDepositRequest, BuilderExitRequest
 from ../utils/utils import calcRequestsHash
 
 export witness_types, stateless_types, common, headers, blocks, results
@@ -35,9 +36,9 @@ export witness_types, stateless_types, common, headers, blocks, results
 func toExecutionWitness*(w: ExecutionWitnessWithKeys): ExecutionWitness =
   var res: ExecutionWitness
   for node in w.state:
-    discard res.state.add(ByteList[MAX_BYTES_PER_WITNESS_NODE].init(node))
+    res.state.add(ByteList[MAX_BYTES_PER_WITNESS_NODE].init(node))
   for code in w.codes:
-    discard res.codes.add(ByteList[MAX_BYTES_PER_CODE].init(code))
+    res.codes.add(ByteList[MAX_BYTES_PER_CODE].init(code))
   for header in w.headers:
     discard res.headers.add(ByteList[MAX_BYTES_PER_HEADER].init(header))
   res
@@ -120,7 +121,7 @@ template statelessProcessBlock*(
 ): Result[void, string] =
   statelessProcessBlock(witness, id, chainConfigForNetwork(id), blk)
 
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/execution_engine/validation_helpers.py#L22
+# https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/execution_engine/validation_helpers.py#L1
 func toBlock(
     p: ExecutionPayload, parentBeaconBlockRoot: Opt[Hash32], requestsHash: Opt[Hash32]
 ): Block {.raises: [RlpError].} =
@@ -170,95 +171,57 @@ func toBlock(
     withdrawals: Opt.some(wds),
   )
 
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L304
-func isActivationActive(
-    activation: ForkActivation, execution_payload: ExecutionPayload
+# https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/execution_engine/new_payload.py#L50
+func is_valid_versioned_hashes(
+    expected: openArray[Digest], blk: Block
 ): Result[void, string] =
-  ## Return whether an activation point is active for the payload.
-  if activation.block_number.len == 0 and activation.timestamp.len == 0:
-    return err("Fork activation must set block_number or timestamp")
+  ## Return ok if and only if the versioned hashes computed by blob
+  ## transactions in `new_payload_request.execution_payload` match
+  ## `new_payload_request.versioned_hashes`.
+  var versionedHashes: seq[VersionedHash]
+  for tx in blk.transactions:
+    if tx.txType == TxEip4844:
+      versionedHashes.add(tx.versionedHashes)
 
-  if activation.block_number.len > 0 and
-      execution_payload.block_number < activation.block_number[0]:
-    return err("ChainConfig active_fork is not active for the target payload")
+  if versionedHashes.len != expected.len:
+    return err("Versioned hashes count does not match the payload")
 
-  if activation.timestamp.len > 0 and
-      execution_payload.timestamp < activation.timestamp[0]:
-    return err("ChainConfig active_fork is not active for the target payload")
+  for i, x in expected:
+    if x.data != versionedHashes[i].data:
+      return err("Versioned hash at index " & $i & " does not match the payload")
 
   ok()
 
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L340
-func validate_chain_config(
-    chain_config: StatelessChainConfig, execution_payload: ExecutionPayload
-): Result[void, string] =
-  ## Validate the target payload's active fork config.
-  let active_fork = chain_config.active_fork
+func chainConfigForStateless(chainId: uint64): ChainConfig =
+  # Normally `chainConfigForNetwork` would be used, but the stateless tests run
+  # the guest fork from genesis, so every fork up to it is activated at zero.
+  # TODO: Might have to change this system once the fork gets scheduled.
+  const lastFork = HardFork.Amsterdam
 
-  ?isActivationActive(active_fork.activation, execution_payload)
+  var transitions: ForkTransitionTable
+  for f in low(HardFork) .. lastPurelyBlockNumberBasedFork:
+    transitions.blockNumberThresholds[f] = Opt.some(0.BlockNumber)
+  transitions.mergeForkTransitionThreshold.number = Opt.some(0.BlockNumber)
+  transitions.mergeForkTransitionThreshold.ttd = Opt.some(0.u256)
+  for f in firstTimeBasedFork .. lastFork:
+    transitions.timeThresholds[f] = Opt.some(0.EthTime)
 
-  if active_fork.fork != PROTOCOL_FORK_AMSTERDAM:
-    return err("Amsterdam stateless guest cannot execute fork " & $active_fork.fork)
+  let
+    networkId = NetworkId(chainId.u256)
+    config = ChainConfig(
+      chainId: networkId,
+      blobSchedule: defaultBlobSchedule(),
+      # Inherit deposit contract address from the known network config
+      # TODO: Separate out the deposit contract address code.
+      depositContractAddress: chainConfigForNetwork(networkId).depositContractAddress,
+    )
+  config.populateFromForkTransitionTable(transitions)
 
-  # The expected blob schedule is the one compiled into the guest for Amsterdam.
-  let expectedBlobSchedule =
-    defaultBlobSchedule()[Amsterdam].expect("Amsterdam blob schedule is defined")
-  if active_fork.blob_schedule.len == 0 or
-      active_fork.blob_schedule[0] != expectedBlobSchedule:
-    return err("ChainConfig active_fork blob_schedule does not match Amsterdam")
-
-  ok()
-
-func chainConfigForStateless(cc: StatelessChainConfig): ChainConfig =
-  # Nimbus EVM needs the full fork timeline, but the stateless input only provides
-  # the active fork. Set the rest to 0 to allow for execution. The active fork is
-  # set to the provided values.
-  let networkId = NetworkId(cc.chain_id.u256)
-
-  var bs = defaultBlobSchedule()
-  if cc.active_fork.blob_schedule.len > 0:
-    bs[Amsterdam] = Opt.some(cc.active_fork.blob_schedule[0])
-
-  let amsterdamTime =
-    if cc.active_fork.activation.timestamp.len > 0:
-      Opt.some(EthTime(cc.active_fork.activation.timestamp[0]))
-    else:
-      Opt.some(0.EthTime)
-
-  ChainConfig(
-    chainId: networkId,
-    homesteadBlock: Opt.some(0.BlockNumber),
-    eip150Block: Opt.some(0.BlockNumber),
-    eip155Block: Opt.some(0.BlockNumber),
-    eip158Block: Opt.some(0.BlockNumber),
-    byzantiumBlock: Opt.some(0.BlockNumber),
-    constantinopleBlock: Opt.some(0.BlockNumber),
-    petersburgBlock: Opt.some(0.BlockNumber),
-    istanbulBlock: Opt.some(0.BlockNumber),
-    berlinBlock: Opt.some(0.BlockNumber),
-    londonBlock: Opt.some(0.BlockNumber),
-    posBlock: Opt.some(0.BlockNumber),
-    shanghaiTime: Opt.some(0.EthTime),
-    cancunTime: Opt.some(0.EthTime),
-    pragueTime: Opt.some(0.EthTime),
-    osakaTime: Opt.some(0.EthTime),
-    bpo1Time: Opt.some(0.EthTime),
-    bpo2Time: Opt.some(0.EthTime),
-    bpo3Time: Opt.some(0.EthTime),
-    bpo4Time: Opt.some(0.EthTime),
-    bpo5Time: Opt.some(0.EthTime),
-    amsterdamTime: amsterdamTime,
-    blobSchedule: bs,
-    # Inherit deposit contract address from the known network config
-    # TODO: Separate out the deposit contract address code.
-    depositContractAddress: chainConfigForNetwork(networkId).depositContractAddress,
-  )
+  config
 
 # Encode execution requests into EL format:
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/execution_engine/requests.py#L135
-func encodeDeposits(
-    deposits: List[DepositRequest, Limit MAX_DEPOSIT_REQUESTS_PER_PAYLOAD]
-): seq[byte] =
+# https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/execution_engine/requests.py#L108
+func encodeDeposits(deposits: seq[DepositRequest]): seq[byte] =
   var res: seq[byte]
   for d in deposits:
     res.add(d.pubkey.blob)
@@ -268,9 +231,7 @@ func encodeDeposits(
     res.add(d.index.toBytesLE())
   res
 
-func encodeWithdrawals(
-    withdrawals: List[WithdrawalRequest, Limit MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD]
-): seq[byte] =
+func encodeWithdrawals(withdrawals: seq[WithdrawalRequest]): seq[byte] =
   var res: seq[byte]
   for w in withdrawals:
     res.add(w.source_address.data)
@@ -278,10 +239,7 @@ func encodeWithdrawals(
     res.add(uint64(w.amount).toBytesLE())
   res
 
-func encodeConsolidations(
-    consolidations:
-      List[ConsolidationRequest, Limit MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD]
-): seq[byte] =
+func encodeConsolidations(consolidations: seq[ConsolidationRequest]): seq[byte] =
   var res: seq[byte]
   for c in consolidations:
     res.add(c.source_address.data)
@@ -289,9 +247,23 @@ func encodeConsolidations(
     res.add(c.target_pubkey.blob)
   res
 
-proc executeNewPayload(input: StatelessInput): Result[void, string] =
-  ?validate_chain_config(input.chain_config, input.new_payload_request.executionPayload)
+func encodeBuilderDeposits(deposits: seq[BuilderDepositRequest]): seq[byte] =
+  var res: seq[byte]
+  for d in deposits:
+    res.add(d.pubkey.blob)
+    res.add(d.withdrawal_credentials.data)
+    res.add(uint64(d.amount).toBytesLE())
+    res.add(d.signature.blob)
+  res
 
+func encodeBuilderExits(exits: seq[BuilderExitRequest]): seq[byte] =
+  var res: seq[byte]
+  for e in exits:
+    res.add(e.source_address.data)
+    res.add(e.pubkey.blob)
+  res
+
+proc executeNewPayload(input: StatelessInput): Result[void, string] =
   let
     reqs = input.new_payload_request.executionRequests
     requestsHash = Opt.some(
@@ -299,6 +271,8 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
         (DEPOSIT_REQUEST_TYPE, encodeDeposits(reqs.deposits)),
         (WITHDRAWAL_REQUEST_TYPE, encodeWithdrawals(reqs.withdrawals)),
         (CONSOLIDATION_REQUEST_TYPE, encodeConsolidations(reqs.consolidations)),
+        (BUILDER_DEPOSIT_REQUEST_TYPE, encodeBuilderDeposits(reqs.builder_deposits)),
+        (BUILDER_EXIT_REQUEST_TYPE, encodeBuilderExits(reqs.builder_exits)),
       )
     )
     parentBeaconBlockRoot =
@@ -314,10 +288,12 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
 
     com = CommonRef.new(
       db = nil,
-      config = chainConfigForStateless(input.chain_config),
-      networkId = NetworkId(input.chain_config.chain_id.u256),
+      config = chainConfigForStateless(input.chain_id),
+      networkId = NetworkId(input.chain_id.u256),
       initializeDb = false,
     )
+
+  ?is_valid_versioned_hashes(input.new_payload_request.versionedHashes, blk)
 
   # Early validation of the input BAL before execution, just like is done for the
   # stateful path. Rejects invalid BALs early without paying the cost of block execution.
@@ -335,12 +311,13 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
 
   statelessProcessBlock(input.witness, com, blk)
 
-# https://github.com/ethereum/execution-specs/blob/bd8c673552d957dbe9c9f3f2656b87201f5ae646/src/ethereum/forks/amsterdam/stateless.py#L368
+# https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless.py#L229
 proc verify_stateless_new_payload*(input: StatelessInput): StatelessValidationResult =
   let new_payload_request_root = compute_new_payload_request_root(input)
 
   StatelessValidationResult(
     new_payload_request_root: new_payload_request_root,
     successful_validation: executeNewPayload(input).isOk(),
-    chain_config: input.chain_config,
+    chain_id: input.chain_id,
+    schema_id: STATELESS_INPUT_SCHEMA_ID,
   )

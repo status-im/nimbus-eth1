@@ -42,11 +42,15 @@ proc new*(_: type EthWireRef,
     node  : node,
     quota : setupTokenBucket(),
     actionQueue : newAsyncQueue[ActionHandler](maxsize = MAX_ACTION_HANDLER),
+    pendingTxGossip: newAsyncQueue[Hash32](maxsize = PENDING_TX_GOSSIP_MAX),
   )
   wire.tickerHeartbeat = tickerLoop(wire)
   for _ in 0 ..< NUM_ACTION_WORKERS:
     wire.actionHeartbeat.add actionLoop(wire)
-  wire.gossipEnabled   = not syncerRunning(wire)
+  wire.txGossipHeartbeat = txGossipLoop(wire)
+  wire.gossipEnabled = not syncerRunning(wire)
+  txPool.onAddedTx = proc(item: TxItemRef) {.gcsafe, raises: [].} =
+    wire.queueTransactionGossip(item.id)
   wire
 
 # ------------------------------------------------------------------------------

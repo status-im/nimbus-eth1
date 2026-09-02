@@ -96,12 +96,12 @@ proc initEnv(): TestEnv =
     conf = makeConfig(@[
       "--network:" & genesisFile
     ])
+    params = conf.computeNetworkParams()
 
   let
     com = CommonRef.new(
       newCoreDbRef DefaultDbMemory,
-      conf.networkId,
-      conf.networkParams
+      params
     )
     chain = ForkedChainRef.init(com)
 
@@ -110,7 +110,7 @@ proc initEnv(): TestEnv =
     xdb     : com.db,
     vaultKey: privKey(hexPrivKey),
     nonce   : 0'u64,
-    chainId : conf.networkParams.config.chainId,
+    chainId : params.config.chainId,
     xp      : TxPoolRef.new(chain),
     chain   : chain,
   )
@@ -374,25 +374,25 @@ proc runLedgerBasicOperationsTests() =
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         stateRoot {.used.} : Hash32
 
-    test "accountExists and isDeadAccount":
+    test "accountExists and isAccountAlive":
       check ledger.accountExists(address) == false
-      check ledger.isDeadAccount(address) == true
+      check ledger.isAccountAlive(address) == false
 
       ledger.setBalance(address, 1000.u256)
 
       check ledger.accountExists(address) == true
-      check ledger.isDeadAccount(address) == false
+      check ledger.isAccountAlive(address) == true
 
       ledger.setBalance(address, 0.u256)
       ledger.setNonce(address, 1)
-      check ledger.isDeadAccount(address) == false
+      check ledger.isAccountAlive(address) == true
 
       ledger.setCode(address, code)
       ledger.setNonce(address, 0)
-      check ledger.isDeadAccount(address) == false
+      check ledger.isAccountAlive(address) == true
 
       ledger.setCode(address, newSeq[byte]())
-      check ledger.isDeadAccount(address) == true
+      check ledger.isAccountAlive(address) == false
       check ledger.accountExists(address) == true
 
     test "clone storage":
@@ -432,7 +432,7 @@ proc runLedgerBasicOperationsTests() =
       var ledger = LedgerRef.init(memDB.baseTxFrame())
       var addr1 = initAddr(1)
 
-      check ledger.isDeadAccount(addr1) == true
+      check ledger.isAccountAlive(addr1) == false
       check ledger.accountExists(addr1) == false
       check ledger.contractCollision(addr1) == false
 
@@ -481,7 +481,7 @@ proc runLedgerBasicOperationsTests() =
       check ac2.getStorage(addr2, 1.u256) == 0.u256
       check ac2.contractCollision(addr2) == false
       check ac2.accountExists(addr2) == false
-      check ac2.isDeadAccount(addr2) == true
+      check ac2.isAccountAlive(addr2) == false
 
       ac2.persist()
       # readonly operations should not modify

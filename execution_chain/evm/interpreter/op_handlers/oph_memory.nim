@@ -48,7 +48,7 @@ proc sstoreImpl(c: Computation, slot, newValue: UInt256): EvmResultVoid =
   ok()
 
 
-proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt, stateGas: bool = false): EvmResultVoid =
+proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt): EvmResultVoid =
   let
     ledger = c.vmState.readOnlyLedger
     currentValue = c.getStorage(slot)
@@ -60,22 +60,9 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
 
     res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
-  # Charge regular gas before state gas so that a regular-gas OOG
-  # does not consume state gas that would inflate the parent's
-  # reservoir on frame failure.
   ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
-
-  if stateGas:
-    # https://github.com/ethereum/execution-specs/pull/2733/changes
-    if res.creditStateGas > 0:
-      c.gasMeter.creditStateGasRefund(res.creditStateGas)
-    if res.stateGas > 0:
-      ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
-
   c.gasMeter.refundGas(res.gasRefund)
 
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.trackStorageWrite(c.msg.contractAddress, slot, newValue)
   c.vmState.mutateLedger:
     ledger.setStorage(c.msg.contractAddress, slot, newValue)
   ok()
@@ -205,7 +192,7 @@ proc sstoreEIP2200Op(cpt: VmCpt): EvmResultVoid =
   ? checkInStaticContext(cpt)
   const SentryGasEIP2200 = 2300
 
-  if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
+  if cpt.gasMeter.executionGasLeft <= SentryGasEIP2200:
     return err(opErr(OutOfGas))
 
   sstoreNetGasMeteringImpl(cpt, slot, newValue)
@@ -224,7 +211,7 @@ proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
   # Minimum gas required to be present for an SSTORE call, not consumed
   const SentryGasEIP2200 = 2300
 
-  if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
+  if cpt.gasMeter.executionGasLeft <= SentryGasEIP2200:
     return err(opErr(OutOfGas))
 
   var coldAccessGas = 0.GasInt
@@ -235,7 +222,38 @@ proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccessGas)
 
-proc sstoreEIP8037Op(cpt: VmCpt): EvmResultVoid =
+proc sstore8038Impl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt): EvmResultVoid =
+  let
+    ledger = c.vmState.readOnlyLedger
+    currentValue = c.getStorage(slot)
+
+    gasParam = GasParamsSs(
+      currentValue: currentValue,
+      originalValue: ledger.getCommittedStorage(c.msg.contractAddress, slot),
+      )
+
+    res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
+
+  # Charge execution gas before state gas so that a execution-gas OOG
+  # does not consume state gas that would inflate the parent's
+  # reservoir on frame failure.
+  ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
+
+  # https://github.com/ethereum/execution-specs/pull/2733/changes
+  if res.creditStateGas > 0:
+    c.gasMeter.creditStateGasRefund(res.creditStateGas)
+  if res.stateGas > 0:
+    ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
+
+  c.gasMeter.refundGas(res.gasRefund)
+
+  if c.balTrackerEnabled:
+    c.vmState.balTracker.trackStorageWrite(c.msg.contractAddress, slot, newValue)
+  c.vmState.mutateLedger:
+    ledger.setStorage(c.msg.contractAddress, slot, newValue)
+  ok()
+
+proc sstoreEIP8038Op(cpt: VmCpt): EvmResultVoid =
   ## 0x55, EIP2929: sstore for Berlin and later
   ? cpt.stack.lsCheck(2)
   let
@@ -247,12 +265,17 @@ proc sstoreEIP8037Op(cpt: VmCpt): EvmResultVoid =
 
   # Minimum gas required to be present for an SSTORE call, not consumed
   const SentryGasEIP2200 = 2300
+  let
+    ledger = cpt.vmState.ledger
+    isColdAccess = not ledger.inAccessList(cpt.msg.contractAddress, slot)
+    coldAccessGas = if isColdAccess: COLD_STORAGE_ACCESS_8038
+                    else: WARM_ACCESS
 
-  if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
-    return err(opErr(OutOfGas))
+  ? cpt.gasMeter.checkGas(max(coldAccessGas, SentryGasEIP2200 + 1).GasInt)
+  if isColdAccess:
+    ledger.accessList(cpt.msg.contractAddress, slot)
 
-  let coldAccessGas = cpt.gasEip8038AccountCheck(cpt.msg.contractAddress, slot)
-  sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccessGas, stateGas = true)
+  sstore8038Impl(cpt, slot, newValue, coldAccessGas.GasInt)
 
 # -------
 
@@ -286,7 +309,7 @@ func msizeOp(cpt: VmCpt): EvmResultVoid =
 func gasOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5a, Get the amount of available gas, including the corresponding
   ##       reduction for the cost of this instruction.
-  cpt.stack.push cpt.gasMeter.gasRemaining
+  cpt.stack.push cpt.gasMeter.executionGasLeft
 
 func jumpDestOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5b, Mark a valid destination for jumps. This operation has no effect
@@ -417,9 +440,9 @@ const
 
     (opCode: Sstore,    ##  0x55, sstore for Amsterdam and later
      forks: VmOpAmsterdamAndLater,
-     name: "sstoreEIP-8037",
-     info: "EIP-8037: sstore for Amsterdam and later",
-     exec: sstoreEIP8037Op),
+     name: "sstoreEIP-8038",
+     info: "EIP-8038: sstore for Amsterdam and later",
+     exec: sstoreEIP8038Op),
 
 
     (opCode: Jump,      ## 0x56, Jump

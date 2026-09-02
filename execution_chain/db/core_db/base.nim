@@ -148,6 +148,7 @@ proc persist*(db: CoreDbRef, txFrame: CoreDbTxRef) =
       db.mpt.putEndFn(mptBatch[]).isOkOr:
         raiseAssert $error
 
+      debug "Core DB persisted"
   else:
     discard kvtBatch.expect("should always be able to create batch")
     discard mptBatch.expect("should always be able to create batch")
@@ -225,6 +226,18 @@ proc put*(
     val: openArray[byte];
       ): CoreDbRc[void] =
   kvt.kTx.put(key, val).isOkOr:
+    return err(error.toError(""))
+
+  ok()
+
+proc putMove*(
+    kvt: CoreDbTxRef;
+    key: openArray[byte];
+    val: var seq[byte];
+      ): CoreDbRc[void] =
+  ## Variant of `put()` that takes over ownership of `val` instead of
+  ## copying it - the caller must not use `val` after this call
+  kvt.kTx.putMove(key, val).isOkOr:
     return err(error.toError(""))
 
   ok()

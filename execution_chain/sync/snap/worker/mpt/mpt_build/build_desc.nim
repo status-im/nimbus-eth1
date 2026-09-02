@@ -14,12 +14,14 @@ import
   pkg/eth/trie/nibbles,
   ../../../../../db/aristo/[aristo_constants, aristo_desc/desc_identifiers],
   ../../../../wire_protocol/snap/snap_types,
-  ../../state_db
+  ../../extra_types
 
 export
   EmptyBlob,
   VOiD_HASH_KEY,
-  desc_identifiers # `HashKey` and friends
+  desc_identifiers, # `HashKey` and friends
+  extra_types,
+  snap_types
 
 const
   EmptyPath* = NibblesBuf()
@@ -84,6 +86,7 @@ type
     stops*: Table[HashKey,StopNodeRef]              ## sub-MPT to complete
     dangling*: seq[(HashKey,StopNodeRef)]           ## dangling link keys
     leafs*: seq[(Hash32,LeafNodeRef)]               ## leaf pairs `(path,node)`
+    atRightEnd*: bool                               ## no more right leafs
 
   KnPair* = tuple
     ## Key-node pair

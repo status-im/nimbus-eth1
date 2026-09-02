@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/[options, os, strutils],
   confutils, stint,
@@ -122,7 +124,7 @@ type
       defaultValue: 3
       name: "verbosity" }: int
 
-proc parseCmdArg(T: type Option[UInt256], p: string): T =
+proc parseCmdArg(T: type Option[UInt256], p: string): T {.raises: [ValueError].} =
   if p == "-1":
     none(UInt256)
   elif startsWith(p, "0x"):
@@ -133,7 +135,7 @@ proc parseCmdArg(T: type Option[UInt256], p: string): T =
 proc completeCmdArg(T: type Option[UInt256], val: string): seq[string] =
   return @[]
 
-proc parseCmdArg(T: type UInt256, p: string): T =
+proc parseCmdArg(T: type UInt256, p: string): T {.raises: [ValueError].} =
   if startsWith(p, "0x"):
     parse(p, UInt256, 16)
   else:
@@ -180,7 +182,7 @@ const
 # rather than have to export parseCmdArg
 # because it will use wrong parseCmdArg under certain
 # condition.
-proc initT8NConf(cmdLine: openArray[string]): T8NConf =
+proc initT8NConf(cmdLine: openArray[string]): T8NConf {.raises: [ConfigurationError].} =
   {.push warning[ProveInit]: off.}
   result = T8NConf.load(
     cmdLine.convertToNimStyle,
@@ -189,5 +191,5 @@ proc initT8NConf(cmdLine: openArray[string]): T8NConf =
   )
   {.pop.}
 
-proc init*(_: type T8NConf, cmdLine = commandLineParams()): T8NConf =
+proc init*(_: type T8NConf, cmdLine = commandLineParams()): T8NConf {.raises: [ConfigurationError].}  =
   initT8NConf(cmdLine)

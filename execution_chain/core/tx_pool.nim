@@ -60,7 +60,9 @@ declareGauge   nec_txpool_last_block_value,
 
 export
   TxPoolRef,
-  TxError
+  TxError,
+  TxItemRef,
+  MAX_TXS_PER_ACCOUNT
 
 # ------------------------------------------------------------------------------
 # TxItemRef public getters
@@ -113,16 +115,19 @@ export
   addTx,
   getItem,
   getNonce,
+  getPendingNonce,
   contains,
   removeTx,
   removeExpiredTxs,
   getBlobAndProofV1,
-  getBlobAndProofV2
+  getBlobAndProofV2,
+  getBlobCellAndProofV1
 
 # addTx(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError]
 # addTx(xp: TxPoolRef, tx: Transaction): Result[void, TxError]
 # getItem(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError]
 # getNonce(xp: TxPoolRef; account: Address): AccountNonce
+# getPendingNonce(xp: TxPoolRef; account: Address): AccountNonce
 # contains(xp: TxPoolRef, id: Hash32): bool
 # removeTx(xp: TxPoolRef, id: Hash32)
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)

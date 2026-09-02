@@ -25,19 +25,18 @@ import
   std/[atomics, hashes, sequtils, sets, tables, heapqueue],
   eth/common/hashes, eth/trie/nibbles,
   results,
-  ../../concurrency/lru,
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_structural],
   ./aristo_desc/desc_backend
 
 when compileOption("threads"):
-  import taskpools, ../../concurrency/readwritelock
-  export taskpools, readwritelock
+  import taskpools, ../../concurrency/lru
+  export taskpools, lru
 
 # Not auto-exporting backend
 export
   tables, aristo_constants, desc_error, desc_identifiers, nibbles,
-  desc_structural, lru, hashes, heapqueue, PutHdlRef
+  desc_structural, hashes, heapqueue, PutHdlRef
 
 type
   AristoTxRef* = ref object
@@ -103,11 +102,6 @@ type
       ## -1 = stored in database, where relevant though typically should be
       ## compared with the base layer level instead.
 
-    when compileOption("threads"):
-      lock*: ReadWriteLock
-        ## A read-write lock used to support thread safe reads and writes to the
-        ## database from multiple threads.
-
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
     acc*: Table[Hash32, (AccLeafRef, int)]
@@ -122,6 +116,7 @@ type
     ## Backend interface.
     getVtxFn*: GetVtxFn              ## Read vertex record
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
+    getKeysFn*: GetKeysFn            ## Read Merkle hashes/keys in batch
     getLstFn*: GetLstFn              ## Read saved state
 
     putBegFn*: PutBegFn              ## Start bulk store session
@@ -134,17 +129,21 @@ type
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
-    accLeaves*: ConcurrentLruCache[Hash32, CachedAccLeaf]
-      ## Account path to payload cache - accounts are frequently accessed by
-      ## account path when contracts interact with them - this cache ensures
-      ## that we don't have to re-traverse the storage trie for every such
-      ## interaction
-      ## TODO a better solution would probably be to cache this in a type
-      ## exposed to the high-level API
+    # Caches only available with threads enabled.
+    # The current only threads disabled use case is the stateless guest, for which
+    # these caches are not useful anyhow.
+    when compileOption("threads"):
+      accLeaves*: ConcurrentLruCache[Hash32, CachedAccLeaf]
+        ## Account path to payload cache - accounts are frequently accessed by
+        ## account path when contracts interact with them - this cache ensures
+        ## that we don't have to re-traverse the storage trie for every such
+        ## interaction
+        ## TODO a better solution would probably be to cache this in a type
+        ## exposed to the high-level API
 
-    stoLeaves*: ConcurrentLruCache[Hash32, CachedStoLeaf]
-      ## Mixed account/storage path to payload cache - same as above but caches
-      ## the full lookup of storage slots
+      stoLeaves*: ConcurrentLruCache[Hash32, CachedStoLeaf]
+        ## Mixed account/storage path to payload cache - same as above but caches
+        ## the full lookup of storage slots
 
     staticLevel*: Atomic[int]
       ## MPT level where "most" leaves can be found, for static vid lookups
@@ -260,15 +259,6 @@ iterator stack*(tx: AristoTxRef, stopAtSnapshot = false): AristoTxRef =
 
   while frames.len > 0:
     yield frames.pop()
-
-proc deltaAtLevel*(db: AristoTxRef, level: int): AristoTxRef =
-  if level < db.db.txRef.level:
-    nil
-  else:
-    for frame in db.rstack():
-      if frame.level == level:
-        return frame
-    nil
 
 proc getStaticLevel*(db: AristoDbRef): int =
   # Retrieve the level where we can expect to find a leaf, updating it based on

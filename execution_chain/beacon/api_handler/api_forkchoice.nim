@@ -57,14 +57,14 @@ template validateVersion(attr, com, apiVersion) =
         raise invalidAttr("forkChoiceUpdatedV2 with beacon root field is invalid after Cancun")
     elif com.isShanghaiOrLater(timestamp):
       if version < Version.V2:
-        raise invalidParams("forkChoiceUpdated" & $apiVersion &
+        raise invalidAttr("forkChoiceUpdated" & $apiVersion &
           " doesn't support payloadAttributesV1 when Shanghai is activated")
       if version > Version.V2:
         raise invalidAttr("if timestamp is Shanghai or later," &
           " payloadAttributes must be PayloadAttributesV2")
     else:
       if version != Version.V1:
-        raise invalidParams("if timestamp is earlier than Shanghai," &
+        raise invalidAttr("if timestamp is earlier than Shanghai," &
           " payloadAttributes must be PayloadAttributesV1")
 
 template validateHeaderTimestamp(header, com, apiVersion) =
@@ -81,9 +81,10 @@ template validateHeaderTimestamp(header, com, apiVersion) =
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,
                         update: ForkchoiceStateV1,
-                        attrsOpt: Opt[PayloadAttributes]):
+                        attrsOpt: Opt[PayloadAttributes],
+                        custodyColumns = Opt.none(seq[byte])):
                           Future[ForkchoiceUpdatedResponse]
-                            {.async: (raises: [CancelledError, ApplicationError]).} =
+                            {.async: (raises: [CancelledError, RpcResponseError]).} =
   let
     com   = ben.com
     chain = ben.chain
@@ -137,6 +138,16 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
     return simpleFCU(PayloadExecutionStatus.syncing)
 
+  if custodyColumns.isSome:
+    # https://github.com/ethereum/execution-apis/blob/742d45db810b31265c8d3c075af324953330d1ed/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
+    if not com.isAmsterdamOrLater(header.timestamp):
+      raise invalidParams("custodyColumns must not appear before Amsterdam")
+
+    if custodyColumns.value.len != 16:
+      raise invalidParams("custodyColumns length must be 16 bytes")
+
+    # TODO: Add custody set expansion and contraction handler
+
   validateHeaderTimestamp(header, com, apiVersion)
 
   # Block is known locally, just sanity check that the beacon client does not
@@ -175,8 +186,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # If the head block is already in our canonical chain, the beacon client is
   # probably resyncing. Ignore the update.
   # See point 2 of fCUV1 specification
-  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/paris.md#specification-1
-  if chain.isCanonicalAncestor(header.number, headHash):
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.7/src/engine/paris.md#specification-1
+  if chain.isCanonicalAndFinalizedAncestor(header.number, headHash, update.finalizedBlockHash):
     notice "Ignoring beacon update to old head",
       headHash   = headHash.short,
       headNumber = header.number,

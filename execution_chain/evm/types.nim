@@ -55,8 +55,9 @@ type
     tracer*           : TracerRef
     receipts*         : seq[StoredReceipt]
     cumulativeGasUsed*: GasInt
-    blockRegularGasUsed*: GasInt
+    blockExecutionGasUsed*: GasInt
     blockStateGasUsed*: GasInt
+    authStateGasUsed* : int64
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
@@ -101,10 +102,10 @@ type
 
   GasMeter* = object
     gasRefunded*: int64
-    gasRemaining*: GasInt
+    executionGasLeft*: GasInt
     stateGasLeft*: GasInt
     stateGasUsed*: int64
-    regularGasUsed*: GasInt
+    executionGasUsed*: GasInt
     stateGasSpilled*: GasInt
 
   CallKind* {.pure.} = enum
@@ -118,14 +119,13 @@ type
   MsgFlags* {.pure.} = enum
     Static
     Precompile
-    TargetAlive
     Delegated
 
   Message* = ref object
     kind*:             CallKind
     depth*:            int
     gas*:              GasInt
-    stateGas*:         GasInt
+    stateGasReservoir*:GasInt
     sender*:           Address
     contractAddress*:  Address
     codeAddress*:      Address
@@ -184,7 +184,7 @@ method captureOpStart*(ctx: TracerRef, comp: Computation,
 
 method captureGasCost*(ctx: TracerRef, comp: Computation,
                        fixed: bool, op: Op, gasCost: GasInt,
-                       gasRemaining: GasInt, depth: int) {.base, gcsafe.} =
+                       executionGasLeft: GasInt, depth: int) {.base, gcsafe.} =
   discard
 
 method captureOpEnd*(ctx: TracerRef, comp: Computation,

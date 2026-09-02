@@ -10,56 +10,7 @@ SHELL := bash # the shell used internally by "make"
 # used inside the included makefiles
 BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 
-LINK_PCRE := 0
-
-EXCLUDED_NIM_PACKAGES := 	\
-  vendor/nimbus-eth2/vendor/nim-bearssl               \
-  vendor/nimbus-eth2/vendor/nim-blscurve              \
-  vendor/nimbus-eth2/vendor/nim-bearssl               \
-  vendor/nimbus-eth2/vendor/nim-blscurve              \
-  vendor/nimbus-eth2/vendor/nim-boringssl             \
-  vendor/nimbus-eth2/vendor/nimbus-build-system       \
-  vendor/nimbus-eth2/vendor/nim-chronicles            \
-  vendor/nimbus-eth2/vendor/nim-chronos               \
-  vendor/nimbus-eth2/vendor/nim-confutils             \
-  vendor/nimbus-eth2/vendor/nimcrypto                 \
-  vendor/nimbus-eth2/vendor/nim-eth                   \
-  vendor/nimbus-eth2/vendor/nim-faststreams           \
-  vendor/nimbus-eth2/vendor/nim-http-utils            \
-  vendor/nimbus-eth2/vendor/nim-ngtcp2                \
-  vendor/nimbus-eth2/vendor/nim-quic                  \
-  vendor/nimbus-eth2/vendor/nim-intops                \
-  vendor/nimbus-eth2/vendor/nim-json-rpc              \
-  vendor/nimbus-eth2/vendor/nim-json-serialization    \
-  vendor/nimbus-eth2/vendor/nim-libbacktrace          \
-  vendor/nimbus-eth2/vendor/nim-metrics               \
-  vendor/nimbus-eth2/vendor/nim-nat-traversal         \
-  vendor/nimbus-eth2/vendor/nim-lsquic                \
-  vendor/nimbus-eth2/vendor/nim-results               \
-  vendor/nimbus-eth2/vendor/nim-secp256k1             \
-  vendor/nimbus-eth2/vendor/nim-serialization         \
-  vendor/nimbus-eth2/vendor/nim-snappy                \
-  vendor/nimbus-eth2/vendor/nim-sqlite3-abi           \
-  vendor/nimbus-eth2/vendor/nim-ssz-serialization     \
-  vendor/nimbus-eth2/vendor/nim-stew                  \
-  vendor/nimbus-eth2/vendor/nim-stint                 \
-  vendor/nimbus-eth2/vendor/nim-testutils             \
-  vendor/nimbus-eth2/vendor/nim-toml-serialization    \
-  vendor/nimbus-eth2/vendor/nim-unittest2             \
-  vendor/nimbus-eth2/vendor/nim-web3                  \
-  vendor/nimbus-eth2/vendor/nim-websock               \
-  vendor/nimbus-eth2/vendor/nim-zlib                  \
-  vendor/nimbus-eth2/vendor/nim-taskpools             \
-  vendor/nimbus-eth2/vendor/nim-normalize             \
-  vendor/nimbus-eth2/vendor/nim-unicodedb             \
-  vendor/nimbus-eth2/vendor/nim-libp2p                \
-  vendor/nimbus-eth2/vendor/nim-presto                \
-  vendor/nimbus-eth2/vendor/nim-zxcvbn                \
-  vendor/nimbus-eth2/vendor/nim-kzg4844               \
-  vendor/nimbus-eth2/vendor/nim-minilru               \
-  vendor/nimbus-eth2/vendor/nimbus-security-resources \
-  vendor/nimbus-eth2/vendor/nim-protobuf-serialization \
-  vendor/nimbus-eth2/vendor/NimYAML
+EXCLUDED_NIM_PACKAGES := $(wildcard vendor/nimbus-eth2/vendor/*)
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
@@ -142,10 +93,14 @@ endif
 	eest_txpool_test \
 	eest_full_test \
 	eest_tool_test \
+	eest_benchmark \
+	eest_benchmark_test \
 	t8n \
 	t8n_test \
 	evmstate \
-	evmstate_test
+	evmstate_test \
+	stateless_guest_baremetal \
+	stateless_execution_test
 
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
@@ -209,13 +164,24 @@ ifeq ($(USE_CACHED_ROCKSDB), 1)
   USE_SYSTEM_ROCKSDB = 1
 endif
 
-deps: | deps-common nat-libs nimbus.nims
+BUILD_END_MSG := "\\x1B[92mBuild completed successfully:\\x1B[39m"
+
+deps: | deps-common nat-libs nimbus.nims build/generate_makefile
+
+# Build the generate_makefile tool which turns Nim compilation into a
+# two-step process (nim c --compileOnly → generate_makefile → sub-make)
+build/generate_makefile: vendor/nimbus-eth2/tools/generate_makefile.nim | deps-common
+	+ echo -e $(BUILD_MSG) "$@" && \
+		$(ENV_SCRIPT) $(NIMC) c -o:$@ $(NIM_PARAMS) --skipParentCfg vendor/nimbus-eth2/tools/generate_makefile.nim && \
+		echo -e $(BUILD_END_MSG) "$@"
 
 # eth protocol settings, rules from "execution_chain/sync/protocol/eth/variables.mk"
 NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
 
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
 update: | update-common
+	rm -f build/generate_makefile
+	rm -fr nimcache/
 	rm -rf nimbus.nims && \
 		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
 
@@ -226,22 +192,23 @@ init: | sanity-checks update-test
 
 # builds the tools, wherever they are
 $(TOOLS): | build deps rocksdb
-	for D in $(TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
+	+ for D in $(TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "$${TOOL_DIR}/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=TRACE && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 tools: | $(TOOLS)
 
-nimbus_execution_client: | build deps rocksdb
-	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "execution_chain/nimbus_execution_client.nim"
+nimbus nimbus_execution_client: | build deps rocksdb
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "execution_chain/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=TRACE && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 check_revision: nimbus_execution_client
 	scripts/check_revision.sh
 
-nimbus: | build deps rocksdb
-	echo -e $(BUILD_MSG) "build/nimbus" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus "execution_chain/nimbus.nim"
 
 # symlink
 nimbus.nims:
@@ -265,19 +232,22 @@ endif
 eest:
 	scripts/eest_ci_cache.sh
 
+eest_benchmark:
+	scripts/eest_ci_cache.sh benchmark
+
 # builds and runs the nimbus test suite
 test: | build deps rocksdb eest
-	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) $(NIMC) test $(NIM_PARAMS) nimbus.nims
 
 test_import: nimbus_execution_client
-	$(ENV_SCRIPT) nim test_import $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) $(NIMC) test_import $(NIM_PARAMS) nimbus.nims
 
 # builds and runs an EVM-related subset of the nimbus test suite
 test-evm: | build deps rocksdb
-	$(ENV_SCRIPT) nim test_evm $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) $(NIMC) test_evm $(NIM_PARAMS) nimbus.nims
 
 build_fuzzers:
-	$(ENV_SCRIPT) nim build_fuzzers $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) $(NIMC) build_fuzzers $(NIM_PARAMS) nimbus.nims
 
 # Primitive reproducibility test.
 #
@@ -296,8 +266,10 @@ test-reproducibility:
 # Portal related targets
 
 nimbus_portal_client: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "portal/client/$@.nim"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "portal/client/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=TRACE && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 # alias for nimbus_portal_client
 portal: | nimbus_portal_client
@@ -315,61 +287,69 @@ portal-test-reproducibility:
 # builds and runs the Portal test suite
 all_portal_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "portal/tests/$@.nim"
+	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "portal/tests/$@.nim"
 
 # alias for all_portal_tests
 portal-test: | all_portal_tests
 
 # builds the Portal tools, wherever they are
 $(PORTAL_TOOLS): | build deps
-	for D in $(PORTAL_TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
+	+ for D in $(PORTAL_TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "$${TOOL_DIR}/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=TRACE && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 # builds all the Portal tools
 portal-tools: | $(PORTAL_TOOLS)
 
 # Build test_portal_testnet
 test_portal_testnet: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "portal/scripts/$@.nim"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) -o:build/$@ "portal/scripts/$@.nim"
 
 # builds the uTP test app
 utp-test-app: | build deps
-	$(ENV_SCRIPT) nim utp_test_app $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) $(NIMC) utp_test_app $(NIM_PARAMS) nimbus.nims
 
 # builds and runs the utp integration test suite
 utp-test: | build deps
-	$(ENV_SCRIPT) nim utp_test $(NIM_PARAMS) nimbus.nims
+	$(ENV_SCRIPT) $(NIMC) utp_test $(NIM_PARAMS) nimbus.nims
 
 # Deprecated legacy targets, to be removed sometime in the future
 
 # Legacy target, same as nimbus_portal_client, deprecated
 fluffy: | build deps
-	echo -e "\033[0;31mWarning:\033[0m The fluffy target and binary is deprecated, use 'make nimbus_portal_client' instead"
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "portal/client/nimbus_portal_client.nim"
+	+ echo -e "\033[0;31mWarning:\033[0m The fluffy target and binary is deprecated, use 'make nimbus_portal_client' instead"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "portal/client/nimbus_portal_client.nim" $(NIM_PARAMS) -d:chronicles_log_level=TRACE && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 # Legacy target, same as nimbus_portal_bridge, deprecated
 portal_bridge: | build deps
-	echo -e "\033[0;31mWarning:\033[0m The portal_bridge target and binary is deprecated, use 'make nimbus_portal_bridge' instead"
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "portal/bridge/nimbus_portal_bridge.nim"
+	+ echo -e "\033[0;31mWarning:\033[0m The portal_bridge target and binary is deprecated, use 'make nimbus_portal_bridge' instead"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "portal/bridge/nimbus_portal_bridge.nim" $(NIM_PARAMS) -d:chronicles_log_level=TRACE && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 # Nimbus Verified Proxy related targets
 
 nimbus_verified_proxy: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c -o:build/$@ $(NIM_PARAMS) -d:chronicles_log_level=TRACE nimbus_verified_proxy/nimbus_verified_proxy.nim
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "nimbus_verified_proxy/nimbus_verified_proxy.nim" $(NIM_PARAMS) -d:chronicles_log_level=TRACE && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 nimbus_verified_proxy_test: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) nimbus_verified_proxy/tests/all_proxy_tests.nim
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) nimbus_verified_proxy/tests/all_proxy_tests.nim
 		rm nimbus_verified_proxy/tests/all_proxy_tests
 
 $(VERIF_PROXY_OUT_PATH)/libverifproxy.a:
-	echo -e $(BUILD_MSG) "build/libverifproxy" && \
-		$(ENV_SCRIPT) nim c \
+	+ echo -e $(BUILD_MSG) "build/libverifproxy" && \
+		$(ENV_SCRIPT) $(NIMC) c \
 		--out:$@ \
 		$(NIM_PARAMS) \
 		nimbus_verified_proxy/library/verifproxy.nim
@@ -379,7 +359,7 @@ libverifproxy: | build deps
 libverifproxy: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 
 libverifproxy_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
-	$(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
+	+ $(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
 		-Wno-incompatible-pointer-types \
 		-o build/$@ \
 		tests/library/test_api.c \
@@ -401,8 +381,8 @@ nimbus_verified_proxy_go_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 
 nimbus_verified_proxy_wasm: | build deps
 	@mkdir -p $(CURDIR)/build/$@
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c \
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c \
 		-d:emscripten \
 		-d:release \
 		-d:disable_libbacktrace \
@@ -412,8 +392,8 @@ nimbus_verified_proxy_wasm: | build deps
 
 nimbus_verified_proxy_wasm_debug: | build deps
 	@mkdir -p $(CURDIR)/build/$@
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c \
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c \
 		-d:emscripten \
 		-d:debug \
 		-d:disable_libbacktrace \
@@ -423,66 +403,117 @@ nimbus_verified_proxy_wasm_debug: | build deps
 
 # Stateless related targets
 
-stateless_execution_baremetal: | build deps
-	$(ENV_SCRIPT) nim c --hints:off --cpu:riscv64 --os:any --mm:arc -d:useMalloc -d:chronicles_enabled:off -u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace --compileOnly --genScript "execution_chain/stateless/stateless_execution.nim"
+# The environment a zkVM guest runs in: single-threaded, no signals, no C++
+# runtime. Deliberately says nothing about which machine it targets, so a native
+# build can use the same set.
+STATELESS_GUEST_FLAGS := \
+	--hints:off --mm:arc -d:useMalloc \
+	-d:chronicles_enabled:off -d:keccakCacheEnabled:false -d:senderCacheEnabled:false \
+	-u:metrics --threads:off --stackTrace:off -d:disable_libbacktrace \
+	-d:enable_mcl_lib=false -d:noSignalHandler
 
+# Kept separate from the flags above since it differs per zkVM, eg:
+#   make STATELESS_GUEST_CPU=riscv32 stateless_guest_baremetal
+STATELESS_GUEST_CPU ?= riscv64
+
+stateless_guest_baremetal: | build deps
+	$(ENV_SCRIPT) $(NIMC) c $(STATELESS_GUEST_FLAGS) --cpu:$(STATELESS_GUEST_CPU) --os:any --compileOnly --genScript "execution_chain/stateless/stateless_guest.nim"
+
+# Two runs: the full suite with standard flags, then the guest specific test
+# with flags closer to the zkVM guest.
 stateless_execution_test: | build deps
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) --mm:arc -d:useMalloc -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
+	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
+	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) -o:build/$@_guest "tests/test_stateless/test_stateless_execution_guest.nim"
 
 # EEST standalone targets - binary to run individual test vector files
 eest_engine: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 eest_blockchain: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 # EEST test suite targets - to run the whole test suite for each category
 eest_engine_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$@"
+	build/$@
 
 eest_txpool_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$@"
+	build/$@
 
 eest_blockchain_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$@"
+	build/$@
 
 eest_stateless_execution_test: | build deps eest
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$@"
+	build/$@
+
+eest_benchmark_test: | build deps eest_benchmark
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$@"
+	build/$@
 
 eest_full_test: | build deps eest
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/all_eest_tests.nim"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "tests/eest/all_eest_tests.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 	build/$@
 
 eest_tool_test: | build deps eest
-	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_tool_tests.nim"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "tests/eest/eest_tool_tests.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 	build/$@
 
+# Some tools below don't use `compile_nim_program` since they don't go into the
+# `build` folder - moving them is likely a good idea but requires changing their
+# lookup logic
 # builds transition tool
 t8n: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(T8N_PARAMS) "tools/t8n/$@.nim"
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) $(T8N_PARAMS) "tools/t8n/$@.nim"
 
 # builds and runs transition tool test suite
 t8n_test: | build deps t8n
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_default_output_device=stderr "tools/t8n/$@.nim"
+		$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) -d:chronicles_default_output_device=stderr "tools/t8n/$@.nim"
 
 # builds evm state test tool
 evmstate: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/evmstate/$@.nim"
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) "tools/evmstate/$@.nim"
 
 # builds and runs evm state tool test suite
 evmstate_test: | build deps evmstate
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) "tools/evmstate/$@.nim"
+		$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) "tools/evmstate/$@.nim"
 
 # builds txparse tool
 txparse: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/txparse/$@.nim"
+	$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) "tools/txparse/$@.nim"
 
 # usual cleaning
 clean: | clean-common

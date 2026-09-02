@@ -42,7 +42,7 @@ func installRPC(server: RpcServer,
                 serverApi: ServerAPIRef,
                 flags: set[RpcFlag]) =
 
-  setupCommonRpc(nimbus.ethNode, config, server)
+  setupCommonRpc(nimbus.ethNode, config, com, server)
 
   if RpcFlag.Eth in flags:
     setupServerAPI(serverApi, server, nimbus.accountsManager)
@@ -198,7 +198,7 @@ proc addServices(handlers: var seq[RpcHandlerProc],
     handlers.addHandler(server)
 
 proc setupRpc*(nimbus: NimbusNode, config: ExecutionClientConf,
-               com: CommonRef) =
+               com: CommonRef, params: NetworkParams) =
   if not config.engineApiEnabled:
     warn "Engine API disabled, the node will not respond to consensus client updates (enable with `--engine-api`)"
 
@@ -207,7 +207,7 @@ proc setupRpc*(nimbus: NimbusNode, config: ExecutionClientConf,
 
   # Provide JWT authentication handler for rpcHttpServer
   let
-    jwtKey = nimbus.rng.jwtSharedSecret(config).valueOr:
+    jwtKey = nimbus.rng.jwtSharedSecret(config, params).valueOr:
       fatal "Failed create or load shared secret", error
       quit(QuitFailure)
     allowedOrigins = config.getAllowedOrigins()

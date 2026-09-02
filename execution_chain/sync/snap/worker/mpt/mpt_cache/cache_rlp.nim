@@ -13,8 +13,6 @@
 import
   pkg/[chronos, eth/common, results, stew/interval_set],
   ../../../../wire_protocol/snap/snap_types,
-  ../../state_db,
-  ../mpt_build/build_desc,
   ./cache_desc
 
 when sizeof(Hash) != sizeof(uint):
@@ -52,74 +50,6 @@ func toRlp(rng: ItemKeyRangeSet): seq[byte] =
 # ------------------------------------------------------------------------------
 # Public RLP decoders
 # ------------------------------------------------------------------------------
-
-proc decodeStateData*(
-    data: openArray[byte];
-      ): Result[CacheStateData,string] =
-  const info = "decodeStateData"
-  var
-    rd = data.rlpFromBytes
-    res: CacheStateData
-  try:
-    rd.tryEnterList()
-    res.hash = rd.read(Hash32).to(BlockHash)
-    res.number = rd.read(BlockNumber)
-    res.touch = Moment.fromNow(rd.read(uint64).int64.nanoseconds)
-    res.tag = StateDataTag(rd.read uint8)
-    res.coverage = rd.read(UInt256)
-  except RlpError as e:
-    return err(info & ": " & $e.name & "(" & e.msg & ")")
-  ok(move res)
-
-func decodeAccountData*(
-    data: openArray[byte];
-      ): Result[CacheAccountData,string] =
-  const info = "decodeAccount"
-  var
-    rd = data.rlpFromBytes
-    res: CacheAccountData
-  try:
-    rd.tryEnterList()
-    res.limit = rd.read(UInt256).to(ItemKey)
-    res.accounts = rd.read(seq[SnapAccount])
-    res.proof = rd.read(seq[ProofNode])
-    res.peerID = cast[Hash](rd.read uint)
-  except RlpError as e:
-    return err(info & ": " & $e.name & "(" & e.msg & ")")
-  ok(move res)
-
-func decodeStoSlotData*(
-    data: openArray[byte];
-      ): Result[CacheStoSlotData,string] =
-  const info = "decodeStoSlot"
-  var
-    rd = data.rlpFromBytes
-    res: CacheStoSlotData
-  try:
-    rd.tryEnterList()
-    res.limit = rd.read(UInt256).to(ItemKey)
-    res.slot = rd.read(seq[StorageItem])
-    res.proof = rd.read(seq[ProofNode])
-    res.peerID = cast[Hash](rd.read uint)
-  except RlpError as e:
-    return err(info & ": " & $e.name & "(" & e.msg & ")")
-  ok(move res)
-
-func decodeByteCodeData*(
-    data: openArray[byte];
-      ): Result[CacheByteCodeData,string] =
-  const info = "decodeByteCode"
-  var
-    rd = data.rlpFromBytes
-    res: CacheByteCodeData
-  try:
-    rd.tryEnterList()
-    res.limit = rd.read(UInt256).to(ItemKey)
-    res.codes = rd.read(seq[(CodeHash,CodeItem)])
-    res.peerID = cast[Hash](rd.read uint)
-  except RlpError as e:
-    return err(info & ": " & $e.name & "(" & e.msg & ")")
-  ok(move res)
 
 func decodeHeader*(data: openArray[byte]): Result[Header,string] =
   const info = "decodeHeader"
@@ -169,8 +99,21 @@ func decodeStoMissingIntvData*(
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(res)
 
-func decodeFlatAccData*(data: openArray[byte]): Result[Account,string] =
-  const info = "decodeFlatAcc"
+func decodeFlatAccData*(
+    data: openArray[byte];
+     ): Result[CacheFlatAccData,string] =
+  const info = "decodeFlatAccData"
+  var res: CacheFlatAccData
+  try:
+    res = rlp.decode(data, CacheFlatAccData)
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
+func decodeAccPayloadData*(
+    data: openArray[byte];
+     ): Result[Account,string] =
+  const info = "decodeAccPayloadData"
   var res: Account
   try:
     res = rlp.decode(data, Account)
@@ -190,58 +133,6 @@ func decodeFlatSlotData*(data: openArray[byte]): Result[UInt256,string] =
 # ------------------------------------------------------------------------------
 # Public RLP encoders
 # ------------------------------------------------------------------------------
-
-template encodeStateData*(
-    hash: BlockHash;
-    number: BlockNumber;
-    touch: Moment;
-    tag: StateDataTag;
-    coverage: UInt256;
-      ): untyped =
-  var wrt = initRlpList 4
-  wrt.append hash.to(Hash32)
-  wrt.append number
-  wrt.append max(touch.epochNanoSeconds(),0).uint64
-  wrt.append tag.uint8
-  wrt.append coverage
-  wrt.finish()
-
-template encodeAccountData*(
-    limit: ItemKey;
-    accounts: seq[SnapAccount];
-    proof: seq[ProofNode];
-    peerID: Hash;
-      ): untyped =
-  var wrt = initRlpList 4
-  wrt.append limit.to(UInt256)
-  wrt.append accounts
-  wrt.append proof
-  wrt.append cast[uint](peerID)
-  wrt.finish()
-
-template encodeStoSlotData*(
-    limit: ItemKey;
-    slot: seq[StorageItem];
-    proof: seq[ProofNode];
-    peerID: Hash;
-      ): untyped =
-  var wrt = initRlpList 4
-  wrt.append limit.to(UInt256)
-  wrt.append slot
-  wrt.append proof
-  wrt.append cast[uint](peerID)
-  wrt.finish()
-
-template encodeByteCodeData*(
-    limit: ItemKey;
-    codes: seq[(CodeHash,CodeItem)];
-    peerID: Hash;
-      ): untyped =
-  var wrt = initRlpList 3
-  wrt.append limit.to(UInt256)
-  wrt.append codes
-  wrt.append cast[uint](peerID)
-  wrt.finish()
 
 template encodeHeader*(
     header: Header;
@@ -271,9 +162,9 @@ template encodeStoMissingIntvData*(
   wrt.finish()
 
 template encodeFlatAccData*(
-    account: Account;
+    data: CacheFlatAccData;
       ): untyped =
-  rlp.encode(account)
+  rlp.encode(data)
 
 template encodeFlatSlotData*(
     slot: UInt256;

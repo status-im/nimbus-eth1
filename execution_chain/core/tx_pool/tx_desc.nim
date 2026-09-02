@@ -13,10 +13,10 @@
 import
   chronicles,
   metrics,
-  std/[times, tables],
+  std/[times, tables, typetraits],
   eth/eip1559,
   eth/common/transaction_utils,
-  stew/sorted_set,
+  stew/[sorted_set, bitseqs],
   web3/engine_api_types,
   ../../common/common,
   ../../evm/state,
@@ -61,6 +61,8 @@ type
     XP_SKIP_BLOB_WRAPPER_VALIDATION
     XP_SKIP_SIZE_VALIDATION
 
+  TxAddedObserver = proc(item: TxItemRef) {.gcsafe, raises: [].}
+
   TxPoolRef* = ref object
     vmState  : BaseVMState
     chain    : ForkedChainRef
@@ -70,10 +72,11 @@ type
     pos      : PosPayloadAttr
     blobTab  : BlobLookupTab
     flags    : set[TxPoolFlags]
+    onAddedTx*: TxAddedObserver
 
 const
-  MAX_POOL_SIZE = 8000
-  MAX_TXS_PER_ACCOUNT = 500
+  MAX_POOL_SIZE = 10000
+  MAX_TXS_PER_ACCOUNT* = 2048
   TX_ITEM_LIFETIME* = initDuration(minutes = 10)
   TX_MAX_SIZE = 128 * 1024
   # BLOB_TX_MAX_SIZE is the maximum size a single transaction can have, outside
@@ -173,8 +176,10 @@ func insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
 
   # Replace current item,
   # insertion to idTab will be handled by addTx.
+  # Drop `current`, not `item`: a leftover blobTab entry pins the replaced
+  # item's blobs (128KiB each) forever - no other table can reach it.
   xp.idTab.del(current.id)
-  xp.blobTab.removeLookup(item)
+  xp.blobTab.removeLookup(current)
   sn.insertOrReplace(item)
   ok()
 
@@ -191,6 +196,19 @@ func excessBlobGas(xp: TxPoolRef): GasInt =
 
 proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
+
+proc getPendingNonce*(xp: TxPoolRef; account: Address): AccountNonce =
+  ## Next nonce `account` can use once its pooled transactions are mined: the
+  ## head-state nonce advanced over the gap-free run of pooled transactions.
+  ## This is what `eth_getTransactionCount(account, "pending")` returns on
+  ## other clients.
+  var nonce = xp.getNonce(account)
+  let sn = xp.senderTab.getOrDefault(account)
+  if sn.isNil:
+    return nonce
+  while sn.list.eq(nonce).isOk:
+    inc nonce
+  nonce
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
@@ -394,7 +412,7 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
 
 
   let
-    sender = ptx.tx.recoverSender().valueOr:
+    sender = ptx.tx.recoverSenderCached().valueOr:
       return err(txErrorInvalidSignature)
     intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit, sender)
 
@@ -441,6 +459,9 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     ?xp.insertToSenderTab(item)
   xp.idTab[item.id] = item
   xp.blobTab.addLookup(item)
+
+  if not xp.onAddedTx.isNil:
+    xp.onAddedTx(item)
 
   debug "Transaction added to txpool",
     txHash = id,
@@ -517,6 +538,52 @@ func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2] =
         proofs: getProofs(np.proofs, val.blobIndex)))
 
   Opt.none(BlobAndProofV2)
+
+proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: BitArray[128]): Opt[BlobCellsAndProofsV1] =
+  type
+    KzgProof = engine_api_types.KzgProof
+    KzgCells = eip4844.KzgCells
+
+  func getNumIndices(indices: BitArray[128]): int =
+    for i in 0..<indices.len:
+      if indices[i]:
+        inc result
+
+  func getCellsAndProofs(indices: BitArray[128],
+                         cells: KzgCells,
+                         list: openArray[KzgProof],
+                         index: int,
+                         output: var BlobCellsAndProofsV1) =
+    let
+      startIndex = index * CELLS_PER_EXT_BLOB
+      endIndex   = startIndex + CELLS_PER_EXT_BLOB
+      numIndices = indices.getNumIndices
+
+    doAssert(list.len >= endIndex)
+
+    output.blob_cells = newSeqOfCap[Opt[seq[byte]]](numIndices)
+    output.proofs = newSeqOfCap[Opt[KzgProof]](numIndices)
+    for i in 0..<indices.len:
+      if indices[i]:
+        output.blob_cells.add(Opt.some(@(cells[i].bytes)))
+        output.proofs.add(Opt.some(list[startIndex + i]))
+
+  xp.blobTab.withValue(v, val):
+    let
+      np = val.item.pooledTx.blobsBundle
+      blob = cast[ptr eip4844.KzgBlob](np.blobs[val.blobIndex].addr)
+      cells = computeCells(blob[]).valueOr:
+        return Opt.none(BlobCellsAndProofsV1)
+    if np.wrapperVersion == WrapperVersionEIP7594:
+      var res = Opt.some(BlobCellsAndProofsV1())
+      indicesBitarray.getCellsAndProofs(
+        cells, np.proofs,
+        val.blobIndex,
+        res.value
+      )
+      return res
+
+  Opt.none(BlobCellsAndProofsV1)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters

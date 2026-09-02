@@ -134,6 +134,7 @@ proc debug*(tx: Transaction): string =
   result.add "accessList    : " & $tx.accessList     & "\n"
   result.add "maxFeePerBlobGas: " & $tx.maxFeePerBlobGas & "\n"
   result.add "versionedHashes.len: " & $tx.versionedHashes.len & "\n"
+  result.add "authorizationList.len: " & $tx.authorizationList.len & "\n"
   result.add "V             : " & $tx.V              & "\n"
   result.add "R             : " & $tx.R              & "\n"
   result.add "S             : " & $tx.S              & "\n"
@@ -173,3 +174,34 @@ proc debugSum*(body: BlockBody): string =
   result.add "num uncles : " & $body.uncles.len & "\n"
   result.add "num wd     : " & numwd          & "\n"
   result.add "sumHash    : " & $sumHash(body) & "\n"
+
+proc debug*(logs: openArray[Log]): string =
+  if logs.len == 0:
+    return "zero length"
+
+  if logs.len > 0:
+    result.add "\n"
+
+  for x in logs:
+    result.add "  - address: " & $x.address & "\n"
+    result.add "  - topics : " & $x.topics & "\n"
+    result.add "  - data   : " & x.data.toHex & "\n"
+
+proc debug*(rec: Receipt): string =
+  result.add "Receipt\n"
+  result.add "receiptType      : " & $rec.receiptType & "\n"
+  result.add "isHash           : " & $rec.isHash & "\n"
+  result.add "status           : " & $rec.status & "\n"
+  result.add "hash             : " & $rec.hash & "\n"
+  result.add "cumulativeGasUsed: " & $rec.cumulativeGasUsed & "\n"
+  result.add "logsBloom        : " & $rec.logsBloom.toHex & "\n"
+  result.add "logs             : " & debug(rec.logs) & "\n"
+
+proc debug*(rec: StoredReceipt): string =
+  result.add "StoredReceipt\n"
+  result.add "receiptType      : " & $rec.receiptType & "\n"
+  result.add "isHash           : " & $rec.isHash & "\n"
+  result.add "status           : " & $rec.status & "\n"
+  result.add "hash             : " & $rec.hash & "\n"
+  result.add "cumulativeGasUsed: " & $rec.cumulativeGasUsed & "\n"
+  result.add "logs             : " & debug(rec.logs) & "\n"

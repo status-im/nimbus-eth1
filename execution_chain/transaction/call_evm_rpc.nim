@@ -43,9 +43,11 @@ proc rpcCallEvm*(
   defer:
     txFrame.dispose() # always dispose state changes
 
-  let
-    vmState = BaseVMState.new(header, topHeader, com, txFrame)
-    params = ?toCallParams(vmState, args, globalGasCap, header)
+  let vmState = BaseVMState.new(header, topHeader, com, txFrame)
+  defer:
+    vmState.dispose()
+
+  let params = ?toCallParams(vmState, args, globalGasCap, header)
 
   ok(runComputation(params, CallResult))
 
@@ -117,7 +119,7 @@ proc rpcEstimateGas*(
 
   let
     intrinsic = intrinsicGas(params, vmState.hardFork, vmState.blockCtx.gasLimit, args.sender)
-    minGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
+    minGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
 
   # Create a helper to check if a gas allowance results in an executable transaction
   proc executable(gasLimit: GasInt): Result[CallResult, OutputResult] =
@@ -192,4 +194,7 @@ proc rpcEstimateGas*(
     txFrame.dispose() # always dispose state changes
 
   let vmState = BaseVMState.new(header, topHeader, com, txFrame)
+  defer:
+    vmState.dispose()
+
   rpcEstimateGas(args, header, vmState, gasCap)

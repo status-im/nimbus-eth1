@@ -87,9 +87,10 @@ proc getVmState(
   ok(p.vmState)
 
 proc dispose*(p: var Persister) =
-  p.vmState.ledger.txFrame.dispose()
-  p.vmState.dispose()
-  p.vmState = nil
+  if not p.vmState.isNil():
+    p.vmState.ledger.txFrame.dispose()
+    p.vmState.dispose()
+    p.vmState = nil
 
 func init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =
   T(com: com, flags: flags)
@@ -190,6 +191,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     # when building the witness.
     vmState.ledger.clearWitnessKeys()
     vmState.ledger.clearCollapsedSiblings()
+    vmState.ledger.clearDeployedCodeHashes()
     vmState.ledger.clearBlockHashesCache()
 
     processBlock()
@@ -212,7 +214,8 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     ?txFrame.persistHeaderAndSetHead(blockHash, header, com.startOfHistory)
 
   if PersistTransactions in p.flags:
-    txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
+    txFrame.persistTransactions(
+      header.number, header.txRoot, blk.transactions)
 
   if PersistReceipts in p.flags:
     txFrame.persistReceipts(header.receiptsRoot, vmState.receipts)

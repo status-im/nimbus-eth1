@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/[os, options, strutils],
   confutils, confutils/defs,
@@ -82,7 +84,12 @@ type
       desc: "if index is unset, all subtest in the fork will be tested"
       defaultValue: none(int)
       name: "sub-index" }: Option[int]
-      
+
+    sanitizeEnv* {.
+      desc: "sanitize env if it polluted by unwanted fields of a fork"
+      defaultValue: true
+      name: "sanitize-env" }: bool
+
     pretty* {.
       desc: "pretty print the trace result"
       defaultValue: false
@@ -106,7 +113,7 @@ const
     " Status Research & Development GmbH"
   Version   = "Nimbus-evmstate " & NimbusVersion
 
-proc init*(_: type StateConf, cmdLine = commandLineParams()): StateConf =
+proc init*(_: type StateConf, cmdLine = commandLineParams()): StateConf {.raises: [ConfigurationError].} =
   {.push warning[ProveInit]: off.}
   result = StateConf.load(
     cmdLine,

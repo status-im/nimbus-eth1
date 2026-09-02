@@ -46,12 +46,14 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
 
   make -j$(nproc) init
 
+  # "build/generate_makefile" is a host tool, so it has to be built before
+  # NIMFLAGS starts pointing Nim at the mingw cross compiler.
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
     USE_CACHED_ROCKSDB=1 \
-    deps-common
+    deps-common build/generate_makefile
 
   make \
     -j$(nproc) \
@@ -106,12 +108,29 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
 
   make -j$(nproc) init
 
+  # "build/generate_makefile" is a host tool, so it has to be built before
+  # NIMFLAGS starts pointing Nim at the aarch64 cross compiler.
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
     USE_CACHED_ROCKSDB=1 \
-    deps-common
+    deps-common build/generate_makefile
+
+  # Both forms of the compiler override are needed, because Nim picks a
+  # different one depending on how it's invoked:
+  # - with "--compileOnly" (what "compile_nim_program.sh" uses) the
+  #   "arm64.linux.gcc.exe" cross-compilation config vars are ignored and the
+  #   plain "gcc.exe" ones are used;
+  # - without it, "arm64.linux.gcc.exe" wins, defaulting to Nim's own
+  #   "aarch64-linux-gnu-gcc" (Debian's toolchain, absent from this image)
+  #   unless we override it. This is the path "libverifproxy" takes, since
+  #   "--app:staticlib" targets aren't built via "compile_nim_program.sh".
+  CROSS_NIMFLAGS="--cpu:arm64"
+  CROSS_NIMFLAGS+=" --gcc.exe=${CC} --gcc.linkerexe=${CXX}"
+  CROSS_NIMFLAGS+=" --gcc.cpp.exe=${CXX} --gcc.cpp.linkerexe=${CXX}"
+  CROSS_NIMFLAGS+=" --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX}"
+  CROSS_NIMFLAGS+=" --arm64.linux.gcc.cpp.exe=${CXX} --arm64.linux.gcc.cpp.linkerexe=${CXX}"
 
   # -j1 will disable parallel build and prevent OOM in github CI
   make \
@@ -119,7 +138,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     CXX="${CXX}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --passC:-fPIC --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    NIMFLAGS="${NIMFLAGS_COMMON} ${CROSS_NIMFLAGS} --passC:-fPIC --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     USE_CACHED_ROCKSDB=1 \
     nimbus nimbus_verified_proxy
@@ -129,7 +148,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     CXX="${CXX}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} -d:disableLTO --cpu:arm64 --passC:-fPIC --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    NIMFLAGS="${NIMFLAGS_COMMON} -d:disableLTO ${CROSS_NIMFLAGS} --passC:-fPIC --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     USE_CACHED_ROCKSDB=1 \
     libverifproxy
@@ -151,12 +170,14 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
 
   make -j$(nproc) init
 
+  # "build/generate_makefile" is a host tool, so it has to be built before
+  # NIMFLAGS starts pointing Nim at the osxcross compiler.
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
     USE_CACHED_ROCKSDB=1 \
-    deps-common
+    deps-common build/generate_makefile
 
   make \
     -j$(nproc) \

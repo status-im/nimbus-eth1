@@ -22,133 +22,19 @@ import
   ../../execution_chain/transaction,
   ../../execution_chain/common/chain_config,
   ../common/helpers,
+  ../common/parsers,
    ./serialize_bal,
    ./types
 
 export
-  helpers
+  helpers,
+  parsers
 
-createJsonFlavor T8Conv,
-  automaticObjectSerialization = false,
-  requireAllFields = false,
-  omitOptionalFields = true, # Skip optional fields==none in Writer
-  allowUnknownFields = true,
-  skipNullFields = true      # Skip optional fields==null in Reader
+Withdrawal.useDefaultSerializationIn Fixture
+Ommer.useDefaultSerializationIn Fixture
+TxObject.useDefaultSerializationIn Fixture
 
-AccessPair.useDefaultSerializationIn T8Conv
-Withdrawal.useDefaultSerializationIn T8Conv
-Ommer.useDefaultSerializationIn T8Conv
-Authorization.useDefaultSerializationIn T8Conv
-TxObject.useDefaultSerializationIn T8Conv
-
-template wrapValueError(body: untyped) =
-  try:
-    body
-  except ValueError as exc:
-    r.raiseUnexpectedValue(exc.msg)
-
-func parseHexOrInt[T](x: string): T {.raises: [ValueError].} =
-  when T is UInt256:
-    if x.startsWith("0x"):
-      UInt256.fromHex(x)
-    else:
-      parse(x, UInt256, 10)
-  else:
-    if x.startsWith("0x"):
-      fromHex[T](x)
-    else:
-      parseInt(x).T
-
-proc parsePaddedHex[T](r: var JsonReader[T8Conv], val: var T)
-       {.raises: [IOError, ValueError, JsonReaderError].} =
-  var data = r.parseString()
-  data.removePrefix("0x")
-  const
-    valLen = sizeof(T)
-    hexLen = valLen*2
-  if data.len < hexLen:
-    data = repeat('0', hexLen - data.len) & data
-  if data.len > hexLen:
-    r.raiseUnexpectedValue("hex string is longer than expected: " & $hexLen & " get: " & $data.len)
-  val = T(hexToByteArray(data, valLen))
-
-proc readValue*(r: var JsonReader[T8Conv], val: var Address)
-       {.raises: [IOError, JsonReaderError].} =
-  wrapValueError:
-    r.parsePaddedHex(val)
-
-proc readValue*(r: var JsonReader[T8Conv], val: var Bytes32)
-       {.raises: [IOError, JsonReaderError].} =
-  wrapValueError:
-    r.parsePaddedHex(val)
-
-proc readValue*(r: var JsonReader[T8Conv], val: var Hash32)
-       {.raises: [IOError, JsonReaderError].} =
-  wrapValueError:
-    r.parsePaddedHex(val)
-
-proc readValue*(r: var JsonReader[T8Conv], val: var UInt256)
-       {.raises: [IOError, JsonReaderError].} =
-  wrapValueError:
-    val = parseHexOrInt[UInt256](r.parseString())
-
-proc readValue*(r: var JsonReader[T8Conv], val: var (uint8 | uint64))
-       {.raises: [IOError, JsonReaderError].} =
-  let tok = r.tokKind
-  if tok == JsonValueKind.Number:
-    val = r.parseInt(typeof(val))
-  else:
-    wrapValueError:
-      val = parseHexOrInt[typeof(val)](r.parseString())
-
-proc readValue*(r: var JsonReader[T8Conv], val: var EthTime)
-       {.raises: [IOError, JsonReaderError].} =
-  wrapValueError:
-    val = parseHexOrInt[uint64](r.parseString()).EthTime
-
-proc readValue*(r: var JsonReader[T8Conv], val: var seq[byte])
-       {.raises: [IOError, JsonReaderError].} =
-  wrapValueError:
-    val = hexToSeqByte(r.parseString())
-
-proc readValue*(r: var JsonReader[T8Conv], val: var GenesisStorage)
-       {.raises: [IOError, SerializationError].} =
-  r.parseObjectCustomKey:
-    let slot = r.readValue(UInt256)
-  do:
-    val[slot] = r.readValue(UInt256)
-
-proc readValue*(r: var JsonReader[T8Conv], val: var GenesisAccount)
-       {.raises: [IOError, SerializationError].} =
-  var balanceParsed = false
-  r.parseObject(key):
-    case key
-    of "code"   : r.readValue(val.code)
-    of "nonce"  : r.readValue(val.nonce)
-    of "balance":
-      r.readValue(val.balance)
-      balanceParsed = true
-    of "storage": r.readValue(val.storage)
-    else: discard r.readValue(JsonString)
-  if not balanceParsed:
-    r.raiseUnexpectedValue("GenesisAccount: balance required")
-
-proc readValue*(r: var JsonReader[T8Conv], val: var GenesisAlloc)
-       {.raises: [IOError, SerializationError].} =
-  r.parseObjectCustomKey:
-    let address = r.readValue(Address)
-  do:
-    val[address] = r.readValue(GenesisAccount)
-
-proc readValue*(r: var JsonReader[T8Conv], val: var Table[uint64, Hash32])
-       {.raises: [IOError, SerializationError].} =
-  wrapValueError:
-    r.parseObjectCustomKey:
-      let number = parseHexOrInt[uint64](r.parseString())
-    do:
-      val[number] = r.readValue(Hash32)
-
-proc readValue*(r: var JsonReader[T8Conv], val: var EnvStruct)
+proc readValue*(r: var JsonReader[Fixture], val: var EnvStruct)
        {.raises: [IOError, SerializationError].} =
   var
     currentCoinbaseParsed = false
@@ -200,7 +86,7 @@ proc readValue*(r: var JsonReader[T8Conv], val: var EnvStruct)
   if not currentTimestampParsed:
     r.raiseUnexpectedValue("env: currentTimestamp required")
 
-proc readValue*(r: var JsonReader[T8Conv], val: var TransContext)
+proc readValue*(r: var JsonReader[Fixture], val: var TransContext)
        {.raises: [IOError, SerializationError].} =
   r.parseObject(key):
     case key
@@ -211,13 +97,13 @@ proc readValue*(r: var JsonReader[T8Conv], val: var TransContext)
 
 proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
   template required(field) =
-    const fName = astToStr(oField)
+    const fName = astToStr(field)
     if txo.field.isNone:
       return err("missing required field '" & fName & "' in transaction")
     tx.field = txo.field.get
 
   template required(field, alias) =
-    const fName = astToStr(oField)
+    const fName = astToStr(field)
     if txo.field.isNone:
       return err("missing required field '" & fName & "' in transaction")
     tx.alias = txo.field.get
@@ -290,57 +176,66 @@ func readNestedTx(rlp: var Rlp, chainId: ChainId): Result[Transaction, string] =
   except RlpError as exc:
     err(exc.msg)
 
-func parseTxs*(ctx: var TransContext, chainId: ChainId)
-                {.raises: [T8NError, RlpError].} =
+func parseTxs*(ctx: var TransContext, chainId: ChainId): Result[void, T8NErr] =
   var numTxs = ctx.txsJson.len
   var rlp: Rlp
 
-  if ctx.txsRlp.len > 0:
-    rlp = rlpFromBytes(ctx.txsRlp)
-    if rlp.isList.not:
-      raise newError(ErrorRlp, "RLP Transaction list should be a list")
-    numTxs += rlp.listLen
+  try:
+    if ctx.txsRlp.len > 0:
+      rlp = rlpFromBytes(ctx.txsRlp)
+      if rlp.isList.not:
+        return err(t8nerr(ErrorRlp, "RLP Transaction list should be a list"))
+      numTxs += rlp.listLen
 
-  ctx.txList = newSeqOfCap[Result[Transaction, string]](numTxs)
-  for tx in ctx.txsJson:
-    ctx.txList.add parseTxJson(tx, chainId)
+    ctx.txList = newSeqOfCap[Result[Transaction, string]](numTxs)
+    for tx in ctx.txsJson:
+      ctx.txList.add parseTxJson(tx, chainId)
 
-  if ctx.txsRlp.len > 0:
-    for item in rlp:
-      ctx.txList.add rlp.readNestedTx(chainId)
+    if ctx.txsRlp.len > 0:
+      for item in rlp:
+        ctx.txList.add rlp.readNestedTx(chainId)
+  except RlpError as exc:
+    return err(t8nerr(ErrorRlp, exc.msg))
+
+  ok()
 
 func filterGoodTransactions*(ctx: TransContext): seq[Transaction] =
   for txRes in ctx.txList:
     if txRes.isOk:
       result.add txRes.get
 
-template wrapException(body) =
+template wrapException(body): auto =
   try:
     body
+    ok()
   except SerializationError as exc:
-    raise newError(ErrorJson, exc.msg)
+    err(t8nerr(ErrorJson, exc.msg))
   except IOError as exc:
-    raise newError(ErrorJson, exc.msg)
+    err(t8nerr(ErrorJson, exc.msg))
 
-proc parseTxsJson*(ctx: var TransContext, jsonFile: string) {.raises: [T8NError].} =
+proc parseTxsJson*(ctx: var TransContext, jsonFile: string): Result[void, T8NErr] =
   wrapException:
-    ctx.txsJson = T8Conv.loadFile(jsonFile, seq[TxObject])
+    ctx.txsJson = Fixture.loadFile(jsonFile, seq[TxObject])
 
-proc parseAlloc*(ctx: var TransContext, allocFile: string) {.raises: [T8NError].} =
+proc parseAlloc*(ctx: var TransContext, allocFile: string): Result[void, T8NErr] =
   wrapException:
-    ctx.alloc = T8Conv.loadFile(allocFile, GenesisAlloc)
+    ctx.alloc = Fixture.loadFile(allocFile, GenesisAlloc)
 
-proc parseEnv*(ctx: var TransContext, envFile: string) {.raises: [T8NError].} =
+proc parseEnv*(ctx: var TransContext, envFile: string): Result[void, T8NErr] =
   wrapException:
-    ctx.env = T8Conv.loadFile(envFile, EnvStruct)
+    ctx.env = Fixture.loadFile(envFile, EnvStruct)
 
-func parseTxsRlp*(ctx: var TransContext, hexData: string) {.raises: [ValueError].} =
-  ctx.txsRlp = hexToSeqByte(hexData)
+func parseTxsRlp*(ctx: var TransContext, hexData: string): Result[void, T8NErr] =
+  try:
+    ctx.txsRlp = hexToSeqByte(hexData)
+    ok()
+  except ValueError as exc:
+    err(t8nerr(ErrorValue, exc.msg))
 
-proc parseInputFromStdin*(ctx: var TransContext) {.raises: [T8NError].} =
+proc parseInputFromStdin*(ctx: var TransContext): Result[void, T8NErr] =
   wrapException:
     let jsonData = stdin.readAll()
-    ctx = T8Conv.decode(jsonData, TransContext)
+    ctx = Fixture.decode(jsonData, TransContext)
 
 import
   std/json

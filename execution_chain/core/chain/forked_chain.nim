@@ -535,7 +535,8 @@ proc validateBlock(
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  c.processBlock(parent, txFrame, blk, blockAccessList, blkHash, finalized).isOkOr:
+  let txHashes = c.processBlock(
+      parent, txFrame, blk, blockAccessList, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -546,8 +547,8 @@ proc validateBlock(
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame)
 
-  for i, tx in blk.transactions:
-    c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
+  for i, txHash in txHashes:
+    c.txRecords[txHash] = (blkHash, uint64(i))
 
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
@@ -565,7 +566,23 @@ proc validateBlock(
       base = c.calculateNewBase(c.latestFinalized.number, c.latest)
       prevBase = c.base.number
 
-    c.updateFinalized(base, base)
+    # `base` is the persistence point; the finalization reference passed to
+    # `updateFinalized` must never sit *below* the existing finalized markers.
+    # During pure auto-forward the current frontier lags `base`, so `base`
+    # advances it (and legitimately prunes branches that forked below the new
+    # base). But when an earlier `forkChoice` finalized within `baseDistance` of
+    # the head, `base` (capped at head - baseDistance) can land *below* that
+    # marker; feeding `base` in as the frontier would then make `reachable`
+    # prune every head (including `c.latest`), tripping `candidate.isNil.not`.
+    # Use the higher of the two - the true finalized frontier on `c.latest`.
+    var finalizedFrontier = base
+    for it in ancestors(c.latest):
+      if not it.notFinalized:
+        if it.number > base.number:
+          finalizedFrontier = it
+        break
+
+    c.updateFinalized(finalizedFrontier, c.latest)
     await c.queueUpdateBase(base)
 
     # If on disk head behind base, move it to base too.
@@ -605,20 +622,31 @@ proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Futu
   c.queueOrphan(parent, finalized)
 
 proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
-  while true:
-    # Cooperative concurrency: one block per loop iteration - because
-    # we run both networking and CPU-heavy things like block processing
-    # on the same thread, we need to make sure that there is steady progress
-    # on the networking side or we get long lockups that lead to timeouts.
-    const
-      # We cap waiting for an idle slot in case there's a lot of network traffic
-      # taking up all CPU - we don't want to _completely_ stop processing blocks
-      # in this case - doing so also allows us to benefit from more batching /
-      # larger network reads when under load.
-      idleTimeout = 10.milliseconds
+  # Networking and block processing share this thread, so we have to hand the
+  # thread back regularly or network reads stall and peers time us out.
+  #
+  # We yield per batch, not per item:
+  #   - per item  -> costs up to `idleTimeout` for every single block
+  #   - per batch -> pay that once per `processingBudget` of work
+  const
+    # Cap on how long we wait for an idle slot. Under heavy network load the
+    # loop may never go idle, and we don't want to stop processing entirely.
+    # Waiting also lets reads batch up into fewer, larger ones.
+    idleTimeout = 10.milliseconds
 
-    discard await idleAsync().withTimeout(idleTimeout)
+    # Max CPU time to spend before yielding. Keep well under the peer response
+    # timeouts, otherwise the syncer starts banning honest peers as slow.
+    processingBudget = 50.milliseconds
+
+  var lastYield = Moment.now()
+  while true:
+    if processingBudget <= Moment.now() - lastYield:
+      discard await idleAsync().withTimeout(idleTimeout)
+      lastYield = Moment.now()
+
     let
+      # Yields on its own when the queue is empty, so an idle node stays
+      # cooperative even though the budget check above rarely fires.
       item = await c.queue.popFirst()
       res = await item.handler()
 
@@ -756,6 +784,16 @@ proc importBlock*(
     parentHash = header.parentHash.short
 
   if header.number <= c.latest.number:
+    # The parent is gone, but this block may itself be the canonical block at
+    # this height that was already imported and then pruned from memory once it
+    # fell at/below `base` (finality cut off its parent). This happens when a
+    # concurrent importer such as `el_sync` advances and finalizes the chain past
+    # a stale sync target. Tell that apart from a genuine dead fork via the
+    # persisted canonical marker (reorg-safe: matched by hash, not by number).
+    if header.number <= c.base.number and
+       c.baseTxFrame.getBlockHash(header.number).valueOr(default(Hash32)) == blkHash:
+      return ok(AlreadyObserved)
+
     # The in-memory chain already spans this height yet the parent is gone: the
     # parent's branch was pruned (finality cut it off), so this block is on a
     # dead fork. `c.latest` is the reliable frontier here - `c.latestFinalized`
@@ -793,12 +831,18 @@ proc forkChoice*(c: ForkedChainRef,
   let
     # Find the unique branch where `headHash` is a member of.
     head = ?c.findHeadPos(headHash)
+
+  # Head maybe moved backward or moved to other branch.
+  c.updateHead(head)
+  if finalizedHash == zeroHash32:
+    # Do nothing else if there is no request to new finality.
+    return ok()
+
+  let
     # Finalized block must be parent or on the new canonical chain which is
     # represented by `head`.
     finalized = ?c.findFinalizedPos(finalizedHash, head)
 
-  # Head maybe moved backward or moved to other branch.
-  c.updateHead(head)
   c.updateFinalized(finalized, head)
 
   let base = c.calculateNewBase(finalized.number, head)
@@ -1278,19 +1322,35 @@ func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, headHash: Hash32):
 
   false
 
-proc isCanonicalAncestor*(c: ForkedChainRef,
+func knownFinalizedBlock(c: ForkedChainRef, finalizedBlockHash: Hash32): BlockRef =
+  let b = c.hashToBlock.getOrDefault(finalizedBlockHash)
+  if b.isNil.not:
+    return b
+  c.hashToBlock.getOrDefault(c.latestFinalized.hash)
+
+proc isCanonicalAndFinalizedAncestor*(c: ForkedChainRef,
                     blockNumber: BlockNumber,
-                    blockHash: Hash32): bool =
-  if blockNumber >= c.latest.number:
+                    blockHash: Hash32,
+                    finalizedBlockHash: Hash32): bool =
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.7/src/engine/paris.md#specification-1
+  # Client software MAY skip an update of the forkchoice state and MUST NOT
+  # begin a payload build process if there is a known finalizedBlockHash and
+  # forkchoiceState.headBlockHash references a VALID ancestor of the latest
+  # known finalized block, i.e. the ancestor passed payload validation process
+  # and deemed VALID.
+
+  if blockHash == finalizedBlockHash:
     return false
 
-  if blockHash == c.latest.hash:
+  let b = c.knownFinalizedBlock(finalizedBlockHash)
+  if b.isNil:
     return false
 
-  if c.base.number < c.latest.number:
-    # The current canonical chain in memory is headed by
-    # latest.header
-    for it in ancestors(c.latest):
+  if blockNumber >= b.number:
+    return false
+
+  if c.base.number < b.number:
+    for it in ancestors(b):
       if it.hash == blockHash and it.number == blockNumber:
         return true
 
