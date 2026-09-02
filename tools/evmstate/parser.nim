@@ -12,7 +12,8 @@
 
 import
   std/[strutils, tables],
-  eth/common/[base, keys, headers, transactions],
+  eth/common/[base, keys, headers, transactions, receipts],
+  eth/bloom,
   stint,
   json_serialization,
   json_serialization/pkg/results,
@@ -58,6 +59,16 @@ type
     authorizationList*   : Opt[seq[Authorization]]
     secretKey*           : Opt[PrivateKey]
 
+  TxoReceipt* = object
+    transactionHash*  : Hash32
+    `type`*           : uint8
+    cumulativeGasUsed*: GasInt
+    bloom*            : BloomFilter
+    logs*             : seq[Log]
+    status*           : Opt[bool]
+    postState*        : Opt[Hash32]
+    rlp*              : seq[byte]
+
   Index* = object
     data* : int
     gas*  : int
@@ -69,6 +80,7 @@ type
     txbytes*: seq[byte]
     indexes*: Index
     state*  : JsonNode
+    receipt*: Opt[TxoReceipt]
 
   SubTests* = ref object
     subs*: seq[SubTest]
@@ -87,6 +99,7 @@ Fixture.automaticSerialization(int, true)
 
 StateEnv.useDefaultReaderIn Fixture
 Txo.useDefaultReaderIn Fixture
+TxoReceipt.useDefaultReaderIn Fixture
 SubTest.useDefaultReaderIn Fixture
 Index.useDefaultReaderIn Fixture
 

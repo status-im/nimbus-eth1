@@ -97,13 +97,13 @@ proc readValue*(r: var JsonReader[Fixture], val: var TransContext)
 
 proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
   template required(field) =
-    const fName = astToStr(oField)
+    const fName = astToStr(field)
     if txo.field.isNone:
       return err("missing required field '" & fName & "' in transaction")
     tx.field = txo.field.get
 
   template required(field, alias) =
-    const fName = astToStr(oField)
+    const fName = astToStr(field)
     if txo.field.isNone:
       return err("missing required field '" & fName & "' in transaction")
     tx.alias = txo.field.get

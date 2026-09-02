@@ -155,7 +155,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
     #   traceBlock(com, EthBlock.init(move(header), move(body)), flags)
 
-    proc debug_setHead(quantityTag: BlockTag): bool {.async: (raises: [CancelledError, ApplicationError]).} =
+    proc debug_setHead(quantityTag: BlockTag): bool {.async: (raises: [CancelledError, RpcResponseError]).} =
       ## Sets the current head of the local chain by block number, hash or tag.
       ## Blocks above the new head are discarded, but only blocks still held
       ## in memory (above the persisted base) can become the new head.
@@ -197,7 +197,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       badBlocks
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawBlock
-    proc debug_getRawBlock(blockTag: BlockTag): seq[byte] {.raises: [ApplicationError].} =
+    proc debug_getRawBlock(blockTag: BlockTag): seq[byte] {.raises: [RpcResponseError].} =
       ## Returns an RLP-encoded block.
       let blockFromTag = chain.blockFromTag(blockTag).valueOr:
         raise invalidParams(error)
@@ -205,14 +205,14 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       rlp.encode(blockFromTag)
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawHeader
-    proc debug_getRawHeader(blockTag: BlockTag): seq[byte] {.raises: [ApplicationError, RlpError].} =
+    proc debug_getRawHeader(blockTag: BlockTag): seq[byte] {.raises: [RpcResponseError, RlpError].} =
       ## Returns an RLP-encoded header.
       let header = chain.headerFromTag(blockTag).valueOr:
         raise invalidParams(error)
       rlp.encode(header)
 
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawReceipts
-    proc debug_getRawReceipts(blockTag: BlockTag): seq[seq[byte]] {.raises: [ApplicationError, RlpError].} =
+    proc debug_getRawReceipts(blockTag: BlockTag): seq[seq[byte]] {.raises: [RpcResponseError, RlpError].} =
       ## Returns an array of EIP-2718 binary-encoded receipts.
       let header = chain.headerFromTag(blockTag).valueOr:
         raise invalidParams(error)
@@ -226,7 +226,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     # https://ethereum.github.io/execution-apis/api/methods/debug_getRawTransaction
     # we take a string input instead of a hex as in that manner we can preverse the raw json input
     # which later allows us to check for the existence of 0x,which the spec expects in a valid input
-    proc debug_getRawTransaction(txHashHex: string): seq[byte] {.raises: [ApplicationError, ValueError, RlpError].} =
+    proc debug_getRawTransaction(txHashHex: string): seq[byte] {.raises: [RpcResponseError, ValueError, RlpError].} =
       ## Returns an EIP-2718 binary-encoded transaction.
       # TODO: remove manual validation when upstream parsing decoding reports strict
       # hex input failures .

@@ -74,6 +74,9 @@ template rpcCall(body: untyped): untyped =
   except ErrorResponse as e:
     result = err(typeof(result), (BackendFetchError, e.msg, UNTAGGED))
     return
+  except RpcResponseError as e:
+    result = err(typeof(result), (BackendDecodingError, toJsonError(e), UNTAGGED))
+    return
   except JsonRpcError as e:
     result = err(typeof(result), (BackendDecodingError, e.msg, UNTAGGED))
     return

@@ -29,6 +29,9 @@ type
       ## Generic backend database retrieval function for a single
       ## `Aristo DB` hash lookup value.
 
+  GetKeysFn* =
+    proc(rvids: openArray[RootedVertexID], keyvtxs: var openArray[(HashKey, VertexRef)], flags: set[GetVtxFlag]): Result[void,AristoError] {.gcsafe, raises: [].}
+
   GetTuvFn* =
     proc(): Result[VertexID,AristoError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function for the top used

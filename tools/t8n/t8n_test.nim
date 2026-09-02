@@ -694,6 +694,33 @@ const
       output: T8nOutput(result: true),
       expExitCode: ErrorConfig.int,
     ),
+    TestSpec(
+      name  : "prepareDispatch isAccountAlive bug: leaf exists and empty",
+      base  : "testdata/00-530",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Amsterdam", "0",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "prepareDispatch isAccountAlive bug: leaf not exists",
+      base  : "testdata/00-531",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Amsterdam", "0",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "prepareDispatch isAccountAlive bug: leaf exists and not empty",
+      base  : "testdata/00-532",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Amsterdam", "0",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
   ]
 
 proc main() =

@@ -92,8 +92,7 @@ proc sessionForward*(
   ##
   let
     db = ctx.pool.cacheDB
-    stats = ?db.getAccMissingIntv(info)
-    pivotNum = stats.number
+    pivotNum = (?db.getAccMissingIntv(info)).number
 
   var number = pivotNum
   template dist: untyped = (number-pivotNum)
@@ -109,7 +108,7 @@ proc sessionForward*(
       break
 
     for w in bal[]:
-      discard db.applyAccountChanges(w, stats.ranges, info).valueOr:
+      discard db.applyAccountChanges(w, info).valueOr:
         error info & ": Error applying BAL account changes", pivotNum, number,
           dist, addr=($w.address), accPath=w.address.computeAccPath.toStr
         return err()

@@ -18,18 +18,8 @@ logScope:
     topics = "snap sync"
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private function(s)
 # ------------------------------------------------------------------------------
-
-proc setStoNoneMissing(
-    db: CacheDbRef;
-    accPath: Hash32;
-    info: static[string];
-      ): Opt[CacheStoMissingIntvData] =
-  var data: CacheStoMissingIntvData
-  data.ranges = ItemKeyRangeSet.init()
-  ?db.putStoMissingIntv(accPath, data, info)
-  ok(move data)
 
 proc setAccMissing(
     db: CacheDbRef;
@@ -37,6 +27,7 @@ proc setAccMissing(
     info: static[string];
       ): Opt[void] =
   ?db.delStoMissingIntv(accPath, info)              # delete storage accounting
+  ?db.delMissingBlob(accPath, info)                 # delete code accounting
   ?db.delFlatSlot(accPath, info)                    # delete all slots
   ?db.delFlatCode(accPath, info)                    # delete contract code
   ?db.delFlatAcc(accPath, info)                     # remove account record
@@ -57,18 +48,16 @@ proc applySlotChanges(
     slots: openArray[SlotChanges];
     info: static[string];
       ): Opt[bool] =
-  ## Apply BAL to storage slots. Returns `true` if changes could be alloed,
-  ## and `false` if the storage sub-MPT was cleared.
+  ## Apply BAL to storage slots. Returns `true` if changes were performed,
+  ## and `false` if there was a partial storage sub-MPT.
   ##
-  let stoState = (?db.getStoMissingIntv(accPath, info)).valueOr:
-    # This is a new account with additional storage chages.
-    ?db.setStoNoneMissing(accPath, info)
-
-  # There is no way to reliably update partial MPTs. So all that can be done
-  # is to clear them and re-download.
-  if stoState.ranges.total != 0 or                  # 0 mod 2^256 => 0 or 2^256
-     stoState.ranges.chunks != 0:                   # intervals => 2^256 => all
-    return ok(false)
+  (?db.getStoMissingIntv(accPath, info)).isErrOr:
+    # Note that this might not apply at all unless there is a special
+    # accounting implemented for partial sub-MPTs.
+    #
+    # At the moment, accounts with partial sub-MPTs are deleted before
+    # any BAL forwarding is applied.
+    return ok(false)                                # there is a partial sub-MPT
 
   # So there is a full MPT which can be updated.
   for w in slots:
@@ -91,7 +80,6 @@ proc applyCodeChange(
       ): Opt[Hash32] =
   ## Apply BAL to contract code
   ##
-  ?db.delMissingBlob(accPath, info)
   if code.len == 0:
     return ok(EMPTY_CODE_HASH)
 
@@ -106,7 +94,6 @@ proc applyCodeChange(
 proc applyAccountChanges*(
     db: CacheDbRef;
     chng: AccountChanges;
-    accExcl: ItemKeyRangeSet;
     info: static[string];
       ): Opt[bool] =
   ## Apply BAL to account. Returns `true` if there were some changes.
@@ -118,7 +105,7 @@ proc applyAccountChanges*(
 
   # Check for existing accounts that have not been fetched, yet
   let accPath = chng.address.computeAccPath
-  if accExcl.covered(accPath.to(ItemKey)):
+  if (?db.getAccMissingIntv(info)).ranges.covered(accPath.to(ItemKey)):
     return ok(false)                                # ignore for now
 
   var acc = db.getFlatAcc(accPath, info).valueOr:
