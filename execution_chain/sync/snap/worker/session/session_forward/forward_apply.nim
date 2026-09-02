@@ -18,62 +18,32 @@ logScope:
     topics = "snap sync"
 
 # ------------------------------------------------------------------------------
-# Private function(s)
-# ------------------------------------------------------------------------------
-
-proc setAccMissing(
-    db: CacheDbRef;
-    accPath: Hash32;
-    info: static[string];
-      ): Opt[void] =
-  ?db.delStoMissingIntv(accPath, info)              # delete storage accounting
-  ?db.delMissingBlob(accPath, info)                 # delete code accounting
-  ?db.delFlatSlot(accPath, info)                    # delete all slots
-  ?db.delFlatCode(accPath, info)                    # delete contract code
-  ?db.delFlatAcc(accPath, info)                     # remove account record
-
-  var accState = ?db.getAccMissingIntv(info)
-  let accKey = accPath.to(ItemKey)
-  discard accState.ranges.merge(accKey, accKey)
-  ?db.putAccMissingIntv(accState, info)             # update bookkeeping
-  ok()
-
-# ------------------------------------------------------------------------------
 # Private helper
 # ------------------------------------------------------------------------------
 
 proc applySlotChanges(
-    db: CacheDbRef;
+    adb: CacheDbRef;
     accPath: Hash32;
     slots: openArray[SlotChanges];
     info: static[string];
-      ): Opt[bool] =
-  ## Apply BAL to storage slots. Returns `true` if changes were performed,
-  ## and `false` if there was a partial storage sub-MPT.
+      ): Opt[void] =
+  ## Apply BAL to storage slots. This assumes to have partial storage sub-MPTs
+  ## cleared. But it would matter if there were a stray one as it would still
+  ## be partial and be cleared later.
   ##
-  (?db.getStoMissingIntv(accPath, info)).isErrOr:
-    # Note that this might not apply at all unless there is a special
-    # accounting implemented for partial sub-MPTs.
-    #
-    # At the moment, accounts with partial sub-MPTs are deleted before
-    # any BAL forwarding is applied.
-    return ok(false)                                # there is a partial sub-MPT
-
-  # So there is a full MPT which can be updated.
   for w in slots:
     if w.changes.len != 0:
       let
         slotKey = w.slot.computeSlotKey()
         slotValue = w.changes[^1].newValue
       if slotValue == 0:
-        ?db.delFlatSlot(accPath, slotKey, info)
+        ?adb.delFlatSlot(accPath, slotKey, info)
       else:
-        ?db.putFlatSlot(accPath, slotKey, slotValue, info)
-
-  ok(true)
+        ?adb.putFlatSlot(accPath, slotKey, slotValue, info)
+  ok()
 
 proc applyCodeChange(
-    db: CacheDbRef;
+    adb: CacheDbRef;
     accPath: Hash32;
     code: openArray[CodeChange];
     info: static[string];
@@ -84,7 +54,7 @@ proc applyCodeChange(
     return ok(EMPTY_CODE_HASH)
 
   let newCode = code[^1].newCode
-  ?db.putFlatCode(accPath, newCode, info)
+  ?adb.putFlatCode(accPath, newCode, info)
   ok(newCode.keccak256)
 
 # ------------------------------------------------------------------------------
@@ -92,38 +62,35 @@ proc applyCodeChange(
 # ------------------------------------------------------------------------------
 
 proc applyAccountChanges*(
-    db: CacheDbRef;
+    ctx: SnapCtxRef;
     chng: AccountChanges;
     info: static[string];
-      ): Opt[bool] =
-  ## Apply BAL to account. Returns `true` if there were some changes.
+      ): Opt[void] =
+  ## Apply BAL to account.
   if chng.storageChanges.len == 0 and
      chng.balanceChanges.len == 0 and
      chng.nonceChanges.len == 0 and
      chng.codeChanges.len == 0:
-    return ok(false)                                # nothing to do
+    return ok()                                     # nothing to do
 
   # Check for existing accounts that have not been fetched, yet
-  let accPath = chng.address.computeAccPath
-  if (?db.getAccMissingIntv(info)).ranges.covered(accPath.to(ItemKey)):
-    return ok(false)                                # ignore for now
+  let
+    adb = ctx.pool.cacheDB
+    accPath = chng.address.computeAccPath
+  if (?adb.getAccMissingIntv(info)).ranges.covered(accPath.to(ItemKey)):
+    return ok()                                     # ignore for now
 
-  var acc = db.getFlatAcc(accPath, info).valueOr:
+  var acc = adb.getFlatAcc(accPath, info).valueOr:
     emptyFlatAccData                                # new account
 
   # Apply change list to account and cache DB
   if 0 < chng.storageChanges.len:
-    if ?db.applySlotChanges(accPath, chng.storageChanges, info):
-      # Some changes apply to a full sub-MPT
-      acc.dirtyStorage = true                       # mark it changed
-      acc.account.storageRoot = zeroHash32          # no storage root known
-    else:
-      # Sub-MPT has become unusable. Remove sub-MPT and corresponding account.
-      ?db.setAccMissing(accPath, info)
-      return ok(true)
+    acc.account.storageRoot = zeroHash32            # no sto root known anymore
+    ?adb.applySlotChanges(accPath, chng.storageChanges, info)
 
   if 0 < chng.codeChanges.len:
-    acc.account.codeHash = ?db.applyCodeChange(accPath, chng.codeChanges, info)
+    acc.dirtyCode = false
+    acc.account.codeHash = ?adb.applyCodeChange(accPath, chng.codeChanges, info)
 
   if 0 < chng.nonceChanges.len:
     acc.account.nonce = chng.nonceChanges[^1].newNonce
@@ -131,8 +98,8 @@ proc applyAccountChanges*(
   if 0 < chng.balanceChanges.len:
     acc.account.balance = chng.balanceChanges[^1].postBalance
 
-  ?db.putFlatAcc(accPath, acc, info)                # update account
-  ok(true)
+  ?adb.putFlatAcc(accPath, acc, info)               # update account
+  ok()
 
 # ------------------------------------------------------------------------------
 # End
