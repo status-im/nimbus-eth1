@@ -58,6 +58,7 @@ type NStartUpCmd* {.pure.} = enum
   nimbus = "Run Ethereum node"
   beaconNode = "Run beacon node in stand-alone mode\pSee 'nimbus beaconNode --help' for further details"
   executionClient = "Run execution client in stand-alone mode\pSee 'nimbus executionClient --help' for further details"
+  lightClient = "Run consensus light client in stand-alone mode\pSee 'nimbus lightClient --help' for further details"
   `import` = "Import execution blocks from ere or era1/era files\pSee 'nimbus import --help' for further details"
   trustedNodeSync = "Sync the beacon node database from a trusted node (checkpoint sync)\pSee 'nimbus trustedNodeSync --help' for further details"
   deposits = "Handle validator deposits\pSee 'nimbus deposits --help' for further details"
@@ -174,7 +175,8 @@ type
       name: "debug-trusted-setup-file" .}: Option[string]
 
     case cmd* {.command, defaultValue: NStartUpCmd.nimbus.}: NStartUpCmd
-    of nimbus, beaconNode, executionClient, `import`, trustedNodeSync, deposits:
+    of nimbus, beaconNode, executionClient, NStartUpCmd.lightClient, `import`,
+       trustedNodeSync, deposits:
       discard
 
 #!fmt: on
@@ -370,7 +372,7 @@ proc runCombinedClient() =
   # go away
   discard randomBytes(distinctBase(jwtKey))
 
-  const banner = ClientId & "\p\pSubcommand options can also be used with the main node, see `beaconNode --help` and `executionClient --help`"
+  const banner = ClientId & "\p\pSubcommand options can also be used with the main node, see `beaconNode --help`, `executionClient --help` and `lightClient --help`"
 
   var config = NimbusConf.loadWithBanners(
     banner, copyright, [specBanner], ignoreUnknown = true, setupLogger = true
@@ -511,12 +513,48 @@ proc runCombinedClient() =
 
   waitFor metricsServer.stopMetricsServer()
 
+proc runLightClientStandalone(cmdLine: seq[string]) {.raises: [CatchableError].} =
+  ## Stand-alone `nimbus lightClient`, the light client counterpart of
+  ## `nimbus beaconNode` / `nimbus executionClient` - `nimbus_light_client.main`
+  ## is not exported, so drive the exported `runLightClient` the same way it does.
+  ##
+  ## Unlike `BeaconNodeConf` and the execution `NimbusConf`, `LightClientConf`
+  ## has no `command` field to absorb the `lightClient` token, so the caller
+  ## strips it and passes the remaining parameters here.
+  # TODO add a `lightClient` command to `LightClientConf` upstream, the way
+  #      `BNStartUpCmd.beaconNode` does, and drop the stripping
+  var params = cmdLine
+  if params.len == 0:
+    # `loadWithBanners` falls back to the real command line - which still holds
+    # the `lightClient` token - when handed an empty sequence. A bare
+    # `nimbus lightClient` cannot run anyway because `--trusted-block-root` is
+    # required, so show the options instead.
+    params.add "--help"
+
+  const banner = "Nimbus light client " & fullVersionStr
+
+  let config = LightClientConf.loadWithBanners(
+    banner, copyright, [specBanner], environment = params, setupLogger = true
+  ).valueOr:
+    writePanicLine error # Logging not yet set up
+    quit QuitFailure
+
+  setupFileLimits()
+
+  ProcessState.setupStopHandlers()
+
+  notice "Launching light client",
+    version = fullVersionStr, cmdParams = commandLineParams(), config
+
+  runLightClient(config)
+
 # noinline to keep it in stack traces
 proc main() {.noinline, raises: [CatchableError].} =
   var
     params = commandLineParams()
     isEC = false
     isBN = false
+    lcArg = -1 # index of the `lightClient` token, which `LightClientConf` cannot parse
   for i in 0 ..< params.len:
     try:
       discard NimbusCmd.matchSymbolName(params[i])
@@ -539,6 +577,9 @@ proc main() {.noinline, raises: [CatchableError].} =
       of NStartUpCmd.executionClient:
         isEC = true
         break
+      of NStartUpCmd.lightClient:
+        lcArg = i
+        break
       else:
         discard
     except ValueError:
@@ -548,6 +589,8 @@ proc main() {.noinline, raises: [CatchableError].} =
     nimbus_beacon_node.main()
   elif isEC:
     nimbus_execution_client.main()
+  elif lcArg >= 0:
+    runLightClientStandalone(params[0 ..< lcArg] & params[lcArg + 1 .. ^1])
   else:
     runCombinedClient()
 
