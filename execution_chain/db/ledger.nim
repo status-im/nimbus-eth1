@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, hashes, sets, typetraits],
+  std/[algorithm, tables, hashes, sets, typetraits],
   chronicles,
   results,
   minilru,
@@ -98,12 +98,6 @@ type
       ## Because the same slots often reappear, we want to avoid writing them
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
-
-    slotMerges: seq[(Hash32, UInt256)]
-    slotDeletes: seq[Hash32]
-      ## Scratch buffers used by `persistStorage` to group the slot writes of
-      ## one account into a single batched trie update. Kept on the ledger so
-      ## that grouping does not cost an allocation per account.
 
     collectWitness*: bool
 
@@ -392,6 +386,12 @@ template abortOnFatalError*(ledger: LedgerRef) =
     else:
       raiseAssert ledger.fatalError.get()
 
+func cmpSlotKey(a, b: Hash32): int =
+  for i in 0 ..< a.data.len:
+    if a.data[i] != b.data[i]:
+      return cmp(a.data[i], b.data[i])
+  0
+
 proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   const info = "persistStorage(): "
 
@@ -406,10 +406,9 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
     return err(info & $$error)
 
-  # Group `overlayStorage[]` into one batch per account so that the trie code
-  # resolves the account leaf once for the whole group rather than once per slot
-  ledger.slotMerges.setLen(0)
-  ledger.slotDeletes.setLen(0)
+  var
+    slotMerges: seq[(Hash32, UInt256)]
+    slotDeletes: seq[Hash32]
 
   let original = acc.original
   for slot, value in acc.overlayStorage:
@@ -425,13 +424,13 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
       slotKey
 
     if value > 0:
-      ledger.slotMerges.add((slotKey, value))
+      slotMerges.add((slotKey, value))
 
       # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
       original.storage[slot] = value
 
     else:
-      ledger.slotDeletes.add(slotKey)
+      slotDeletes.add(slotKey)
       original.storage.del(slot)
 
     if ledger.storeSlotHash and not cached:
@@ -443,15 +442,15 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
       if rc.isErr:
         warn logTxt "persistStorage()", slot, error=($$rc.error)
 
-  # Merges run before the deletions: emptying the storage trie de-registers it
-  # from the account, so deleting last avoids re-creating it under a fresh
-  # vertex id for the slots that survive.
-  ledger.txFrame.mergeSlots(acc.accPath, ledger.slotMerges).isOkOr:
+  slotMerges.sort do (a, b: (Hash32, UInt256)) -> int:
+    cmpSlotKey(a[0], b[0])
+  slotDeletes.sort(cmpSlotKey)
+
+  ledger.txFrame.mergeSlots(acc.accPath, slotMerges).isOkOr:
     return err(info & $$error)
 
-  for slotKey in ledger.slotDeletes:
-    ledger.txFrame.deleteSlot(acc.accPath, slotKey).isOkOr:
-      return err(info & $$error)
+  ledger.txFrame.deleteSlots(acc.accPath, slotDeletes).isOkOr:
+    return err(info & $$error)
 
   acc.overlayStorage.clear()
   ok()

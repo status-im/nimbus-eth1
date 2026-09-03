@@ -8,27 +8,17 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Benchmark for the storage write path in `aristo_merge`.
-##
-## `mergeSlot` resolves the account leaf with a full hike from the state root
-## and invalidates the Merkle keys along that path for every single slot.
-## `mergeSlots` does both once for all the slots of one account, which is how
-## the ledger writes them (`persistStorage` groups the dirty slots per account).
-##
-## The benchmark seeds an account trie with storage, persists it to an in-memory
-## backend and then re-writes the same slots through both APIs, checking that
-## the resulting state roots agree.
-
 {.used.}
 
 import
-  std/[strformat, strutils, times],
+  std/[algorithm, strformat, strutils, times],
   unittest2,
   stew/endians2,
   results,
   eth/common/hashes,
   ../../execution_chain/db/aristo/[
     aristo_compute,
+    aristo_delete,
     aristo_desc,
     aristo_merge,
     aristo_tx_frame,
@@ -37,17 +27,13 @@ import
   ]
 
 const
-  benchmarkNameWidth = 30
+  benchmarkNameWidth = 34
   accountCount {.intdefine.} = 500_000
-    ## Accounts seeded into the state trie. This only sets the depth of the
-    ## account hike that `mergeSlot` repeats per slot and `mergeSlots` does
-    ## once, but that depth is the whole point - a small trie is shallow and
-    ## hides the win (log16(10k) is ~3 levels against ~7 on mainnet).
   storageAccountCount {.intdefine.} = 5_000
-    ## Of those, the accounts that get storage and are then benchmarked
   rounds = 4
   slotCounts = [1, 2, 4, 8]
   maxSlotsPerAccount = slotCounts[^1]
+  deleteStride = 2
 
 type BenchmarkStats = object
   elapsed: float
@@ -65,9 +51,13 @@ proc benchmarkLine(name: string, stats: BenchmarkStats): string =
     " " & align(fmt"{writesPerSecond:.2f}", 14) & " " &
     align(fmt"{microsecondsPerWrite:.4f}", 10)
 
+func cmpSlotKey(a, b: Hash32): int =
+  for i in 0 ..< a.data.len:
+    if a.data[i] != b.data[i]:
+      return cmp(a.data[i], b.data[i])
+  0
+
 proc makeAccPath(i: int): Hash32 =
-  ## Hashed so the seeded accounts spread evenly over the trie and the hikes
-  ## reach a realistic depth
   var seed {.noinit.}: array[8, byte]
   seed = uint64(i + 1).toBytesBE()
   keccak256(seed)
@@ -79,14 +69,9 @@ proc makeStoPath(acc, slot: int): Hash32 =
   keccak256(seed)
 
 proc slotValue(acc, slot, round: int): UInt256 =
-  # A fresh value every round so the merge never short-circuits on MergeNoAction
   (uint64(acc + 1) * 1_000_003'u64 + uint64(slot + 1) * 97'u64 + uint64(round + 1)).u256
 
 proc seedDb(slotsPerAccount: int, accPaths: var seq[Hash32]): AristoDbRef =
-  ## Populate `accountCount` accounts so the account trie has a realistic
-  ## depth, give the first `storageAccountCount` of them `slotsPerAccount`
-  ## storage slots, and persist everything to the backend so the benchmarked
-  ## writes start from a cold set of layers.
   let db = AristoDbRef.init()
   db.parallelStateRootComputation = false
 
@@ -110,7 +95,7 @@ proc seedDb(slotsPerAccount: int, accPaths: var seq[Hash32]): AristoDbRef =
 
   db
 
-proc runPerSlot(
+proc mergePerSlot(
     tx: AristoTxRef, accPaths: openArray[Hash32], slotsPerAccount: int
 ): BenchmarkStats =
   let started = epochTime()
@@ -123,10 +108,9 @@ proc runPerSlot(
     operations: rounds * accPaths.len * slotsPerAccount,
   )
 
-proc runBatched(
+proc mergeBatched(
     tx: AristoTxRef, accPaths: openArray[Hash32], slotsPerAccount: int
 ): BenchmarkStats =
-  # The ledger reuses one scratch buffer for this, so do the same here
   var slots = newSeq[(Hash32, UInt256)](maxSlotsPerAccount)
   let started = epochTime()
   for round in 1 .. rounds:
@@ -134,14 +118,54 @@ proc runBatched(
       slots.setLen(slotsPerAccount)
       for s in 0 ..< slotsPerAccount:
         slots[s] = (makeStoPath(i, s), slotValue(i, s, round))
+      slots.sort do (a, b: (Hash32, UInt256)) -> int:
+        cmpSlotKey(a[0], b[0])
       doAssert tx.mergeSlots(accPaths[i], slots).isOk()
   BenchmarkStats(
     elapsed: epochTime() - started,
     operations: rounds * accPaths.len * slotsPerAccount,
   )
 
+iterator deletedSlots(slotsPerAccount: int): int =
+  # A subset so that the surviving slots keep the merged trie in the final
+  # state root and the account keeps its storage trie registered
+  for s in countup(0, slotsPerAccount - 1, deleteStride):
+    yield s
+
+proc deleteCount(slotsPerAccount: int): int =
+  for _ in deletedSlots(slotsPerAccount):
+    inc result
+
+proc deletePerSlot(
+    tx: AristoTxRef, accPaths: openArray[Hash32], slotsPerAccount: int
+): BenchmarkStats =
+  let started = epochTime()
+  for i in 0 ..< accPaths.len:
+    for s in deletedSlots(slotsPerAccount):
+      doAssert tx.deleteSlot(accPaths[i], makeStoPath(i, s)).isOk()
+  BenchmarkStats(
+    elapsed: epochTime() - started,
+    operations: accPaths.len * deleteCount(slotsPerAccount),
+  )
+
+proc deleteBatched(
+    tx: AristoTxRef, accPaths: openArray[Hash32], slotsPerAccount: int
+): BenchmarkStats =
+  var slots = newSeqOfCap[Hash32](maxSlotsPerAccount)
+  let started = epochTime()
+  for i in 0 ..< accPaths.len:
+    slots.setLen(0)
+    for s in deletedSlots(slotsPerAccount):
+      slots.add(makeStoPath(i, s))
+    slots.sort(cmpSlotKey)
+    doAssert tx.deleteSlots(accPaths[i], slots).isOk()
+  BenchmarkStats(
+    elapsed: epochTime() - started,
+    operations: accPaths.len * deleteCount(slotsPerAccount),
+  )
+
 suite "Aristo storage merge benchmark":
-  test "Benchmark mergeSlot per slot vs batched mergeSlots":
+  test "Benchmark mergeSlot/deleteSlot per slot vs batched":
     debugEcho ""
     debugEcho "Aristo storage merge benchmark"
     debugEcho "  accounts seeded: ", accountCount, ", with storage: ",
@@ -158,24 +182,31 @@ suite "Aristo storage merge benchmark":
       # Nothing here may compute a state root either - that writes keys back
       # through the backend and would leave the next run on different footing.
       let warmupTx = db.txFrameBegin(db.baseTxFrame())
-      discard runPerSlot(warmupTx, accPaths, slotsPerAccount)
+      discard mergePerSlot(warmupTx, accPaths, slotsPerAccount)
       warmupTx.dispose()
 
       # Batched runs first so any residual ordering bias counts against it
       let
         batchedTx = db.txFrameBegin(db.baseTxFrame())
-        batched = runBatched(batchedTx, accPaths, slotsPerAccount)
+        batchedMerge = mergeBatched(batchedTx, accPaths, slotsPerAccount)
+        batchedDelete = deleteBatched(batchedTx, accPaths, slotsPerAccount)
         perSlotTx = db.txFrameBegin(db.baseTxFrame())
-        perSlot = runPerSlot(perSlotTx, accPaths, slotsPerAccount)
+        perSlotMerge = mergePerSlot(perSlotTx, accPaths, slotsPerAccount)
+        perSlotDelete = deletePerSlot(perSlotTx, accPaths, slotsPerAccount)
 
-      # Both paths must produce exactly the same trie
       check batchedTx.computeStateRoot().expect("batched state root") ==
         perSlotTx.computeStateRoot().expect("per-slot state root")
 
-      let speedup = perSlot.elapsed / batched.elapsed
-      debugEcho benchmarkLine(fmt"mergeSlot   ({slotsPerAccount} slots/acc)", perSlot)
-      debugEcho benchmarkLine(fmt"mergeSlots  ({slotsPerAccount} slots/acc)", batched)
-      debugEcho fmt"  -> speedup {speedup:.2f}x"
+      debugEcho benchmarkLine(
+        fmt"mergeSlot    ({slotsPerAccount} slots/acc)", perSlotMerge)
+      debugEcho benchmarkLine(
+        fmt"mergeSlots   ({slotsPerAccount} slots/acc)", batchedMerge)
+      debugEcho fmt"  -> speedup {perSlotMerge.elapsed / batchedMerge.elapsed:.2f}x"
+      debugEcho benchmarkLine(
+        fmt"deleteSlot   ({slotsPerAccount} slots/acc)", perSlotDelete)
+      debugEcho benchmarkLine(
+        fmt"deleteSlots  ({slotsPerAccount} slots/acc)", batchedDelete)
+      debugEcho fmt"  -> speedup {perSlotDelete.elapsed / batchedDelete.elapsed:.2f}x"
 
       perSlotTx.dispose()
       batchedTx.dispose()

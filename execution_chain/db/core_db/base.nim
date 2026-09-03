@@ -435,6 +435,17 @@ proc deleteSlot*(
 
   ok()
 
+proc deleteSlots*(
+    acc: CoreDbTxRef;
+    accPath: Hash32;
+    stoPaths: openArray[Hash32];
+      ): CoreDbRc[void] =
+  ## Variant of `deleteSlot()` for several slots of the same account.
+  acc.aTx.deleteSlots(accPath, stoPaths).isOkOr:
+    return err(error.toError(""))
+
+  ok()
+
 proc mergeSlot*(
     acc: CoreDbTxRef;
     accPath: Hash32;
@@ -452,7 +463,7 @@ proc mergeSlots*(
     accPath: Hash32;
     slots: openArray[(Hash32, UInt256)];
       ): CoreDbRc[void] =
-  ## Batched variant of `mergeSlot()` for several slots of the same account.
+  ## Variant of `mergeSlot()` for several slots of the same account.
   acc.aTx.mergeSlots(accPath, slots).isOkOr:
     return err(error.toError(""))
 

@@ -195,24 +195,19 @@ proc deleteAccount*(
 
   ok()
 
-proc deleteSlot*(
+proc deleteSlots*(
     db: AristoTxRef;
     accPath: Hash32;
-    stoPath: Hash32;
+    stoPaths: openArray[Hash32];
       ): Result[void,AristoError] =
-  ## For a given account argument `accPath`, this function deletes the
-  ## argument `stoPath` from the associated storage tree (if any, at all.) If
-  ## the if the argument `stoPath` deleted was the last one on the storage tree,
-  ## account leaf referred to by `accPath` will be updated so that it will
-  ## not refer to a storage tree anymore.
+  ## For a given account argument `accPath`, this function deletes all the
+  ## `stoPaths` entries from the associated storage tree (if any, at all.) If
+  ## the last entry on the storage tree was deleted, the account leaf referred
+  ## to by `accPath` will be updated so that it will not refer to a storage
+  ## tree anymore.
   ##
-
-  let
-    mixPath = mixUp(accPath, stoPath)
-    stoLeaf = db.cachedStoLeaf(mixPath)
-
-  if stoLeaf == Opt.some(nil):
-    return ok() # Trying to delete something that doesn't exist is ok
+  if stoPaths.len == 0:
+    return ok()
 
   var accHike: Hike
   db.fetchAccountHike(accPath, accHike).isOkOr:
@@ -228,56 +223,87 @@ proc deleteSlot*(
   if not stoID.isValid:
     return ok() # Trying to delete something that doesn't exist is ok
 
-  let stoNibbles = NibblesBuf.fromBytes(stoPath.data)
-  var stoHike: Hike
-  stoNibbles.hikeUp(stoID.vid, db, stoLeaf, stoHike).isOkOr:
-    if error[1] in HikeAcceptableStopsNotFound:
-      return ok()
-    return err(error[1])
+  var
+    deleted = false
+    emptied = false
 
-  # Mark account path Merkle keys for update - the leaf key is not stored so no
-  # need to mark it
-  db.layersResKeys(accHike, skip = 1)
+  for stoPath in stoPaths:
+    let
+      mixPath = mixUp(accPath, stoPath)
+      stoLeaf = db.cachedStoLeaf(mixPath)
 
-  let otherVtx = ?db.deleteImpl(stoHike)
-  db.layersPutStoLeaf(mixPath, nil)
+    if stoLeaf == Opt.some(nil):
+      continue # Trying to delete something that doesn't exist is ok
 
-  if otherVtx.isValid:
-    if otherVtx.vType == StoLeaf:
-      let
-        sibStoPath = Hash32(getBytes(stoNibbles.replaceSuffix(StoLeafRef(otherVtx).pfx)))
-        leafMixPath = mixUp(accPath, sibStoPath)
-      db.layersPutStoLeaf(leafMixPath, StoLeafRef(otherVtx))
-      if db.collectWitness:
-        # Record the collapsed branch vid so we can check after all transactions
-        # whether the collapse was re-expanded by a later insertion.
-        db.collapsedSiblings.add((
-            accPath, Opt.some(sibStoPath),
-            stoID.vid,
-            stoHike.legs[^2].wp.vid))
-    elif db.collectWitness and otherVtx.vType in Branches:
-      # Branch collapse with non-leaf sibling: the witness must include the
-      # sibling branch node so stateless execution can read it. This builds a
-      # proof path for it: root prefix + extBranch.pfx (rest is arbitrary).
-      let
-        branchDepth =
-          64 - (
-            BranchRef(stoHike.legs[^2].wp.vtx).pfx.len + 1 +
-            StoLeafRef(stoHike.legs[^1].wp.vtx).pfx.len
+    let stoNibbles = NibblesBuf.fromBytes(stoPath.data)
+    var stoHike: Hike
+    stoNibbles.hikeUp(stoID.vid, db, stoLeaf, stoHike).isOkOr:
+      if error[1] in HikeAcceptableStopsNotFound:
+        continue
+      return err(error[1])
+
+    if not deleted:
+      deleted = true
+      # Mark account path Merkle keys for update - the leaf key is not stored so
+      # no need to mark it
+      db.layersResKeys(accHike, skip = 1)
+
+    let otherVtx = ?db.deleteImpl(stoHike)
+    db.layersPutStoLeaf(mixPath, nil)
+
+    if otherVtx.isValid:
+      if otherVtx.vType == StoLeaf:
+        let
+          sibStoPath = Hash32(getBytes(stoNibbles.replaceSuffix(StoLeafRef(otherVtx).pfx)))
+          leafMixPath = mixUp(accPath, sibStoPath)
+        db.layersPutStoLeaf(leafMixPath, StoLeafRef(otherVtx))
+        if db.collectWitness:
+          # Record the collapsed branch vid so we can check after all transactions
+          # whether the collapse was re-expanded by a later insertion.
+          db.collapsedSiblings.add((
+              accPath, Opt.some(sibStoPath),
+              stoID.vid,
+              stoHike.legs[^2].wp.vid))
+      elif db.collectWitness and otherVtx.vType in Branches:
+        # Branch collapse with non-leaf sibling: the witness must include the
+        # sibling branch node so stateless execution can read it. This builds a
+        # proof path for it: root prefix + extBranch.pfx (rest is arbitrary).
+        let
+          branchDepth =
+            64 - (
+              BranchRef(stoHike.legs[^2].wp.vtx).pfx.len + 1 +
+              StoLeafRef(stoHike.legs[^1].wp.vtx).pfx.len
+            )
+          sibStoPath = Hash32(
+            getBytes(stoNibbles.slice(0, branchDepth) & ExtBranchRef(otherVtx).pfx)
           )
-        sibStoPath = Hash32(
-          getBytes(stoNibbles.slice(0, branchDepth) & ExtBranchRef(otherVtx).pfx)
-        )
-      db.collapsedSiblings.add((accPath, Opt.some(sibStoPath), VertexID(0), VertexID(0)))
+        db.collapsedSiblings.add((accPath, Opt.some(sibStoPath), VertexID(0), VertexID(0)))
 
-  # If there was only one item (that got deleted), update the account as well
-  if stoHike.legs.len == 1:
+    # If there was only one item (that got deleted), update the account as well
+    if stoHike.legs.len == 1:
+      emptied = true
+      break
+
+  if emptied:
     # De-register the deleted storage tree from the account record
     let leaf = db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
     leaf.stoID.isValid = false
     db.layersPutAccLeaf(accPath, leaf)
 
   ok()
+
+proc deleteSlot*(
+    db: AristoTxRef;
+    accPath: Hash32;
+    stoPath: Hash32;
+      ): Result[void,AristoError] =
+  ## For a given account argument `accPath`, this function deletes the
+  ## argument `stoPath` from the associated storage tree (if any, at all.) If
+  ## the if the argument `stoPath` deleted was the last one on the storage tree,
+  ## account leaf referred to by `accPath` will be updated so that it will
+  ## not refer to a storage tree anymore.
+  ##
+  db.deleteSlots(accPath, [stoPath])
 
 proc clearStorage*(
     db: AristoTxRef;                   # Database, top layer
