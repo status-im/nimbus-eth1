@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos, minilru, results, stew/byteutils],
-  ./worker/[download, helpers, cache_db, state_forward,
+  ./worker/[download, helpers, cache_db, import_coredb, state_forward,
             start_stop, update, worker_desc]
 
 logScope:
@@ -100,6 +100,9 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         bodyRc = daemonWaitResumeInterval           # not yet? take a nap
 
     of SnapClear:
+      ctx.pool.coreDb2Path.reset                    # maybe failed DB assmbly
+      ctx.pool.resetReq = false                     # sanity measure
+
       # Clear cache DB if needed.
       let hasData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr: false
       if hasData and not ctx.pool.cacheDB.clear(info):
@@ -147,7 +150,13 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         forwardNum=ctx.pool.forwardNum
 
     of SnapAssembleMpt:
-      bodyRc = daemonWaitElseInterval
+      let dbPath = ctx.importCoreDb(info).valueOr:
+        ctx.pool.resetReq = true                    # not much else possible
+        break body
+
+      ctx.pool.coreDb2Path = dbPath
+      debug info & ": CoreDb/Aristo available", dbPath
+      break body
 
     # of TBD ..
 

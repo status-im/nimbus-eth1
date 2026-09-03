@@ -11,6 +11,7 @@
 {.push raises:[].}
 
 import
+  std/paths,
   pkg/[chronos, eth/common, minilru, results],
   ../../../core/chain,
   ../../sync_desc,
@@ -124,6 +125,8 @@ type
     forwardNum*: BlockNumber         ## Max possible BALs forward
     balsLocked*: SnapPeerRef         ## Only one peer can download BALs
     failedEthBalId*: EthBalHashSet   ## Ditto for eth peers
+    coreDb2Path*: Path               ## Assembled core DM path
+    resetReq*: bool                  ## Restart system (problem with cache data)
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one

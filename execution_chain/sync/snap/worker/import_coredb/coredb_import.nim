@@ -111,16 +111,23 @@ proc importFlatImpl(
         accPath=w.accPath.toStr, `error`=w.error
       return err()
 
-    # Verify that the code and storage are properly updated.
+    # Verify that the code and storage are properly updated. No need to
+    # test the `storageRoot` as it will be reset to `zeroHash32` when BAL
+    # forwarding.
+    var nErrors = 0
     if w.data.dirtyCode:
-      trace info & ": Flat contract code DB incoplete", accPath=w.accPath.toStr
-      return ok((0,0))
+      nErrors.inc
     if w.data.dirtyStorage:
-      trace info & ": Flat storage MPT incoplete", accPath=w.accPath.toStr
+      nErrors.inc
+    if w.data.account.codeHash == zeroHash32:
+      nErrors.inc
+    if 0 < nErrors:
+      error info & ": account record is incomplete",
+        accPath=w.accPath.toStr,
+        dirtyStorage=w.data.dirtyStorage,
+        dirtyCode=w.data.dirtyCode,
+        codeHash=w.data.account.codeHash.toStr
       return ok((0,0))
-
-    doAssert w.data.account.codeHash != zeroHash32
-    doAssert w.data.account.storageRoot != zeroHash32
 
     if w.data.account.storageRoot == EMPTY_ROOT_HASH:
       # Save account only

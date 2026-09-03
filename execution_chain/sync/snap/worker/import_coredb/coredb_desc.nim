@@ -36,6 +36,7 @@ type
   CoreDb2Ref* = ref object
     ## Secondary core DB
     tx2*: CoreDbTxRef
+    dbDir*: Path
     db2: CoreDbRef
 
 # ------------------------------------------------------------------------------
@@ -51,12 +52,11 @@ proc init*(_: type CoreDb2Ref, ctx: SnapCtxRef, clean = false): CoreDb2Ref =
   if clean:
     db2.close(wipe=true)
     db2 = AristoDbRocks.newCoreDbRef(dataDir, dbOpts)
-  CoreDb2Ref(db2: db2, tx2: db2.baseTxFrame)
+  CoreDb2Ref(db2: db2, tx2: db2.baseTxFrame, dbDir: Path dataDir)
 
 proc destroy*(db: CoreDb2Ref) =
   db.db2.close()
-  db.tx2 = nil
-  db.db2 = nil
+  db[].reset
 
 # ------------------------------------------------------------------------------
 # Public helpers

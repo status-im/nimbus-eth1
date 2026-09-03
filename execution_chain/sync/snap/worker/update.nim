@@ -11,6 +11,7 @@
 {.push raises:[].}
 
 import
+  std/paths,
   pkg/chronicles,
   ./[cache_db, worker_const, worker_desc]
 
@@ -124,7 +125,13 @@ proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
 
 proc assembleMptNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
-  SnapStop                                          # FIXME, must change
+  if ctx.pool.resetReq:                             # Oops, something failed
+    return SnapClear
+  if 0 < ctx.pool.coreDb2Path.string.len:
+    return SnapStop                                 # FIXME, must change
+  # Reaching here would be quite unusual as this state is handled
+  # by the deamon in the foreground.
+  SnapAssembleMpt
 
 # TBD ..
 
