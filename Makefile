@@ -422,14 +422,10 @@ stateless_guest_baremetal: | build deps
 
 # The guest as an ordinary host binary, with zkvm_io_stdio.c supplying read_input
 # and write_output over stdin/stdout in place of a zkVM runtime.
-#
-# gcc 14 errors on a pointer type that disagrees with the C prototype, earlier
-# versions only warn. Promote it so every gcc behaves like gcc 14. clang still
-# passes either way: nimbase.h ignores the diagnostic.
-STATELESS_GUEST_NATIVE_FLAGS := --passC:"-Werror=incompatible-pointer-types"
-
 stateless_guest_native: | build deps
-	$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) $(STATELESS_GUEST_NATIVE_FLAGS) --compile:"execution_chain/stateless/zkvm_io_stdio.c" -o:build/$@ "execution_chain/stateless/stateless_guest.nim"
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) --compile:"execution_chain/stateless/zkvm_io_stdio.c" -o:build/$@ "execution_chain/stateless/stateless_guest.nim" && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 # Two runs: the full suite with standard flags, then the guest specific test
 # with flags closer to the zkVM guest.
