@@ -48,7 +48,7 @@ type
   BlockHashesCache* = LruCache[BlockNumber, Hash32]
 
   AccountFlag = enum
-    Alive
+    LeafExists
     IsNew
     Dirty
     Touched
@@ -232,7 +232,7 @@ proc getAccount(
     result = AccountRef(
       statement: rc.value,
       accPath:   accPath,
-      flags:     {Alive},
+      flags:     {LeafExists},
     )
 
   if ledger.balOverlay.isSome() and ledger.balOverlay[].hasAccount(address):
@@ -241,7 +241,7 @@ proc getAccount(
       result = AccountRef(
         statement: EMPTY_STATEMENT,
         accPath:   accPath,
-        flags:    {Alive}
+        flags:    {LeafExists}
       )
     ledger.applyOverlay(address, result)
     # If the account from the overlay is empty, it was self destructed
@@ -258,7 +258,7 @@ proc getAccount(
     result = AccountRef(
       statement: EMPTY_STATEMENT,
       accPath:    accPath,
-      flags:      {Alive, IsNew},
+      flags:      {LeafExists, IsNew},
       original: OriginalValueRef(
         statement: EMPTY_STATEMENT,
       )
@@ -284,7 +284,7 @@ proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
     result.overlayStorage = acc.overlayStorage
 
 template exists(acc: AccountRef): bool =
-  Alive in acc.flags
+  LeafExists in acc.flags
 
 template fetchSlotChecked(ledger: LedgerRef, accPath: Hash32, slotKey: Hash32): UInt256 =
   ## Like `fetchSlot`, but a witness gap on the slot's path is a fatal
@@ -338,7 +338,7 @@ proc storageValue(
     result = acc.originalStorageValue(address, slot, ledger)
 
 proc kill(ledger: LedgerRef, acc: AccountRef) =
-  acc.flags.excl Alive
+  acc.flags.excl LeafExists
   acc.overlayStorage.clear()
   acc.original.storage.clear()
   acc.statement = EMPTY_STATEMENT
@@ -352,7 +352,7 @@ type
 
 proc persistMode(acc: AccountRef): PersistMode =
   result = DoNothing
-  if Alive in acc.flags:
+  if LeafExists in acc.flags:
     if IsNew in acc.flags or Dirty in acc.flags:
       result = Update
   else:
@@ -724,13 +724,13 @@ proc isEmptyAccount*(ledger: LedgerRef, address: Address): bool =
   doAssert acc.exists()
   acc.isEmpty()
 
-proc isDeadAccount*(ledger: LedgerRef, address: Address): bool =
+proc isAccountAlive*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
-    return true
+    return false
   if not acc.exists():
-    return true
-  acc.isEmpty()
+    return false
+  not acc.isEmpty()
 
 proc originalAccountEmpty*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
@@ -740,7 +740,7 @@ proc originalAccountEmpty*(ledger: LedgerRef, address: Address): bool =
 
 proc setBalance*(ledger: LedgerRef, address: Address, balance: UInt256) =
   let acc = ledger.getAccount(address)
-  acc.flags.incl {Alive}
+  acc.flags.incl {LeafExists}
   if acc.statement.balance != balance:
     ledger.makeDirty(address).statement.balance = balance
 
@@ -778,7 +778,7 @@ proc subBalance*(ledger: LedgerRef, address: Address, delta: UInt256) =
 
 proc setNonce*(ledger: LedgerRef, address: Address, nonce: AccountNonce) =
   let acc = ledger.getAccount(address)
-  acc.flags.incl {Alive}
+  acc.flags.incl {LeafExists}
   if acc.statement.nonce != nonce:
     ledger.makeDirty(address).statement.nonce = nonce
 
@@ -787,7 +787,7 @@ proc incNonce*(ledger: LedgerRef, address: Address) =
 
 proc setCode*(ledger: LedgerRef, address: Address, code: seq[byte]) =
   let acc = ledger.getAccount(address)
-  acc.flags.incl {Alive}
+  acc.flags.incl {LeafExists}
   let codeHash = keccak256(code)
   if acc.statement.codeHash != codeHash:
     var acc = ledger.makeDirty(address)
@@ -801,7 +801,7 @@ proc setCode*(ledger: LedgerRef, address: Address, code: seq[byte]) =
 
 proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
   let acc = ledger.getAccount(address)
-  acc.flags.incl {Alive}
+  acc.flags.incl {LeafExists}
 
   if ledger.collectWitness:
     let lookupKey = (address, Opt.some(slot))
@@ -817,7 +817,7 @@ proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
 proc clearStorage*(ledger: LedgerRef, address: Address) =
   # If there is an existing account with the given address, it is overwritten.
   let acc = ledger.getAccount(address)
-  acc.flags.incl {Alive, NewlyCreated}
+  acc.flags.incl {LeafExists, NewlyCreated}
 
   if ledger.txFrame.hasStorage(acc.accPath).valueOr(false):
     # need to clear the storage from the database first
@@ -1001,7 +1001,7 @@ proc persist*(ledger: LedgerRef,
     of DoNothing:
       # dead man tell no tales
       # remove touched dead account from cache
-      if Alive notin acc.flags:
+      if LeafExists notin acc.flags:
         ledger.savePoint.cache.del address
 
     acc.flags = acc.flags - resetFlags
@@ -1102,7 +1102,7 @@ proc getCode*(ledger: ReadOnlyLedger, address: Address): CodeBytesRef = getCode(
 proc getCodeSize*(ledger: ReadOnlyLedger, address: Address): int = getCodeSize(distinctBase ledger, address)
 proc contractCollision*(ledger: ReadOnlyLedger, address: Address): bool = contractCollision(distinctBase ledger, address)
 proc accountExists*(ledger: ReadOnlyLedger, address: Address): bool = accountExists(distinctBase ledger, address)
-proc isDeadAccount*(ledger: ReadOnlyLedger, address: Address): bool = isDeadAccount(distinctBase ledger, address)
+proc isAccountAlive*(ledger: ReadOnlyLedger, address: Address): bool = isAccountAlive(distinctBase ledger, address)
 proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAccount(distinctBase ledger, address)
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase ledger, address)

@@ -84,7 +84,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         attrsOpt: Opt[PayloadAttributes],
                         custodyColumns = Opt.none(seq[byte])):
                           Future[ForkchoiceUpdatedResponse]
-                            {.async: (raises: [CancelledError, ApplicationError]).} =
+                            {.async: (raises: [CancelledError, RpcResponseError]).} =
   let
     com   = ben.com
     chain = ben.chain
