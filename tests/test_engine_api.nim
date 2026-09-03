@@ -481,7 +481,7 @@ proc newPayloadV5UndecodableBAL(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
