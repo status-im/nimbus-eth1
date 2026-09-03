@@ -155,6 +155,21 @@ const
     ClearAccountPreserveBalance
     }
 
+  slotHistBuckets = 17
+
+type
+  SlotHist = array[slotHistBuckets, int]
+
+  SlotStats = object
+    accounts: int
+    merged: int
+    deleted: int
+    maxMerged: int
+    maxDeleted: int
+    mergeHist: SlotHist
+    deleteHist: SlotHist
+
+const
   EMPTY_STATEMENT = CoreDbAccount(
     nonce:    EMPTY_ACCOUNT.nonce,
     balance:  EMPTY_ACCOUNT.balance,
@@ -392,7 +407,24 @@ func cmpSlotKey(a, b: Hash32): int =
       return cmp(a.data[i], b.data[i])
   0
 
-proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
+func bump(hist: var SlotHist, n: int) =
+  if n > 0:
+    inc hist[min(n, hist.high)]
+
+func histTxt(hist: SlotHist): string =
+  for i in 1 .. hist.high:
+    if hist[i] > 0:
+      if result.len > 0:
+        result.add ' '
+      result.add $i
+      if i == hist.high:
+        result.add '+'
+      result.add ':'
+      result.add $hist[i]
+
+proc persistStorage(
+    acc: AccountRef, ledger: LedgerRef, stats: var SlotStats
+): Result[void, string] =
   const info = "persistStorage(): "
 
   if acc.overlayStorage.len == 0:
@@ -445,6 +477,15 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   slotMerges.sort do (a, b: (Hash32, UInt256)) -> int:
     cmpSlotKey(a[0], b[0])
   slotDeletes.sort(cmpSlotKey)
+
+  if slotMerges.len > 0 or slotDeletes.len > 0:
+    inc stats.accounts
+    stats.merged += slotMerges.len
+    stats.deleted += slotDeletes.len
+    stats.maxMerged = max(stats.maxMerged, slotMerges.len)
+    stats.maxDeleted = max(stats.maxDeleted, slotDeletes.len)
+    stats.mergeHist.bump slotMerges.len
+    stats.deleteHist.bump slotDeletes.len
 
   ledger.txFrame.mergeSlots(acc.accPath, slotMerges).isOkOr:
     return err(info & $$error)
@@ -960,6 +1001,8 @@ proc persist*(ledger: LedgerRef,
   # make sure all savePoint already committed
   doAssert(ledger.savePoint.parentSavePoint.isNil)
 
+  var slotStats: SlotStats
+
   for address in ledger.savePoint.selfDestruct:
     ledger.deleteAccount(address)
 
@@ -980,7 +1023,7 @@ proc persist*(ledger: LedgerRef,
         ledger.txFrame.clearStorage(acc.accPath).expect("can clear storage of account")
 
       if StorageChanged in acc.flags:
-        acc.persistStorage(ledger).isOkOr:
+        acc.persistStorage(ledger, slotStats).isOkOr:
           ledger.setFatalErrorOrAssert(error)
       else:
         # This one is only necessary unless `persistStorage()` is run which needs
@@ -1011,6 +1054,16 @@ proc persist*(ledger: LedgerRef,
     # TODO https://github.com/nim-lang/Nim/issues/23759
     swap(ledger.cache, ledger.savePoint.cache)
     ledger.savePoint.cache.reset()
+
+  if slotStats.accounts > 0:
+    debug logTxt "persist() slots",
+      accounts = slotStats.accounts,
+      merged = slotStats.merged,
+      deleted = slotStats.deleted,
+      maxMerged = slotStats.maxMerged,
+      maxDeleted = slotStats.maxDeleted,
+      mergeHist = slotStats.mergeHist.histTxt,
+      deleteHist = slotStats.deleteHist.histTxt
 
   ledger.savePoint.dirty.clear()
   ledger.savePoint.selfDestruct.clear()
