@@ -22,8 +22,11 @@ import
   ../../../../db/[aristo, core_db, core_db/persistent, opts],
   ../worker_desc
 
+from ../../../../db/core_db/backend/rocksdb_desc
+  import DbFolder
+
 const
-  coreDb2Folder = "coredb"
+  coreDb2Folder = DbFolder & ".new"
 
 type
   AristoImportStats* = tuple
