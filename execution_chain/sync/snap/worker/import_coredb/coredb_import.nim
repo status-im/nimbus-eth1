@@ -20,8 +20,8 @@
 import
   std/paths,
   pkg/[chronicles, eth/common],
-  ../../../../../db/core_db,
-  ../../[helpers, mpt, worker_desc],
+  ../../../../db/core_db,
+  ../[helpers, mpt, worker_desc],
   ./coredb_desc
 
 logScope:

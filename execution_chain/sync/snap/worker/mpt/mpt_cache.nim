@@ -34,7 +34,7 @@
 import
   ./mpt_cache/[
     cache_desc, cache_flat, cache_flat_simple, cache_init,
-    cache_header_bal, cache_header_bal_simple]
+    cache_header_bal, cache_header_bal_simple, cache_stats]
 
 export
   cache_desc,
@@ -42,6 +42,7 @@ export
   cache_flat_simple,
   cache_header_bal,
   cache_header_bal_simple,
-  cache_init
+  cache_init,
+  cache_stats
 
 # End

@@ -19,8 +19,8 @@
 
 import
   std/paths,
-  ../../../../../db/[aristo, core_db, core_db/persistent, opts],
-  ../../worker_desc
+  ../../../../db/[aristo, core_db, core_db/persistent, opts],
+  ../worker_desc
 
 const
   coreDb2Folder = "coredb"

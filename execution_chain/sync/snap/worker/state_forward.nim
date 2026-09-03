@@ -13,8 +13,8 @@
 import
   pkg/[chronicles, eth/common],
   pkg/stew/[byteutils, interval_set],
-  ../[helpers, mpt, worker_desc],
-  ./session_forward/[forward_apply, forward_calc]
+  ./[helpers, mpt, worker_desc],
+  ./state_forward/[forward_apply, forward_calc]
 
 logScope:
   topics = "snap sync"
@@ -31,13 +31,13 @@ const
     ## and will go away.
 
 when VerifyAgainstCoreDb:
-  import ./session_coredb
+  import ./import_coredb
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc sessionForwardVerify*(
+proc stateForwardVerify*(
     ctx: SnapCtxRef;
     info: static[string];
       ): Opt[void] =
@@ -77,7 +77,7 @@ proc sessionForwardVerify*(
 
   ok()
 
-proc sessionForward*(
+proc stateForward*(
     ctx: SnapCtxRef;
     info: static[string];
     nBalsMax = high(uint);

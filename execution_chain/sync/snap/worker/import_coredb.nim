@@ -8,12 +8,20 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+## Not for production, yet.
+## ------------------------
+##
+## Module depends on CoreDb/Aristo. This module serves as a template for
+## how to flush and re-fill production Aristo from the flat snap sync
+## tables once they are ready.
+##
 {.push raises: [].}
 
 import
-  ./session_stats/stats_state
+  ./import_coredb/[coredb_desc, coredb_import, coredb_stats]
 
 export
-  stats_state
+  coredb_desc,
+  coredb_import
 
 # End

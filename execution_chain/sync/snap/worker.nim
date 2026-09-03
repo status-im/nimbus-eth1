@@ -12,7 +12,8 @@
 
 import
   pkg/[chronicles, chronos, minilru, results, stew/byteutils],
-  ./worker/[download, helpers, mpt, session, start_stop, update, worker_desc]
+  ./worker/[download, helpers, mpt, state_forward,
+            start_stop, update, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -136,7 +137,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       bodyRc = daemonWaitElseInterval               # wait for sync
 
     of SnapStateForward:
-      ctx.sessionForward(info).isOkOr:
+      ctx.stateForward(info).isOkOr:
         break body
 
       # Prepare for next download cyle

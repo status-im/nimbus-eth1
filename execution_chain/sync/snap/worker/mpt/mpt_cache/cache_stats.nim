@@ -13,8 +13,8 @@
 import
   pkg/[chronicles, chronos, stew/interval_set],
   ../../../../../networking/[p2p, peer_pool],
-  ../../download/download_helpers,
-  ../../[helpers, mpt, worker_desc]
+  ../../[helpers, worker_desc],
+  ./[cache_desc, cache_flat, cache_flat_simple]
 
 logScope:
   topics = "snap sync"
@@ -39,6 +39,14 @@ type
     nCodeBlob: int
     nLockCode: int
     nMissCode: int
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+func isFullRange(itrs: ItemKeyRangeSet): bool =
+  itrs.total == 0 and                               # => 0 or 2^256
+  itrs.chunks == 1                                  # => one intv => full MPT
 
 # ------------------------------------------------------------------------------
 # Private functions
