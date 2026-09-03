@@ -146,6 +146,9 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       debug info & ": Forwarded state", pivotNum=ctx.pool.pivotNum,
         forwardNum=ctx.pool.forwardNum
 
+    of SnapAssembleMpt:
+      bodyRc = daemonWaitElseInterval
+
     # of TBD ..
 
     of SnapStop:

@@ -51,12 +51,10 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   let haveData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr:
-    return SnapStop                                 # DB problem, failure
-
+    return SnapClear                                # DB problem, failure
   if haveData and ctx.accUnproc.synced():
     info info & ": Resuming previous session"
     return SnapBalsFetch
-
   info info & ": No previous session available"
   SnapClear
 
@@ -81,26 +79,6 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
 
 # -------------------------
 
-proc downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
-  ## State transition handler
-  # Check whether one should forward the downloaded partial state
-  let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
-  if ctx.pool.pivotNum + consHeadSupportWindowSize < consHeadNum:
-    ctx.poolMode = true
-    return SnapDownloadFinish                       # => sync peers
-  ctx.allDownloaded(info).isErrOr:                  # download is complete?
-    ctx.poolMode = true
-    return SnapDownloadFinish                       # => sync peers
-  SnapDownload                                      # keep downloading
-
-proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
-  ## State transition handler
-  if ctx.poolMode:                                  # wait for peers to sync
-    return SnapDownloadFinish
-  ctx.allDownloaded(info).isErrOr:                  # download is complete?
-    return SnapStop                                 # FIXME, must change
-  SnapBalsFetch
-
 proc balsFetchNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.pivotNum < ctx.pool.forwardNum:       # can bring forward state?
@@ -118,8 +96,34 @@ proc stateForwardNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.pivotNum < ctx.pool.forwardNum:       # must bring forward state
     return SnapStateForward
-  if true:                                          # FIXME, must change
-    return SnapDownload
+  SnapDownload
+
+# -------------------------
+
+proc downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
+  ## State transition handler
+  # Check whether one should forward the downloaded partial state
+  let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
+  if ctx.pool.pivotNum + consHeadSupportWindowSize < consHeadNum:
+    ctx.poolMode = true
+    return SnapDownloadFinish                       # => sync peers
+  ctx.allDownloaded(info).isErrOr:                  # download is complete?
+    ctx.poolMode = true
+    return SnapDownloadFinish                       # => sync peers
+  SnapDownload                                      # keep downloading
+
+proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
+  ## State transition handler
+  if ctx.poolMode:                                  # wait for peers to sync
+    return SnapDownloadFinish
+  ctx.allDownloaded(info).isErrOr:                  # download is complete?
+    return SnapAssembleMpt
+  SnapBalsFetch
+
+# -------------------------
+
+proc assembleMptNext(ctx: SnapCtxRef, info: static[string]): SnapState =
+  ## State transition handler
   SnapStop                                          # FIXME, must change
 
 # TBD ..
@@ -140,22 +144,25 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   #                         idle ---------.
   #                           |           |
   #                           v           v
-  #                        resume ----> clear
-  #                           |           |
-  #                           v           v
-  #                .----> balsFetch     ready
-  #                |          |           |
-  #                |          v           |
-  #                |    balsFetchFinish   |
-  #                |          |           |
-  #                |          v           |
-  #                |     stateForward     |
-  #                |          |           |
-  #                |          v           |
-  #                |       download <-----'
-  #                |          |
-  #                |          v
-  #                `--- downloadFinish
+  #                        resume ----> clear <---.
+  #                           |           |       |
+  #                           v           v       |
+  #                .----> balsFetch     ready     |
+  #                |          |           |       |
+  #                |          v           |       |
+  #                |    balsFetchFinish   |       |
+  #                |          |           |       |
+  #                |          v           |       |
+  #                |     stateForward     |       |
+  #                |          |           |       |
+  #                |          v           |       |
+  #                |       download <-----'       |
+  #                |          |                   |
+  #                |          v                   |
+  #                `--- downloadFinish            |
+  #                           |                   |
+  #                           v                   |
+  #                       assembleMpt ------------'
   #                           |
   #                           v
   #                         [...]
@@ -183,6 +190,8 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
       ctx.balsFetchFinishNext info
     of SnapStateForward:
       ctx.stateForwardNext info
+    of SnapAssembleMpt:
+      ctx.assembleMptNext info
 
     # [..]
 
@@ -196,7 +205,7 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   ctx.pool.syncState = newState
 
   case newState:
-  of SnapReady, SnapDownload, SnapDownloadFinish:
+  of SnapReady, SnapDownload, SnapDownloadFinish, SnapAssembleMpt:
     chronicles.info info & ": State changed", prevState, newState,
       pivot=ctx.pool.pivotNum, nSyncPeers=ctx.nSyncPeers()
   of SnapBalsFetch, SnapBalsFetchFinish, SnapStateForward:
