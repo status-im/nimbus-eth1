@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[].}
+
 import
   results,
   chronicles,
@@ -15,12 +17,12 @@ import
   web3/[execution_types, primitives],
   json_rpc/errors,
   ../../core/tx_pool,
+  ../../core/focil,
+  ../../db/ledger,
   ../web3_eth_conv,
   ../beacon_engine,
   ../payload_conv,
   ./api_utils
-
-{.push gcsafe, raises:[].}
 
 logScope:
   topics = "beacon engine"
@@ -161,7 +163,7 @@ template validatePayload(apiVersion, payload) =
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
 func validateExecutionRequest(
             requests: openArray[seq[byte]], apiVersion: Version):
-              Opt[PayloadStatusV1] {.raises: [RpcResponseError].} =
+              Opt[PayloadStatus] {.raises: [RpcResponseError].} =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
@@ -195,16 +197,26 @@ func validateExecutionRequest(
           "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
 
     previousRequestType = requestType.int
-  Opt.none(PayloadStatusV1)
+  Opt.none(PayloadStatus)
+
+proc getValidIL(inclusionList: Opt[InclusionList],
+                txFrame: CoreDbTxRef, blk: Block): Opt[bool] =
+  if inclusionList.isNone:
+    return Opt.none(bool)
+
+  let
+    decodedIL = decodeIL(inclusionList.value)
+    ledger = LedgerRef.init(txFrame)
+  Opt.some(validateInclusionList(ledger, decodedIL, blk))
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(seq[seq[byte]])):
-                   Future[PayloadStatusV1] {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
-
+                 executionRequests = Opt.none(seq[seq[byte]]),
+                 inclusionList = Opt.none(InclusionList)):
+                   Future[PayloadStatus] {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
   trace "Engine API request received",
     meth = "newPayload",
     number = payload.blockNumber,
@@ -223,6 +235,11 @@ proc newPayload*(ben: BeaconEngineRef,
     let res = validateExecutionRequest(executionRequests.value, apiVersion)
     if res.isSome:
       return res.value
+
+  if apiVersion >= Version.V6:
+    if inclusionList.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": inclusionList is expected from execution payload")
 
   let
     com = ben.com
@@ -350,4 +367,5 @@ proc newPayload*(ben: BeaconEngineRef,
     gasUsed = header.gasUsed,
     blobGas = header.blobGasUsed.get(0'u64)
 
-  return validStatus(blockHash)
+  let validIL = getValidIL(inclusionList, chain.latestTxFrame(), blk)
+  return validStatus(blockHash, validIL)

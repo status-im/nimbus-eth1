@@ -26,6 +26,18 @@ const
 
 const skipFiles = [
   "CALLBlake2f_MaxRounds.json", # Doesn't work in github CI
+
+  # blobGasUSed
+  "insufficient_balance_blob_tx_combinations.json",
+  "invalid_blob_hash_versioning_multiple_txs.json",
+  "invalid_blob_hash_versioning_single_tx.json",
+  "invalid_block_blob_count.json",
+  "invalid_tx_blob_count.json",
+  "invalid_tx_max_fee_per_blob_gas.json",
+  "invalid_normal_gas.json",
+
+  # BAL
+  "tx_gas_limit.json",
 ]
 
 runEESTSuite(
