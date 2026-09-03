@@ -14,6 +14,7 @@ import
   std/[sequtils, typetraits],
   pkg/[chronicles, chronos],
   ../../[helpers, mpt, worker_desc],
+  ../download_helpers,
   ./code_fetch
 
 logScope:
@@ -56,7 +57,17 @@ proc storeValidatedCodes(
 
     # Store contract code
     if 0 < code.len:
-      adb.putFlatCode(cdeItem.accPath, code, info).isOkOr:
+      # Need to fetch account now for updating latest record
+      var accData = adb.getFlatAcc(cdeItem.accPath, info).valueOr:
+        return err(ECacheError)                     # cannot do much, here
+      accData.dirtyCode = false                     # update account flag
+      adb.putFlatAcc(cdeItem.accPath, accData, info).isOkOr:
+        return err(ECacheError)                     # cannot do much, here
+
+      # Save contract code and unlock
+      adb.delCodeLock(cdeItem.accPath,info).isOkOr: # sub-MPT not in-use anymore
+        return err(ECacheError)                     # cannot do much, here
+      adb.putFlatCode(cdeItem.accPath,code, info).isOkOr:
         return err(ECacheError)                     # cannot do much, here
 
     cdeItem.processed = true
@@ -69,10 +80,11 @@ proc storeValidatedCodes(
 # ------------------------------------------------------------------------------
 
 proc fetchAndLockCodeList(
-    adb: CacheDbRef;
+    buddy: SnapPeerRef;
     info: static[string];                           # Log message prefix
       ): Result[seq[AccCodeItem],ErrorType] =
   ## Collect some missing contract code items from cache DB
+  let adb = buddy.ctx.pool.cacheDB
   var cdeQ = newSeqOfCap[AccCodeItem](fetchCodeBatchMax)
 
   for accPath in adb.walkMissingBlob():
@@ -88,36 +100,35 @@ proc fetchAndLockCodeList(
 
   # Remove from cache DB, so there is unique access
   for w in cdeQ:
+    adb.putCodeLock(w.accPath,info).isOkOr:         # mark sub-MPT in-use
+      return err(ECacheError)                       # cannot do much, here
     adb.delMissingBlob(w.accPath, info).isOkOr:
-      return err(ECacheError)                      # cannot do much, here
+      return err(ECacheError)                       # cannot do much, here
 
   ok(move cdeQ)
 
-proc saveCodeUpdates(
-    adb: CacheDbRef;
+proc commitCodeUpdates(
+    buddy: SnapPeerRef;
     cdeQ: openArray[AccCodeItem];
     info: static[string];                           # Log message prefix
       ): Result[int,ErrorType] =
   ## Post process updated contract code items. The corresponding accounting
   ## data are updated on the cache DB.
   ##
+  let adb = buddy.ctx.pool.cacheDB
   var nUnprocessed = 0
   for w in cdeQ:
 
     # Check whether contract code was updated.
-    if w.processed:
-      # Need to fetch account now for updating latest record
-      var accData = adb.getFlatAcc(w.accPath, info).valueOr:
-        return err(ECacheError)                      # cannot do much, here
-      accData.dirtyCode = false                      # update account flag
-      adb.putFlatAcc(w.accPath, accData, info).isOkOr:
-        return err(ECacheError)                      # cannot do much, here
-      continue
+    if not w.processed:
+      # Store back missing contract code record
+      adb.putMissingBlob(w.accPath, info).isOkOr:
+        return err(ECacheError)                     # cannot do much, here
+      nUnprocessed.inc
 
-    # Otherwise store missing contract code record
-    adb.putMissingBlob(w.accPath, info).isOkOr:
-      return err(ECacheError)                        # cannot do much, here
-    nUnprocessed.inc
+    # Clear lock
+    adb.delCodeLock(w.accPath,info).isOkOr:         # mark sub-MPT in-use
+      return err(ECacheError)                       # cannot do much, here
 
   ok(move nUnprocessed)
 
@@ -181,13 +192,11 @@ template queueAndDownload(
   var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
     let
-      adb = buddy.ctx.pool.cacheDB
-
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = stateRoot.toStr        # logging only
 
     # Collect some missing contract code addresses from cache DB
-    var cdeQ = adb.fetchAndLockCodeList(info).valueOr:
+    var cdeQ = buddy.fetchAndLockCodeList(info).valueOr:
       bodyRc = typeof(bodyRc).err(error)
       break body
 
@@ -197,20 +206,20 @@ template queueAndDownload(
     # Fetch data from network, validate and store it. The  `downloadImpl()`
     # directive will store any success in the `cdeQ[]` list.
     buddy.downloadImpl(stateRoot, number, cdeQ, info).isOkOr:
-      adb.saveCodeUpdates(cdeQ, info).isOkOr:       # restore by `stoQ[]`
+      buddy.commitCodeUpdates(cdeQ, info).isOkOr:   # restore by `stoQ[]`
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # oops, serious error
       bodyRc = typeof(bodyRc).err(error)
       break body
 
-    let nUnprocessed {.inject,used.} = adb.saveCodeUpdates(cdeQ, info).valueOr:
+    let nLeft = buddy.commitCodeUpdates(cdeQ, info).valueOr:
       trace info & ": Contract code processing failed", peer, root, number,
         syncState=($buddy.syncState), `error`=bodyRc.error
       bodyRc = typeof(bodyRc).err(error)
       break body
 
     chronicles.info info & ": Contract codes saved", peer, root, number,
-      nCodes=(cdeQ.len-nUnprocessed), nUnprocessed, syncState=($buddy.syncState)
+      nCodes=(cdeQ.len-nLeft), nUnprocessed=nLeft, syncState=($buddy.syncState)
 
     bodyRc = typeof(bodyRc).ok()
     # End `block body`
@@ -220,6 +229,30 @@ template queueAndDownload(
 # ------------------------------------------------------------------------------
 # Public function
 # ------------------------------------------------------------------------------
+
+proc codeDownloadCommit*(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Result[void,ErrorType] =
+  ## Get ready for state forward procedure using BAL.
+  ##
+  ## In particular, for missing contract codes and lock records, its
+  ## correspnding accounts are deleted.
+  ##
+  let adb = ctx.pool.cacheDB
+
+  # Collect stale code locks (if any)
+  var accPaths: seq[Hash32]
+  for key in adb.walkCodeLock:
+    accPaths.add key
+
+  for accPath in accPaths:
+    ctx.deleteAccount(accPath, info).isOkOr:
+      return err(ECacheError)
+
+  chronicles.info info & ": Cleared missing contract codes",
+    nCodeLock=accPaths.len
+  ok()
 
 template codeDownload*(
     buddy: SnapPeerRef;                             # Snap peer

@@ -33,9 +33,10 @@ proc init*(udb: var UnprocItemKeys; initRange: ItemKeyRange) =
   discard udb.unprocessed.merge initRange
 
 proc clear*(udb: var UnprocItemKeys) =
-  ## Reset argument range sets empty.
+  ## Reset argument range sets qnd clears sync flag.
   udb.unprocessed.clear()
   udb.borrowed.clear()
+  udb.syncedOk = false
 
 proc synced*(udb: UnprocItemKeys): bool =
   ## Getter
@@ -213,6 +214,9 @@ func totalTop*(udb: UnprocItemKeys): ItemKey =
         low(ItemKey)
   max(uMax, bMax)
 
+func chunks*(udb: UnprocItemKeys): int =
+  ## Total of chunks from `unprocessed` and `borrowed` range set.
+  udb.unprocessed.chunks + udb.borrowed.chunks
 
 func totalRatio*(udb: UnprocItemKeys): float =
   ## The function returns the factor of how much more data are to be processed
