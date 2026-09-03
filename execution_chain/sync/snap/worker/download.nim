@@ -90,8 +90,8 @@ proc downloadInit*(
       debug info & ": Start downloading", pivotNum=ctx.pool.pivotNum,
         forwardNum=ctx.pool.forwardNum
 
-    ctx.accountDownloadMetricsUpdate()
     ctx.accUnproc.synced = true
+    ctx.accountDownloadMetricsUpdate()
   ok()
 
 proc downloadCommit*(

@@ -213,7 +213,7 @@ proc statsStateImpl(
       nStoSlot = nFlatSlots,
 
       nContrCodes = stats.nContrCode,
-      nCodeBlob = (stats.nContrCode - stats.nDirtyCode),
+      nCodeBlob = stats.nCodeBlob,
       nMissCode = stats.nDirtyCode,
 
       ela=(Moment.now() - start).toStr

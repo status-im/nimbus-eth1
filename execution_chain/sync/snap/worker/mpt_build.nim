@@ -7,6 +7,12 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+## In-Memory MPT builder
+##
+## The main purpose of this module is to validate partial MPT data received
+## via the `snap` protocol.
+##
+
 {.push raises: [].}
 
 import

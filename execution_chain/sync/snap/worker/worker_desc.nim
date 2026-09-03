@@ -109,7 +109,7 @@ type
     peerType*: string                ## Self declared peer type
     failedReq*: PeerFirstFetchReq    ## Don't send the same failed request twice
     lastMsgLog*: Moment              ## Helps reducing logging noise
-    stateExhausted*: BlockNumber     ## Wait until state is forwarded
+    stateExhausted*: BlockNumber     ## Wait until pivot is forwarded
 
   SnapCtxData* = object
     ## Globally shared data extension
@@ -121,7 +121,7 @@ type
     baseDir*: string                 ## Path for assembly database
     cacheDB*: CacheDbRef             ## Downloas and assembly cache database
     headersSynced*: bool             ## beacon sync headers
-    pivotNum*: BlockNumber           ## Current appl;icable state block number
+    pivotNum*: BlockNumber           ## Last applicable state block number
     forwardNum*: BlockNumber         ## Max possible BALs forward
     balsLocked*: SnapPeerRef         ## Only one peer can download BALs
     failedEthBalId*: EthBalHashSet   ## Ditto for eth peers
