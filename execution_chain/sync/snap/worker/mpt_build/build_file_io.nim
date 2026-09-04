@@ -16,7 +16,7 @@
 import
   std/[streams, syncio],
   pkg/[eth/common, stew/byteutils, zlib],
-  ./mpt_build/build_desc
+  ./build_desc
 
 export
   GUnzipRef

@@ -14,7 +14,7 @@ import
   std/paths,
   pkg/[chronos, eth/common, rocksdb],
   pkg/stew/interval_set,
-  ../mpt/mpt_build/build_desc
+  ../mpt_build/build_desc
 
 export
   build_desc

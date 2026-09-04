@@ -12,9 +12,9 @@
 import
   std/[tables, typetraits],
   pkg/eth/trie/nibbles,
-  ../../../../../db/aristo/[aristo_constants, aristo_desc/desc_identifiers],
-  ../../../../wire_protocol/snap/snap_types,
-  ../../extra_types
+  ../../../../db/aristo/[aristo_constants, aristo_desc/desc_identifiers],
+  ../../../wire_protocol/snap/snap_types,
+  ../extra_types
 
 export
   EmptyBlob,
