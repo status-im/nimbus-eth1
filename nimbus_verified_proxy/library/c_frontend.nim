@@ -29,15 +29,15 @@ template callbackToC(
     dec ctx.pendingCalls
     let (status, response) =
       if fut.cancelled():
-        (RET_CANCELLED, Json.encode(fut.error().msg))
+        (RET_CANCELLED, EthJson.encode(fut.error().msg))
       elif fut.failed():
-        (RET_ERROR, Json.encode(fut.error().msg))
+        (RET_ERROR, EthJson.encode(fut.error().msg))
       else:
         let res = fut.value()
         if res.isErr():
           (RET_ERROR, $res.error.errType & ": " & res.error.errMsg)
         else:
-          (RET_SUCCESS, Json.encode(res.get()))
+          (RET_SUCCESS, EthJson.encode(res.get()))
 
     cb(ctx, status, alloc(response), userData)
 

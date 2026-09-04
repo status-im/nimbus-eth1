@@ -130,7 +130,7 @@ proc getAccount*(
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
     proof = ?(
-      (await backend.eth_getProof(address, @[], blockId(blockNumber))).tagBackend(
+      (await backend.eth_getProof(address, newSeq[Bytes32](), blockId(blockNumber))).tagBackend(
         backendIdx
       )
     )
@@ -201,7 +201,7 @@ proc getStorageAt*(
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
     proof = ?(
-      (await backend.eth_getProof(address, @[slot], blockId(blockNumber))).tagBackend(
+      (await backend.eth_getProof(address, @[slot.toStorageKey()], blockId(blockNumber))).tagBackend(
         backendIdx
       )
     )
@@ -231,7 +231,7 @@ proc populateCachesForAccountAndSlots(
     let
       (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
       proof = ?(
-        (await backend.eth_getProof(address, slotsToFetch, blockId(blockNumber))).tagBackend(
+        (await backend.eth_getProof(address, slotsToFetch.toStorageKeys(), blockId(blockNumber))).tagBackend(
           backendIdx
         )
       )
