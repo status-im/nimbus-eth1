@@ -111,7 +111,7 @@ proc putVtx(
 proc putKeyAtLevel(
     txRef: AristoTxRef,
     rvid: RootedVertexID,
-    vtx: BranchRef,
+    vtx: VertexRef,
     key: HashKey,
     level: int,
     batch: var WriteBatch,
@@ -232,7 +232,7 @@ template childVid(vp: VertexRef): VertexID =
   of Branch, ExtBranch:
     let v = BranchRef(v)
     v.startVid
-  of BoundaryNode, StoLeaf:
+  of BoundaryNode, StoLeaf, LeafPtr:
     default(VertexID)
 
 proc computeKeyImpl(
@@ -405,6 +405,24 @@ proc computeKeyImpl(
       # so normally this branch is not reached.
       let ev = BoundaryNodeRef(vtx)
       rlpEncodeExt(ev.pfx, ev.childKey).digestTo(HashKey)
+    of LeafPtr:
+      let
+        leafVid = LeafPtrRef(vtx).vid
+        keyvtxl = ?txRef.getKey((rvid.root, leafVid), skipLayers, parallel)
+        (leafKey, leafLevel) = ?txRef.computeKeyImpl(
+          (rvid.root, leafVid),
+          batch,
+          keyvtxl[0][1],
+          keyvtxl[1],
+          skipLayers = skipLayers,
+          spawnTpTasks = false,
+          parallel,
+          snapshotFrame,
+          keyBuf,
+          vtxBufQueue,
+        )
+      level = max(level, leafLevel)
+      leafKey
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
@@ -582,9 +600,11 @@ proc computeKeyImpl(
   # root key also changing while leaves that have never been hashed will see
   # their hash being saved directly to the backend.
 
-  if vtx.vType in Branches:
+  if vtx.vType in Branches or vtx.vType == LeafPtr:
     when parallel and not spawnTpTasks:
-      if level >= txRef.db.baseTxFrame().level:
+      if keyBuf.isNil:
+        ?txRef.putKeyAtLevel(rvid, vtx, key, level, batch, snapshotFrame)
+      elif level >= txRef.db.baseTxFrame().level:
         keyBuf[].add((rvid, key, level.uint32))
       elif level == dbLevel:
         var vtxBuf: VertexBuf
@@ -596,7 +616,7 @@ proc computeKeyImpl(
             ", baseTxFrame level = " & $txRef.db.baseTxFrame().level
         )
     else:
-      ?txRef.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch, snapshotFrame)
+      ?txRef.putKeyAtLevel(rvid, vtx, key, level, batch, snapshotFrame)
 
   ok (key, level)
 

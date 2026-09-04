@@ -84,10 +84,13 @@ proc initInstance*(
     parallelStateRootComputation = true,
     threadSafeCaches = true,
     accLeavesLruSize = 0,
-    stoLeavesLruSize = 0
+    stoLeavesLruSize = 0,
+    directLeafFetch = true
 ): Result[void, AristoError] =
   doAssert maxSnapshots > 0
   let vTop = (?db.getLstFn()).vTop
+
+  db.directLeafFetch = directLeafFetch
 
   db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
   when compileOption("threads"):

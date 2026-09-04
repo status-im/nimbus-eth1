@@ -100,8 +100,7 @@ proc checkTopCommon*(
             if vTop < stoVid:
               return err((stoVid,CheckAnyVidDeadStorageRoot))
             stoRoots.incl stoVid
-      of StoLeaf: discard
-      of BoundaryNode: discard
+      of StoLeaf, BoundaryNode, LeafPtr: discard
       of Branches:
         block check42Links:
           var seen = false

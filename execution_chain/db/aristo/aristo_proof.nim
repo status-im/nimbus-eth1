@@ -71,6 +71,9 @@ proc chainRlpNodes(
     else:
       ok()
 
+  of LeafPtr:
+    db.chainRlpNodes((rvid.root, LeafPtrRef(vtx).vid), path, chain, nodesCache)
+
   of Branches:
     let vtx = BranchRef(vtx)
     let nChewOff = sharedPrefixLen(vtx.pfx, path)
@@ -434,7 +437,7 @@ proc convertSubtrie(
           k = HashKey.fromBytes(link).valueOr:
             return err(PartTrkLinkExpected)
         if k.len() > 0:
-          discard branch.setUsed(i.uint8, true)
+          discard branch.setBranch(i.uint8)
           ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
         key[i] = k
       NodeRef(key: key, vtx: branch)
@@ -485,6 +488,8 @@ proc putSubtrie(
     of Branch, ExtBranch:
       let bvtx = BranchRef(node.vtx)
       bvtx.startVid = db.vidFetch(16)
+      bvtx.leafMask = 0
+      bvtx.leafVids.setLen(0)
 
       for n, subvid in node.vtx.pairs():
         let
@@ -497,18 +502,32 @@ proc putSubtrie(
               else:
                 node.key[n]
         if nodes.contains(k):
+          if nodes.getOrDefault(k).vtx.vType in Leaves:
+            bvtx.setLeaf(n, subvid)
           ?db.putSubtrie(k, nodes, r)
         else:
           # Write the known hash key setting the vtx to nil
           db.layersPutKey(r, BranchRef(nil), k)
 
+    of LeafPtr:
+      raiseAssert "LeafPtr in witness conversion"
+
   # When writing into a storage trie, duplicate vertices before putting in
   # the database to avoid sharing mutable NodeRef instances between different
   # accounts that happen to share the same storage root hash in the witness.
-  if rvid.root != STATE_ROOT_VID:
-    db.layersPutVtx(rvid, node.vtx.dup())
+  let vtx =
+    if rvid.root != STATE_ROOT_VID:
+      node.vtx.dup()
+    else:
+      node.vtx
+
+  if vtx.vType in Leaves and rvid.vid == rvid.root:
+    # A trie consisting of a single leaf is referred to from the root record
+    let leafVid = db.vidFetch()
+    db.layersPutVtx((rvid.root, leafVid), vtx)
+    db.layersPutVtx(rvid, LeafPtrRef.init(leafVid))
   else:
-    db.layersPutVtx(rvid, node.vtx)
+    db.layersPutVtx(rvid, vtx)
 
   ok()
 
@@ -516,6 +535,8 @@ proc putSubtrie*(
     db: AristoTxRef,
     stateRoot: Hash32,
     nodes: Table[Hash32, seq[byte]]): Result[void, AristoError] =
+  db.db.directLeafFetch = false
+
   if stateRoot == emptyRoot:
     # Short path for empty pre-state: fetchStateRoot returns emptyRoot when
     # GetVtxNotFound, so nothing needed to store here.

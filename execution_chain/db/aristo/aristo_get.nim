@@ -122,6 +122,12 @@ proc getKey*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   ##
   (db.getKeyRc(rvid, {}).valueOr(((VOID_HASH_KEY, nil), 0)))[0][0]
 
+proc resKeyRootLeaf*(db: AristoTxRef; root: VertexID) =
+  ## Reset the cached key of a trie that consists of a single leaf
+  let vtx = db.getVtx((root, root))
+  if vtx.isValid and vtx.vType == LeafPtr:
+    discard db.layersUpdate((root, root), LeafPtrRef(vtx))
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

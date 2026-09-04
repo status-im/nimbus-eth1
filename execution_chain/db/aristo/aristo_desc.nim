@@ -163,6 +163,10 @@ type
     parallelStateRootComputation*: bool
       ## Enables parallel state root computation.
 
+    directLeafFetch*: bool
+      ## Resolve leaf lookups by their derived vid instead of traversing the
+      ## trie, must be off for partial tries built from witnesses
+
     when compileOption("threads"):
       taskpool*: Taskpool
         ## Shared task pool for offloading computation to other threads.

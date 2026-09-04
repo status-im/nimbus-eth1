@@ -15,7 +15,7 @@
 {.push raises: [].}
 
 import
-  std/[hashes as std_hashes, strutils, tables],
+  std/[bitops, hashes as std_hashes, strutils, tables],
   stint,
   eth/common/[accounts, base, hashes],
   ./desc_identifiers
@@ -30,6 +30,7 @@ type
     Branch
     ExtBranch
     BoundaryNode # Stateless only type
+    LeafPtr # Root of a single-leaf trie, or a derived vid collision marker
 
   AristoAccount* = object
     ## Application relevant part of an Ethereum account. Note that the storage
@@ -52,7 +53,13 @@ type
 
   BranchRef* = ref object of VertexRef
     used*: uint16
+      ## Bitmap of child slots in use
+    leafMask*: uint16
+      ## Subset of `used` whose children are leaves with an explicit vid
     startVid*: VertexID
+      ## First vertex ID of the 16 slot block for branch children
+    leafVids*: seq[VertexID]
+      ## Vertex IDs of the leaf children, in nibble order
 
   ExtBranchRef* = ref object of BranchRef
     pfx*: NibblesBuf
@@ -69,6 +76,12 @@ type
     pfx*: NibblesBuf
     childKey*: HashKey
 
+  LeafPtrRef* = ref object of VertexRef
+    ## Root record of a trie that consists of a single leaf, referring to the
+    ## leaf by vid. With a zero vid it marks a derived vid that is shared by
+    ## several leaves, all of which live at allocated vids.
+    vid*: VertexID
+
   LeafRef* = ref object of VertexRef
     pfx*: NibblesBuf
 
@@ -79,9 +92,9 @@ type
   StoLeafRef* = ref object of LeafRef
     stoData*: UInt256
 
-  ## NOTE: Leaf cache values are stored as value types so the cache can be safely 
+  ## NOTE: Leaf cache values are stored as value types so the cache can be safely
   ## written from background pre-fetch threads under refc (which uses thread-local heaps).
-  
+
   CachedAccLeaf* = object
     case empty*: bool
     of true:
@@ -121,7 +134,7 @@ type
 const
   Leaves* = {VertexType.AccLeaf, VertexType.StoLeaf}
   Branches* = {VertexType.Branch, VertexType.ExtBranch}
-  VertexTypes* = Leaves + Branches + {VertexType.BoundaryNode}
+  VertexTypes* = Leaves + Branches + {VertexType.BoundaryNode, VertexType.LeafPtr}
 
 # ------------------------------------------------------------------------------
 # Public helpers (misc)
@@ -146,6 +159,9 @@ template init*(
 template init*(_: type BoundaryNodeRef, pfxp: NibblesBuf, childKeyp: HashKey): BoundaryNodeRef =
   BoundaryNodeRef(vType: BoundaryNode, pfx: pfxp, childKey: childKeyp)
 
+template init*(_: type LeafPtrRef, vidp: VertexID): LeafPtrRef =
+  LeafPtrRef(vType: LeafPtr, vid: vidp)
+
 template init*(
     T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID): T =
   T(empty: false, pfx: pfxp, account: accountp, stoID: stoIDp)
@@ -165,15 +181,15 @@ template isEmpty*(c: CachedStoLeaf): bool =
   c.stoData.isZero()
 
 func toLeaf*(c: CachedAccLeaf): AccLeafRef =
-  if c.isEmpty(): 
-    AccLeafRef(nil) 
-  else: 
+  if c.isEmpty():
+    AccLeafRef(nil)
+  else:
     AccLeafRef.init(c.pfx, c.account, c.stoID)
 
 func toLeaf*(c: CachedStoLeaf): StoLeafRef =
-  if c.isEmpty(): 
-    StoLeafRef(nil) 
-  else: 
+  if c.isEmpty():
+    StoLeafRef(nil)
+  else:
     StoLeafRef.init(c.pfx, c.stoData)
 
 func toStoData*(c: CachedStoLeaf): UInt256 =
@@ -187,8 +203,6 @@ func toStoData*(v: StoLeafRef): UInt256 =
 
 const emptyNibbles = NibblesBuf()
 
-# template used*(vtx: VertexRef): uint16 = BranchRef(vtx).used
-# template startVid*(vtx: VertexRef): VertexID = BranchRef(vtx).startVid
 template pfx*(vtx: VertexRef): NibblesBuf =
   case vtx.vType
   of Leaves:
@@ -197,7 +211,7 @@ template pfx*(vtx: VertexRef): NibblesBuf =
     ExtBranchRef(vtx).pfx
   of BoundaryNode:
     BoundaryNodeRef(vtx).pfx
-  of Branch:
+  of Branch, LeafPtr:
     emptyNibbles
 
 template pfx*(vtx: BranchRef): NibblesBuf =
@@ -206,19 +220,53 @@ template pfx*(vtx: BranchRef): NibblesBuf =
   else:
     emptyNibbles
 
-func bVid*(vtx: BranchRef, nibble: uint8): VertexID =
-  if (vtx.used and (1'u16 shl nibble)) > 0:
-    VertexID(uint64(vtx.startVid) + nibble)
-  else:
-    default(VertexID)
+template slotBit(nibble: uint8): uint16 =
+  1'u16 shl nibble
 
-func setUsed*(vtx: BranchRef, nibble: uint8, used: static bool): VertexID =
-  vtx.used =
-    when used:
-      vtx.used or (1'u16 shl nibble)
-    else:
-      vtx.used and (not (1'u16 shl nibble))
-  vtx.bVid(nibble)
+func isUsed*(vtx: BranchRef, nibble: uint8): bool =
+  (vtx.used and slotBit(nibble)) > 0
+
+func isLeaf*(vtx: BranchRef, nibble: uint8): bool =
+  (vtx.leafMask and slotBit(nibble)) > 0
+
+func nChildren*(vtx: BranchRef): int =
+  countSetBits(vtx.used)
+
+func leafIndex(mask: uint16, nibble: uint8): int =
+  countSetBits(mask and (slotBit(nibble) - 1))
+
+func setLeaf*(vtx: BranchRef, nibble: uint8, vid: VertexID) =
+  let bit = slotBit(nibble)
+  if (vtx.leafMask and bit) > 0:
+    vtx.leafVids[leafIndex(vtx.leafMask, nibble)] = vid
+  else:
+    vtx.leafVids.insert(vid, leafIndex(vtx.leafMask, nibble))
+    vtx.leafMask = vtx.leafMask or bit
+    vtx.used = vtx.used or bit
+
+func clearSlot*(vtx: BranchRef, nibble: uint8) =
+  let bit = slotBit(nibble)
+  if (vtx.leafMask and bit) > 0:
+    vtx.leafVids.delete(leafIndex(vtx.leafMask, nibble))
+    vtx.leafMask = vtx.leafMask and not bit
+  vtx.used = vtx.used and not bit
+
+func setBranch*(vtx: BranchRef, nibble: uint8): VertexID =
+  let bit = slotBit(nibble)
+  if (vtx.leafMask and bit) > 0:
+    vtx.leafVids.delete(leafIndex(vtx.leafMask, nibble))
+    vtx.leafMask = vtx.leafMask and not bit
+  vtx.used = vtx.used or bit
+  VertexID(uint64(vtx.startVid) + nibble)
+
+func bVid*(vtx: BranchRef, nibble: uint8): VertexID =
+  let bit = slotBit(nibble)
+  if (vtx.used and bit) == 0:
+    default(VertexID)
+  elif (vtx.leafMask and bit) > 0:
+    vtx.leafVids[leafIndex(vtx.leafMask, nibble)]
+  else:
+    VertexID(uint64(vtx.startVid) + nibble)
 
 func hash*(node: NodeRef): Hash =
   ## Table/KeyedQueue/HashSet mixin
@@ -249,33 +297,39 @@ proc `==`*(a, b: VertexRef): bool =
       ExtBranchRef(a)[] == ExtBranchRef(b)[]
     of BoundaryNode:
       BoundaryNodeRef(a)[] == BoundaryNodeRef(b)[]
+    of LeafPtr:
+      LeafPtrRef(a)[] == LeafPtrRef(b)[]
   else:
     true
 
 iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
-  ## Iterates over the sub-vids of a branch (does nothing for leaves or BoundaryNode)
+  ## Iterates over the sub-vids of a branch (does nothing for other vertex types)
   case vtx.vType
-  of Leaves, BoundaryNode:
+  of Leaves, BoundaryNode, LeafPtr:
     discard
   of Branches:
     let vtx = BranchRef(vtx)
     for n in 0'u8 .. 15'u8:
       if (vtx.used and (1'u16 shl n)) > 0:
-        yield (n, VertexID(uint64(vtx.startVid) + n))
+        yield (n, vtx.bVid(n))
 
 iterator allPairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
-  ## Iterates over the sub-vids of a branch (does nothing for leaves or BoundaryNode)
-  ## including currently unset nodes
+  ## Iterates over the sub-vids of a branch (does nothing for other vertex
+  ## types) including currently unset nodes
   case vtx.vType
-  of Leaves, BoundaryNode:
+  of Leaves, BoundaryNode, LeafPtr:
     discard
   of Branches:
     let vtx = BranchRef(vtx)
     for n in 0'u8 .. 15'u8:
-      if (vtx.used and (1'u16 shl n)) > 0:
-        yield (n, VertexID(uint64(vtx.startVid) + n))
-      else:
-        yield (n, default(VertexID))
+      yield (n, vtx.bVid(n))
+
+iterator leafSlots*(vtx: BranchRef): tuple[nibble: uint8, vid: VertexID] =
+  var i = 0
+  for n in 0'u8 .. 15'u8:
+    if (vtx.leafMask and (1'u16 shl n)) > 0:
+      yield (n, vtx.leafVids[i])
+      inc i
 
 proc `==`*(a, b: NodeRef): bool =
   ## Beware, potential deep comparison
@@ -310,13 +364,28 @@ func dup*(vtx: VertexRef): VertexRef =
       StoLeafRef.init(vtx.pfx, vtx.stoData)
     of Branch:
       let vtx = BranchRef(vtx)
-      BranchRef.init(vtx.startVid, vtx.used)
+      BranchRef(
+        vType: Branch,
+        used: vtx.used,
+        leafMask: vtx.leafMask,
+        startVid: vtx.startVid,
+        leafVids: vtx.leafVids,
+      )
     of ExtBranch:
       let vtx = ExtBranchRef(vtx)
-      ExtBranchRef.init(vtx.pfx, vtx.startVid, vtx.used)
+      ExtBranchRef(
+        vType: ExtBranch,
+        pfx: vtx.pfx,
+        used: vtx.used,
+        leafMask: vtx.leafMask,
+        startVid: vtx.startVid,
+        leafVids: vtx.leafVids,
+      )
     of BoundaryNode:
       let vtx = BoundaryNodeRef(vtx)
       BoundaryNodeRef.init(vtx.pfx, vtx.childKey)
+    of LeafPtr:
+      LeafPtrRef.init(LeafPtrRef(vtx).vid)
 
 template dup*(vtx: StoLeafRef): StoLeafRef =
   StoLeafRef(VertexRef(vtx).dup())
@@ -332,6 +401,9 @@ template dup*(vtx: ExtBranchRef): ExtBranchRef =
 
 template dup*(vtx: BoundaryNodeRef): BoundaryNodeRef =
   BoundaryNodeRef(VertexRef(vtx).dup())
+
+template dup*(vtx: LeafPtrRef): LeafPtrRef =
+  LeafPtrRef(VertexRef(vtx).dup())
 
 func `$`*(aa: AristoAccount): string =
   $aa.nonce & "," & $aa.balance & "," &
@@ -360,13 +432,15 @@ func `$`*(vtx: BranchRef): string =
   if vtx == nil:
     "B(nil)"
   else:
-    "B(" & $vtx.startVid & "+" & toBin(BiggestInt(vtx.used), 16) & ")"
+    "B(" & $vtx.startVid & "+" & toBin(BiggestInt(vtx.used), 16) & "/" &
+      toBin(BiggestInt(vtx.leafMask), 16) & ")"
 
 func `$`*(vtx: ExtBranchRef): string =
   if vtx == nil:
     "E(nil)"
   else:
-    "E(" & $vtx.pfx & ":"  & $vtx.startVid & "+" & toBin(BiggestInt(vtx.used), 16) & ")"
+    "E(" & $vtx.pfx & ":"  & $vtx.startVid & "+" & toBin(BiggestInt(vtx.used), 16) &
+      "/" & toBin(BiggestInt(vtx.leafMask), 16) & ")"
 
 func `$`*(vtx: BoundaryNodeRef): string =
   if vtx == nil:
@@ -374,21 +448,29 @@ func `$`*(vtx: BoundaryNodeRef): string =
   else:
     "BN(" & $vtx.pfx & ":" & $vtx.childKey & ")"
 
+func `$`*(vtx: LeafPtrRef): string =
+  if vtx == nil:
+    "P(nil)"
+  else:
+    "P(" & $vtx.vid & ")"
+
 func `$`*(vtx: VertexRef): string =
   if vtx == nil:
     "V(nil)"
   else:
     case vtx.vType
     of AccLeaf:
-      $(AccLeafRef(vtx)[])
+      $(AccLeafRef(vtx))
     of StoLeaf:
-      $(StoLeafRef(vtx)[])
+      $(StoLeafRef(vtx))
     of Branch:
-      $(BranchRef(vtx)[])
+      $(BranchRef(vtx))
     of ExtBranch:
-      $(ExtBranchRef(vtx)[])
+      $(ExtBranchRef(vtx))
     of BoundaryNode:
-      $(BoundaryNodeRef(vtx)[])
+      $(BoundaryNodeRef(vtx))
+    of LeafPtr:
+      $(LeafPtrRef(vtx))
 
 
 # ------------------------------------------------------------------------------

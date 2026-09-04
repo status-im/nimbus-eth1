@@ -105,6 +105,8 @@ proc to*(node: NodeRef, T: type array[2, seq[byte]]): T =
   of StoLeaf:
     let vtx = StoLeafRef(node.vtx)
     [@(rlpEncodeStoLeaf(vtx.pfx, vtx.stoData)), @[]]
+  of LeafPtr:
+    raiseAssert "LeafPtr nodes are converted to leaves"
 
 proc digestTo*(node: NodeRef, T: type HashKey): T =
   ## Convert the argument `node` to the corresponding Merkle hash key. Note
@@ -126,6 +128,8 @@ proc digestTo*(node: NodeRef, T: type HashKey): T =
   of StoLeaf:
     let vtx = StoLeafRef(node.vtx)
     rlpEncodeStoLeaf(vtx.pfx, vtx.stoData).digestTo(HashKey)
+  of LeafPtr:
+    raiseAssert "LeafPtr nodes are converted to leaves"
 
 # ------------------------------------------------------------------------------
 # End

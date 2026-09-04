@@ -103,9 +103,9 @@ proc putVtx*(
     # likely to evict more useful items (when putting many items, we might even
     # evict those that were just added)
 
-    if vtx.vType == Branch:
+    if vtx.vType == Branch and BranchRef(vtx).leafMask == 0:
       let vtx = BranchRef(vtx)
-      rdb.rdVtxLru.del(rvid.vid)
+      rdb.rdVtxLru.del(rvid)
       if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
         rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
       else:
@@ -114,9 +114,9 @@ proc putVtx*(
       rdb.rdBranchLru.del(rvid.vid)
       
       if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-        rdb.rdVtxLru.put(rvid.vid, vtxBuf)
+        rdb.rdVtxLru.put(rvid, vtxBuf)
       else:
-        discard rdb.rdVtxLru.update(rvid.vid, vtxBuf)
+        discard rdb.rdVtxLru.update(rvid, vtxBuf)
 
 
     if key.isValid:
@@ -136,7 +136,7 @@ proc putVtx*(
 
     # Update cache, vertex will most probably never be visited anymore
     rdb.rdBranchLru.del rvid.vid
-    rdb.rdVtxLru.del rvid.vid
+    rdb.rdVtxLru.del rvid
     rdb.rdKeyLru.del rvid.vid
 
   ok()

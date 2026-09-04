@@ -106,7 +106,7 @@ func layersPrepareUpdate[T: VertexRef](db: AristoTxRef, rvid: RootedVertexID, vt
     db.sTab[rvid] = dup
     dup
 
-func layersUpdate*[T: BranchRef | LeafRef](
+func layersUpdate*[T: BranchRef | LeafRef | LeafPtrRef](
     db: AristoTxRef;
     rvid: RootedVertexID;
     vtx: T;
@@ -116,8 +116,9 @@ func layersUpdate*[T: BranchRef | LeafRef](
   ## in a different layer and therefore should not be mutated.
   let vtx = db.layersPrepareUpdate(rvid, vtx)
 
-  when T is BranchRef:
-    # Only branches have keys stored and we're not changing vertex type
+  when T is BranchRef or T is LeafPtrRef:
+    # Only branches and leaf pointers have keys stored and we're not changing
+    # vertex type
     db.kMap.del(rvid)
 
   if db.snapshot.level.isSome():
@@ -269,7 +270,7 @@ proc mergeAndReset*(trg, src: AristoTxRef) =
 
 iterator layersWalkVtx*(
     db: AristoTxRef;
-    seen: var HashSet[VertexID];
+    seen: var HashSet[RootedVertexID];
       ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Walk over all `(VertexID,VertexRef)` pairs on the cache layers. Note that
   ## entries are unsorted.
@@ -280,14 +281,14 @@ iterator layersWalkVtx*(
   ##
   for w in db.rstack:
     for (rvid,vtx) in w.sTab.pairs:
-      if not seen.containsOrIncl(rvid.vid):
+      if not seen.containsOrIncl(rvid):
         yield (rvid,vtx)
 
 iterator layersWalkVtx*(
     db: AristoTxRef;
       ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Variant of `layersWalkVtx()`.
-  var seen: HashSet[VertexID]
+  var seen: HashSet[RootedVertexID]
   for (rvid,vtx) in db.layersWalkVtx seen:
     yield (rvid,vtx)
 
@@ -297,10 +298,10 @@ iterator layersWalkKey*(
       ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Walk over all `(VertexID,HashKey)` pairs on the cache layers. Note that
   ## entries are unsorted.
-  var seen: HashSet[VertexID]
+  var seen: HashSet[RootedVertexID]
   for w in db.rstack:
     for (rvid,key) in w.kMap.pairs:
-      if not seen.containsOrIncl(rvid.vid):
+      if not seen.containsOrIncl(rvid):
         yield (rvid,key)
 
 # ------------------------------------------------------------------------------

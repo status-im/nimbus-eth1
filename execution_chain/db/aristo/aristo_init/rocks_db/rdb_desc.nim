@@ -13,6 +13,7 @@
 
 {.push raises: [].}
 
+
 import
   std/concurrency/atomics,
   stew/endians2,
@@ -58,7 +59,7 @@ type
     rdKeyLru*: ConcurrentLruCache[VertexID,HashKey] ## Read cache
     rdKeySize*: int
 
-    rdVtxLru*: ConcurrentLruCache[VertexID,VertexBuf] ## Read cache
+    rdVtxLru*: ConcurrentLruCache[RootedVertexID,VertexBuf] ## Read cache
     rdVtxSize*: int
 
     rdBranchLru*: ConcurrentLruCache[VertexID, (VertexID, uint16)]
@@ -106,7 +107,7 @@ template to*(v: RootedVertexID, T: type RdbStateType): RdbStateType =
 
 template to*(v: VertexType, T: type RdbVertexType): RdbVertexType =
   case v
-  of VertexType.AccLeaf, VertexType.StoLeaf: RdbVertexType.Leaf
+  of VertexType.AccLeaf, VertexType.StoLeaf, VertexType.LeafPtr: RdbVertexType.Leaf
   of VertexType.Branch: RdbVertexType.Branch
   of VertexType.ExtBranch: RdbVertexType.ExtBranch
   of VertexType.BoundaryNode: raiseAssert "BoundaryNode is stateless-only and never persisted"

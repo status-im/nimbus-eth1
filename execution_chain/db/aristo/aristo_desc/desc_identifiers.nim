@@ -18,7 +18,7 @@ import
   std/[algorithm, sequtils, sets, strutils, hashes],
   eth/common/[base, hashes],
   eth/rlp, eth/trie/nibbles,
-  stew/byteutils,
+  stew/[byteutils, endians2],
   chronicles,
   results,
   stint
@@ -109,8 +109,21 @@ func `+`*(a: VertexID; b: uint64): VertexID = (a.uint64+b).VertexID
 func `-`*(a: VertexID; b: uint64): VertexID = (a.uint64-b).VertexID
 func `-`*(a, b: VertexID): uint64 = (a.uint64 - b.uint64)
 
+const
+  DERIVED_VID_BIT* = 1'u64 shl 63
+
+func isDerived*(vid: VertexID): bool =
+  ## Derived vids carry the top bit, allocated vids never reach it
+  (vid.uint64 and DERIVED_VID_BIT) > 0
+
+func derivedVid*(path: Hash32): VertexID =
+  ## Vertex ID of a leaf derived from the first 12 nibbles of its path
+  VertexID(DERIVED_VID_BIT or (uint64.fromBytesBE(path.data.toOpenArray(0, 7)) shr 16))
+
 func `==`*(a, b: RootedVertexID): bool {.inline.} =
-  a.vid == b.vid
+  ## Allocated vids are unique across all tries, derived vids only within
+  ## their trie
+  a.vid == b.vid and (a.root == b.root or not a.vid.isDerived)
 
 func hash*(rvid: RootedVertexID): Hash {.inline.} =
   hash(rvid.vid)

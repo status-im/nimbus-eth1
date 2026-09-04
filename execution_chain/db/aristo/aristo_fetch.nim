@@ -117,6 +117,17 @@ proc retrieveAccStatic(
           err FetchPathNotFound
         else:
           ok (vtx, path, next)
+    of LeafPtr:
+      # Only the root of a single-leaf trie has a static vid
+      let vtx = LeafPtrRef(vtx[0])
+      countHitOrLower()
+      if not vtx.vid.isValid:
+        return err FetchPathNotFound
+      let leaf = db.getVtxRc((STATE_ROOT_VID, vtx.vid)).valueOr:
+        return err FetchPathNotFound
+      if leaf[0].vType != AccLeaf or AccLeafRef(leaf[0]).pfx != path:
+        return err FetchPathNotFound
+      return ok (AccLeafRef(leaf[0]), path, next)
     of BoundaryNode:
       # Stateless-only boundary: child absent from witness, not traversable.
       # Same divergence-vs-gap distinction as `aristo_hike.step()`.
@@ -158,6 +169,12 @@ proc retrieveAccStatic(
   # We end up here when we have to continue the search down a branch
   ok (nil, path, next)
 
+func matchesPath(pfx: NibblesBuf, path: Hash32): bool =
+  ## A leaf found at a derived vid belongs to `path` when its suffix covers
+  ## the nibbles not encoded in the vid and equals the tail of the path
+  pfx.len >= 64 - DERIVED_VID_LEVEL and
+    NibblesBuf.fromBytes(path.data).slice(64 - pfx.len) == pfx
+
 proc retrieveAccLeaf(
     db: AristoTxRef;
     accPath: Hash32;
@@ -166,6 +183,19 @@ proc retrieveAccLeaf(
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
     return ok leafVtx[]
+
+  if db.db.directLeafFetch:
+    let rc = db.getVtxRc((STATE_ROOT_VID, derivedVid(accPath)))
+    if rc.isOk:
+      if rc.value[0].vType == AccLeaf and AccLeafRef(rc.value[0]).pfx.matchesPath(accPath):
+        let leafVtx = AccLeafRef(rc.value[0])
+        db.cacheAccLeaf(accPath, CachedAccLeaf.init(leafVtx.pfx, leafVtx.account, leafVtx.stoID))
+        return ok leafVtx
+    elif rc.error == GetVtxNotFound:
+      db.cacheAccLeaf(accPath, emptyCachedAccLeaf)
+      return err(FetchPathNotFound)
+    else:
+      return err(rc.error)
 
   let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
     if error == FetchPathNotFound:
@@ -328,6 +358,19 @@ proc fetchSlot*(
   if not stoID.isValid():
     db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
     return ok 0'u256
+
+  if db.db.directLeafFetch:
+    let rc = db.getVtxRc((stoID, derivedVid(stoPath)))
+    if rc.isOk:
+      if rc.value[0].vType == StoLeaf and StoLeafRef(rc.value[0]).pfx.matchesPath(stoPath):
+        let leaf = StoLeafRef(rc.value[0])
+        db.cacheStoLeaf(mixPath, CachedStoLeaf.init(leaf.pfx, leaf.stoData))
+        return ok leaf.toStoData()
+    elif rc.error == GetVtxNotFound:
+      db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
+      return ok 0'u256
+    else:
+      return err(rc.error)
 
   let leafRc = db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data))
   if leafRc.isErr:

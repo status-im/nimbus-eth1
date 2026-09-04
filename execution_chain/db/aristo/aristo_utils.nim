@@ -15,7 +15,7 @@
 
 import
   results,
-  "."/[aristo_desc, aristo_compute]
+  "."/[aristo_desc, aristo_compute, aristo_get]
 
 # ------------------------------------------------------------------------------
 # Public functions, converters
@@ -60,6 +60,12 @@ proc toNode*(
     let node = NodeRef(vtx: vtx.dup())
     return ok node
 
+  of LeafPtr:
+    let leaf = db.getVtx((root, LeafPtrRef(vtx).vid))
+    if not leaf.isValid:
+      return err(@[root])
+    return leaf.toNode(root, db)
+
   of Branch, ExtBranch:
     let node = NodeRef(vtx: vtx.dup())
     for n, subvid in vtx.pairs():
@@ -78,6 +84,10 @@ iterator subVids*(vtx: VertexRef): VertexID =
 
   of StoLeaf, BoundaryNode:
     discard
+  of LeafPtr:
+    let vid = LeafPtrRef(vtx).vid
+    if vid.isValid:
+      yield vid
   of Branches:
     for _, subvid in vtx.pairs():
       yield subvid
@@ -89,7 +99,7 @@ iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
     let stoID = AccLeafRef(node.vtx).stoID
     if stoID.isValid:
       yield (stoID.vid, node.key[0])
-  of StoLeaf, BoundaryNode:
+  of StoLeaf, BoundaryNode, LeafPtr:
     discard
   of Branches:
     for n, subvid in node.vtx.pairs():

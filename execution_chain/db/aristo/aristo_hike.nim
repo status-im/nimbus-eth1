@@ -39,7 +39,7 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesBuf =
     of ExtBranch:
       let vtx = ExtBranchRef(leg.wp.vtx)
       result = result & vtx.pfx & NibblesBuf.nibble(leg.nibble.byte)
-    of BoundaryNode:
+    of BoundaryNode, LeafPtr:
       discard # BoundaryNode never successfully steps forward
     of Leaves:
       let vtx = LeafRef(leg.wp.vtx)
@@ -128,6 +128,22 @@ proc step*(
       return err(HikeBranchMissingEdge)
     return err(HikeBranchUnresolvedEdge)
 
+  of LeafPtr:
+    # Root of a single-leaf trie: resolve the leaf and report its vid as the
+    # next vertex so that callers can address it
+    let vtx = LeafPtrRef(vtx)
+    if rvid.vid != rvid.root or not vtx.vid.isValid:
+      return err(HikeDanglingEdge)
+
+    let (leaf, _) = db.getVtxRc((rvid.root, vtx.vid)).valueOr:
+      return err(HikeDanglingEdge)
+    if leaf.vType notin Leaves:
+      return err(HikeDanglingEdge)
+    if path.len != path.sharedPrefixLen(leaf.pfx):
+      return err(HikeLeafUnexpected)
+
+    ok (leaf, 0, vtx.vid)
+
 
 iterator stepUp*(
     path: NibblesBuf;                            # Partial path
@@ -178,7 +194,7 @@ proc hikeUp*[LeafType](
 
   var vid = root
   while true:
-    if leaf.isSome() and leaf[].isValid and path == leaf[].pfx:
+    if vid != root and leaf.isSome() and leaf[].isValid and path == leaf[].pfx:
       hike.legs.add Leg(wp: VidVtxPair(vid: vid, vtx: leaf[]), nibble: -1)
       #reset(hike.tail)
       break
@@ -186,7 +202,8 @@ proc hikeUp*[LeafType](
     let
       (vtx, common, next) = step(path, (root, vid), db).valueOr:
         return err((vid,error))
-      wp = VidVtxPair(vid:vid, vtx:vtx)
+      wp = VidVtxPair(
+        vid: (if vtx.vType in Leaves and next.isValid: next else: vid), vtx: vtx)
 
     case vtx.vType
     of Leaves:
@@ -199,8 +216,8 @@ proc hikeUp*[LeafType](
     of ExtBranch:
       let vtx = ExtBranchRef(vtx)
       hike.legs.add Leg(wp: wp, nibble: int8 path[vtx.pfx.len])
-    of BoundaryNode:
-      discard # step() always fails for BoundaryNode thus this is unreachable
+    of BoundaryNode, LeafPtr:
+      discard # step() never returns these thus this is unreachable
 
     path = path.slice(common)
     vid = next

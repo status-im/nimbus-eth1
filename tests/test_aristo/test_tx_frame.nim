@@ -120,7 +120,7 @@ suite "Aristo TxFrame":
       tx0.mergeAccount(acc1[0], acc1[1]).isOk()
       tx1.mergeAccount(acc2[0], acc2[1]).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
-      tx0.kMap.len() == 0
+      tx0.kMap.len() == 1
       tx1.kMap.len() == 1
 
     # Check that the kMap hashkeys are moved correctly
@@ -149,7 +149,7 @@ suite "Aristo TxFrame":
       tx0.mergeAccount(acc1[0], acc1[1]).isOk()
       tx1.mergeAccount(acc2[0], acc2[1]).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
-      tx0.kMap.len() == 0
+      tx0.kMap.len() == 1
       tx1.kMap.len() == 1
     tx1.checkpoint(1, skipSnapshot = false)
 
@@ -198,7 +198,7 @@ suite "Aristo TxFrame":
       tx0.mergeAccount(acc1[0], acc1[1]).isOk()
       tx1.mergeAccount(acc2[0], acc2[1]).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
-      tx0.kMap.len() == 0
+      tx0.kMap.len() == 1
       tx1.kMap.len() == 1
 
     discard db.txFrameBegin(tx1, moveParentHashKeys = true)
@@ -228,7 +228,7 @@ suite "Aristo TxFrame":
       tx0.mergeAccount(acc1[0], acc1[1]).isOk()
       tx1.mergeAccount(acc2[0], acc2[1]).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
-      tx0.kMap.len() == 0
+      tx0.kMap.len() == 1
       tx1.kMap.len() == 1
 
     let tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)

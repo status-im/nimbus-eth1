@@ -16,11 +16,9 @@
 ## associated (but separated) Merkle hashes will be deleted unless locked.
 ## Instead of deleting locked hashes error handling is applied.
 ##
-## Also, nodes (vertices plus merkle hashes) can be added which is needed for
-## boundary proofing after `snap/1` download. The vertices are split from the
-## nodes and stored as-is on the table holding `Patricia Trie` entries. The
-##  hashes are stored iin a separate table and the vertices are labelled
-## `locked`.
+## Leaves are stored at vids derived from their path so that they can be
+## fetched without traversing the trie, see `derivedVid()`. A branch stores
+## the vid of each leaf child explicitly.
 
 {.push raises: [].}
 
@@ -41,6 +39,28 @@ proc layersPutLeaf[T](
   db.layersPutVtx(rvid, vtx)
   vtx
 
+proc escapeVid(db: AristoTxRef, root, derived: VertexID): VertexID =
+  ## Allocate a vid for a leaf whose derived vid is shared with a sibling and
+  ## make sure the derived vid holds a collision marker
+  let existing = db.getVtxRc((root, derived))
+  if existing.isErr or existing.value[0].vType != LeafPtr:
+    db.layersPutVtx((root, derived), LeafPtrRef.init(VertexID(0)))
+  db.vidFetch()
+
+proc newBranch(
+    db: AristoTxRef, root: VertexID, path: NibblesBuf, pos, n: int
+): BranchRef =
+  ## Create a branch whose extension prefix is `path[pos ..< pos + n]`
+  let startVid =
+    if root == STATE_ROOT_VID:
+      db.accVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
+    else:
+      db.vidFetch(16)
+  if n > 0:
+    ExtBranchRef.init(path.slice(pos, pos + n), startVid, 0)
+  else:
+    BranchRef.init(startVid, 0)
+
 proc mergePayloadImpl[LeafType, T](
     db: AristoTxRef, # Database, top layer
     root: VertexID, # MPT state root
@@ -53,85 +73,112 @@ proc mergePayloadImpl[LeafType, T](
   ## leaf vertex with the payload. It is stored or updated on the database
   ## accordingly.
   ##
+  let derived = derivedVid(path)
   var
     path = NibblesBuf.fromBytes(path.data)
     pos = 0
     cur = root
+    rootPtr = LeafPtrRef(nil)
     (vtx, _) = db.getVtxRc((root, cur)).valueOr:
       if error != GetVtxNotFound:
         return err(error)
 
       # We're at the root vertex and there is no data - this must be a fresh
       # VertexID!
-      return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil)
+      db.layersPutVtx((root, cur), LeafPtrRef.init(derived))
+      return ok (db.layersPutLeaf((root, derived), path, payload), nil, nil)
     vids: ArrayBuf[NibblesBuf.high + 1, VertexID]
     vtxs: ArrayBuf[NibblesBuf.high + 1, BranchRef]
 
-  template resetKeys() =
+  if vtx.vType == LeafPtr:
+    rootPtr = LeafPtrRef(vtx)
+    if not rootPtr.vid.isValid:
+      return err(MergeHikeFailed)
+    cur = rootPtr.vid
+    vtx = (?db.getVtxRc((root, cur)))[0]
+
+  template resetKeys(skip: int) =
     # Reset cached hashes of touched verticies
-    for i in 1..vids.len:
+    for i in (skip + 1)..vids.len:
       db.layersResKey((root, vids[^i]), vtxs[^i])
+
+  template leafVidAt(childPos: int): VertexID =
+    if childPos < DERIVED_VID_LEVEL:
+      derived
+    else:
+      db.escapeVid(root, derived)
 
   while pos < path.len:
     var psuffix = path.slice(pos)
     let n = psuffix.sharedPrefixLen(vtx.pfx)
     case vtx.vType
     of Leaves:
-      let res =
-        if n == vtx.pfx.len:
-          # Same path - replace the current vertex with a new payload
+      if n == vtx.pfx.len:
+        # Same path - replace the current vertex with a new payload
+        when payload is AristoAccount:
+          if AccLeafRef(vtx).account == payload:
+            return err(MergeNoAction)
+          let leafVtx = db.layersUpdate((root, cur), AccLeafRef(vtx))
+          leafVtx.account = payload
+          leafVtx.stoID = AccLeafRef(vtx).stoID
 
-          when payload is AristoAccount:
-            if AccLeafRef(vtx).account == payload:
-              return err(MergeNoAction)
-            let leafVtx = db.layersUpdate((root, cur), AccLeafRef(vtx))
-            leafVtx.account = payload
-            leafVtx.stoID = AccLeafRef(vtx).stoID
-
-          else:
-            if StoLeafRef(vtx).stoData == payload:
-              return err(MergeNoAction)
-            let leafVtx = db.layersUpdate((root, cur), StoLeafRef(vtx))
-            leafVtx.stoData = payload
-          (leafVtx, nil, nil)
         else:
-          # Turn leaf into a branch (or extension) then insert the two leaves
-          # into the branch
-          let
-            startVid =
-              if root == STATE_ROOT_VID:
-                db.accVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
-              else:
-                db.vidFetch(16)
-            branch =
-              if n > 0:
-                ExtBranchRef.init(psuffix.slice(0, n), startVid, 0)
-              else:
-                BranchRef.init(startVid, 0)
-          let other = block: # Copy of existing leaf node, now one level deeper
-            let
-              local = branch.setUsed(vtx.pfx[n], true)
-              pfx = vtx.pfx.slice(n + 1)
-            when payload is AristoAccount:
-              let accVtx = db.layersPutLeaf((root, local), pfx, AccLeafRef(vtx).account)
-              accVtx.stoID = AccLeafRef(vtx).stoID
-              accVtx
-            else:
-              db.layersPutLeaf((root, local), pfx, StoLeafRef(vtx).stoData)
+          if StoLeafRef(vtx).stoData == payload:
+            return err(MergeNoAction)
+          let leafVtx = db.layersUpdate((root, cur), StoLeafRef(vtx))
+          leafVtx.stoData = payload
 
-          let leafVtx = block: # Newly inserted leaf node
-            let local = branch.setUsed(psuffix[n], true)
-            db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
+        if not rootPtr.isNil:
+          discard db.layersUpdate((root, root), rootPtr)
 
-          # Put the branch at the vid where the leaf was
-          db.layersPutVtx((root, cur), branch)
+        resetKeys(0)
+        return ok((leafVtx, nil, nil))
 
-          # We need to return vtx here because its pfx member hasn't yet been
-          # sliced off and is therefore shared with the hike
-          (leafVtx, vtx, other)
+      # Turn leaf into a branch (or extension) then insert the two leaves
+      # into the branch. The existing leaf keeps its vid unless it moves
+      # below the derived vid level, the new branch takes the slot of the
+      # existing leaf in the parent.
+      let
+        childPos = pos + n
+        branch = db.newBranch(root, path, pos, n)
+        brVid =
+          if vids.len == 0:
+            root
+          else:
+            let parent = db.layersUpdate((root, vids[^1]), vtxs[^1])
+            parent.setBranch(path[pos - 1])
+        otherVid =
+          if cur == brVid or (childPos >= DERIVED_VID_LEVEL and cur.isDerived):
+            db.vidFetch()
+          else:
+            cur
 
-      resetKeys()
-      return ok(res)
+      let other = block: # Copy of existing leaf node, now one level deeper
+        let pfx = vtx.pfx.slice(n + 1)
+        when payload is AristoAccount:
+          let accVtx = db.layersPutLeaf((root, otherVid), pfx, AccLeafRef(vtx).account)
+          accVtx.stoID = AccLeafRef(vtx).stoID
+          accVtx
+        else:
+          db.layersPutLeaf((root, otherVid), pfx, StoLeafRef(vtx).stoData)
+      branch.setLeaf(vtx.pfx[n], otherVid)
+
+      let newVid =
+        if childPos < DERIVED_VID_LEVEL:
+          derived
+        else:
+          db.layersPutVtx((root, derived), LeafPtrRef.init(VertexID(0)))
+          db.vidFetch()
+      let leafVtx = db.layersPutLeaf((root, newVid), psuffix.slice(n + 1), payload)
+      branch.setLeaf(psuffix[n], newVid)
+
+      db.layersPutVtx((root, brVid), branch)
+      resetKeys(if vids.len == 0: 0 else: 1)
+
+      # We need to return vtx here because its pfx member hasn't yet been
+      # sliced off and is therefore shared with the hike
+      return ok((leafVtx, vtx, other))
+
     of Branches:
       if vtx.pfx.len == n:
         # The existing branch is a prefix of the new entry
@@ -153,49 +200,41 @@ proc mergePayloadImpl[LeafType, T](
         else:
           # There's no vertex at the branch point - insert the payload as a new
           # leaf and update the existing branch
-
           let
             brDup = db.layersUpdate((root, cur), BranchRef(vtx))
-            local = brDup.setUsed(nibble, true)
-            leafVtx = db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
+            newVid = leafVidAt(pos + n)
+          brDup.setLeaf(nibble, newVid)
+          let leafVtx = db.layersPutLeaf((root, newVid), psuffix.slice(n + 1), payload)
 
-          resetKeys()
+          resetKeys(0)
           return ok((leafVtx, nil, nil))
       else:
         # Partial path match - we need to split the existing branch at
         # the point of divergence, inserting a new branch
-        let
-          startVid =
-            if root == STATE_ROOT_VID:
-              db.accVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
-            else:
-              db.vidFetch(16)
-          branch =
-            if n > 0:
-              ExtBranchRef.init(psuffix.slice(0, n), startVid, 0)
-            else:
-              BranchRef.init(startVid, 0)
+        let branch = db.newBranch(root, path, pos, n)
 
         block: # Copy the existing vertex and add it to the new branch
           let
-            local = branch.setUsed(vtx.pfx[n], true)
+            local = branch.setBranch(vtx.pfx[n])
             pfx = vtx.pfx.slice(n + 1)
-            vtx = BranchRef(vtx)
-          db.layersPutVtx(
-            (root, local),
-            if pfx.len > 0:
-              ExtBranchRef.init(pfx, vtx.startVid, vtx.used)
-            else:
-              BranchRef.init(vtx.startVid, vtx.used),
-          )
+            bvtx = BranchRef(vtx)
+            moved =
+              if pfx.len > 0:
+                ExtBranchRef.init(pfx, bvtx.startVid, bvtx.used)
+              else:
+                BranchRef.init(bvtx.startVid, bvtx.used)
+          moved.leafMask = bvtx.leafMask
+          moved.leafVids = bvtx.leafVids
+          db.layersPutVtx((root, local), moved)
 
-        let leafVtx = block: # add the new entry
-          let local = branch.setUsed(psuffix[n], true)
-          db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
+        let
+          newVid = leafVidAt(pos + n)
+          leafVtx = db.layersPutLeaf((root, newVid), psuffix.slice(n + 1), payload)
+        branch.setLeaf(psuffix[n], newVid)
 
         db.layersPutVtx((root, cur), branch)
 
-        resetKeys()
+        resetKeys(0)
         return ok((leafVtx, nil, nil))
 
     of BoundaryNode:
@@ -208,21 +247,11 @@ proc mergePayloadImpl[LeafType, T](
         # Partial prefix match: split the BoundaryNode at the divergence point,
         # creating a new branch. This is similar as for leaves except that
         # the existing BoundaryNode is moved down one level.
-        let
-          startVid =
-            if root == STATE_ROOT_VID:
-              db.accVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
-            else:
-              db.vidFetch(16)
-          branch =
-            if n > 0:
-              ExtBranchRef.init(psuffix.slice(0, n), startVid, 0)
-            else:
-              BranchRef.init(startVid, 0)
+        let branch = db.newBranch(root, path, pos, n)
 
         # Place the existing BoundaryNode content at its new position
         let
-          local = branch.setUsed(evtx.pfx[n], true)
+          local = branch.setBranch(evtx.pfx[n])
           pfx = evtx.pfx.slice(n + 1)
         if pfx.len > 0:
           # Remaining prefix: create new BoundaryNode pointing to the same child.
@@ -235,13 +264,17 @@ proc mergePayloadImpl[LeafType, T](
           # computeKeyImpl still works via kMap
           db.layersPutKey((root, local), BranchRef(nil), evtx.childKey)
 
-        let leafVtx = block: # Add the new entry
-          let local = branch.setUsed(psuffix[n], true)
-          db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
+        let
+          newVid = leafVidAt(pos + n)
+          leafVtx = db.layersPutLeaf((root, newVid), psuffix.slice(n + 1), payload)
+        branch.setLeaf(psuffix[n], newVid)
 
         db.layersPutVtx((root, cur), branch)
-        resetKeys()
+        resetKeys(0)
         return ok((leafVtx, nil, nil))
+
+    of LeafPtr:
+      return err(MergeHikeFailed)
 
   err(MergeHikeFailed)
 
@@ -315,6 +348,8 @@ proc mergeSlot*(
   # Mark account path Merkle keys for update - the leaf key is not stored so no
   # need to mark it
   db.layersResKeys(accHike, skip = 1)
+  if accHike.legs.len == 1:
+    db.resKeyRootLeaf(STATE_ROOT_VID)
 
   # Update leaf cache both of the merged value and potentially the displaced
   # leaf resulting from splitting a leaf into a branch with two leaves

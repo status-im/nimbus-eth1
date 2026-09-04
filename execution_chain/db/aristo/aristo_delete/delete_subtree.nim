@@ -48,6 +48,10 @@ proc delStoTreeNow(
     let vtx = StoLeafRef(vtx)
     let stoPath = Hash32((stoPath & vtx.pfx).getBytes())
     db.layersPutStoLeaf(mixUp(accPath, stoPath), nil)
+  of LeafPtr:
+    let vtx = LeafPtrRef(vtx)
+    if vtx.vid.isValid:
+      ?db.delStoTreeNow((rvid.root, vtx.vid), accPath, stoPath)
   of AccLeaf:
     raiseAssert "Removing storage leaves only!"
   db.layersResVtx(rvid)

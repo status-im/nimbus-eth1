@@ -62,6 +62,7 @@ proc deleteImpl(
   if hike.legs.len == 1:
     # This was the last node in the trie, meaning we don't have any branches or
     # leaves to update
+    db.layersResVtx((hike.root, hike.root))
     return ok(nil)
 
   if hike.legs[^2].wp.vtx.vType notin Branches:
@@ -107,39 +108,61 @@ proc deleteImpl(
       db.layersResVtx((hike.root, vid))
       return ok(VertexRef(newExt))
 
-    db.layersResVtx((hike.root, vid))
-    let
-      pfx =
-        if brVtx.vType == Branch:
-          NibblesBuf.nibble(nbl.byte)
-        else:
-          ExtBranchRef(brVtx).pfx & NibblesBuf.nibble(nbl.byte)
-      vtx =
-        case nxt.vType
-        of AccLeaf:
+    let pfx =
+      if brVtx.vType == Branch:
+        NibblesBuf.nibble(nbl.byte)
+      else:
+        ExtBranchRef(brVtx).pfx & NibblesBuf.nibble(nbl.byte)
+
+    case nxt.vType
+    of Leaves:
+      # The leaf keeps its vid and takes over the path of the obsolete branch
+      # while the grandparent (or the root pointer) now refers to it directly
+      let vtx =
+        if nxt.vType == AccLeaf:
           let nxt = AccLeafRef(nxt)
-          AccLeafRef.init(pfx & nxt.pfx, nxt.account, nxt.stoID)
-        of StoLeaf:
+          VertexRef(AccLeafRef.init(pfx & nxt.pfx, nxt.account, nxt.stoID))
+        else:
           let nxt = StoLeafRef(nxt)
-          StoLeafRef.init(pfx & nxt.pfx, nxt.stoData)
-        of Branch:
-          let nxt = BranchRef(nxt)
-          ExtBranchRef.init(pfx, nxt.startVid, nxt.used)
-        of ExtBranch:
-          let nxt = ExtBranchRef(nxt)
-          ExtBranchRef.init(pfx & nxt.pfx, nxt.startVid, nxt.used)
-        of BoundaryNode:
-          let nxt = BoundaryNodeRef(nxt)
-          BoundaryNodeRef.init(pfx & nxt.pfx, nxt.childKey)
+          VertexRef(StoLeafRef.init(pfx & nxt.pfx, nxt.stoData))
+      db.layersPutVtx((hike.root, vid), vtx)
+      db.layersResVtx((hike.root, br.vid))
 
-    # Put the new vertex at the id of the obsolete branch
-    db.layersPutVtx((hike.root, br.vid), vtx)
+      if hike.legs.len == 2:
+        db.layersPutVtx((hike.root, hike.root), LeafPtrRef.init(vid))
+      else:
+        let
+          gp = hike.legs[^3]
+          gpVtx = db.layersGetVtx((hike.root, gp.wp.vid)).expect("reset by layersResKeys")
+        BranchRef(gpVtx[0]).setLeaf(uint8 gp.nibble, vid)
 
-    ok(vtx)
+      ok(vtx)
+    of Branch, ExtBranch:
+      db.layersResVtx((hike.root, vid))
+      let
+        nxt = BranchRef(nxt)
+        vtx = ExtBranchRef.init(pfx & nxt.pfx, nxt.startVid, nxt.used)
+      vtx.leafMask = nxt.leafMask
+      vtx.leafVids = nxt.leafVids
+
+      # Put the new vertex at the id of the obsolete branch
+      db.layersPutVtx((hike.root, br.vid), vtx)
+
+      ok(VertexRef(vtx))
+    of BoundaryNode:
+      db.layersResVtx((hike.root, vid))
+      let
+        nxt = BoundaryNodeRef(nxt)
+        vtx = BoundaryNodeRef.init(pfx & nxt.pfx, nxt.childKey)
+      db.layersPutVtx((hike.root, br.vid), vtx)
+
+      ok(VertexRef(vtx))
+    of LeafPtr:
+      err(DelVidStaleVtx)
   else:
     # Clear the removed leaf from the branch (that still contains other children)
     let brDup = db.layersUpdate((hike.root, br.vid), brVtx)
-    discard brDup.setUsed(uint8 hike.legs[^2].nibble, false)
+    brDup.clearSlot(uint8 hike.legs[^2].nibble)
 
     ok(nil)
 
@@ -238,6 +261,8 @@ proc deleteSlot*(
   # Mark account path Merkle keys for update - the leaf key is not stored so no
   # need to mark it
   db.layersResKeys(accHike, skip = 1)
+  if accHike.legs.len == 1:
+    db.resKeyRootLeaf(STATE_ROOT_VID)
 
   let otherVtx = ?db.deleteImpl(stoHike)
   db.layersPutStoLeaf(mixPath, nil)
@@ -302,6 +327,8 @@ proc clearStorage*(
 
   # Mark account path Merkle keys for update, except for the vtx we update below
   db.layersResKeys(accHike, skip = 1)
+  if accHike.legs.len == 1:
+    db.resKeyRootLeaf(STATE_ROOT_VID)
 
   ?db.delStoTreeImpl(stoID.vid, accPath)
 

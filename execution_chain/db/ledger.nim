@@ -890,15 +890,15 @@ proc getCollapsedSiblings*(
     ledger: LedgerRef
 ): seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]] =
   ## Collapsed siblings for witness generation. StoLeaf collapses (brVid
-  ## valid) are only included if brVid is still a StoLeaf in the final trie.
-  ## A branch there means a later insertion expanded it again, no auxiliary
-  ## needed.
+  ## valid) are only included if the collapsed branch is still gone in the
+  ## final trie. A branch there means a later insertion expanded it again, no
+  ## auxiliary needed.
   let db = ledger.txFrame.aTx
   var res: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]]
   for (accPath, sibStoPath, stoRoot, brVid) in db.collapsedSiblings:
     if brVid.isValid:
       let vtx = db.getVtx((stoRoot, brVid))
-      if vtx.isValid and vtx.vType == StoLeaf:
+      if not vtx.isValid or vtx.vType == LeafPtr:
         res.add((accPath, sibStoPath))
     else:
       res.add((accPath, sibStoPath))

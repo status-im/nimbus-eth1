@@ -41,6 +41,9 @@ iterator rightPairs*(
     let vtx = db.getVtx((root, next))
     if not vtx.isValid:
       break
+    if vtx.vType == LeafPtr:
+      next = LeafPtrRef(vtx).vid
+      continue
     hike.legs.add(Leg(nibble: -1, wp: VidVtxPair(vid: next, vtx: vtx)))
     reset(next)
 
@@ -49,8 +52,8 @@ iterator rightPairs*(
         var x = hike.legs[^1]
 
         case x.wp.vtx.vType
-        of BoundaryNode:
-          discard # BoundaryNode never appears in hike legs (step always fails for it)
+        of BoundaryNode, LeafPtr:
+          discard # never appear in hike legs
         of Branches:
           let vtx = BranchRef(x.wp.vtx)
           for i in uint8(x.nibble + 1) ..< 16u8:

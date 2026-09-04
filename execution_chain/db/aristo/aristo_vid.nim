@@ -17,6 +17,12 @@ import ./aristo_desc
 
 export aristo_desc
 
+const
+  DERIVED_VID_LEVEL* = 12
+    ## Number of leading path nibbles encoded in a derived vid. Leaves placed
+    ## under a branch at this nibble position or deeper share their derived vid
+    ## with a sibling and use allocated vids instead.
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------

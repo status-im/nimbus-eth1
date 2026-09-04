@@ -137,7 +137,7 @@ proc getKey*(
 
   block:
     # We don't store keys for leaves, no need to hit the database
-    rdb.rdVtxLru.withPeek(rvid.vid, cached):
+    rdb.rdVtxLru.withPeek(rvid, cached):
       let vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
       if vtx.vType in Leaves:
         return ok((VOID_HASH_KEY, vtx))
@@ -168,7 +168,7 @@ proc getKey*(
   if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
     # Don't invalidate vertex cache entries because of key reads - the latter
     # follow a different access pattern!
-    rdb.rdVtxLru.put(rvid.vid, vtxBuf)
+    rdb.rdVtxLru.put(rvid, vtxBuf)
 
   let vtx =
     if res.isNone():
@@ -215,7 +215,7 @@ proc getKeys*(
 
       block:
         var leafVtx: VertexRef
-        rdb.rdVtxLru.withPeek(rvid.vid, cached):
+        rdb.rdVtxLru.withPeek(rvid, cached):
           let vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
           if vtx.vType in Leaves:
             leafVtx = vtx
@@ -283,7 +283,7 @@ proc getKeys*(
       rdb.rdKeyLru.put(rvid.vid, res.value())
 
     if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-      rdb.rdVtxLru.put(rvid.vid, vtxBufs[j])
+      rdb.rdVtxLru.put(rvid, vtxBufs[j])
 
     keyvtxs[i] =
       if res.isSome():
@@ -313,10 +313,10 @@ proc getVtx*(
   block:
     var vtx: VertexRef
     if GetVtxFlag.PeekCache in flags:
-      rdb.rdVtxLru.withPeek(rvid.vid, cached):
+      rdb.rdVtxLru.withPeek(rvid, cached):
         vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
     else:
-      rdb.rdVtxLru.withGet(rvid.vid, cached):
+      rdb.rdVtxLru.withGet(rvid, cached):
         vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
 
     if vtx != nil:
@@ -356,11 +356,11 @@ proc getVtx*(
 
   # Update cache and return - in peek mode, avoid evicting cache items
   if GetVtxFlag.PeekCache notin flags:
-    if res.value.vType == Branch:
+    if res.value.vType == Branch and BranchRef(res.value()).leafMask == 0:
       let vtx = BranchRef(res.value())
       rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
     else:
-      rdb.rdVtxLru.put(rvid.vid, vtxBuf)
+      rdb.rdVtxLru.put(rvid, vtxBuf)
 
   ok res.value()
 
