@@ -201,9 +201,11 @@ proc getStorageAt*(
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
     proof = ?(
-      (await backend.eth_getProof(address, @[slot.toStorageKey()], blockId(blockNumber))).tagBackend(
-        backendIdx
-      )
+      (
+        await backend.eth_getProof(
+          address, @[slot.toStorageKey()], blockId(blockNumber)
+        )
+      ).tagBackend(backendIdx)
     )
 
     slotValue = ?(getStorageFromProof(stateRoot, slot, proof).tagBackend(backendIdx))
@@ -231,9 +233,11 @@ proc populateCachesForAccountAndSlots(
     let
       (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
       proof = ?(
-        (await backend.eth_getProof(address, slotsToFetch.toStorageKeys(), blockId(blockNumber))).tagBackend(
-          backendIdx
-        )
+        (
+          await backend.eth_getProof(
+            address, slotsToFetch.toStorageKeys(), blockId(blockNumber)
+          )
+        ).tagBackend(backendIdx)
       )
 
       account = ?(
