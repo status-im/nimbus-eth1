@@ -108,9 +108,9 @@ proc sessionForward*(
       break
 
     for w in bal[]:
-      discard db.applyAccountChanges(w, info).valueOr:
+      ctx.applyAccountChanges(w, info).isOkOr:
         error info & ": Error applying BAL account changes", pivotNum, number,
-          dist, addr=($w.address), accPath=w.address.computeAccPath.toStr
+          dist, accAddr=($w.address), accPath=w.address.computeAccPath.toStr
         return err()
 
   # Update pivot and forward block numbers if there was some progress

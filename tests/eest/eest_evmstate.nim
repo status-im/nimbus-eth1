@@ -23,7 +23,7 @@ proc runTest(filePath: string): Result[seq[StateResult], string] =
     postState    : true,
     dumpEnabled  : true,
     enableError  : false,
-    sanitizeEnv  : true,
+    sanitizeEnv  : false,
   )
 
   evmstate.prepareAndRun(filePath, conf, seq[StateResult])
