@@ -112,3 +112,14 @@ func frameStateGasUsed*(gasMeter: var GasMeter, stateGasReservoir: GasInt): int6
   int64(stateGasReservoir) -
     int64(gasMeter.stateGasLeft) +
     int64(gasMeter.stateGasSpilled)
+
+func repayStateGasSpill*(gasMeter: var GasMeter) =
+  # Repay outstanding [spill] from the reservoir after a child merges.
+  let
+    repayment = min(gasMeter.stateGasLeft, gasMeter.stateGasSpilled)
+
+  gasMeter.executionGasLeft = gasMeter.executionGasLeft + repayment
+  gasMeter.stateGasLeft -= repayment
+  gasMeter.stateGasSpilled -= repayment
+  # The claim and the credit cannot both survive a repayment.
+  doAssert gasMeter.stateGasLeft == 0 or gasMeter.stateGasSpilled == 0
