@@ -94,6 +94,11 @@ type
   CachedStoLeaf* = object
     pfx*: NibblesBuf
     stoData*: UInt256
+    vid*: VertexID
+      ## VertexID of the leaf in its storage trie, or `VertexID(0)` when not
+      ## known. Demoted into `AristoDbRef.stoLeafVids` when this entry is
+      ## evicted so that a later lookup can jump straight to the leaf instead
+      ## of descending the storage trie.
 
   NodeRef* = ref object of RootRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
@@ -151,8 +156,9 @@ template init*(
   T(empty: false, pfx: pfxp, account: accountp, stoID: stoIDp)
 
 template init*(
-    T: type CachedStoLeaf, pfxp: NibblesBuf, stoDatap: UInt256): T =
-  T(pfx: pfxp, stoData: stoDatap)
+    T: type CachedStoLeaf, pfxp: NibblesBuf, stoDatap: UInt256,
+    vidp = VertexID(0)): T =
+  T(pfx: pfxp, stoData: stoDatap, vid: vidp)
 
 const
   emptyCachedAccLeaf* = CachedAccLeaf(empty: true)

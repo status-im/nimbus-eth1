@@ -134,9 +134,10 @@ iterator stepUp*(
     root: VertexID;                              # Start vertex
     db: AristoTxRef;                             # Database
     next = VertexID(0)
-): Result[VertexRef, AristoError] =
+): Result[(VertexRef, VertexID), AristoError] =
   ## For the argument `path`, iterate over the logest possible path in the
-  ## argument database `db`.
+  ## argument database `db`, yielding each vertex together with the `VertexID`
+  ## it was fetched from.
   var
     path = path
     next = if next == VertexID(0): root else: next
@@ -144,11 +145,12 @@ iterator stepUp*(
     common = 0
   block iter:
     while true:
-      (vtx, common, next) = step(path, (root, next), db).valueOr:
-        yield Result[VertexRef, AristoError].err(error)
+      let cur = next
+      (vtx, common, next) = step(path, (root, cur), db).valueOr:
+        yield Result[(VertexRef, VertexID), AristoError].err(error)
         break iter
 
-      yield Result[VertexRef, AristoError].ok(vtx)
+      yield Result[(VertexRef, VertexID), AristoError].ok((vtx, cur))
 
       if common == 0:
         break

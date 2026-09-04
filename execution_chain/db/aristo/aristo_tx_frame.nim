@@ -267,6 +267,7 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
     for mixPath, v in txFrame.snapshot.sto:
       if v[0] == nil:
         db.stoLeaves.del(mixPath)
+        db.stoLeafVids.del(stoVidKey(mixPath))
       else:
         discard db.stoLeaves.update(mixPath, CachedStoLeaf.init(v[0].pfx, v[0].stoData))
 
@@ -280,6 +281,7 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
     for mixPath, vtx in txFrame.stoLeaves:
       if vtx == nil:
         db.stoLeaves.del(mixPath)
+        db.stoLeafVids.del(stoVidKey(mixPath))
       else:
         discard db.stoLeaves.update(mixPath, CachedStoLeaf.init(vtx.pfx, vtx.stoData))
 

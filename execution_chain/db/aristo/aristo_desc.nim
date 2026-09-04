@@ -144,9 +144,24 @@ type
         ## Mixed account/storage path to payload cache - same as above but caches
         ## the full lookup of storage slots
 
+      stoLeafVids*: ConcurrentLruCache[uint64, VertexID]
+        ## Second-level cache holding just the VertexID of a storage leaf, keyed
+        ## by `stoVidKey` of the same mixed path as `stoLeaves`. Entries are
+        ## demoted here when they fall out of `stoLeaves`: an entry is ~40 bytes
+        ## against ~64 there, so for the same memory this tracks far more slots.
+        ## A hit turns the root-to-leaf descent of the storage trie into a single
+        ## lookup. Entries are verified on use and are therefore allowed to go
+        ## stale - see `fetchSlot`.
+
     staticLevel*: Atomic[int]
       ## MPT level where "most" leaves can be found, for static vid lookups
     lookupsLower*, lookupsHits*, lookupsHigher*: Atomic[int]
+
+    stoVidHits*, stoVidStale*, stoVidMisses*: Atomic[int]
+      ## `stoLeafVids` effectiveness: a hit skipped the storage trie descent, a
+      ## stale entry cost one extra lookup before falling back to it, a miss had
+      ## no entry at all. A high stale share means the working set churns faster
+      ## than the cache can track it.
 
     snapshots*: HeapQueue[AristoTxRef]
       ## A priority queue of txFrames holding snapshots. Used to limit the number
@@ -193,6 +208,17 @@ template mixUp*(accPath, stoPath: Hash32): Hash32 =
     # `+` wraps leaving all bits used
     v.data[i] = accPath.data[i] + stoPath.data[i]
   v
+
+func stoVidKey*(mixPath: Hash32): uint64 =
+  ## Key for the `stoLeafVids` second-level cache, derived from the `mixUp` path
+  ## used by `stoLeaves` so that an entry evicted from the latter can be demoted
+  ## without knowing the account and slot paths it came from.
+  ##
+  ## Each byte of `mixPath` is a wrapping sum of two independent, effectively
+  ## uniform bytes and is therefore itself uniform, so truncating to 64 bits is
+  ## entropy-optimal and needs no further mixing. A collision costs at most one
+  ## wasted vertex lookup because the cached vid is verified before use.
+  copyMem(addr result, unsafeAddr mixPath.data[0], sizeof(result))
 
 func getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
   tab.getOrDefault(w, VertexRef(nil))

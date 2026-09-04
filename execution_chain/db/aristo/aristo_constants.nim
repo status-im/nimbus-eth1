@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -47,5 +47,10 @@ const
   ACC_LRU_SIZE* = 1024 * 1024
     ## LRU cache size for accounts that have storage, see `.accLeaves` and
     ## `.stoLeaves` fields of the main descriptor.
+
+  STO_VID_LRU_SIZE* = ACC_LRU_SIZE
+    ## LRU cache size for the storage leaf vid cache, see the `.stoLeafVids`
+    ## field of the main descriptor. Entries there are ~40 bytes against ~64 in
+    ## `.stoLeaves`, so this holds more slots per byte than growing the latter.
 
 # End

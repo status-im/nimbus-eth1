@@ -1169,6 +1169,39 @@ template putWithEvicted*[K, V](
   withMutable(val, v):
     lru.putWithEvictedByHashImpl(lru.toKeyHash(key), key, v)
 
+proc putWithEvictedKVByHashImpl[K, V](
+    lru: var ConcurrentLruCache[K, V], keyHash: KeyHash, key: K, val: var V
+): Opt[(K, V)] =
+  template putInto(cache: var LruCache[K, V], sh: uint32) =
+    for (evicted, evictedKey, evictedVal) in cache.putWithEvicted(sh, key, val):
+      if evicted:
+        result = Opt.some((evictedKey, move(evictedVal[])))
+
+  if not lru.threadSafe:
+    putInto(lru.cache, keyHash.subhash)
+  else:
+    let s = addr lru.shards[keyHash.shardIdx]
+    s.lock.withWriteLock:
+      putInto(s.cache, keyHash.subhash)
+      s.usedCount.store(s.cache.len, moRelaxed)
+
+template putWithEvictedKV*[K, V](
+    lru: var ConcurrentLruCache[K, V], key: K, val: V
+): Opt[(K, V)] =
+  ## Insert or update `key` with `val`, returning the key and value of the entry
+  ## that fell off the least-recently-used end, if any.
+  ##
+  ## Unlike `putWithEvicted`, an entry that was merely replaced under the same
+  ## key is not reported - only a true eviction is. This lets the caller demote
+  ## the evicted entry into a secondary cache without also demoting keys that
+  ## are still resident.
+  ##
+  ## Note that the replaced value of a same-key update is therefore abandoned,
+  ## so this variant must not be used where V owns manually allocated memory.
+  bind putWithEvictedKVByHashImpl, withMutable
+  withMutable(val, v):
+    lru.putWithEvictedKVByHashImpl(lru.toKeyHash(key), key, v)
+
 proc pop*[K, V](lru: var ConcurrentLruCache[K, V], key: K): Opt[V] {.inline, noinit.} =
   ## Remove `key` from the cache and return its value, transferring ownership to
   ## the caller. Prefer this over `del` when V owns manually allocated memory.

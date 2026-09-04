@@ -84,7 +84,8 @@ proc initInstance*(
     parallelStateRootComputation = true,
     threadSafeCaches = true,
     accLeavesLruSize = 0,
-    stoLeavesLruSize = 0
+    stoLeavesLruSize = 0,
+    stoLeafVidsLruSize = 0
 ): Result[void, AristoError] =
   doAssert maxSnapshots > 0
   let vTop = (?db.getLstFn()).vTop
@@ -94,9 +95,11 @@ proc initInstance*(
     if threadSafeCaches:
       db.accLeaves.init(accLeavesLruSize)
       db.stoLeaves.init(stoLeavesLruSize)
+      db.stoLeafVids.init(stoLeafVidsLruSize)
     else:
       db.accLeaves.init(accLeavesLruSize, shardBits = 0, threadSafe = false)
       db.stoLeaves.init(stoLeavesLruSize, shardBits = 0, threadSafe = false)
+      db.stoLeafVids.init(stoLeafVidsLruSize, shardBits = 0, threadSafe = false)
   db.maxSnapshots = maxSnapshots
   db.parallelStateRootComputation = parallelStateRootComputation
 
@@ -116,8 +119,10 @@ proc close*(db: AristoDbRef; wipe = false) =
   when compileOption("threads"):
     db.accLeaves.dispose()
     db.stoLeaves.dispose()
+    db.stoLeafVids.dispose()
     db.accLeaves.reset()
     db.stoLeaves.reset()
+    db.stoLeafVids.reset()
 
   db.closeFn wipe
 

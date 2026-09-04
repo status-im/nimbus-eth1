@@ -28,17 +28,50 @@ proc retrieveLeaf(
     root: VertexID;
     path: NibblesBuf;
     next = VertexID(0),
-      ): Result[VertexRef,AristoError] =
+      ): Result[(VertexRef, VertexID),AristoError] =
   for step in stepUp(path, root, db, next):
-    let vtx = step.valueOr:
+    let (vtx, vid) = step.valueOr:
       if error in HikeAcceptableStopsNotFound:
         return err(FetchPathNotFound)
       return err(error)
 
     if vtx.vType in Leaves:
-      return ok vtx
+      return ok (vtx, vid)
 
   return err(FetchPathNotFound)
+
+proc verifiedStoLeaf(
+    db: AristoTxRef;
+    root: VertexID;
+    vid: VertexID;
+    stoPath: NibblesBuf;
+      ): StoLeafRef =
+  ## Fetch the vertex at `vid` and return it if it really is the storage leaf for
+  ## `stoPath`, else `nil`.
+  ##
+  ## A vid taken from `stoLeafVids` may be stale: inserting a sibling slot turns
+  ## the leaf into a branch and moves the leaf to a fresh vid, and deleting one
+  ## can pull a different leaf up into its place. Both are detected here, so the
+  ## cache never needs invalidating - a stale entry costs one lookup.
+  ##
+  ## The check is exact rather than probabilistic. Non-root vids are never reused
+  ## (`vidFetch` only ever advances `vTop`) and a vid's position in the trie is
+  ## fixed for life by the branch slot that allocated it, so its leading nibbles
+  ## cannot change. A leaf found at `vid` whose suffix matches `stoPath` at the
+  ## depth implied by that suffix is therefore the leaf for `stoPath`.
+  let (vtx, _) = db.getVtxRc((root, vid)).valueOr:
+    return nil
+
+  if vtx.vType != StoLeaf:
+    return nil
+
+  let leaf = StoLeafRef(vtx)
+  if leaf.pfx.len > stoPath.len:
+    return nil
+  if leaf.pfx != stoPath.slice(stoPath.len - leaf.pfx.len):
+    return nil
+
+  leaf
 
 template cacheAccLeaf(db: AristoTxRef; accPath: Hash32; cached: CachedAccLeaf) =
   when compileOption("threads"):
@@ -46,7 +79,12 @@ template cacheAccLeaf(db: AristoTxRef; accPath: Hash32; cached: CachedAccLeaf) =
 
 template cacheStoLeaf(db: AristoTxRef; mixPath: Hash32; cached: CachedStoLeaf) =
   when compileOption("threads"):
-    db.db.stoLeaves.put(mixPath, cached)
+    # Demote the entry that falls off the end of the cache: keeping just its vid
+    # is much cheaper than keeping the payload and still lets a later lookup skip
+    # the descent through the storage trie.
+    let evicted = db.db.stoLeaves.putWithEvictedKV(mixPath, cached)
+    if evicted.isSome() and evicted[][1].vid.isValid():
+      db.db.stoLeafVids.put(stoVidKey(evicted[][0]), evicted[][1].vid)
 
 proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
@@ -179,7 +217,7 @@ proc retrieveAccLeaf(
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
   let
-    leafVtx = db.retrieveLeaf(STATE_ROOT_VID, path, next).valueOr:
+    leaf = db.retrieveLeaf(STATE_ROOT_VID, path, next).valueOr:
       if error == FetchPathNotFound:
         # The branch was the deepest level where a vertex actually existed
         # meaning that it was a hit - else searches for non-existing paths would
@@ -190,7 +228,7 @@ proc retrieveAccLeaf(
 
   discard db.db.lookupsHigher.fetchAdd(1, moRelaxed)
 
-  let accLeaf = AccLeafRef(leafVtx)
+  let accLeaf = AccLeafRef(leaf[0])
   db.cacheAccLeaf(accPath, CachedAccLeaf.init(accLeaf.pfx, accLeaf.account, accLeaf.stoID))
 
   ok accLeaf
@@ -329,7 +367,24 @@ proc fetchSlot*(
     db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
     return ok 0'u256
 
-  let leafRc = db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data))
+  let stoPathNibbles = NibblesBuf.fromBytes(stoPath.data)
+
+  # Second-level cache: a hit turns the descent below into a single lookup. The
+  # vid is verified because it may be stale - see `verifiedStoLeaf`.
+  when compileOption("threads"):
+    let cachedVid = db.db.stoLeafVids.get(stoVidKey(mixPath))
+    if cachedVid.isSome():
+      let leaf = db.verifiedStoLeaf(stoID, cachedVid[], stoPathNibbles)
+      if leaf.isValid():
+        discard db.db.stoVidHits.fetchAdd(1, moRelaxed)
+        db.cacheStoLeaf(
+          mixPath, CachedStoLeaf.init(leaf.pfx, leaf.stoData, cachedVid[]))
+        return ok leaf.toStoData()
+      discard db.db.stoVidStale.fetchAdd(1, moRelaxed)
+    else:
+      discard db.db.stoVidMisses.fetchAdd(1, moRelaxed)
+
+  let leafRc = db.retrieveLeaf(stoID, stoPathNibbles)
   if leafRc.isErr:
     if leafRc.error == FetchPathNotFound:
       db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
@@ -340,8 +395,8 @@ proc fetchSlot*(
     # Can't know if slot is absent.
     return err(leafRc.error)
 
-  let leaf = StoLeafRef(leafRc.value)
-  db.cacheStoLeaf(mixPath, CachedStoLeaf.init(leaf.pfx, leaf.stoData))
+  let leaf = StoLeafRef(leafRc.value[0])
+  db.cacheStoLeaf(mixPath, CachedStoLeaf.init(leaf.pfx, leaf.stoData, leafRc.value[1]))
   return ok leaf.toStoData()
 
 proc fetchStorageRoot*(

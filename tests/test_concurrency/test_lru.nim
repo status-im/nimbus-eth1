@@ -503,6 +503,36 @@ suite "ConcurrentLruCache Tests":
       lru.get(1) == Opt.some(20)
       lru.len() == 1
 
+  test "putWithEvictedKV reports only true evictions":
+    for threadSafe in [true, false]:
+      var lru: ConcurrentLruCache[int, int]
+      lru.init(2, shardBits = 0, threadSafe = threadSafe)
+      defer:
+        lru.dispose()
+
+      check:
+        lru.putWithEvictedKV(1, 10).isNone()
+        lru.putWithEvictedKV(2, 20).isNone()
+
+      # Replacing a resident key is not an eviction - unlike `putWithEvicted`,
+      # nothing is reported because the entry is still in the cache
+      check:
+        lru.putWithEvictedKV(1, 11).isNone()
+        lru.get(1) == Opt.some(11)
+        lru.len() == 2
+
+      # Going past capacity evicts the least recently used entry and reports
+      # both its key and its value, so it can be demoted elsewhere
+      let evicted = lru.putWithEvictedKV(3, 30)
+      check:
+        evicted.isSome()
+        evicted.unsafeGet()[0] == 2
+        evicted.unsafeGet()[1] == 20
+        lru.len() == 2
+        not lru.contains(2)
+        lru.contains(1)
+        lru.contains(3)
+
   test "pop":
     var lru: ConcurrentLruCache[int, int]
     lru.init(1000)
