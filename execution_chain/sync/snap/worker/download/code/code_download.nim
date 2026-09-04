@@ -241,8 +241,13 @@ proc codeDownloadCommit*(
   ##
   let adb = ctx.pool.cacheDB
 
-  # Collect stale code locks (if any)
+  # Collect paths for missing contract codes.
   var accPaths: seq[Hash32]
+  for key in adb.walkMissingBlob:
+    accPaths.add key
+
+  # Collect stale code locks (if any)
+  let nMissCode = accPaths.len
   for key in adb.walkCodeLock:
     accPaths.add key
 
@@ -251,7 +256,7 @@ proc codeDownloadCommit*(
       return err(ECacheError)
 
   chronicles.info info & ": Cleared missing contract codes",
-    nCodeLock=accPaths.len
+    nMissCode, nCodeLock=(accPaths.len-nMissCode)
   ok()
 
 template codeDownload*(

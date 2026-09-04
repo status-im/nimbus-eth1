@@ -85,11 +85,10 @@ proc applyAccountChanges*(
 
   # Apply change list to account and cache DB
   if 0 < chng.storageChanges.len:
-    acc.account.storageRoot = zeroHash32            # no sto root known anymore
+    acc.account.storageRoot = zeroHash32            # no sto. root known anymore
     ?adb.applySlotChanges(accPath, chng.storageChanges, info)
 
   if 0 < chng.codeChanges.len:
-    acc.dirtyCode = false
     acc.account.codeHash = ?adb.applyCodeChange(accPath, chng.codeChanges, info)
 
   if 0 < chng.nonceChanges.len:
