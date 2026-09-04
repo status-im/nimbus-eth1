@@ -36,23 +36,14 @@ when not defined(`any`) and not defined(standalone):
 else:
   {.passc: "-I\"" & zkvmIoDir & "\"".}
 
-# `buf_ptr` cannot be the matching `ptr ptr UncheckedArray[byte]`: the standard
-# declares it `const uint8_t**`, and C does not accept a `uint8_t**` here. Nim
-# cannot spell the const, and `void*` is the only pointer C converts freely, so
-# `pointer` it is. Downside: no type check on `buf_ptr`.
-#
-# Getting this wrong is only an error on newer gcc and is silent on clang, which
-# ignores the diagnostic in nimbase.h. Turn it into an error here instead, where
-# it applies to this file alone.
-{.emit: """/*TYPESECTION*/
-#pragma GCC diagnostic error "-Wincompatible-pointer-types"
-""".}
-{.localPassC: "-Werror=incompatible-pointer-types".}
-
+# `buf_ptr` cannot be matching `ptr ptr UncheckedArray[byte]`: the zkvm-standard
+# declares it `const uint8_t**`, not `uint8_t**`. Nim cannot provide the const,
+# and `void*` is the only pointer C converts freely, so `pointer` it is.
+# Downside is no type check on `buf_ptr`.
+# gcc 14 and later error on it. Older gcc and clang only warn, and Nim passes
+# -w to the C compiler default, so no reported warning or error.
 proc c_read_input(
-  # Temp. fix disabled
-  # buf_ptr: pointer, buf_size: ptr csize_t
-  buf_ptr: ptr ptr UncheckedArray[byte], buf_size: ptr csize_t
+  buf_ptr: pointer, buf_size: ptr csize_t
 ) {.importc: "read_input", header: "zkvm_io.h".}
 
 proc c_write_output(
