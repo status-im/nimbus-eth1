@@ -14,68 +14,14 @@ import
   pkg/[chronicles, eth/common],
   pkg/stew/[byteutils, interval_set],
   ./[helpers, cache_db, worker_desc],
-  ./state_forward/[forward_apply, forward_calc]
+  ./state_forward/forward_apply
 
 logScope:
   topics = "snap sync"
 
-const
-  VerifyAgainstCoreDb = false
-    ## Do a secondary `CoreDb` import when verifying state roots and
-    ## compare it against the state root compiled for the flat tables.
-    ##
-    ## Note that this feature needs the debug syb-modules which are
-    ## only available in a test environment.
-    ##
-    ## This constant `VerifyAgainstCoreDb` is temporarily used
-    ## and will go away.
-
-when VerifyAgainstCoreDb:
-  import ./import_coredb
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-proc stateForwardVerify*(
-    ctx: SnapCtxRef;
-    info: static[string];
-      ): Opt[void] =
-  ## Calculate the flat tables state root and compare it aganst the state
-  ## root stored in the corresponding state header.
-  ##
-  ## This function is for testing only.
-  ##
-  ## It has potentally a huge memory foot print as the state root is
-  ## calculated by assembling MPTs in memory.
-  ##
-  let
-    db = ctx.pool.cacheDB
-    status = ?db.getAccMissingIntv(info)
-    cacheRc = ?db.calcStateRoot(info)
-    header = ?db.getHeader(status.number, info)
-
-  when VerifyAgainstCoreDb:
-    let tx = CoreDb2Ref.init(ctx, clean=true)
-    defer: tx.destroy()
-
-    let
-      txStats = ?tx.importFlat(db, info)
-      txStateRoot = ?tx.fetchStateRoot(info)
-
-    if cacheRc.stateRoot != txStateRoot:
-      error info & ": Oops, state roots differ", number=status.number,
-        cacheStats=cacheRc.stats, txStats, stateRoot=cacheRc.stateRoot,
-        txStateRoot=txStateRoot.toStr
-      return err()
-
-  if cacheRc.stateRoot != header.stateRoot:
-    error info & ": Oops, state root mismatch", number=status.number,
-      cacheStats=cacheRc.stats, stateRoot=cacheRc.stateRoot,
-      expected=header.stateRoot.toStr
-    return err()
-
-  ok()
 
 proc stateForward*(
     ctx: SnapCtxRef;
