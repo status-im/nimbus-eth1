@@ -12,13 +12,22 @@
 import
   ../evm/[types, state, computation, interpreter_dispatch, code_stream],
   ../db/ledger,
-  ../core/eip8037,
-  ./call_types
+  ../core/eip8037
+
+from ./call_types import OutputResult
 
 export
-  call_types
+  OutputResult
 
-proc setupComputation(params: CallParams): Computation =
+type
+  SysCallParams* = object
+    vmState*:  BaseVMState          # Chain, database, state, block, fork.
+    gasLimit*: GasInt               # Maximum gas available for this call.
+    sender*:   addresses.Address    # Sender account.
+    to*:       addresses.Address    # Recipient.
+    input*:    seq[byte]            # Input data.
+
+proc setupComputation(params: SysCallParams): Computation =
   let
     vmState = params.vmState
     stateGasReservoir = if vmState.fork >= FkAmsterdam: SYSTEM_STATE_GAS_RESERVOIR.GasInt
@@ -30,7 +39,6 @@ proc setupComputation(params: CallParams): Computation =
       contractAddress:   params.to,
       codeAddress:       params.to,
       sender:            params.sender,
-      value:             params.value,
       data:              params.input,
     )
     code = vmState.ledger.getCode(msg.codeAddress)
@@ -44,12 +52,12 @@ proc setupComputation(params: CallParams): Computation =
   # EVM called for a new transaction
   vmState.gasRefunded = 0
   vmState.captureStart(computation, params.sender, params.to,
-                       params.isCreate, params.input,
-                       params.gasLimit, params.value)
+                       false, params.input,
+                       params.gasLimit, 0.u256)
   computation
 
 func sysCallGasUsed(c: Computation): GasInt =
-  c.msg.gas - c.gasMeter.gasRemaining - c.gasMeter.stateGasLeft
+  c.msg.gas - c.gasMeter.executionGasLeft - c.gasMeter.stateGasLeft
 
 proc finishRunningComputation(c: Computation, T: type): T =
   let
@@ -86,7 +94,7 @@ proc preExecComputation(c: Computation) =
         c.setError("No code found for builder deposit or exit requests contract")
         return
 
-proc systemCall*(params: CallParams, T: type): T =
+proc systemCall*(params: SysCallParams, T: type): T =
   let
     ledger = params.vmState.ledger
     c = setupComputation(params)

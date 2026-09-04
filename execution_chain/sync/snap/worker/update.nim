@@ -12,10 +12,31 @@
 
 import
   pkg/chronicles,
-  ./[mpt, state_db, worker_const, worker_desc]
+  ./[mpt, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc allDownloaded(ctx: SnapCtxRef; info: static[string]): Opt[void] =
+  let adb = ctx.pool.cacheDB
+  if ctx.accUnproc.synced():                        # accounting cache active?
+    if 0 < ctx.accUnproc.chunks():
+      return err()
+  else:
+    if ?adb.hasAccMissingIntv(info):
+      return err()
+
+  # So, either the accounting cache is complete, od the cache DB.
+  if not ?adb.hasStoMissingIntv(info) and           # storage left (or error)?
+     not ?adb.hasStoLock(info) and
+     not ?adb.hasMissingBlob(info) and              # codes left (or error)?
+     not ?adb.hasCodeLock(info):
+    return ok()
+  err()
 
 # ------------------------------------------------------------------------------
 # Private FSA transition functions
@@ -60,19 +81,24 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
 
 # -------------------------
 
-func downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
+proc downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   # Check whether one should forward the downloaded partial state
   let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
   if ctx.pool.pivotNum + consHeadSupportWindowSize < consHeadNum:
     ctx.poolMode = true
-    return SnapDownloadFinish
+    return SnapDownloadFinish                       # => sync peers
+  ctx.allDownloaded(info).isErrOr:                  # download is complete?
+    ctx.poolMode = true
+    return SnapDownloadFinish                       # => sync peers
   SnapDownload                                      # keep downloading
 
 proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
     return SnapDownloadFinish
+  ctx.allDownloaded(info).isErrOr:                  # download is complete?
+    return SnapStop                                 # FIXME, must change
   SnapBalsFetch
 
 proc balsFetchNext(ctx: SnapCtxRef, info: static[string]): SnapState =

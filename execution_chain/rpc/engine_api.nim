@@ -75,24 +75,24 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
       apiTiming("engine_exchangeCapabilities"):
         methods.filterIt(supportedMethods.contains(it))
 
-    proc engine_newPayloadV1(payload: ExecutionPayloadV1): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
+    proc engine_newPayloadV1(payload: ExecutionPayloadV1): PayloadStatusV1 {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
       apiTiming("engine_newPayloadV1"):
         await engine.newPayload(Version.V1, payload.executionPayload)
 
-    proc engine_newPayloadV2(payload: ExecutionPayload): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
+    proc engine_newPayloadV2(payload: ExecutionPayload): PayloadStatusV1 {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
       apiTiming("engine_newPayloadV2"):
         await engine.newPayload(Version.V2, payload)
 
     proc engine_newPayloadV3(payload: ExecutionPayload,
                                         expectedBlobVersionedHashes: Opt[seq[Hash32]],
-                                        parentBeaconBlockRoot: Opt[Hash32]): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
+                                        parentBeaconBlockRoot: Opt[Hash32]): PayloadStatusV1 {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
       apiTiming("engine_newPayloadV3"):
         await engine.newPayload(Version.V3, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
 
     proc engine_newPayloadV4(payload: ExecutionPayload,
                                         expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                         parentBeaconBlockRoot: Opt[Hash32],
-                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
+                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
       apiTiming("engine_newPayloadV4"):
         await engine.newPayload(Version.V4, payload,
           expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
@@ -100,7 +100,7 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
     proc engine_newPayloadV5(payload: ExecutionPayload,
                                         expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                         parentBeaconBlockRoot: Opt[Hash32],
-                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async: (raises: [CancelledError, ApplicationError, RlpError]).} =
+                                        executionRequests: Opt[seq[seq[byte]]]): PayloadStatusV1 {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
       apiTiming("engine_newPayloadV5"):
         await engine.newPayload(Version.V5, payload,
           expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
@@ -130,22 +130,22 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
         engine.getPayloadV6(payloadId)
 
     proc engine_forkchoiceUpdatedV1(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributesV1]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
+                      attrs: Opt[PayloadAttributesV1]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, RpcResponseError]).} =
       apiTiming("engine_forkchoiceUpdatedV1"):
         await engine.forkchoiceUpdated(Version.V1, update, attrs.payloadAttributes)
 
     proc engine_forkchoiceUpdatedV2(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
+                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, RpcResponseError]).} =
       apiTiming("engine_forkchoiceUpdatedV2"):
         await engine.forkchoiceUpdated(Version.V2, update, attrs)
 
     proc engine_forkchoiceUpdatedV3(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
+                      attrs: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, RpcResponseError]).} =
       apiTiming("engine_forkchoiceUpdatedV3"):
         await engine.forkchoiceUpdated(Version.V3, update, attrs)
 
     proc engine_forkchoiceUpdatedV4(update: ForkchoiceStateV1,
-                      attrs: Opt[PayloadAttributes], custodyColumns: Opt[seq[byte]]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, ApplicationError]).} =
+                      attrs: Opt[PayloadAttributes], custodyColumns: Opt[seq[byte]]): ForkchoiceUpdatedResponse {.async: (raises: [CancelledError, RpcResponseError]).} =
       apiTiming("engine_forkchoiceUpdatedV4"):
         await engine.forkchoiceUpdated(Version.V4, update, attrs, custodyColumns)
 
@@ -181,21 +181,21 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
         )]
 
     proc engine_getBlobsV1(versionedHashes: seq[VersionedHash]):
-                                          seq[Opt[BlobAndProofV1]] {.raises: [ApplicationError].} =
+                                          seq[Opt[BlobAndProofV1]] {.raises: [RpcResponseError].} =
       apiTiming("engine_getBlobsV1"):
         engine.getBlobsV1(versionedHashes)
 
     proc engine_getBlobsV2(versionedHashes: seq[VersionedHash]):
-                                          Opt[seq[BlobAndProofV2]] {.raises: [ApplicationError].} =
+                                          Opt[seq[BlobAndProofV2]] {.raises: [RpcResponseError].} =
       apiTiming("engine_getBlobsV2"):
         engine.getBlobsV2(versionedHashes)
 
     proc engine_getBlobsV3(versionedHashes: seq[VersionedHash]):
-                                          seq[Opt[BlobAndProofV2]] {.raises: [ApplicationError].} =
+                                          seq[Opt[BlobAndProofV2]] {.raises: [RpcResponseError].} =
       apiTiming("engine_getBlobsV3"):
         engine.getBlobsV3(versionedHashes)
 
     proc engine_getBlobsV4(versionedHashes: seq[VersionedHash], indicesBitarray: seq[byte]):
-                                          seq[Opt[BlobCellsAndProofsV1]] {.raises: [ApplicationError].} =
+                                          seq[Opt[BlobCellsAndProofsV1]] {.raises: [RpcResponseError].} =
       apiTiming("engine_getBlobsV4"):
         engine.getBlobsV4(versionedHashes, indicesBitarray)

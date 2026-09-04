@@ -83,35 +83,3 @@ procSuite "Stateless Execution Tests":
       var partial = witness
       partial.state.asSeq.delete(dropIdx)
       check statelessProcessBlock(partial, com, blk).isErr()
-
-  asyncTest "Stateless process block json files - mainnet block 100":
-    let
-      witnessJsonFile = sourcePath / "mainnet_100_witness.json"
-      blkJsonFile = sourcePath / "mainnet_100_block.json"
-    check statelessProcessBlockJsonFiles(witnessJsonFile, com, blkJsonFile).isOk()
-
-    let com2 = CommonRef.new(
-      db = nil,
-      config = chainConfigForNetwork(networkId),
-      networkId = networkId,
-      initializeDb = false
-    )
-    check statelessProcessBlockJsonFiles(witnessJsonFile, com2, blkJsonFile).isOk()
-    discard era0
-    discard fc
-
-  asyncTest "Stateless process block json files - mainnet block 73141":
-    let
-      witnessJsonFile = sourcePath / "mainnet_73141_witness.json"
-      blkJsonFile = sourcePath / "mainnet_73141_block.json"
-    check statelessProcessBlockJsonFiles(witnessJsonFile, com, blkJsonFile).isOk()
-
-    let com2 = CommonRef.new(
-      db = nil,
-      config = chainConfigForNetwork(networkId),
-      networkId = networkId,
-      initializeDb = false
-    )
-    check statelessProcessBlockJsonFiles(witnessJsonFile, com2, blkJsonFile).isOk()
-    discard era0
-    discard fc

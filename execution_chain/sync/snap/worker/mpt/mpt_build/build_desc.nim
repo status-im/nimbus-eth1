@@ -14,12 +14,14 @@ import
   pkg/eth/trie/nibbles,
   ../../../../../db/aristo/[aristo_constants, aristo_desc/desc_identifiers],
   ../../../../wire_protocol/snap/snap_types,
-  ../../state_db
+  ../../extra_types
 
 export
   EmptyBlob,
   VOiD_HASH_KEY,
-  desc_identifiers # `HashKey` and friends
+  desc_identifiers, # `HashKey` and friends
+  extra_types,
+  snap_types
 
 const
   EmptyPath* = NibblesBuf()

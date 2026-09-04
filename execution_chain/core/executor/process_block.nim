@@ -68,10 +68,10 @@ proc processTransactions*(
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
-  vmState.blockRegularGasUsed = 0
+  vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.allLogs = @[]
+  vmState.allLogs.setLen(0)
 
   when compileOption("threads"):
     if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
@@ -85,7 +85,7 @@ proc processTransactions*(
     if vmState.balTrackerEnabled:
       vmState.balTracker.setBlockAccessIndex(txIndex + 1)
 
-    let rc = vmState.processTransaction(tx, sender)
+    var rc = vmState.processTransaction(tx, sender)
     if rc.isErr:
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
     if skipReceipts:
@@ -148,9 +148,13 @@ proc procBlkPreamble(
   if com.isAmsterdamOrLater(header.timestamp):
     if header.blockAccessListHash.isNone:
       return err("Post-Amsterdam block header must have blockAccessListHash")
+    if header.slotNumber.isNone:
+      return err("Post-Amsterdam block header must have slotNumber")
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
+    if header.slotNumber.isSome:
+      return err("Pre-Amsterdam block header must not have slotNumber")
 
   # Commit block access list tracker changes for pre‑execution system calls
   if vmState.balTrackerEnabled:
@@ -192,7 +196,7 @@ proc procBlkPreamble(
       return err("Pre-Shanghai block body must not have withdrawals")
 
   if com.isAmsterdamOrLater(header.timestamp):
-    let blockGasUsed = max(vmState.blockRegularGasUsed, vmState.blockStateGasUsed)
+    let blockGasUsed = max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
     if blockGasUsed != header.gasUsed:
       # TODO replace logging with better error
       debug "gasUsed neq blockGasUsed",
@@ -281,6 +285,10 @@ proc procBlkEpilogue(
           blockAccessList = $(bal[])
         return err("blockAccessListHash mismatch, expect: " &
           $header.blockAccessListHash.get & ", got: " & $balHash)
+
+      if vmState.com.balPostExecValidation:
+        bal.validate(header.blockAccessListHash.get, header.gasLimit).isOkOr:
+          return err("blockAccessList failed post-execution validation: " & $error)
 
     if not skipStateRootCheck:
       let stateRoot = vmState.ledger.getStateRoot()

@@ -15,7 +15,7 @@ import
   pkg/[chronicles, metrics, minilru],
   ../../../networking/p2p,
   ../../wire_protocol,
-  ./[mpt, download, state_db, worker_desc]
+  ./[mpt, download, worker_desc]
 
 logScope:
   topics = "snap sync"

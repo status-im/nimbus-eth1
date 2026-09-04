@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  eth/common/[base, keys, headers, transactions],
+  eth/common/[base, keys, headers, transactions, receipts],
   stew/byteutils,
   json_serialization,
   ../../execution_chain/transaction,
@@ -47,12 +47,6 @@ template defaultZero(res, n: untyped, i: int) =
     res = n.value[i]
   else:
     res = default(typeof(res))
-
-template defaultTo(res, x, n: untyped) =
-  if n.isSome:
-    res = n.value
-  else:
-    res = x
 
 func txType(n: Txo): TxType =
   if n.authorizationList.isSome:
@@ -93,7 +87,7 @@ func parseParentHeader*(n: StateEnv): Result[Header, string] =
   optional(res.blobGasUsed, n.parentBlobGasUsed)
   ok(move(res))
 
-func parseTx*(n: Txo, index: Index, eip155: bool): Result[Transaction, string] =
+func parseTx*(n: Txo, index: Index): Result[Transaction, string] =
   var tx = Transaction(
     txType  : txType(n)
   )
@@ -101,7 +95,7 @@ func parseTx*(n: Txo, index: Index, eip155: bool): Result[Transaction, string] =
   required(tx.gasLimit, n.gasLimit, index.gas)
   required(tx.value, n.value, index.value)
   required(tx.payload, n.data, index.data)
-  defaultTo(tx.chainId, 1.u256, n.chainId)
+  defaultZero(tx.chainId, n.chainId)
   defaultZero(tx.gasPrice, n.gasPrice)
   defaultZero(tx.maxFeePerGas, n.maxFeePerGas)
   defaultZero(tx.accessList, n.accessLists, index.data)
@@ -118,7 +112,27 @@ func parseTx*(n: Txo, index: Index, eip155: bool): Result[Transaction, string] =
 
   let secretKey = n.secretKey.valueOr:
     return err("missing secretKey field")
-  ok(signTransaction(tx, secretKey, eip155))
+  ok(signTransaction(tx, secretKey, n.chainId.isSome))
+
+func parseReceipt*(rec: TxoReceipt): Receipt =
+  if rec.postState.isSome:
+    Receipt(
+      receiptType      : ReceiptType(rec.`type`),
+      isHash           : true,
+      hash             : rec.postState.value,
+      cumulativeGasUsed: rec.cumulativeGasUsed,
+      logsBloom        : rec.bloom.value.to(Bloom),
+      logs             : rec.logs,
+    )
+  else:
+    Receipt(
+      receiptType      : ReceiptType(rec.`type`),
+      isHash           : false,
+      status           : rec.status.get,
+      cumulativeGasUsed: rec.cumulativeGasUsed,
+      logsBloom        : rec.bloom.value.to(Bloom),
+      logs             : rec.logs,
+    )
 
 proc setupLedger*(wantedState: GenesisAlloc, ledger: LedgerRef) =
   for address, account in wantedState:

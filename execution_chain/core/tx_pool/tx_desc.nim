@@ -197,6 +197,19 @@ func excessBlobGas(xp: TxPoolRef): GasInt =
 proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
 
+proc getPendingNonce*(xp: TxPoolRef; account: Address): AccountNonce =
+  ## Next nonce `account` can use once its pooled transactions are mined: the
+  ## head-state nonce advanced over the gap-free run of pooled transactions.
+  ## This is what `eth_getTransactionCount(account, "pending")` returns on
+  ## other clients.
+  var nonce = xp.getNonce(account)
+  let sn = xp.senderTab.getOrDefault(account)
+  if sn.isNil:
+    return nonce
+  while sn.list.eq(nonce).isOk:
+    inc nonce
+  nonce
+
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
     let
@@ -531,6 +544,11 @@ proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: Bi
     KzgProof = engine_api_types.KzgProof
     KzgCells = eip4844.KzgCells
 
+  func getNumIndices(indices: BitArray[128]): int =
+    for i in 0..<indices.len:
+      if indices[i]:
+        inc result
+
   func getCellsAndProofs(indices: BitArray[128],
                          cells: KzgCells,
                          list: openArray[KzgProof],
@@ -539,12 +557,16 @@ proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: Bi
     let
       startIndex = index * CELLS_PER_EXT_BLOB
       endIndex   = startIndex + CELLS_PER_EXT_BLOB
+      numIndices = indices.getNumIndices
+
     doAssert(list.len >= endIndex)
 
+    output.blob_cells = newSeqOfCap[Opt[seq[byte]]](numIndices)
+    output.proofs = newSeqOfCap[Opt[KzgProof]](numIndices)
     for i in 0..<indices.len:
       if indices[i]:
-        output.proofs[i] = Opt.some(list[startIndex + i])
-        output.cells[i] = Opt.some(@(cells[i].bytes))
+        output.blob_cells.add(Opt.some(@(cells[i].bytes)))
+        output.proofs.add(Opt.some(list[startIndex + i]))
 
   xp.blobTab.withValue(v, val):
     let

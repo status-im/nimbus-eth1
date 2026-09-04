@@ -12,55 +12,49 @@
 
 import
   pkg/[chronicles, eth/common, stew/interval_set],
-  ../../[mpt, state_db, worker_desc]
+  ../../[mpt, worker_desc]
 
 logScope:
     topics = "snap sync"
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private helper
 # ------------------------------------------------------------------------------
 
 proc applySlotChanges(
-    db: CacheDbRef;
+    adb: CacheDbRef;
     accPath: Hash32;
     slots: openArray[SlotChanges];
     info: static[string];
       ): Opt[void] =
-  ## Apply BAL to storage slots. Returns the number of changes
-  let maybeStats = ?db.getStoMissingIntv(accPath, info)
-
-  if maybeStats.isNone():
-    # All covered, nothing to do
-    return ok()
-
-  let stoMissing = maybeStats.unsafeGet().ranges
+  ## Apply BAL to storage slots. This assumes to have partial storage sub-MPTs
+  ## cleared. But it would matter if there were a stray one as it would still
+  ## be partial and be cleared later.
+  ##
   for w in slots:
-    if w.changes.len == 0:
-      continue
-    let slotKey = w.slot.computeSlotKey()
-    if stoMissing.covered(slotKey.to(ItemKey)):
-      continue
-    let slotValue = w.changes[^1].newValue
-    if slotValue == 0:
-      ?db.delFlatSlot(accPath, slotKey, info)
-    else:
-      ?db.putFlatSlot(accPath, slotKey, slotValue, info)
-
+    if w.changes.len != 0:
+      let
+        slotKey = w.slot.computeSlotKey()
+        slotValue = w.changes[^1].newValue
+      if slotValue == 0:
+        ?adb.delFlatSlot(accPath, slotKey, info)
+      else:
+        ?adb.putFlatSlot(accPath, slotKey, slotValue, info)
   ok()
 
 proc applyCodeChange(
-    db: CacheDbRef;
+    adb: CacheDbRef;
     accPath: Hash32;
     code: openArray[CodeChange];
     info: static[string];
       ): Opt[Hash32] =
   ## Apply BAL to contract code
+  ##
   if code.len == 0:
     return ok(EMPTY_CODE_HASH)
 
   let newCode = code[^1].newCode
-  ?db.putFlatCode(accPath, newCode, info)
+  ?adb.putFlatCode(accPath, newCode, info)
   ok(newCode.keccak256)
 
 # ------------------------------------------------------------------------------
@@ -68,43 +62,44 @@ proc applyCodeChange(
 # ------------------------------------------------------------------------------
 
 proc applyAccountChanges*(
-    db: CacheDbRef;
+    ctx: SnapCtxRef;
     chng: AccountChanges;
-    accExcl: ItemKeyRangeSet;
     info: static[string];
-      ): Opt[bool] =
-  ## Apply BAL to account. Returns `true` if there were some changes.
+      ): Opt[void] =
+  ## Apply BAL to account.
   if chng.storageChanges.len == 0 and
      chng.balanceChanges.len == 0 and
      chng.nonceChanges.len == 0 and
      chng.codeChanges.len == 0:
-    return ok(false)                                # nothing to do
+    return ok()                                     # nothing to do
 
   # Check for existing accounts that have not been fetched, yet
-  let accPath = chng.address.computeAccPath
-  if accExcl.covered(accPath.to(ItemKey)):
-    return ok(false)                                # ignore for now
+  let
+    adb = ctx.pool.cacheDB
+    accPath = chng.address.computeAccPath
+  if (?adb.getAccMissingIntv(info)).ranges.covered(accPath.to(ItemKey)):
+    return ok()                                     # ignore for now
 
-  var acc = db.getFlatAcc(accPath, info).valueOr:
+  var acc = adb.getFlatAcc(accPath, info).valueOr:
     emptyFlatAccData                                # new account
 
-  # Apply change list to database
+  # Apply change list to account and cache DB
+  if 0 < chng.storageChanges.len:
+    acc.account.storageRoot = zeroHash32            # no sto root known anymore
+    ?adb.applySlotChanges(accPath, chng.storageChanges, info)
+
+  if 0 < chng.codeChanges.len:
+    acc.dirtyCode = false
+    acc.account.codeHash = ?adb.applyCodeChange(accPath, chng.codeChanges, info)
+
   if 0 < chng.nonceChanges.len:
     acc.account.nonce = chng.nonceChanges[^1].newNonce
 
   if 0 < chng.balanceChanges.len:
     acc.account.balance = chng.balanceChanges[^1].postBalance
 
-  if 0 < chng.codeChanges.len:
-    acc.account.codeHash = ?db.applyCodeChange(accPath, chng.codeChanges, info)
-
-  if 0 < chng.storageChanges.len:
-    ?db.applySlotChanges(accPath, chng.storageChanges, info)
-    acc.dirtyStorage = true                         # mark it changed
-    acc.account.storageRoot = zeroHash32            # no storage root yet
-
-  ?db.putFlatAcc(accPath, acc, info)                # update account
-  ok(true)
+  ?adb.putFlatAcc(accPath, acc, info)               # update account
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

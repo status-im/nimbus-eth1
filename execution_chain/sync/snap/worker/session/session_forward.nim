@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, eth/common],
   pkg/stew/[byteutils, interval_set],
-  ../[helpers, mpt, state_db, worker_desc],
+  ../[helpers, mpt, worker_desc],
   ./session_forward/[forward_apply, forward_calc]
 
 logScope:
@@ -92,8 +92,7 @@ proc sessionForward*(
   ##
   let
     db = ctx.pool.cacheDB
-    stats = ?db.getAccMissingIntv(info)
-    pivotNum = stats.number
+    pivotNum = (?db.getAccMissingIntv(info)).number
 
   var number = pivotNum
   template dist: untyped = (number-pivotNum)
@@ -109,9 +108,9 @@ proc sessionForward*(
       break
 
     for w in bal[]:
-      discard db.applyAccountChanges(w, stats.ranges, info).valueOr:
+      ctx.applyAccountChanges(w, info).isOkOr:
         error info & ": Error applying BAL account changes", pivotNum, number,
-          dist, addr=($w.address), accPath=w.address.computeAccPath.toStr
+          dist, accAddr=($w.address), accPath=w.address.computeAccPath.toStr
         return err()
 
   # Update pivot and forward block numbers if there was some progress

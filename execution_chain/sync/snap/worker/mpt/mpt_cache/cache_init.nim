@@ -15,8 +15,7 @@ import
   pkg/[chronicles, chronos, eth/common, results, rocksdb],
   #pkg/stew/[byteutils, interval_set],
   ../../../../wire_protocol/snap/snap_types,
-  ../../[state_db, worker_const],
-  ../mpt_build/build_desc,
+  ../../worker_const,
   ./cache_desc
 
 logScope:
