@@ -30,7 +30,10 @@ import
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/history/db/ere_db,
   ../execution_chain/db/fcu_db,
+  ../execution_chain/rpc/rpc_utils,
   ./test_forked_chain/chain_debug
+
+from web3/eth_api_types import blockId
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
@@ -877,6 +880,43 @@ suite "ForkedChainRef tests":
     checkImportBlock(fc, blk2)
     checkForkChoice(fc, blk2, blk2)
     check chain.validate info & " (2)"
+
+  test "latestBlock returns err when the block body is not in the db":
+    # An `Era1`/`Era` import stores headers and state but no transaction bodies,
+    # see `persistBlocks()` without `PersistTransactions`. Loading such a block
+    # as `base`/`latest` must surface an error, not take the node down.
+    const info = "latestBlock without body"
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
+    checkImportBlock(chain, blk1)
+    checkForkChoice(chain, blk1, blk1)
+    check chain.validate info & " (1)"
+
+    # Write a header that claims transactions but store none of them, and make
+    # it the saved state block -- exactly what an `Era` import leaves behind.
+    var header = blk1.header
+    header.number = 2
+    header.parentHash = blk1.blockHash
+    header.timestamp = blk1.header.timestamp + 1
+    header.transactionsRoot =
+      hash32"0x38abf3ae5e933b7856447028d7fe8928f1a51b57fa657079203d31a217b81e9b"
+
+    let
+      txFrame = com.db.baseTxFrame()
+      headerHash = header.computeBlockHash
+    check txFrame.persistHeaderAndSetHead(headerHash, header).isOk
+    txFrame.checkpoint(header.number, skipSnapshot = true)
+    com.db.persist(txFrame)
+
+    let fc = ForkedChainRef.init(env.newCom(com.db),
+      baseDistance = 0, persistBatchSize = 1)
+    check fc.latestNumber == 2
+    check fc.latestHash == headerHash
+
+    # Before the fix these raised a `ResultDefect`, killing the process.
+    check fc.latestBlock.isErr
+    check fc.blockFromTag(blockId("latest")).isErr
 
   test "newBase move forward, greater than persistBatchSize":
     const info = "newBase move forward, greater than persistBatchSize"
