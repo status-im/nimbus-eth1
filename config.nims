@@ -97,11 +97,16 @@ if not defined(emscripten):
       else:
         switch("passC", "-mssse3")
         switch("passL", "-mssse3")
-  elif defined(riscv64):
-    # riscv64 needs specification of ISA with extensions. 'gc' is widely supported
+  elif defined(riscv64) or defined(riscv32):
+    # riscv needs specification of ISA with extensions. 'gc' is widely supported
     # and seems to be the minimum extensions needed to build.
-    switch("passC", "-march=rv64gc")
-    switch("passL", "-march=rv64gc")
+    # zkVM guests are the exception: each vendor mandates its own narrower ISA and
+    # ABI, so those builds pass -march/-mabi themselves and set -d:zkvmTarget to
+    # keep the default below from overriding it.
+    if not defined(zkvmTarget):
+      let march = if defined(riscv64): "-march=rv64gc" else: "-march=rv32gc"
+      switch("passC", march)
+      switch("passL", march)
   elif defined(linux) and defined(arm64):
     # clang can't handle "-march=native"
     switch("passC", "-march=armv8-a")
