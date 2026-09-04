@@ -55,7 +55,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,UInt256)
+      let r = unpackResult(raw, UInt256)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -77,7 +77,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,BlockObject)
+      let r = unpackResult(raw, BlockObject)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -99,7 +99,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,BlockObject)
+      let r = unpackResult(raw, BlockObject)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -127,7 +127,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,ProofResponse)
+      let r = unpackResult(raw, ProofResponse)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -151,7 +151,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,AccessListResult)
+      let r = unpackResult(raw, AccessListResult)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -175,7 +175,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,seq[byte])
+      let r = unpackResult(raw, seq[byte])
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -196,7 +196,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,TransactionObject)
+      let r = unpackResult(raw, TransactionObject)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -217,7 +217,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,ReceiptObject)
+      let r = unpackResult(raw, ReceiptObject)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -239,7 +239,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,Opt[seq[ReceiptObject]])
+      let r = unpackResult(raw, Opt[seq[ReceiptObject]])
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -259,7 +259,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,seq[LogObject])
+      let r = unpackResult(raw, seq[LogObject])
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -287,7 +287,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,FeeHistoryResult)
+      let r = unpackResult(raw, FeeHistoryResult)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -308,7 +308,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackResult(raw,Hash32)
+      let r = unpackResult(raw, Hash32)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
