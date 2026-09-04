@@ -22,6 +22,7 @@ import
 
 export
   coredb_desc,
-  coredb_import
+  coredb_import,
+  coredb_stats
 
 # End

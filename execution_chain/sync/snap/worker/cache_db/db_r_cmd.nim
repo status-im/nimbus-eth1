@@ -15,7 +15,7 @@ import
   std/typetraits,
   pkg/[results, rocksdb],
   pkg/stew/byteutils,
-  ./[cache_const, cache_desc]
+  ./[db_const, db_desc]
 
 when extraTraceMessages:
   import chronicles

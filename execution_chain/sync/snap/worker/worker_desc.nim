@@ -17,7 +17,7 @@ import
   ../../wire_protocol/types as wire_types,
   ./[extra_types, worker_const]
 
-from ./mpt/mpt_cache/cache_desc
+from ./cache_db/db_desc
   import CacheDbRef
 
 # Running beacon syncer in tandem

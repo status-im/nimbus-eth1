@@ -12,7 +12,7 @@
 import
   std/typetraits,
   pkg/eth/common,
-  ./[cache_const, cache_desc, cache_r_cmd]
+  ./[db_const, db_desc, db_r_cmd]
 
 # ------------------------------------------------------------------------------
 # Private  helpers

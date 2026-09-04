@@ -12,8 +12,8 @@
 
 import
   pkg/[chronos, eth/common, results, stew/interval_set],
-  ../../../../wire_protocol/snap/snap_types,
-  ./cache_desc
+  ../../../wire_protocol/snap/snap_types,
+  ./db_desc
 
 when sizeof(Hash) != sizeof(uint):
   {.error: "Hash type must have size of uint".}

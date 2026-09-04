@@ -32,8 +32,7 @@
 
 import
   pkg/[eth/common, results, stew/endians2],
-  ./[cache_api1, cache_api9, cache_desc,
-     cache_const, cache_iter, cache_rlp]
+  ./[db_api1, db_api9, db_desc, db_const, db_iter, db_rlp]
 
 # ------------------------------------------------------------------------------
 # Public functions

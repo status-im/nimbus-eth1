@@ -15,8 +15,8 @@
 
 import
   pkg/[chronicles, eth/common, stew/interval_set],
-  ../../[helpers, worker_desc],
-  ./[cache_desc, cache_flat]
+  ../[helpers, worker_desc],
+  ./[db_desc, db_flat]
 
 logScope:
   topics = "snap sync"

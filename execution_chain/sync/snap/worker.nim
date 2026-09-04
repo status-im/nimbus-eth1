@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos, minilru, results, stew/byteutils],
-  ./worker/[download, helpers, mpt, state_forward,
+  ./worker/[download, helpers, cache_db, state_forward,
             start_stop, update, worker_desc]
 
 logScope:

@@ -13,7 +13,7 @@
 import
   std/[sequtils, typetraits],
   pkg/[chronicles, chronos],
-  ../../[helpers, mpt, worker_desc],
+  ../../[helpers, cache_db, worker_desc],
   ../download_helpers,
   ./code_fetch
 

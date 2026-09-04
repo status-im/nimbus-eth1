@@ -13,10 +13,9 @@
 import
   std/[dirs, paths, typetraits],
   pkg/[chronicles, chronos, eth/common, results, rocksdb],
-  #pkg/stew/[byteutils, interval_set],
-  ../../../../wire_protocol/snap/snap_types,
-  ../../worker_const,
-  ./cache_desc
+  ../../../wire_protocol/snap/snap_types,
+  ../worker_const,
+  ./db_desc
 
 logScope:
   topics = "snap sync"

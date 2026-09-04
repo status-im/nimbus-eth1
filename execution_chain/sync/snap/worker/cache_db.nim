@@ -32,17 +32,17 @@
 {.push raises: [].}
 
 import
-  ./mpt_cache/[
-    cache_desc, cache_flat, cache_flat_simple, cache_init,
-    cache_header_bal, cache_header_bal_simple, cache_stats]
+  ./cache_db/[
+    db_desc, db_flat, db_flat_simple, db_init,
+    db_header_bal, db_header_bal_simple, db_stats]
 
 export
-  cache_desc,
-  cache_flat,
-  cache_flat_simple,
-  cache_header_bal,
-  cache_header_bal_simple,
-  cache_init,
-  cache_stats
+  db_desc,
+  db_flat,
+  db_flat_simple,
+  db_header_bal,
+  db_header_bal_simple,
+  db_init,
+  db_stats
 
 # End

@@ -18,7 +18,7 @@
 
 import
   pkg/[chronicles, eth/common],
-  ../[helpers, mpt, worker_desc]
+  ../[helpers, cache_db, worker_desc]
 
 logScope:
   topics = "snap sync"

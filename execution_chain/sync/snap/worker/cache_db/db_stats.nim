@@ -12,9 +12,9 @@
 
 import
   pkg/[chronicles, chronos, stew/interval_set],
-  ../../../../../networking/[p2p, peer_pool],
-  ../../[helpers, worker_desc],
-  ./[cache_desc, cache_flat, cache_flat_simple]
+  ../../../../networking/[p2p, peer_pool],
+  ../[helpers, worker_desc],
+  ./[db_desc, db_flat, db_flat_simple]
 
 logScope:
   topics = "snap sync"

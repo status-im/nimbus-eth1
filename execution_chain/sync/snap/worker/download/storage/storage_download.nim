@@ -18,7 +18,7 @@
 
 import
   pkg/[chronicles, chronos, stew/interval_set],
-  ../../[helpers, mpt, worker_desc],
+  ../../[helpers, cache_db, mpt, worker_desc],
   ../download_helpers,
   ./storage_fetch
 

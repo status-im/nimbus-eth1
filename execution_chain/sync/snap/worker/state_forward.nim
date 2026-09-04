@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, eth/common],
   pkg/stew/[byteutils, interval_set],
-  ./[helpers, mpt, worker_desc],
+  ./[helpers, cache_db, worker_desc],
   ./state_forward/[forward_apply, forward_calc]
 
 logScope:

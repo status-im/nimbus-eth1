@@ -80,8 +80,7 @@
 
 import
   pkg/[eth/common, results, stew/interval_set],
-  ./[cache_api1, cache_api33, cache_api65,
-     cache_const, cache_desc, cache_iter, cache_rlp]
+  ./[db_api1, db_api33, db_api65, db_const, db_desc, db_iter, db_rlp]
 
 const emptyFlatAccData* = block:
   var q: CacheFlatAccData

@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  ../../../../wire_protocol/snap/snap_types
+  ../../../wire_protocol/snap/snap_types
 
 const
   EmptyProof* = seq[ProofNode].default

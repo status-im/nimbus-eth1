@@ -10,38 +10,36 @@
 {.push raises: [].}
 
 import
-  pkg/[eth/common, stew/endians2],
-  ./[cache_const, cache_desc, cache_r_cmd]
+  ./[db_const, db_desc, db_r_cmd]
 
 # ------------------------------------------------------------------------------
 # Public API for internal use
 # ------------------------------------------------------------------------------
 
-template key9*(col: MptAsmCol; key1: uint64): openArray[byte] =
-  var keyData: array[9,byte]
-  let key1Data = key1.toBytesBE()
-  keyData[0] = col.ord
-  (addr keyData[1]).copyMem(addr key1Data[0], 8)
-  keyData.toOpenArray(0,8)
-
-template key9*(col: MptAsmCol): openArray[byte] =
-  var key: array[9,byte]
-  key[0] = col.ord
-  key.toOpenArray(0,8)
-
-template get9*(db: CacheDbRef; col: MptAsmCol; key1: uint64): untyped =
-  db.adb.rGet(col.key9 key1)
-
-template put9*(
+template get1*(
     db: CacheDbRef;
     col: MptAsmCol;
-    key1: uint64;
+      ): untyped =
+  db.adb.rGet @[byte col]
+
+template put1*(
+    db: CacheDbRef;
+    col: MptAsmCol;
     data: openArray[byte];
       ): untyped =
-  db.adb.rPut(col.key9 key1, data)
+  db.adb.rPut(@[byte col], data)
 
-template del9*(db: CacheDbRef; col: MptAsmCol; key1: uint64): untyped =
-  db.adb.rDel(col.key9 key1)
+template del1*(
+    db: CacheDbRef;
+    col: MptAsmCol;
+      ): untyped =
+  db.adb.rDel @[byte col]
+
+template clr1*(
+    db: CacheDbRef;
+    col: MptAsmCol;
+      ): untyped =
+  db.adb.rClear col
 
 # ------------------------------------------------------------------------------
 # End

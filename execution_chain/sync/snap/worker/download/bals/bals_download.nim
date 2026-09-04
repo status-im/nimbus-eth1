@@ -15,7 +15,7 @@ import
   pkg/[chronicles, chronos, minilru],
   ../../../../../block_access_list/bal_utils,
   ../../../../wire_protocol,
-  ../../[helpers, mpt, worker_desc],
+  ../../[helpers, cache_db, worker_desc],
   ./bals_fetch
 
 logScope:

@@ -13,7 +13,7 @@
 import
   std/typetraits,
   pkg/[eth/common, stew/endians2, rocksdb],
-  ./[cache_const, cache_desc]
+  ./[db_const, db_desc]
 
 when extraTraceMessages:
   import chronicles

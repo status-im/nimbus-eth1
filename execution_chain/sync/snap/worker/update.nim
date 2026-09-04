@@ -12,7 +12,7 @@
 
 import
   pkg/chronicles,
-  ./[mpt, worker_const, worker_desc]
+  ./[cache_db, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"

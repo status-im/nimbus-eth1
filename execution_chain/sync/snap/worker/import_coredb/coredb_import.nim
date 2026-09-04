@@ -21,7 +21,7 @@ import
   std/paths,
   pkg/[chronicles, eth/common],
   ../../../../db/core_db,
-  ../[helpers, mpt, worker_desc],
+  ../[helpers, cache_db, worker_desc],
   ./coredb_desc
 
 logScope:
