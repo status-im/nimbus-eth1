@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos],
   ../../../../beacon,
-  ../../[mpt, worker_desc]
+  ../../[cache_db, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Private functions

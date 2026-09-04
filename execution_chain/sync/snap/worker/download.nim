@@ -14,7 +14,7 @@ import
   std/bitops,
   pkg/[chronicles, chronos, stew/interval_set],
   ./download/[account, bals, code, header, storage],
-  ./[helpers, mpt, worker_desc]
+  ./[helpers, cache_db, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -90,8 +90,8 @@ proc downloadInit*(
       debug info & ": Start downloading", pivotNum=ctx.pool.pivotNum,
         forwardNum=ctx.pool.forwardNum
 
-    ctx.accountDownloadMetricsUpdate()
     ctx.accUnproc.synced = true
+    ctx.accountDownloadMetricsUpdate()
   ok()
 
 proc downloadCommit*(
