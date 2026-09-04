@@ -420,7 +420,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
       return err(opErr(OutOfGas))
 
     # Cnew_account
-    if params.isNewAccount() and params.kind == Call:
+    if params.kind == Call and params.isNewAccount():
       when fork < FkSpurious:
         # Pre-EIP161 all account creation calls consumed 25000 gas.
         gasCost += static(GasInt(FeeSchedule[GasNewAccount]))

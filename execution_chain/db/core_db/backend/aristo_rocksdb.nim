@@ -137,6 +137,7 @@ proc toCfOpts*(opts: DbOptions, cache: CacheRef, bulk: bool): ColFamilyOptionsRe
   # simple tests around mainnet block 14M.
   # TODO evaluate zstd dictionary compression
   # https://github.com/facebook/rocksdb/wiki/Dictionary-Compression
+  cfOpts.compression = noCompression
   cfOpts.bottommostCompression = Compression.zstdCompression
 
   # With the default options, we end up with 512MB at the base level - a

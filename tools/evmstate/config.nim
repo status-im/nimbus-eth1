@@ -85,6 +85,11 @@ type
       defaultValue: none(int)
       name: "sub-index" }: Option[int]
 
+    sanitizeEnv* {.
+      desc: "sanitize env if it polluted by unwanted fields of a fork"
+      defaultValue: true
+      name: "sanitize-env" }: bool
+
     pretty* {.
       desc: "pretty print the trace result"
       defaultValue: false

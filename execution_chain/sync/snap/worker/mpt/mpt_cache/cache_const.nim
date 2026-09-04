@@ -27,9 +27,15 @@ type
     cHeader                                         # header chain by block num
     cBal                                            # block access lists
 
-    gFlatTables = 40                                # group, not used as column
+    gMissingTables = 20                             # group, not used as column
     cMissingIntv                                    # missing accounts/slots
     cMissingBlob                                    # missing contract codes
+
+    gLockTables = 30                                # group, not used as column
+    cLockStoMpt                                     # lock storage sub-MPT
+    cLockCode                                       # lock contract code
+
+    gFlatTables = 40                                # group, not used as column
     cFlatAccount                                    # flat accounts table
     cFlatSlot                                       # flat storage slots table
     cFlatCode                                       # contract codes table

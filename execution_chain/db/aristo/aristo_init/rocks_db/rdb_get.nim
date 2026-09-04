@@ -143,7 +143,7 @@ proc getKey*(
         return ok((VOID_HASH_KEY, vtx))
 
   # Otherwise fetch from backend database
-  var 
+  var
     vtxBuf {.noinit.}: VertexBuf
     dataLen: int
 
@@ -155,7 +155,7 @@ proc getKey*(
 
   if not gotData:
     return ok((VOID_HASH_KEY, nil))
-  
+
   vtxBuf.n = typeof(vtxBuf.n)(dataLen)
 
   let res = vtxBuf.data().deblobify(HashKey)
@@ -170,13 +170,131 @@ proc getKey*(
     # follow a different access pattern!
     rdb.rdVtxLru.put(rvid.vid, vtxBuf)
 
-  let vtx = 
+  let vtx =
     if res.isNone():
       vtxBuf.data().deblobify(VertexRef).expect("valid data in db")
     else:
       nil
 
   ok (res.valueOr(VOID_HASH_KEY), vtx)
+
+func cmpKeyBuf(a, b: RVidBuf): int =
+  let n = min(int(a.len), int(b.len))
+  for i in 0 ..< n:
+    if a.buf[i] != b.buf[i]:
+      return int(a.buf[i]) - int(b.buf[i])
+  int(a.len) - int(b.len)
+
+proc getKeys*(
+    rdb: var RdbInst,
+    rvids: openArray[RootedVertexID],
+    keyvtxs: var openArray[(HashKey, VertexRef)],
+    flags: set[GetVtxFlag],
+): Result[void, (AristoError, string)] =
+  doAssert rvids.len <= MAX_KEYS_FETCH and keyvtxs.len == rvids.len
+
+  var
+    fetchIdxs {.noinit.}: array[MAX_KEYS_FETCH, uint8]
+    nFetch = 0
+
+  for i, rvid in rvids:
+    block lookup:
+      block:
+        let rc =
+          if GetVtxFlag.PeekCache in flags:
+            rdb.rdKeyLru.peek(rvid.vid)
+          else:
+            rdb.rdKeyLru.get(rvid.vid)
+
+        if rc.isOk:
+          rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
+          keyvtxs[i] = (rc.value, VertexRef(nil))
+          break lookup
+
+        rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
+
+      block:
+        var leafVtx: VertexRef
+        rdb.rdVtxLru.withPeek(rvid.vid, cached):
+          let vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
+          if vtx.vType in Leaves:
+            leafVtx = vtx
+
+        if not leafVtx.isNil:
+          keyvtxs[i] = (VOID_HASH_KEY, leafVtx)
+          break lookup
+
+      fetchIdxs[nFetch] = uint8 i
+      inc nFetch
+
+  if nFetch == 0:
+    return ok()
+
+  var
+    keyBufs {.noinit.}: array[MAX_KEYS_FETCH, RVidBuf]
+    keySlices {.noinit.}: array[MAX_KEYS_FETCH, RocksDbSlice]
+    vtxBufs {.noinit.}: array[MAX_KEYS_FETCH, VertexBuf]
+    valueSlices {.noinit.}: array[MAX_KEYS_FETCH, RocksDbMutSlice]
+
+  for j in 0 ..< nFetch:
+    keyBufs[j] = rvids[int fetchIdxs[j]].blobify()
+
+  # Keys must be in comparator order because multiGet is called with sortedInput = true.
+  # Insertion sort keeps this allocation free, unlike `algorithm.sort`.
+  for j in 1 ..< nFetch:
+    let
+      keyBuf = keyBufs[j]
+      fetchIdx = fetchIdxs[j]
+    var k = j
+    while k > 0 and cmpKeyBuf(keyBufs[k - 1], keyBuf) > 0:
+      keyBufs[k] = keyBufs[k - 1]
+      fetchIdxs[k] = fetchIdxs[k - 1]
+      dec k
+    keyBufs[k] = keyBuf
+    fetchIdxs[k] = fetchIdx
+
+  for j in 0 ..< nFetch:
+    keySlices[j] =
+      RocksDbSlice.init(keyBufs[j].buf.toOpenArray(0, int(keyBufs[j].len) - 1))
+    valueSlices[j] = RocksDbMutSlice.init(vtxBufs[j].buf)
+
+  rdb.vtxCol.multiGet(
+    keySlices.toOpenArray(0, nFetch - 1),
+    valueSlices.toOpenArray(0, nFetch - 1),
+    sortedInput = true,
+  ).isOkOr:
+    return err((RdbBeDriverGetKeyError, error))
+
+  for j in 0 ..< nFetch:
+    let i = int fetchIdxs[j]
+
+    if not valueSlices[j].found:
+      keyvtxs[i] = (VOID_HASH_KEY, VertexRef(nil))
+      continue
+
+    vtxBufs[j].n = typeof(vtxBufs[j].n)(valueSlices[j].len)
+
+    let
+      rvid = rvids[i]
+      res = vtxBufs[j].data().deblobify(HashKey)
+
+    if res.isSome() and
+        (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
+      rdb.rdKeyLru.put(rvid.vid, res.value())
+
+    if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+      rdb.rdVtxLru.put(rvid.vid, vtxBufs[j])
+
+    keyvtxs[i] =
+      if res.isSome():
+        (res.value(), VertexRef(nil))
+      else:
+        (
+          VOID_HASH_KEY,
+          vtxBufs[j].data().deblobify(VertexRef).expect("valid data in db"),
+        )
+
+  ok()
 
 proc getVtx*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
@@ -208,7 +326,7 @@ proc getVtx*(
       return ok(vtx)
 
   # Otherwise fetch from backend database
-  var 
+  var
     vtxBuf {.noinit.}: VertexBuf
     dataLen: int
 
@@ -221,7 +339,7 @@ proc getVtx*(
   if not gotData:
     rdbVtxLruStats[rvid.to(RdbStateType)][RdbVertexType.Empty].inc(false)
     return ok(VertexRef(nil))
-  
+
   vtxBuf.n = typeof(vtxBuf.n)(dataLen)
 
   let res = vtxBuf.data().deblobify(VertexRef)

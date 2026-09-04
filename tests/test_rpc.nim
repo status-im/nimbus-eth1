@@ -45,6 +45,7 @@ type
     am       : ref AccountsManager
     node     : EthereumNode
     txHash   : Hash32
+    contractTxHash: Hash32
     blockHash: Hash32
     nonce    : uint64
     chainId  : ChainId
@@ -114,7 +115,7 @@ proc close(env: TestEnv) =
 func makeTx(
     env: var TestEnv,
     signerKey: PrivateKey,
-    recipient: addresses.Address,
+    recipient: Opt[addresses.Address],
     amount: UInt256,
     gasPrice: GasInt,
     payload: openArray[byte] = []
@@ -128,7 +129,7 @@ func makeTx(
     nonce: AccountNonce(env.nonce),
     gasPrice: gasPrice,
     gasLimit: gasLimit,
-    to: Opt.some(recipient),
+    to: recipient,
     value: amount,
     payload: @payload,
   )
@@ -275,13 +276,15 @@ proc generateBlock(env: var TestEnv) =
     am =  env.am
     txFrame = com.db.baseTxFrame()
     acc = am[].getAccount(signer).tryGet()
-    tx1 = env.makeTx(acc.privateKey, zeroAddress, 1.u256, 30_000_000_000'u64)
-    tx2 = env.makeTx(acc.privateKey, zeroAddress, 2.u256, 30_000_000_100'u64)
+    tx1 = env.makeTx(acc.privateKey, Opt.some(zeroAddress), 1.u256, 30_000_000_000'u64)
+    tx2 = env.makeTx(acc.privateKey, Opt.some(zeroAddress), 2.u256, 30_000_000_100'u64)
+    tx3 = env.makeTx(acc.privateKey, Opt.none(addresses.Address), 0.u256, 30_000_000_200'u64, payload=contractCode)
     chain = env.chain
 
   doAssert xp.addTx(tx1).isOk
   doAssert xp.addTx(tx2).isOk
-  doAssert(xp.len == 2)
+  doAssert xp.addTx(tx3).isOk
+  doAssert(xp.len == 3)
 
   # generate block
   xp.prevRandao = prevRandao
@@ -293,7 +296,7 @@ proc generateBlock(env: var TestEnv) =
     quit(QuitFailure)
 
   let blk = bundle.blk
-  doAssert(blk.transactions.len == 2)
+  doAssert(blk.transactions.len == 3)
 
   # import block
   (waitFor chain.importBlock(blk)).isOkOr:
@@ -305,6 +308,7 @@ proc generateBlock(env: var TestEnv) =
   txFrame.persistFixtureBlock()
 
   env.txHash = tx1.computeRlpHash
+  env.contractTxHash = tx3.computeRlpHash
   env.blockHash = blk.header.computeBlockHash
 
 func contractsInConfig(c: ConfigObject, contracts: openArray[addresses.Address]): bool =
@@ -441,7 +445,7 @@ proc rpcMain*() =
 
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()
-      check res == w3Qty(30_000_000_050)  # Avg of `unsignedTx1` / `unsignedTx2`
+      check res == w3Qty(30_000_000_100)  # Median of `unsignedTx1`, `unsignedTx2`, `tx3`
 
     test "eth_maxPriorityFeePerGas":
       let res = await client.eth_maxPriorityFeePerGas()
@@ -459,7 +463,7 @@ proc rpcMain*() =
 
     test "eth_getBalance":
       let a = await client.eth_getBalance(signer, blockId(1'u64))
-      check a == 998739999997899997'u256
+      check a == 997119519987096797'u256
       let b = await client.eth_getBalance(regularAcc, blockId(1'u64))
       check b == 2_000_000_000.u256
       let c = await client.eth_getBalance(contractAccWithStorage, blockId(1'u64))
@@ -471,15 +475,33 @@ proc rpcMain*() =
 
     test "eth_getTransactionCount":
       let res = await client.eth_getTransactionCount(signer, blockId(1'u64))
-      check res == w3Qty(2'u64)
+      check res == w3Qty(3'u64)
+
+    test "eth_getTransactionCount pending":
+      let
+        acc = env.am[].getAccount(signer).tryGet()
+        head = await client.eth_getTransactionCount(signer, blockId("latest"))
+        pendingEmpty = await client.eth_getTransactionCount(signer, blockId("pending"))
+
+      # Nothing pooled for the signer: "pending" is the head-state nonce.
+      check pendingEmpty == head
+
+      let tx = env.makeTx(acc.privateKey, Opt.some(zeroAddress), 1.u256, 30_000_000_000'u64)
+      check tx.nonce == AccountNonce(head)
+      doAssert env.txPool.addTx(tx).isOk
+
+      let pending = await client.eth_getTransactionCount(signer, blockId("pending"))
+      check pending == w3Qty(uint64(head) + 1)
+
+      env.txPool.removeTx(tx.computeRlpHash)
 
     test "eth_getBlockTransactionCountByHash":
       let res = await client.eth_getBlockTransactionCountByHash(env.blockHash)
-      check res == w3Qty(2'u64)
+      check res == w3Qty(3'u64)
 
     test "eth_getBlockTransactionCountByNumber":
       let res = await client.eth_getBlockTransactionCountByNumber(blockId(1'u64))
-      check res == w3Qty(2'u64)
+      check res == w3Qty(3'u64)
 
     test "eth_getUncleCountByBlockHash":
       let res = await client.eth_getUncleCountByBlockHash(env.blockHash)
@@ -497,7 +519,7 @@ proc rpcMain*() =
       let msg = "hello world"
       let msgBytes = @(msg.toOpenArrayByte(0, msg.len-1))
 
-      expect JsonRpcError:
+      expect RpcResponseError:
         discard await client.eth_sign(contractAddress, msgBytes)
 
       let res = await client.eth_sign(signer, msgBytes)
@@ -518,7 +540,7 @@ proc rpcMain*() =
         gas: Opt.some(w3Qty(100000'u)),
         gasPrice: Opt.none(Quantity),
         value: Opt.some(100.u256),
-        nonce: Opt.some(2.Quantity)
+        nonce: Opt.some(4.Quantity)
         )
 
       let signedTxBytes = await client.eth_signTransaction(unsignedTx)
@@ -526,8 +548,7 @@ proc rpcMain*() =
       check signer == signedTx.recoverSender().expect("valid signature") # verified
 
       let txHash = await client.eth_sendTransaction(unsignedTx)
-      const expHash = hash32"0x929d48788096f26cfff70296b16c9974e6b1bf693c0121742e8527bb92b6d074"
-      check txHash == expHash
+      check txHash == keccak256(signedTxBytes)
 
     test "eth_sendRawTransaction":
       let unsignedTx = TransactionArgs(
@@ -536,7 +557,7 @@ proc rpcMain*() =
         gas: Opt.some(w3Qty(100001'u)),
         gasPrice: Opt.none(Quantity),
         value: Opt.some(100.u256),
-        nonce: Opt.some(3.Quantity)
+        nonce: Opt.some(5.Quantity)
         )
 
       let signedTxBytes = await client.eth_signTransaction(unsignedTx)
@@ -544,11 +565,10 @@ proc rpcMain*() =
       check signer == signedTx.recoverSender().expect("valid signature") # verified
 
       let txHash = await client.eth_sendRawTransaction(signedTxBytes)
-      const expHash = hash32"0xeea79669dd904921d203fb720c7228f5c7854e5a768248f494f36fa68c83c191"
-      check txHash == expHash
+      check txHash == keccak256(signedTxBytes)
 
       let
-        blobTx = env.makeBlobTx(4)
+        blobTx = env.makeBlobTx(6)
         blobTxBytes = rlp.encode(blobTx)
         blobTxHash = await client.eth_sendRawTransaction(blobTxBytes)
         expected = computeRlpHash(blobTx.tx) # use inner tx hash
@@ -686,6 +706,11 @@ proc rpcMain*() =
       let res = await client.eth_getBlockByHash(env.blockHash, true)
       check res.isNil.not
       check res.hash == env.blockHash
+      for item in res.transactions:
+        if item.tx.hash == env.contractTxHash:
+          check item.tx.to.isNone
+        else:
+          check item.tx.to.isSome
       let res2 = await client.eth_getBlockByHash(env.txHash, true)
       check res2.isNil
 
@@ -694,7 +719,7 @@ proc rpcMain*() =
       check res.isNil.not
       check res.hash == env.blockHash
 
-      expect JsonRpcError:
+      expect RpcResponseError:
         discard await client.eth_getBlockByNumber($1, true)
 
     test "eth_getTransactionByHash":
@@ -703,6 +728,11 @@ proc rpcMain*() =
       check res.blockNumber.get() == w3Qty(1'u64)
       let res2 = await client.eth_getTransactionByHash(env.blockHash)
       check res2.isNil
+
+      # Contract creation tx should have null `to` field instead of zeroAddress
+      let contractTx = await client.eth_getTransactionByHash(env.contractTxHash)
+      check contractTx.isNil.not
+      check contractTx.to.isNone
 
     test "eth_getTransactionByBlockHashAndIndex":
       let res = await client.eth_getTransactionByBlockHashAndIndex(env.blockHash, w3Qty(0'u64))
@@ -724,13 +754,13 @@ proc rpcMain*() =
       check res2.isNil
 
     test "eth_getBlockReceipts":
-        let recs = await client.eth_getBlockReceipts(blockId(1'u64))
-        check recs.isSome
-        if recs.isSome:
-          let receipts = recs.get
-          check receipts.len == 2
-          check receipts[0].transactionIndex == 0.Quantity
-          check receipts[1].transactionIndex == 1.Quantity
+      let recs = await client.eth_getBlockReceipts(blockId(1'u64))
+      check recs.isSome
+      if recs.isSome:
+        let receipts = recs.get
+        check receipts.len == 3
+        check receipts[0].transactionIndex == 0.Quantity
+        check receipts[1].transactionIndex == 1.Quantity
 
     test "debug_getRawReceipts":
       let
@@ -749,11 +779,14 @@ proc rpcMain*() =
         discard await client.call("debug_getRawBlockAccessList",
           %[%"latest"], EthJson)
         check false
-      except JsonRpcError as exc:
-        check "Resource not found" in exc.msg
+      except RpcResponseError as exc:
+        check:
+          exc.code == -32000
+          exc.msg == "`debug_getRawBlockAccessList` raised an exception"
+          exc.data == JsonString("\"Resource not found\"")
 
       # Unknown block tag must raise an error.
-      expect JsonRpcError:
+      expect RpcResponseError:
         discard await client.call("debug_getRawBlockAccessList",
           %[%"0xabcdabcd"], EthJson)
 
@@ -763,24 +796,24 @@ proc rpcMain*() =
         %[%*{"blockHash": $env.blockHash}], EthJson)
       let recs1 = EthJson.decode(r1.string, Opt[seq[ReceiptObject]])
       check recs1.isSome
-      check recs1.get.len == 2
+      check recs1.get.len == 3
 
       # blockHash with requireCanonical=false
       let r2 = await client.call("eth_getBlockReceipts",
         %[%*{"blockHash": $env.blockHash, "requireCanonical": false}], EthJson)
       let recs2 = EthJson.decode(r2.string, Opt[seq[ReceiptObject]])
       check recs2.isSome
-      check recs2.get.len == 2
+      check recs2.get.len == 3
 
       # blockNumber object form
       let r3 = await client.call("eth_getBlockReceipts",
         %[%*{"blockNumber": "0x1"}], EthJson)
       let recs3 = EthJson.decode(r3.string, Opt[seq[ReceiptObject]])
       check recs3.isSome
-      check recs3.get.len == 2
+      check recs3.get.len == 3
 
       # requireCanonical=true should fail
-      expect JsonRpcError:
+      expect RpcResponseError:
         discard await client.call("eth_getBlockReceipts",
           %[%*{"blockHash": $env.blockHash, "requireCanonical": true}], EthJson)
 
@@ -1016,7 +1049,7 @@ proc rpcMain*() =
       check res.string == "true"
 
       # An unknown block cannot become the head
-      expect JsonRpcError:
+      expect RpcResponseError:
         discard await client.call("debug_setHead",
           %[%"0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"],
           EthJson)

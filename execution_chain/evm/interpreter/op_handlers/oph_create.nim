@@ -50,6 +50,7 @@ proc postExecutionCreate(c: Computation, child: Computation, newAccountCharged: 
       c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
       c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
       c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
+      c.gasMeter.repayStateGasSpill()
     c.merge(child)
     c.stack.lsTop child.msg.contractAddress
   else:
@@ -77,7 +78,7 @@ proc execSubCreate(c: Computation; childMsg: Message;
     return ok()
 
   if c.fork >= FkAmsterdam:
-    newAccountCharged = not c.accountExists(child.msg.contractAddress)
+    newAccountCharged = not c.accountExistsOrAlive(child.msg.contractAddress)
     if newAccountCharged:
       c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "Create op new account").isOkOr:
         child.dispose()
