@@ -519,7 +519,7 @@ proc rpcMain*() =
       let msg = "hello world"
       let msgBytes = @(msg.toOpenArrayByte(0, msg.len-1))
 
-      expect JsonRpcError:
+      expect RpcResponseError:
         discard await client.eth_sign(contractAddress, msgBytes)
 
       let res = await client.eth_sign(signer, msgBytes)
@@ -719,7 +719,7 @@ proc rpcMain*() =
       check res.isNil.not
       check res.hash == env.blockHash
 
-      expect JsonRpcError:
+      expect RpcResponseError:
         discard await client.eth_getBlockByNumber($1, true)
 
     test "eth_getTransactionByHash":
@@ -779,11 +779,14 @@ proc rpcMain*() =
         discard await client.call("debug_getRawBlockAccessList",
           %[%"latest"], EthJson)
         check false
-      except JsonRpcError as exc:
-        check "Resource not found" in exc.msg
+      except RpcResponseError as exc:
+        check:
+          exc.code == -32000
+          exc.msg == "`debug_getRawBlockAccessList` raised an exception"
+          exc.data == JsonString("\"Resource not found\"")
 
       # Unknown block tag must raise an error.
-      expect JsonRpcError:
+      expect RpcResponseError:
         discard await client.call("debug_getRawBlockAccessList",
           %[%"0xabcdabcd"], EthJson)
 
@@ -810,7 +813,7 @@ proc rpcMain*() =
       check recs3.get.len == 3
 
       # requireCanonical=true should fail
-      expect JsonRpcError:
+      expect RpcResponseError:
         discard await client.call("eth_getBlockReceipts",
           %[%*{"blockHash": $env.blockHash, "requireCanonical": true}], EthJson)
 
@@ -1046,7 +1049,7 @@ proc rpcMain*() =
       check res.string == "true"
 
       # An unknown block cannot become the head
-      expect JsonRpcError:
+      expect RpcResponseError:
         discard await client.call("debug_setHead",
           %[%"0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"],
           EthJson)

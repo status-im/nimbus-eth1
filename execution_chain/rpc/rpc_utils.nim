@@ -44,8 +44,8 @@ func median(prices: var openArray[GasInt]): GasInt =
 
   prices[middle]
 
-proc invalidParams*(msg: string): ref ApplicationError =
-  (ref ApplicationError)(
+proc invalidParams*(msg: string): ref RpcResponseError =
+  (ref RpcResponseError)(
     code: -32602,
     msg: msg,
   )

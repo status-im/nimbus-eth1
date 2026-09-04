@@ -44,6 +44,10 @@ const
         v += 1'u64 shl (i * 4)
       v
 
+  MAX_KEYS_FETCH* = 16
+    ## Maximum number of keys accepted by `GetKeysFn` in a single batch, sized
+    ## to the branch vertex fan-out.
+
   ACC_LRU_SIZE* = 1024 * 1024
     ## LRU cache size for accounts that have storage, see `.accLeaves` and
     ## `.stoLeaves` fields of the main descriptor.
