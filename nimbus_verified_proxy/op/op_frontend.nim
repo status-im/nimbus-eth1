@@ -611,7 +611,9 @@ proc getExecutionApiFrontend*(
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(blockId))
     let (backend, backendIdx) = ?(opEngine.executionBackendFor(GetProof))
     let proof = opEngine.penaltyOr(
-      (await backend.eth_getProof(address, slots, tag)).tagBackend(backendIdx)
+      (await backend.eth_getProof(address, slots.toStorageKeys(), tag)).tagBackend(
+        backendIdx
+      )
     )
     ok(proof)
 

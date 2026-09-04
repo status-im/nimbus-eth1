@@ -120,7 +120,7 @@ proc getExecutionApiBackend*(client: JsonRpcClient): ExecutionApiBackend =
         ok(res)
 
     getProofProc = proc(
-        address: Address, slots: seq[UInt256], blockId: BlockTag
+        address: Address, slots: seq[Bytes32], blockId: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
       rpcCall:
         ok(await client.resolveClient().eth_getProof(address, slots, blockId))

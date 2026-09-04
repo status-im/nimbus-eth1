@@ -55,7 +55,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, UInt256)
+      let r = unpackResult(raw,UInt256)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -77,7 +77,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, BlockObject)
+      let r = unpackResult(raw,BlockObject)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -99,13 +99,13 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, BlockObject)
+      let r = unpackResult(raw,BlockObject)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
 
     getProofProc = proc(
-        address: Address, slots: seq[UInt256], blockId: BlockTag
+        address: Address, slots: seq[Bytes32], blockId: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
       let
         addressSer = packArg(address).valueOr:
@@ -127,7 +127,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, ProofResponse)
+      let r = unpackResult(raw,ProofResponse)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -151,7 +151,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, AccessListResult)
+      let r = unpackResult(raw,AccessListResult)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -175,7 +175,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, seq[byte])
+      let r = unpackResult(raw,seq[byte])
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -196,7 +196,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, TransactionObject)
+      let r = unpackResult(raw,TransactionObject)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -217,7 +217,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, ReceiptObject)
+      let r = unpackResult(raw,ReceiptObject)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -239,7 +239,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, Opt[seq[ReceiptObject]])
+      let r = unpackResult(raw,Opt[seq[ReceiptObject]])
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -259,7 +259,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, seq[LogObject])
+      let r = unpackResult(raw,seq[LogObject])
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -287,7 +287,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, FeeHistoryResult)
+      let r = unpackResult(raw,FeeHistoryResult)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())
@@ -308,7 +308,7 @@ proc getExecutionApiBackend*(
           raise e
         except CatchableError as e:
           return err((BackendError, e.msg, UNTAGGED))
-      let r = unpackArg(raw, Hash32)
+      let r = unpackResult(raw,Hash32)
       if r.isErr():
         return err((BackendDecodingError, r.error, UNTAGGED))
       return ok(r.get())

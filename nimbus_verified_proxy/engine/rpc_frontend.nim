@@ -607,7 +607,9 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
 
     let (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
     let proof = engine.penaltyOr(
-      (await backend.eth_getProof(address, slots, blockId)).tagBackend(backendIdx)
+      (await backend.eth_getProof(address, slots.toStorageKeys(), blockId)).tagBackend(
+        backendIdx
+      )
     )
     ok(proof)
 

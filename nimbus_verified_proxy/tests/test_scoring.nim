@@ -44,7 +44,7 @@ suite "backend scoring":
     let ts = TestApiState.init(1.u256)
     var backend = initTestExecutionBackend(ts)
     backend.eth_getProof = proc(
-        address: Address, slots: seq[UInt256], blkNum: BlockTag
+        address: Address, slots: seq[Bytes32], blkNum: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
       return err((BackendFetchError, "simulated transport failure", UNTAGGED))
 
@@ -67,7 +67,7 @@ suite "backend scoring":
     let ts = TestApiState.init(1.u256)
     var backend = initTestExecutionBackend(ts)
     backend.eth_getProof = proc(
-        address: Address, slots: seq[UInt256], blkNum: BlockTag
+        address: Address, slots: seq[Bytes32], blkNum: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
       # Return a bogus accountProof node so verifyMptProof returns InvalidProof.
       # The node's hash won't match the block's stateRoot, triggering VerificationError.
