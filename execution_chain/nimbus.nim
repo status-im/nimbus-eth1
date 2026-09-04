@@ -31,9 +31,11 @@ import
   beacon_chain/[
     buildinfo,
     conf as bnconf,
+    conf_light_client,
     beacon_node,
     nimbus_beacon_node,
     nimbus_binary_common,
+    nimbus_light_client,
     nimbus_rest_common,
     process_state,
   ],
@@ -56,6 +58,7 @@ type NStartUpCmd* {.pure.} = enum
   nimbus = "Run Ethereum node"
   beaconNode = "Run beacon node in stand-alone mode\pSee 'nimbus beaconNode --help' for further details"
   executionClient = "Run execution client in stand-alone mode\pSee 'nimbus executionClient --help' for further details"
+  lightClient = "Run consensus light client in stand-alone mode\pSee 'nimbus lightClient --help' for further details"
   `import` = "Import execution blocks from ere or era1/era files\pSee 'nimbus import --help' for further details"
   trustedNodeSync = "Sync the beacon node database from a trusted node (checkpoint sync)\pSee 'nimbus trustedNodeSync --help' for further details"
   deposits = "Handle validator deposits\pSee 'nimbus deposits --help' for further details"
@@ -152,6 +155,11 @@ type
       defaultValue: true
       name: "el-sync" .}: bool
 
+    light* {.
+      desc: "Run a light node: pair the execution client with the consensus light client instead of a full beacon node (requires --trusted-block-root)"
+      defaultValue: false
+      name: "light" .}: bool
+
     # detect if user added --engine-api option which is not valid in unified mode
     engineApiEnabled* {.
       hidden
@@ -167,7 +175,8 @@ type
       name: "debug-trusted-setup-file" .}: Option[string]
 
     case cmd* {.command, defaultValue: NStartUpCmd.nimbus.}: NStartUpCmd
-    of nimbus, beaconNode, executionClient, `import`, trustedNodeSync, deposits:
+    of nimbus, beaconNode, executionClient, NStartUpCmd.lightClient, `import`,
+       trustedNodeSync, deposits:
       discard
 
 #!fmt: on
@@ -183,6 +192,11 @@ type
     tsp: ThreadSignalPtr
     tcpPort: Port
     udpPort: Option[Port]
+
+  LightThreadConfig = object
+    tsp: ThreadSignalPtr
+    tcpPort: Port
+    udpPort: Port
 
 var
   jwtKey: JwtSharedKey
@@ -208,6 +222,13 @@ proc justWait(tsp: ThreadSignalPtr) {.async: (raises: [CancelledError]).} =
     await tsp.wait()
   except AsyncError as exc:
     notice "Waiting failed", err = exc.msg
+
+proc stopOnSignal(tsp: ThreadSignalPtr) {.async: (raises: [CancelledError]).} =
+  ## `runLightClient` drives its own `poll()` loop until `ProcessState` says
+  ## stop - it takes no stop future - so relay the thread stop signal into the
+  ## process-wide flag instead. The light client's poll loop runs this future.
+  await tsp.justWait()
+  ProcessState.scheduleStop("nimbus")
 
 proc elSyncLoop(
     dag: ChainDAGRef, url: EngineApiUrl
@@ -276,6 +297,34 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
   # Stop the other thread as well, in case we're stopping early
   waitFor p.tsp.fire()
 
+proc runLightClientThread(p: LightThreadConfig) {.thread.} =
+  var config = LightClientConf.loadWithBanners(clientId, copyright, [specBanner], true).valueOr:
+    stderr.writeLine error # Logging not yet set up
+    quit QuitFailure
+
+  let engineUrl =
+    EngineApiUrl.init(&"http://127.0.0.1:{defaultEngineApiPort}/", Opt.some(jwtKey))
+
+  config.metricsEnabled = false
+  config.elUrls.add EngineApiUrlConfigValue(
+    url: engineUrl.url, jwtSecret: some toHex(distinctBase(jwtKey))
+  )
+  config.tcpPort = p.tcpPort
+  config.udpPort = p.udpPort
+
+  info "Launching light client",
+    version = fullVersionStr, cmdParams = commandLineParams(), config
+
+  let stopper = stopOnSignal(p.tsp)
+
+  dynamicLogScope(comp = "lc"):
+    runLightClient(config)
+
+  waitFor noCancel stopper.cancelAndWait()
+
+  # Stop the other thread as well, in case the light client stopped early
+  waitFor p.tsp.fire()
+
 proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
   var config = makeConfig(ignoreUnknown = true)
   config.metricsEnabled = false
@@ -323,7 +372,7 @@ proc runCombinedClient() =
   # go away
   discard randomBytes(distinctBase(jwtKey))
 
-  const banner = ClientId & "\p\pSubcommand options can also be used with the main node, see `beaconNode --help` and `executionClient --help`"
+  const banner = ClientId & "\p\pSubcommand options can also be used with the main node, see `beaconNode --help`, `executionClient --help` and `lightClient --help`"
 
   var config = NimbusConf.loadWithBanners(
     banner, copyright, [specBanner], ignoreUnknown = true, setupLogger = true
@@ -362,6 +411,14 @@ proc runCombinedClient() =
       "Baked-in KZG setup is correct"
     )
 
+  # Consensus side: either a full beacon node or, with `--light`, the consensus
+  # light client. Both are stopped via `bnStop` and drive the EL over the
+  # internal loopback Engine API.
+  var
+    bnThread: Thread[BeaconThreadConfig]
+    lightThread: Thread[LightThreadConfig]
+
+  # NEW
   let
     bnTcpPort = config.beaconTcpPort.get(config.tcpPort.get(Port defaultEth2TcpPort))
     bnUdpPort = config.beaconUdpPort.get(config.udpPort.get(Port defaultEth2TcpPort))
@@ -395,15 +452,33 @@ proc runCombinedClient() =
       NimbusName & " " & NimbusVersion,
     ).ip
 
-  var bnThread: Thread[BeaconThreadConfig]
   let bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
-  createThread(
-    bnThread,
-    runBeaconNode,
-    BeaconThreadConfig(
-      tsp: bnStop, tcpPort: bnTcpPort, udpPort: bnUdpPort, elSync: config.elSync
-    ),
-  )
+
+  if config.light:
+    # The light client drives the EL directly via the Engine API, so the
+    # beacon-node CL-driven EL sync loop (`elSyncLoop`/`--el-sync`) must not run.
+    config.elSync = false
+    createThread(
+      lightThread,
+      runLightClientThread,
+      LightThreadConfig(
+        tsp: bnStop,
+        tcpPort: bnTcpPort,
+        udpPort: bnUdpPort,
+      )
+    )
+  else:
+    createThread(
+      bnThread,
+      runBeaconNode,
+      BeaconThreadConfig(
+        tsp: bnStop, 
+        tcpPort: bnTcpPort, 
+        udpPort: bnUdpPort, 
+        elSync: config.elSync
+      )
+    )
+
 
   var ecThread: Thread[ExecutionThreadConfig]
   let ecStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
@@ -413,16 +488,65 @@ proc runCombinedClient() =
     ExecutionThreadConfig(tsp: ecStop, tcpPort: ecTcpPort, udpPort: ecUdpPort),
   )
 
+  # Shut the whole process down if either worker thread exits on its own (e.g. an
+  # unrecoverable startup error). Without this the main thread would keep polling
+  # `ProcessState` forever while the surviving thread - or nothing - runs on.
+  proc workerExited(): bool =
+    let consensusStopped =
+      if config.light: not lightThread.running else: not bnThread.running
+    consensusStopped or not ecThread.running
+
   while not ProcessState.stopIt(notice("Shutting down", reason = it)):
+    if workerExited():
+      notice "A worker thread stopped, shutting down"
+      break
     os.sleep(100)
 
   waitFor bnStop.fire()
   waitFor ecStop.fire()
 
-  joinThread(bnThread)
+  if config.light:
+    joinThread(lightThread)
+  else:
+    joinThread(bnThread)
   joinThread(ecThread)
 
   waitFor metricsServer.stopMetricsServer()
+
+proc runLightClientStandalone(cmdLine: seq[string]) {.raises: [CatchableError].} =
+  ## Stand-alone `nimbus lightClient`, the light client counterpart of
+  ## `nimbus beaconNode` / `nimbus executionClient` - `nimbus_light_client.main`
+  ## is not exported, so drive the exported `runLightClient` the same way it does.
+  ##
+  ## Unlike `BeaconNodeConf` and the execution `NimbusConf`, `LightClientConf`
+  ## has no `command` field to absorb the `lightClient` token, so the caller
+  ## strips it and passes the remaining parameters here.
+  # TODO add a `lightClient` command to `LightClientConf` upstream, the way
+  #      `BNStartUpCmd.beaconNode` does, and drop the stripping
+  var params = cmdLine
+  if params.len == 0:
+    # `loadWithBanners` falls back to the real command line - which still holds
+    # the `lightClient` token - when handed an empty sequence. A bare
+    # `nimbus lightClient` cannot run anyway because `--trusted-block-root` is
+    # required, so show the options instead.
+    params.add "--help"
+
+  const banner = "Nimbus light client " & fullVersionStr
+
+  let config = LightClientConf.loadWithBanners(
+    banner, copyright, [specBanner], environment = params, setupLogger = true
+  ).valueOr:
+    writePanicLine error # Logging not yet set up
+    quit QuitFailure
+
+  setupFileLimits()
+
+  ProcessState.setupStopHandlers()
+
+  notice "Launching light client",
+    version = fullVersionStr, cmdParams = commandLineParams(), config
+
+  runLightClient(config)
 
 # noinline to keep it in stack traces
 proc main() {.noinline, raises: [CatchableError].} =
@@ -430,6 +554,7 @@ proc main() {.noinline, raises: [CatchableError].} =
     params = commandLineParams()
     isEC = false
     isBN = false
+    lcArg = -1 # index of the `lightClient` token, which `LightClientConf` cannot parse
   for i in 0 ..< params.len:
     try:
       discard NimbusCmd.matchSymbolName(params[i])
@@ -452,6 +577,9 @@ proc main() {.noinline, raises: [CatchableError].} =
       of NStartUpCmd.executionClient:
         isEC = true
         break
+      of NStartUpCmd.lightClient:
+        lcArg = i
+        break
       else:
         discard
     except ValueError:
@@ -461,6 +589,8 @@ proc main() {.noinline, raises: [CatchableError].} =
     nimbus_beacon_node.main()
   elif isEC:
     nimbus_execution_client.main()
+  elif lcArg >= 0:
+    runLightClientStandalone(params[0 ..< lcArg] & params[lcArg + 1 .. ^1])
   else:
     runCombinedClient()
 
