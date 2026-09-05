@@ -58,8 +58,8 @@ type
       ## Subset of `used` whose children are leaves with an explicit vid
     startVid*: VertexID
       ## First vertex ID of the 16 slot block for branch children
-    leafVids*: seq[VertexID]
-      ## Vertex IDs of the leaf children, in nibble order
+    leafVids*: array[16, VertexID]
+      ## Vertex IDs of the leaf children, indexed by nibble
 
   ExtBranchRef* = ref object of BranchRef
     pfx*: NibblesBuf
@@ -125,6 +125,7 @@ type
     ## Last saved state
     vTop*: VertexID                   ## Top used VertexID
     serial*: uint64                  ## Generic identifier from application
+    derivedVids*: bool               ## All leaves reachable at their derived vid
 
   GetVtxFlag* = enum
     PeekCache
@@ -232,30 +233,22 @@ func isLeaf*(vtx: BranchRef, nibble: uint8): bool =
 func nChildren*(vtx: BranchRef): int =
   countSetBits(vtx.used)
 
-func leafIndex(mask: uint16, nibble: uint8): int =
-  countSetBits(mask and (slotBit(nibble) - 1))
-
 func setLeaf*(vtx: BranchRef, nibble: uint8, vid: VertexID) =
   let bit = slotBit(nibble)
-  if (vtx.leafMask and bit) > 0:
-    vtx.leafVids[leafIndex(vtx.leafMask, nibble)] = vid
-  else:
-    vtx.leafVids.insert(vid, leafIndex(vtx.leafMask, nibble))
-    vtx.leafMask = vtx.leafMask or bit
-    vtx.used = vtx.used or bit
+  vtx.leafVids[nibble] = vid
+  vtx.leafMask = vtx.leafMask or bit
+  vtx.used = vtx.used or bit
 
 func clearSlot*(vtx: BranchRef, nibble: uint8) =
   let bit = slotBit(nibble)
-  if (vtx.leafMask and bit) > 0:
-    vtx.leafVids.delete(leafIndex(vtx.leafMask, nibble))
-    vtx.leafMask = vtx.leafMask and not bit
+  vtx.leafVids[nibble] = default(VertexID)
+  vtx.leafMask = vtx.leafMask and not bit
   vtx.used = vtx.used and not bit
 
 func setBranch*(vtx: BranchRef, nibble: uint8): VertexID =
   let bit = slotBit(nibble)
-  if (vtx.leafMask and bit) > 0:
-    vtx.leafVids.delete(leafIndex(vtx.leafMask, nibble))
-    vtx.leafMask = vtx.leafMask and not bit
+  vtx.leafVids[nibble] = default(VertexID)
+  vtx.leafMask = vtx.leafMask and not bit
   vtx.used = vtx.used or bit
   VertexID(uint64(vtx.startVid) + nibble)
 
@@ -264,7 +257,7 @@ func bVid*(vtx: BranchRef, nibble: uint8): VertexID =
   if (vtx.used and bit) == 0:
     default(VertexID)
   elif (vtx.leafMask and bit) > 0:
-    vtx.leafVids[leafIndex(vtx.leafMask, nibble)]
+    vtx.leafVids[nibble]
   else:
     VertexID(uint64(vtx.startVid) + nibble)
 
@@ -325,11 +318,9 @@ iterator allPairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
       yield (n, vtx.bVid(n))
 
 iterator leafSlots*(vtx: BranchRef): tuple[nibble: uint8, vid: VertexID] =
-  var i = 0
   for n in 0'u8 .. 15'u8:
     if (vtx.leafMask and (1'u16 shl n)) > 0:
-      yield (n, vtx.leafVids[i])
-      inc i
+      yield (n, vtx.leafVids[n])
 
 proc `==`*(a, b: NodeRef): bool =
   ## Beware, potential deep comparison

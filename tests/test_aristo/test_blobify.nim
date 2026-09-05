@@ -71,5 +71,5 @@ suite "Aristo blobify":
       branch.leafMask == 0x04'u16
       branch.setBranch(2) == VertexID(0x334454)
       branch.leafMask == 0'u16
-      branch.leafVids.len == 0
+      branch.leafMask == 0
       branch.bVid(2) == VertexID(0x334454)

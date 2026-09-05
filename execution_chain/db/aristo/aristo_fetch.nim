@@ -191,11 +191,11 @@ proc retrieveAccLeaf(
         let leafVtx = AccLeafRef(rc.value[0])
         db.cacheAccLeaf(accPath, CachedAccLeaf.init(leafVtx.pfx, leafVtx.account, leafVtx.stoID))
         return ok leafVtx
-    elif rc.error == GetVtxNotFound:
+    elif rc.error != GetVtxNotFound:
+      return err(rc.error)
+    elif not db.db.legacyLeaves:
       db.cacheAccLeaf(accPath, emptyCachedAccLeaf)
       return err(FetchPathNotFound)
-    else:
-      return err(rc.error)
 
   let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
     if error == FetchPathNotFound:
@@ -366,11 +366,11 @@ proc fetchSlot*(
         let leaf = StoLeafRef(rc.value[0])
         db.cacheStoLeaf(mixPath, CachedStoLeaf.init(leaf.pfx, leaf.stoData))
         return ok leaf.toStoData()
-    elif rc.error == GetVtxNotFound:
+    elif rc.error != GetVtxNotFound:
+      return err(rc.error)
+    elif not db.db.legacyLeaves:
       db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
       return ok 0'u256
-    else:
-      return err(rc.error)
 
   let leafRc = db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data))
   if leafRc.isErr:

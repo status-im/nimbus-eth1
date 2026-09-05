@@ -489,7 +489,7 @@ proc putSubtrie(
       let bvtx = BranchRef(node.vtx)
       bvtx.startVid = db.vidFetch(16)
       bvtx.leafMask = 0
-      bvtx.leafVids.setLen(0)
+      reset(bvtx.leafVids)
 
       for n, subvid in node.vtx.pairs():
         let

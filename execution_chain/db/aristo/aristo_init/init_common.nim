@@ -88,11 +88,13 @@ proc initInstance*(
     directLeafFetch = true
 ): Result[void, AristoError] =
   doAssert maxSnapshots > 0
-  let vTop = (?db.getLstFn()).vTop
+  let lSst = ?db.getLstFn()
 
   db.directLeafFetch = directLeafFetch
+  db.legacyLeaves = lSst.vTop.isValid and not lSst.derivedVids
 
-  db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
+  db.txRef =
+    AristoTxRef(db: db, vTop: lSst.vTop, snapshot: Snapshot(level: Opt.some(0)))
   when compileOption("threads"):
     if threadSafeCaches:
       db.accLeaves.init(accLeavesLruSize)

@@ -18,8 +18,8 @@ import
   ../../execution_chain/db/core_db/backend/[aristo_rocksdb, rocksdb_desc]
 
 const
-  ACCOUNTS = 2_000_000
-  CONTRACTS = 100_000
+  ACCOUNTS = 20_000_000
+  CONTRACTS = 1_000_000
   SLOTS_PER_CONTRACT = 32
   LEAVES_PER_BLOCK = 100_000
   READS = 200_000

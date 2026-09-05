@@ -164,6 +164,7 @@ type
       ## Enables parallel state root computation.
 
     directLeafFetch*: bool
+    legacyLeaves*: bool
       ## Resolve leaf lookups by their derived vid instead of traversing the
       ## trie, must be off for partial tries built from witnesses
 

@@ -172,6 +172,7 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   let lSst = SavedState(
     vTop: txFrame.vTop,
     serial: txFrame.blockNumber.expect("`checkpoint` before persisting frame"),
+    derivedVids: not db.legacyLeaves,
   )
 
   let oldLevel = db.txRef.level

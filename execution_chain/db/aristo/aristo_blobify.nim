@@ -19,7 +19,11 @@ import
 
 export aristo_desc, results
 
-const MAX_VERTEX_BLOB_SIZE = 208
+const
+  MAX_VERTEX_BLOB_SIZE = 208
+
+  EXT_HAS_KEY = 0b01'u8
+  EXT_LEAF_PTR = 0b10'u8
 
 # Allocation-free version short big-endian encoding that skips the leading
 # zeroes
@@ -208,32 +212,42 @@ proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var VertexBuf) =
     of Branches:
       let
         vtx = BranchRef(vtx)
-        bits =
-          if key.isValid and key.len == 32:
+        hasKey = key.isValid and key.len == 32
+      if vtx.leafMask == 0:
+        let bits =
+          if hasKey:
             # Shorter keys can be loaded from the vertex directly
             data.add key.data()
             0b10'u8
           else:
             0b00'u8
 
-      data.add toBytesBE(vtx.used)
-      data.add toBytesBE(vtx.leafMask)
-      for vid in vtx.leafVids:
-        data.add toBytesBE(vid.uint64)
-      data.add vtx.startVid.blobify().data()
-      if vtx.vType == ExtBranch:
-        writePfx(ExtBranchRef(vtx), bits)
-      else:
-        bits shl 6
-    of LeafPtr:
-      let flag =
-        if key.isValid and key.len == 32:
-          data.add key.data()
-          1'u8
+        data.add vtx.startVid.blobify().data()
+        data.add toBytesBE(vtx.used)
+        if vtx.vType == ExtBranch:
+          writePfx(ExtBranchRef(vtx), bits)
         else:
-          0'u8
+          bits shl 6
+      else:
+        data.add [if hasKey: EXT_HAS_KEY else: 0'u8]
+        if hasKey:
+          data.add key.data()
+        data.add toBytesBE(vtx.leafMask)
+        for _, vid in vtx.leafSlots:
+          data.add toBytesBE(vid.uint64)
+        data.add vtx.startVid.blobify().data()
+        data.add toBytesBE(vtx.used)
+        if vtx.vType == ExtBranch:
+          writePfx(ExtBranchRef(vtx), 0b11'u8)
+        else:
+          0b11'u8 shl 6
+    of LeafPtr:
+      let hasKey = key.isValid and key.len == 32
+      data.add [if hasKey: EXT_HAS_KEY or EXT_LEAF_PTR else: EXT_LEAF_PTR]
+      if hasKey:
+        data.add key.data()
       data.add toBytesBE(LeafPtrRef(vtx).vid.uint64)
-      (0b11'u8 shl 6) or flag
+      0b11'u8 shl 6
     of AccLeaf:
       let vtx = AccLeafRef(vtx)
       vtx.blobifyTo(data)
@@ -254,7 +268,7 @@ proc blobifyTo*(lSst: SavedState; data: var seq[byte]) =
   ## Serialise a last saved state record
   data.add lSst.vTop.uint64.toBytesBE
   data.add lSst.serial.toBytesBE
-  data.add @[0x7fu8]
+  data.add @[if lSst.derivedVids: 0x7eu8 else: 0x7du8]
 
 proc blobify*(lSst: SavedState): seq[byte] =
   ## Variant of `blobify()`
@@ -314,7 +328,9 @@ proc deblobifyType*(record: openArray[byte]; T: type VertexRef):
     psLen = int(record[^1] and 0b00111111)
     psPos = record.len - psLen - 1
   if bits == 0b11'u8:
-    return ok LeafPtr
+    if (record[0] and EXT_LEAF_PTR) > 0:
+      return ok LeafPtr
+    return ok(if psLen > 0: ExtBranch else: Branch)
   ok if (bits and 0b01'u8) > 0:
     let mask = record[psPos - 1]
     if (mask and 0x20) > 0: StoLeaf else: AccLeaf
@@ -330,20 +346,23 @@ proc deblobify*(
   if record.len < 3: # minimum `Leaf` record
     return err(DeblobVtxTooShort)
 
-  let bits = record[^1] shr 6
+  let
+    bits = record[^1] shr 6
+    isExt = bits == 0b11'u8
+    isLeaf = not isExt and (bits and 0b01'u8) > 0
+    hasKey =
+      if isExt:
+        (record[0] and EXT_HAS_KEY) > 0
+      else:
+        (bits and 0b10'u8) > 0
+    psLen = int(record[^1] and 0b00111111)
+    start = (if isExt: 1 else: 0) + (if hasKey: 32 else: 0)
 
-  if bits == 0b11'u8:
-    let start = if (record[^1] and 1) > 0: 32 else: 0
+  if isExt and (record[0] and EXT_LEAF_PTR) > 0:
     if record.len != start + 9:
       return err(DeblobWrongSize)
     return ok VertexRef(
       LeafPtrRef.init(VertexID(uint64.fromBytesBE(record.toOpenArray(start, start + 7)))))
-
-  let
-    isLeaf = (bits and 0b01'u8) > 0
-    hasKey = (bits and 0b10'u8) > 0
-    psLen = int(record[^1] and 0b00111111)
-    start = if hasKey: 32 else: 0
 
   if psLen > record.len - 2 or start > record.len - 2 - psLen:
     return err(DeblobBranchTooShort)
@@ -355,27 +374,29 @@ proc deblobify*(
 
   ok case isLeaf
   of false:
-    var pos = start
-    if psPos - pos < 5:
+    var
+      pos = start
+      leafMask = 0'u16
+    if isExt:
+      if psPos - pos < 2:
+        return err(DeblobBranchTooShort)
+      leafMask = uint16.fromBytesBE(record.toOpenArray(pos, pos + 1))
+      pos += 2
+
+    let nLeaves = countSetBits(leafMask)
+    if psPos - pos < nLeaves * 8 + 3:
       return err(DeblobBranchTooShort)
 
-    let
-      used = uint16.fromBytesBE(record.toOpenArray(pos, pos + 1))
-      leafMask = uint16.fromBytesBE(record.toOpenArray(pos + 2, pos + 3))
-      nLeaves = countSetBits(leafMask)
-    pos += 4
-
-    if psPos - pos < nLeaves * 8 + 1:
-      return err(DeblobBranchTooShort)
-
-    var leafVids = newSeqOfCap[VertexID](nLeaves)
-    for _ in 0 ..< nLeaves:
-      leafVids.add VertexID(uint64.fromBytesBE(record.toOpenArray(pos, pos + 7)))
-      pos += 8
+    var leafVids: array[16, VertexID]
+    for n in 0'u8 .. 15'u8:
+      if (leafMask and (1'u16 shl n)) > 0:
+        leafVids[n] = VertexID(uint64.fromBytesBE(record.toOpenArray(pos, pos + 7)))
+        pos += 8
 
     let
-      svLen = psPos - pos
+      svLen = psPos - pos - 2
       startVid = VertexID(?load64(record, pos, svLen))
+      used = uint16.fromBytesBE(record.toOpenArray(pos, pos + 1))
       vtx =
         if pathSegment.len > 0:
           ExtBranchRef.init(pathSegment, startVid, used)
@@ -383,7 +404,7 @@ proc deblobify*(
           BranchRef.init(startVid, used)
 
     vtx.leafMask = leafMask
-    vtx.leafVids = move(leafVids)
+    vtx.leafVids = leafVids
     VertexRef(vtx)
   of true:
     ?record.toOpenArray(start, psPos - 1).deblobifyLeaf(pathSegment)
@@ -392,15 +413,12 @@ proc deblobify*(record: openArray[byte], T: type HashKey): Opt[HashKey] =
   if record.len < 34:
     return Opt.none(HashKey)
 
-  let
-    bits = record[^1] shr 6
-    hasKey =
-      if bits == 0b11'u8:
-        (record[^1] and 1) > 0
-      else:
-        (bits and 0b10'u8) > 0
+  if (record[^1] shr 6) == 0b11'u8:
+    if (record[0] and EXT_HAS_KEY) > 0:
+      return HashKey.fromBytes(record.toOpenArray(1, 32))
+    return Opt.none(HashKey)
 
-  if hasKey:
+  if ((record[^1] shr 6) and 0b10'u8) > 0:
     HashKey.fromBytes(record.toOpenArray(0, 31))
   else:
     Opt.none(HashKey)
@@ -413,12 +431,13 @@ proc deblobify*(
   ## `blobify()`.
   if data.len != 17:
     return err(DeblobWrongSize)
-  if data[^1] != 0x7f:
+  if data[^1] notin [0x7fu8, 0x7eu8, 0x7du8]:
     return err(DeblobWrongType)
 
   ok(SavedState(
     vTop: VertexID(uint64.fromBytesBE data.toOpenArray(0, 7)),
-    serial: uint64.fromBytesBE data.toOpenArray(8, 15)))
+    serial: uint64.fromBytesBE data.toOpenArray(8, 15),
+    derivedVids: data[^1] == 0x7e))
 
 # ------------------------------------------------------------------------------
 # End
