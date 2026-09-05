@@ -566,16 +566,12 @@ proc getExecutionApiFrontend*(
 
     let header = opEngine.penaltyOr(await opEngine.getHeader(blockId("latest")))
 
-    if header.blobGasUsed.isNone():
-      return
-        err((UnavailableDataError, "blobGasUsed missing from latest header", UNTAGGED))
     if header.excessBlobGas.isNone():
       return err(
         (UnavailableDataError, "excessBlobGas missing from latest header", UNTAGGED)
       )
     let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get, com, com.toHardFork(header)) *
-      header.blobGasUsed.get.u256
+      getBlobBaseFee(header.excessBlobGas.get, com, com.toHardFork(header))
 
     ok(blobBaseFee)
 
