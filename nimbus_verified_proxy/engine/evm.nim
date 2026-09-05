@@ -36,6 +36,11 @@ proc toAsyncEvmStateBackend*(engine: RpcVerificationEngine): AsyncEvmStateBacken
       let storageSlot = (
         await engine.getStorageAt(address, slotKey, header.number, header.stateRoot)
       ).valueOr:
+        debug "Storage slot fetch failed",
+          address = $address,
+          slotKey = $slotKey,
+          errType = error.errType,
+          errMsg = error.errMsg
         return Opt.none(UInt256)
 
       Opt.some(storageSlot)

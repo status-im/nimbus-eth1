@@ -8,7 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strutils],
+  std/[strutils, json],
   stint,
   stew/byteutils,
   web3/[conversions, eth_api_types],
@@ -53,6 +53,24 @@ func unpackArg*(arg: string, argType: type): Result[argType, string] {.raises: [
     ok(EthJson.decode(arg, argType))
   except CatchableError as e:
     err("Parameter of type " & $argType & " coudln't be decoded: " & e.msg)
+
+proc unpackResult*(raw: string, resType: type): Result[resType, string] {.raises: [].} =
+  var node: JsonNode
+  try:
+    node = parseJson(raw)
+  except CatchableError as e:
+    return err("transport payload is not valid JSON: " & e.msg)
+
+  try:
+    if node.kind != JObject or not node.hasKey("jsonrpc"):
+      return err("transport payload is not a JSON-RPC response envelope")
+    if node.hasKey("error"):
+      return err("backend returned error: " & $node["error"])
+    if not node.hasKey("result"):
+      return err("JSON-RPC response envelope has no result")
+    ok(EthJson.decode($node["result"], resType))
+  except CatchableError as e:
+    err("Result of type " & $resType & " couldn't be decoded: " & e.msg)
 
 func packArg*[T](arg: T): Result[string, string] {.raises: [].} =
   try:
