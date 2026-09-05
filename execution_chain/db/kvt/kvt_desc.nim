@@ -41,18 +41,8 @@ type
   ): Result[void, KvtError] {.gcsafe, raises: [].}
     ## Generic backend database bulk retrieval function
 
-  # -------------
-
-  PutBegFn* = proc(): Result[PutHdlRef, KvtError] {.gcsafe, raises: [].}
-    ## Generic transaction initialisation function
-
-  PutKvpFn* = proc(hdl: PutHdlRef, k, v: openArray[byte]) {.gcsafe, raises: [].}
-    ## Generic backend database bulk storage function.
-
-  PutEndFn* = proc(hdl: PutHdlRef): Result[void, KvtError] {.gcsafe, raises: [].}
-    ## Generic transaction termination function
-
-  # -------------
+  PutKvpFn* = proc(k, v: openArray[byte]): Result[void, KvtError] {.gcsafe, raises: [].}
+    ## Generic backend database storage function.
 
   DelKvpFn* = proc(key: openArray[byte]): Result[void, KvtError] {.gcsafe, raises: [].}
     ## Generic backend database delete function.
@@ -75,19 +65,12 @@ type
   GetBackendFn* = proc(): TypedBackendRef {.gcsafe, raises: [].}
     ## Get a reference to typed backend.
 
-  KvtTxRef* = ref object ## Transaction descriptor
-    db*: KvtDbRef ## Database descriptor
-    parent*: KvtTxRef ## Previous transaction
-    sTab*: Table[seq[byte], seq[byte]] ## Structural data table
-
   KvtDbRef* = ref object of RootRef ## Backend interface.
     getKvpFn*: GetKvpFn ## Read key-value pair
     lenKvpFn*: LenKvpFn ## Read key-value pair length
     multiGetKvpFn*: MultiGetKvpFn ## Bulk read key-value pairs
 
-    putBegFn*: PutBegFn ## Start bulk store session
-    putKvpFn*: PutKvpFn ## Bulk store key-value pairs
-    putEndFn*: PutEndFn ## Commit bulk store session
+    putKvpFn*: PutKvpFn ## Store key-value pairs
 
     delKvpFn*: DelKvpFn ## Delete key-value pair
     delRangeKvpFn*: DelRangeKvpFn ## Bulk delete key-value pairs
@@ -95,10 +78,6 @@ type
     closeFn*: CloseFn ## Generic destructor
 
     getBackendFn*: GetBackendFn
-
-    txRef*: KvtTxRef
-      ## Tx holding data scheduled to be written to disk during the next
-      ## `persist` call
 
     when compileOption("threads"):
       blockHashes*: ConcurrentLruCache[BlockNumber, Hash32]
@@ -110,7 +89,6 @@ type
 
 proc initInstance*(
     db: KvtDbRef, threadSafeCaches = true, blockHashesLruSize = 0) =
-  db.txRef = KvtTxRef(db: db)
   when compileOption("threads"):
     if threadSafeCaches:
       db.blockHashes.init(blockHashesLruSize)
@@ -126,14 +104,8 @@ proc disposeInstance*(db: KvtDbRef) =
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func getOrVoid*(tab: Table[seq[byte], seq[byte]], w: seq[byte]): seq[byte] =
-  tab.getOrDefault(w, EmptyBlob)
-
 func isValid*(key: seq[byte]): bool =
   key != EmptyBlob
-
-func isValid*(tx: KvtTxRef): bool =
-  tx != KvtTxRef(nil)
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
@@ -141,24 +113,6 @@ func isValid*(tx: KvtTxRef): bool =
 
 # Don't put in a hash!
 func hash*(db: KvtDbRef): Hash {.error.}
-
-iterator stack*(tx: KvtTxRef): KvtTxRef =
-  # Stack going from base to tx
-  var frames: seq[KvtTxRef]
-  var tx = tx
-  while tx != nil:
-    frames.add tx
-    tx = tx.parent
-
-  while frames.len > 0:
-    yield frames.pop()
-
-iterator rstack*(tx: KvtTxRef): KvtTxRef =
-  var tx = tx
-  # Stack in reverse order
-  while tx != nil:
-    yield tx
-    tx = tx.parent
 
 # ------------------------------------------------------------------------------
 # End

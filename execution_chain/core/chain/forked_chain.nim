@@ -88,7 +88,7 @@ func appendBlock(c: ForkedChainRef,
   c.heads.add newBlock
   newBlock
 
-func fcuSetHead(c: ForkedChainRef,
+proc fcuSetHead(c: ForkedChainRef,
                 txFrame: CoreDbTxRef,
                 header: Header,
                 hash: Hash32,
@@ -230,7 +230,7 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   b.parent = nil
   b.header.reset()   # frees extraData seq immediately
 
-func updateHead(c: ForkedChainRef, head: BlockRef) =
+proc updateHead(c: ForkedChainRef, head: BlockRef) =
   ## Update head if the new head is different from current head.
 
   c.fcuSetHead(head.txFrame,

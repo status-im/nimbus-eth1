@@ -22,7 +22,7 @@ import
   "../.."/[constants],
   "../.."/stateless/witness_types,
   ".."/[aristo, storage_types],
-  "../kvt"/[kvt_desc, kvt_layers, kvt_utils],
+  "../kvt"/[kvt_desc, kvt_utils],
   "."/base
 
 logScope:
@@ -144,20 +144,14 @@ proc getBlockHash*(
   const info = "getBlockHash()"
   let key = blockNumberToHashKey(n)
 
-  let pending = db.kTx.layersGet(key.toOpenArray)
-  if pending.isSome():
-    wrapRlpException info:
-      return ok(rlp.decode(pending.unsafeGet(), Hash32))
-
   when compileOption("threads"):
     let
-      kvt = db.kTx.db
-      keyHash = kvt.blockHashes.toKeyHash(n)
+      keyHash = db.kvt.blockHashes.toKeyHash(n)
 
-    kvt.blockHashes.withGetByHash(keyHash, n, cached):
+    db.kvt.blockHashes.withGetByHash(keyHash, n, cached):
       return ok(cached)
 
-  let data = db.kTx.db.getBe(key.toOpenArray).valueOr:
+  let data = db.kvt.getBe(key.toOpenArray).valueOr:
     let dbError =
       if error == GetNotFound:
         error.toError("", KvtNotFound)
@@ -170,7 +164,7 @@ proc getBlockHash*(
   wrapRlpException info:
     let blockHash = rlp.decode(data, Hash32)
     when compileOption("threads"):
-      kvt.blockHashes.putByHash(keyHash, n, blockHash)
+      db.kvt.blockHashes.putByHash(keyHash, n, blockHash)
     return ok(blockHash)
 
 proc getBlockHeader*(

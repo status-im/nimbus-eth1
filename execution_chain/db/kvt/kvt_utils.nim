@@ -15,7 +15,7 @@
 
 import
   results,
-  "."/[kvt_desc, kvt_layers]
+  ./[kvt_desc]
 
 export results
 
@@ -64,10 +64,17 @@ proc delRangeBe*(
       ): Result[void, KvtError] =
   db.delRangeKvpFn(startKey, endKey, compactRange)
 
+proc putBe*(
+    db: KvtDbRef;                     # Database
+    key: openArray[byte];             # Key of database record to store
+    data: openArray[byte];            # Value of database record to store
+      ): Result[void,KvtError] =
+  db.putKvpFn(key, data)
+
 # ------------
 
 proc putMove*(
-    db: KvtTxRef;                     # Database
+    db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record to store
     data: var seq[byte];              # Value of database record to store
       ): Result[void,KvtError] =
@@ -79,11 +86,10 @@ proc putMove*(
   if data.len == 0:
     return err(DataInvalid)
 
-  db.layersPutMove(key, data)
-  ok()
+  db.putKvpFn(key, data)
 
 proc put*(
-    db: KvtTxRef;                     # Database
+    db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record to store
     data: openArray[byte];            # Value of database record to store
       ): Result[void,KvtError] =
@@ -91,9 +97,8 @@ proc put*(
   var data = @data
   db.putMove(key, data)
 
-
 proc del*(
-    db: KvtTxRef;                     # Database
+    db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record to delete
       ): Result[void,KvtError] =
   ## For the argument `key` delete the associated value (which will be marked
@@ -101,13 +106,12 @@ proc del*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  db.layersPut(key, EmptyBlob)
-  ok()
+  db.delBe(key)
 
 # ------------
 
 proc get*(
-    db: KvtTxRef;                     # Database
+    db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[seq[byte],KvtError] =
   ## For the argument `key` return the associated value preferably from the
@@ -116,13 +120,10 @@ proc get*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  var data = db.layersGet(key).valueOr:
-    return db.db.getBe key
-
-  return ok(move(data))
+  db.getBe key
 
 proc len*(
-    db: KvtTxRef;                     # Database
+    db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[int,KvtError] =
   ## For the argument `key` return the length of the associated value,
@@ -131,43 +132,19 @@ proc len*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  let len = db.layersLen(key).valueOr:
-    return db.db.getBeLen key
-  ok(len)
+  db.getBeLen key
 
 proc multiGet*(
-    db: KvtTxRef,
+    db: KvtDbRef,
     keys: openArray[seq[byte]],
     values: var openArray[Opt[seq[byte]]],
     sortedInput = false,
       ): Result[void, KvtError] =
 
-  var
-    remainingKeys: seq[seq[byte]] # keys to fetch from the db backend
-    keyIndexes: seq[int] # record the indexes from the original keys list
-
-  # First fetch each key from the in memory layers
-  for i, k in keys:
-    let value = db.layersGet(k)
-    if value.isSome():
-      values[i] = value
-    else:
-      remainingKeys.add(k)
-      keyIndexes.add(i)
-
-  # Fetch the remaining keys from the db backend
-  if remainingKeys.len() > 0:
-    var remainingValues = newSeq[Opt[seq[byte]]](remainingKeys.len())
-    ?db.db.multiGetBe(remainingKeys, remainingValues)
-
-    for i, v in remainingValues:
-      let index = keyIndexes[i]
-      values[index] = v
-
-  ok()
+  db.multiGetBe(keys, values)
 
 proc hasKeyRc*(
-    db: KvtTxRef;                     # Database
+    db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[bool,KvtError] =
   ## For the argument `key` return `true` if `get()` returned a value on
@@ -177,10 +154,7 @@ proc hasKeyRc*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  if db.layersHasKey key:
-    return ok(true)
-
-  let rc = db.db.getBe key
+  let rc = db.getBe key
   if rc.isOk:
     return ok(true)
   if rc.error == GetNotFound:
@@ -188,7 +162,7 @@ proc hasKeyRc*(
   err(rc.error)
 
 proc hasKey*(
-    db: KvtTxRef;                     # Database
+    db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): bool =
   ## Simplified version of `hasKeyRc` where `false` is returned instead of

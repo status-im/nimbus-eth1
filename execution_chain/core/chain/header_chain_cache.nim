@@ -64,7 +64,7 @@ import
   pkg/eth/[common, rlp],
   "../.."/[common, db/core_db, db/storage_types],
   ../../db/[kvt, kvt_cf],
-  ../../db/kvt/[kvt_utils, kvt_tx_frame],
+  ../../db/kvt/[kvt_utils],
   ./forked_chain,
   ./forked_chain/[chain_branch, chain_desc, block_quarantine]
 
@@ -124,7 +124,7 @@ type
     chain: ForkedChainRef       # descriptor will resolve into that in future
     session: HccSession         # additional session variables
     notify: HeaderChainNotifyCB # client app notification
-    kvt: KvtTxRef               # metadata and temporary headers storage with
+    kvt: KvtDbRef               # metadata and temporary headers storage with
                                 # it's own column family
                                 # isolated from ordinary headers storage.
 const
@@ -169,12 +169,12 @@ func decodePayload(data: seq[byte]; T: type): T =
 # Private cache helpers: database related
 # ------------------------------------------------------------------------------
 
-proc putInfo(db: KvtTxRef; state: HccDbInfo) =
+proc putInfo(db: KvtDbRef; state: HccDbInfo) =
   var data = encodePayload(state)
   db.putMove(HccDbInfoKey.toOpenArray, data).isOkOr:
     raiseAssert MsgPfx & "put(info) failed: " & $error
 
-proc getInfo(db: KvtTxRef): Opt[HccDbInfo] =
+proc getInfo(db: KvtDbRef): Opt[HccDbInfo] =
   let data = db.get(HccDbInfoKey.toOpenArray).valueOr:
     return err()
   # Ignore state decode error, might be from an earlier state version release
@@ -184,12 +184,12 @@ proc getInfo(db: KvtTxRef): Opt[HccDbInfo] =
     discard
   err()
 
-proc delInfo(db: KvtTxRef) =
+proc delInfo(db: KvtDbRef) =
   ## Remove info record from cache
   discard db.del(HccDbInfoKey.toOpenArray)
 
 
-proc putHeader(db: KvtTxRef; h: Header) =
+proc putHeader(db: KvtDbRef; h: Header) =
   ## Store the argument `header` indexed by block number, and the hash lookup
   ## of the parent header.
   var data = encodePayload(h)
@@ -201,23 +201,23 @@ proc putHeader(db: KvtTxRef; h: Header) =
     raiseAssert MsgPfx & "put(number-1) failed: " & $error
 
 
-proc getNumber(db: KvtTxRef, hash: Hash32): Opt[BlockNumber] =
+proc getNumber(db: KvtDbRef, hash: Hash32): Opt[BlockNumber] =
   let number = db.get(genericHashKey(hash).toOpenArray).valueOr:
     return err()
   ok(uint64.fromBytesBE(number))
 
-proc getHeader(db: KvtTxRef; bn: BlockNumber): Opt[Header] =
+proc getHeader(db: KvtDbRef; bn: BlockNumber): Opt[Header] =
   ## Retrieve some header from cache
   let data = db.get(beaconHeaderKey(bn).toOpenArray).valueOr:
     return err()
   ok decodePayload(data, Header)
 
-proc getHeader(db: KvtTxRef; hash: Hash32): Opt[Header] =
+proc getHeader(db: KvtDbRef; hash: Hash32): Opt[Header] =
   ## Variant of `getHeader()`
   db.getHeader ?db.getNumber(hash)
 
 
-proc delHeader(db: KvtTxRef; bn: BlockNumber) =
+proc delHeader(db: KvtDbRef; bn: BlockNumber) =
   ## Remove header from cache, ignore non-existing entries
   let
     bnKey = beaconHeaderKey(bn)
@@ -234,7 +234,7 @@ proc persistInfo(hc: HeaderChainRef) =
   hc.kvt.putInfo HccDbInfo(
     least: hc.session.ante.number,
     last:  hc.session.head.number)
-  hc.kvt.persist()
+  #hc.kvt.persist()
 
 proc persistClear(hc: HeaderChainRef) =
   ## Clear persistent database
@@ -242,10 +242,10 @@ proc persistClear(hc: HeaderChainRef) =
   for bn in w.least .. w.last:
     hc.kvt.delHeader(bn)
     # Occasionally flush the current data
-    if (bn - w.least) mod MaxDeleteBatch == 0:
-      hc.kvt.persist()
+    #if (bn - w.least) mod MaxDeleteBatch == 0:
+      #hc.kvt.persist()
   hc.kvt.delInfo()
-  hc.kvt.persist()
+  #hc.kvt.persist()
 
 # ------------------------------------------------------------------------------
 # Private functions
