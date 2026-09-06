@@ -70,6 +70,11 @@ type
     snappyEnabled*: bool
     clientId*: string
     inbound*: bool  # true if connection was initiated by remote peer
+    lastReceived*: Moment
+      # Time the last message arrived from this peer - a connection whose
+      # remote end silently went away is detected by this going stale
+    keepAlive*: Future[void].Raising([CancelledError])
+      # Liveness monitor, see `keepAliveLoop` in rlpx.nim
 
 #------------------------------------------------------------------------------
 # PeerRef public functions

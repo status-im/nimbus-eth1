@@ -35,7 +35,7 @@ proc newEthereumNode*(
     enrTcpPort, enrUdpPort: Opt[Port],
     networkId: NetworkId,
     clientId = "nim-eth-p2p",
-    minPeers = 10,
+    maxPeers = 25,
     bootstrapNodes = BootstrapNodes(),
     bindUdpPort: Port,
     bindTcpPort: Port,
@@ -65,7 +65,7 @@ proc newEthereumNode*(
       rng: rng,
     )
   node.peerPool = newPeerPool[EthereumNode](
-    node, discovery, minPeers = minPeers, forkId = forkIdProcs.forkId)
+    node, discovery, maxPeers = maxPeers, forkId = forkIdProcs.forkId)
   node
 
 proc processIncoming(server: StreamServer,
