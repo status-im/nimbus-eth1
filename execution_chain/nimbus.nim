@@ -539,8 +539,6 @@ proc runLightClientStandalone(cmdLine: seq[string]) {.raises: [CatchableError].}
     writePanicLine error # Logging not yet set up
     quit QuitFailure
 
-  setupFileLimits()
-
   ProcessState.setupStopHandlers()
 
   notice "Launching light client",
