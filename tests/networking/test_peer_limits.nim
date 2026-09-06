@@ -14,9 +14,6 @@
 ##   `--max-peers` peers, and
 ## * a connection whose remote end has gone away without closing the socket is
 ##   reaped by the liveness monitor.
-##
-## Without either of them a node accumulates established sockets until it runs
-## out of file descriptors: nothing else in the stack ever closes one.
 
 {.used.}
 
