@@ -24,6 +24,12 @@ createRpcSigsFromNim(RpcClient, EthJson):
     blockCount: Quantity, newestBlock: BlockIdentifier, rewardPercentiles: seq[int]
   ): FeeHistoryResult
 
+  # remove after this PR is merged in and the commit is factored in nimbus-eth1
+  # https://github.com/status-im/nim-web3/pull/270
+  proc eth_getProof(
+    address: Address, slots: seq[Bytes32], blockId: BlockIdentifier
+  ): ProofResponse
+
 type JsonRpcClient* = ref object
   url: string
   case kind*: ClientKind
