@@ -30,7 +30,7 @@ func txType(n: TransactionArgs): TxType =
     return TxEip7702
   if n.blobVersionedHashes.isSome:
     return TxEip4844
-  if n.gasPrice.isNone:
+  if n.maxFeePerGas.isSome or n.maxPriorityFeePerGas.isSome:
     return TxEip1559
   if n.accessList.isSome:
     return TxEip2930
@@ -38,7 +38,8 @@ func txType(n: TransactionArgs): TxType =
 
 proc toTransaction*(vmState: BaseVMState,
                     args: TransactionArgs,
-                    globalGasCap: GasInt): EvmResult[Transaction] =
+                    globalGasCap: GasInt,
+                    header: Header): EvmResult[Transaction] =
 
   # Reject invalid combinations of pre- and post-1559 fee styles
   if args.gasPrice.isSome and
