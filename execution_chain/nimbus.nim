@@ -552,7 +552,7 @@ proc main() {.noinline, raises: [CatchableError].} =
     params = commandLineParams()
     isEC = false
     isBN = false
-    lcArg = -1 # index of the `lightClient` token, which `LightClientConf` cannot parse
+    isLC = false
   for i in 0 ..< params.len:
     try:
       discard NimbusCmd.matchSymbolName(params[i])
@@ -576,7 +576,10 @@ proc main() {.noinline, raises: [CatchableError].} =
         isEC = true
         break
       of NStartUpCmd.lightClient:
-        lcArg = i
+        # Unlike the other two, `LightClientConf` has no `command` field to
+        # absorb this token, so drop it before handing the rest over.
+        params.delete(i)
+        isLC = true
         break
       else:
         discard
@@ -587,8 +590,8 @@ proc main() {.noinline, raises: [CatchableError].} =
     nimbus_beacon_node.main()
   elif isEC:
     nimbus_execution_client.main()
-  elif lcArg >= 0:
-    runLightClientStandalone(params[0 ..< lcArg] & params[lcArg + 1 .. ^1])
+  elif isLC:
+    runLightClientStandalone(params)
   else:
     runCombinedClient()
 
