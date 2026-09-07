@@ -25,13 +25,20 @@ const
 func sender*(args: TransactionArgs): Address =
   args.source.get(ZeroAddr)
 
-func destination*(args: TransactionArgs): Address =
-  args.to.get(ZeroAddr)
+func txType(n: TransactionArgs): TxType =
+  if n.authorizationList.isSome:
+    return TxEip7702
+  if n.blobVersionedHashes.isSome:
+    return TxEip4844
+  if n.gasPrice.isNone:
+    return TxEip1559
+  if n.accessList.isSome:
+    return TxEip2930
+  TxLegacy
 
-proc toCallParams*(vmState: BaseVMState,
-                   args: TransactionArgs,
-                   globalGasCap: GasInt,
-                   header: Header): EvmResult[CallParams] =
+proc toTransaction*(vmState: BaseVMState,
+                    args: TransactionArgs,
+                    globalGasCap: GasInt): EvmResult[Transaction] =
 
   # Reject invalid combinations of pre- and post-1559 fee styles
   if args.gasPrice.isSome and
@@ -52,50 +59,27 @@ proc toCallParams*(vmState: BaseVMState,
       cap = globalGasCap,
       gasLimit = globalGasCap
 
-  var gasPrice = GasInt args.gasPrice.get(0.Quantity)
-  if header.baseFeePerGas.isSome:
-    # A basefee is provided, necessitating EIP-1559-type execution
-    let
-        feeNormTx = Transaction(
-          txType:
-            if args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome:
-              TxEip1559
-            else:
-              TxLegacy,
-          gasPrice: GasInt args.gasPrice.get(0.Quantity),
-          maxPriorityFeePerGas: GasInt args.maxPriorityFeePerGas.get(0.Quantity),
-          maxFeePerGas: GasInt args.maxFeePerGas.get(0.Quantity),
-        )
-        maxPriorityFee = feeNormTx.maxPriorityFeePerGasNorm
-        maxFee = feeNormTx.maxFeePerGasNorm
-
-    # Backfill the legacy gasPrice for EVM execution, unless we're all zeroes
-    if maxPriorityFee > 0 or maxFee > 0:
-      let baseFee = header.baseFeePerGas.value.truncate(GasInt)
-      let priorityFee = min(maxPriorityFee, maxFee - baseFee)
-      gasPrice = priorityFee + baseFee
-
   template versionedHashes(args: TransactionArgs): seq[VersionedHash] =
     if args.blobVersionedHashes.isSome:
       args.blobVersionedHashes.get
     else:
       @[]
 
-  var res = CallParams(
-    vmState:         vmState,
-    sender:          args.sender,
-    to:              args.destination,
-    isCreate:        args.to.isNone,
-    gasLimit:        gasLimit,
-    gasPrice:        gasPrice,
-    value:           args.value.get(0.u256),
-    input:           args.payload(),
-    accessList:      args.accessList.get(@[]),
-    versionedHashes: args.versionedHashes,
-    authorizationList: args.authorizationList.get(@[]),
-  )
-
-  res.intrinsic = res.intrinsicGas(vmState.hardFork, header.gasLimit, res.sender)
-  ok(move(res))
+  ok(Transaction(
+    txType:               txType(args),
+    chainId:              args.chainId.get(0.u256),
+    nonce:                args.nonce.get(0.Quantity).AccountNonce,
+    gasPrice:             args.gasPrice.get(0.Quantity).GasInt,
+    maxPriorityFeePerGas: args.maxPriorityFeePerGas.get(0.Quantity).GasInt,
+    maxFeePerGas:         args.maxFeePerGas.get(0.Quantity).GasInt,
+    gasLimit:             gasLimit,
+    to:                   args.to,
+    value:                args.value.get(0.u256),
+    payload:              args.payload(),
+    accessList:           args.accessList.get(@[]),
+    maxFeePerBlobGas:     args.maxFeePerBlobGas.get(0.u256),
+    versionedHashes:      args.versionedHashes,
+    authorizationList:    args.authorizationList.get(@[]),
+  ))
 
 {.pop.}
