@@ -241,7 +241,14 @@ static void execution_transport(
     if (file) {
         char *data = read_file(file);
         if (data) {
-            cb(RET_SUCCESS, data, userData);
+            /* the library expects the JSON-RPC response envelope verbatim */
+            const char *prefix = "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":";
+            const char *suffix = "}";
+            size_t len = strlen(prefix) + strlen(data) + strlen(suffix) + 1;
+            char *envelope = malloc(len);
+            snprintf(envelope, len, "%s%s%s", prefix, data, suffix);
+            cb(RET_SUCCESS, envelope, userData);
+            free(envelope);
             free(data);
             return;
         }
