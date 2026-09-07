@@ -60,12 +60,17 @@ For a partial storage sub-MPT, a change of storage slots due to BAL forwarding
 cannot happen (is not allowed) because it would need a change the *storageRoot*
 field of the corresponding account record.
 
-Instead, the whole account and storage sub-MPT (and contract code) must be
-deleted, and the account declared missing so that it can be re-fetched, along
-with the new *storageRoot*.
+In particular, after a state root change due to BAL forwarding, updating a
+a partial storage sub-MPT code would also require an update of the
+corresponding account record in order to fetch the current data via the
+*storageRoot*, which is stored in the account record.
 
-Currently, all partial storage sub-MPTs will be deleted before BAL forwarding
-takes place.
+Instead, before BAL forwarding the whole account and storage sub-MPT (and
+contract code) will be deleted, and the account declared missing so that it
+can be re-fetched, along with the new *storageRoot*.
+
+So, all partial storage sub-MPTs and the corresponding account records will be
+deleted before BAL forwarding takes place.
 
 By prioritising non-empty partial storage sub-MPTs, it is expected that there
 is some reduction of downloaded storage slots that go to waste when preparing

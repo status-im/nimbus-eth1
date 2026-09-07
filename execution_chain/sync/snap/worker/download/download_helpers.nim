@@ -10,7 +10,7 @@
 
 import
   pkg/stew/interval_set,
-  ../[mpt, worker_desc]
+  ../[cache_db, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Public helpers

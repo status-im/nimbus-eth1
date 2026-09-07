@@ -449,7 +449,8 @@ proc rpcMain*() =
 
     test "eth_maxPriorityFeePerGas":
       let res = await client.eth_maxPriorityFeePerGas()
-      check res == w3Qty(calculateMedianMaxPriorityFeePerGas(env.chain).uint64)
+      check res == w3Qty(calculateMedianMaxPriorityFeePerGas(env.chain)
+        .expect("body present in test db").uint64)
 
     test "eth_accounts":
       let res = await client.eth_accounts()
