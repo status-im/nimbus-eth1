@@ -28,7 +28,7 @@ proc allDownloaded(ctx: SnapCtxRef; info: static[string]): Opt[void] =
     if 0 < ctx.accUnproc.chunks():
       return err()
   else:
-    if ?adb.hasAccMissingIntv(info):
+    if ?adb.hasAccMissingIntvRange(info):
       return err()
 
   # So, either the accounting cache is complete, od the cache DB.
@@ -51,7 +51,7 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
 
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  let haveData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr:
+  let haveData = ctx.pool.cacheDB.hasAccMissingIntvRange(info).valueOr:
     return SnapClear                                # DB problem, failure
   if haveData and ctx.accUnproc.synced():
     info info & ": Resuming previous session"
@@ -61,7 +61,7 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
 
 proc clearNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  let haveData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr:
+  let haveData = ctx.pool.cacheDB.hasAccMissingIntvRange(info).valueOr:
     return SnapStop                                 # DB problem, failure
   if haveData:
     return SnapClear

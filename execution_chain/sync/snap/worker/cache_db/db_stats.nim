@@ -22,8 +22,9 @@ logScope:
 type
   LogNoise* = enum
     minimal
-    smart
+    check
     full
+    codeOnly
 
   FlatStatsWalk = tuple
     nAcc: int
@@ -177,6 +178,46 @@ proc statsWalk(
 
   ok(stats)
 
+proc codeStatsWalk(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[FlatStatsWalk] =
+  var stats: FlatStatsWalk
+  for w in db.walkFlatAcc():
+    if 0 < w.error.len:
+      error info & ": Error walking accounts", accPath=w.accPath.toStr,
+        nAccSoFar=stats.nAcc, `error`=w.error
+      return err()
+
+    stats.nAcc.inc
+    if w.data.dirtyCode:
+      stats.nDirtyCode.inc
+
+    if w.data.account.codeHash != EMPTY_CODE_HASH:
+      stats.nContrCode.inc
+
+      if ?db.hasMissingBlob(w.accPath, info):
+        stats.nMissCode.inc
+        if not w.data.dirtyCode:
+          error info & ": Error dirtyCode should be set for missing code",
+            accPath=w.accPath.toStr
+      elif ?db.hasCodeLock(w.accPath, info):
+        stats.nLockCode.inc
+        if not w.data.dirtyCode:
+          error info & ": Error dirtyCode must be set for locked sub-MPT",
+            accPath=w.accPath.toStr
+      else:
+        stats.nCodeBlob.inc
+        if w.data.dirtyCode:
+          if ?db.hasFlatCode(w.accPath, info):
+            error info & ": Error dirtyCode set for exixting code",
+              accPath=w.accPath.toStr
+          else:
+            error info & ": Error missing contract code on cache DB",
+              accPath=w.accPath.toStr
+
+  ok(stats)
+
 # ----------------
 
 proc statsStateImpl(
@@ -196,6 +237,39 @@ proc statsStateImpl(
     nFlatSlots = db.nFlatSlots info
 
   case logNoise:
+  of codeOnly:
+    let
+      stats = db.codeStatsWalk(info).valueOr:
+        chronicles.info info & ": Error collecting stats", peer
+        return
+
+      nFlatBlob = db.nFlatBlobs info
+      nMissBlob = db.nFlatMissBlobs info
+
+      nDirtyCode = stats.nDirtyCode
+      nContrCode = stats.nContrCode
+      nCodeBlob = stats.nCodeBlob
+      nMissCode = stats.nMissCode
+      nLockCode = stats.nLockCode
+
+    if nCodeBlob != nFlatBlob:
+      error info & ": Contract code counts do not match", peer,
+        number, nCodeBlob, nFlatBlob
+
+    if nMissCode != nMissBlob:
+      error info & ": Missing code counts do not match", peer,
+        number, nMissCode, nMissBlob
+
+    if nLockCode + nMissCode != nDirtyCode:
+      error info & ": Missing code counts do not add up", peer,
+        number, nLockCode, nMissCode, nDirtyCode
+
+    debug info & ": Code download stats", peer, number,
+      nAcc = stats.nAcc,
+
+      nContrCode, nCodeBlob, nMissCode,
+      ela=(Moment.now() - start).toStr
+
   of minimal:
     let stats = db.statsWalk(info, shallowCheck=true).valueOr:
       chronicles.info info & ": Error collecting stats", peer
@@ -218,7 +292,7 @@ proc statsStateImpl(
 
       ela=(Moment.now() - start).toStr
 
-  of smart, full:
+  of check, full:
     let
       stats = db.statsWalk(info, shallowCheck=false).valueOr:
         chronicles.info info & ": Error collecting stats", peer
@@ -245,7 +319,7 @@ proc statsStateImpl(
       nLockCode = stats.nLockCode
 
     case logNoise:
-    of smart:
+    of check:
       if nLockStoRange + nEmptyStoMpt + nPartStoMpt != nDirtyStoMpt:
         error info & ": Storage sub-MPT counts do not add up", peer,
           number, nLockStoRange, nEmptyStoMpt, nPartStoMpt, nDirtyStoMpt
@@ -313,14 +387,14 @@ proc statsStateImpl(
 proc statsStateLog*(
     ctx: SnapCtxRef;
     info: static[string];
-    logNoise = LogNoise.smart;
+    logNoise = LogNoise.check;
       ) =
   ctx.statsStateImpl(Opt.none(Peer), logNoise, info)
 
 proc statsStateLog*(
     buddy: SnapPeerRef;
     info: static[string];
-    logNoise = LogNoise.smart;
+    logNoise = LogNoise.check;
       ) =
   buddy.ctx.statsStateImpl(Opt.some(buddy.peer), logNoise, info)
 

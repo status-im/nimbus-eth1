@@ -98,8 +98,8 @@ template fetchBlockAccessLists*(
 
     let startHash {.inject.} = request.blockHashes[startInx]
     trace sendInfo, peer, startHash=startHash.short, nReq,
-      nErrors=buddy.nErrors.fetch.bal,
-      `startInx`=startInx, nHashes=request.blockHashes.len
+      nErrors=buddy.nErrors.fetch.bal, firstInx=startInx,
+      nHashes=request.blockHashes.len
 
     let
       req = BlockAccessListsRequest(
