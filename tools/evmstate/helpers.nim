@@ -53,7 +53,7 @@ func txType(n: Txo): TxType =
     return TxEip7702
   if n.blobVersionedHashes.isSome:
     return TxEip4844
-  if n.gasPrice.isNone:
+  if n.maxPriorityFeePerGas.isSome or n.maxFeePerGas.isSome:
     return TxEip1559
   if n.accessLists.isSome:
     return TxEip2930
