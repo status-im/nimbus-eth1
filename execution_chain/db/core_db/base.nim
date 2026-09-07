@@ -170,9 +170,9 @@ proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
 
 proc get*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## This function always returns a non-empty `seq[byte]` or an error code.
-  let rc = kvt.kTx.get(key)
+  var rc = kvt.kTx.get(key)
   if rc.isOk:
-    ok(rc.value)
+    ok(move(rc.value))
   elif rc.error == GetNotFound:
     err(rc.error.toError("", KvtNotFound))
   else:
@@ -182,9 +182,9 @@ proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## Variant of `get()` returning an empty `seq[byte]` if the key is not found
   ## on the database.
   ##
-  let rc = kvt.kTx.get(key)
+  var rc = kvt.kTx.get(key)
   if rc.isOk:
-    ok(rc.value)
+    ok(move(rc.value))
   elif rc.error == GetNotFound:
     CoreDbRc[seq[byte]].ok(EmptyBlob)
   else:
