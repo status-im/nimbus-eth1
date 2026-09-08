@@ -140,6 +140,7 @@ jobs:
           # archive. Catches anything the two above cannot, since only this one
           # links.
           make ${DEFAULT_MAKE_FLAGS} \
+            ZKVM=zisk \
             ZKVM_GCC="$GCC" \
             ZISK_LIB="$HOME/.local/zisk/libziskos_staticlib.a" \
-            stateless_guest_zisk_gcc
+            stateless_guest_zkvm
