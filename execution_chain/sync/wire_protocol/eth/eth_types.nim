@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables, times],
+  std/[tables, times],
   pkg/[chronos, chronos/ratelimit, eth/common],
   ../../../core/[chain, tx_pool, pooled_txs],
   ../../../networking/p2p_types
@@ -134,7 +134,12 @@ type
 
   SeenObject* = ref object
     lastSeen*: Time
-    peers*: HashSet[NodeId]
+    peers*: seq[NodeId]
+      ## Announcers of this hash. Bounded by `--max-peers` and holding one or
+      ## two entries in the common case, so a linear scan beats hashing. It is
+      ## deliberately not a `HashSet`: there is one of these per tracked hash,
+      ## and an `initHashSet[NodeId]()` allocates 128 slots of 40 bytes to hold
+      ## a single 32-byte id - 5KiB per announced transaction.
 
   ActionHandler* = proc(): Future[void] {.async: (raises: [CancelledError]).}
 

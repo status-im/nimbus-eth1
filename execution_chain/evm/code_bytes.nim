@@ -28,8 +28,9 @@ template bitpos(pos: int): (int, byte) =
 func init*(
     T: type CodeBytesRef, bytes: sink seq[byte], persisted = false
 ): CodeBytesRef =
-  let ip = newSeq[byte]((bytes.len + 7) div 8)
-  CodeBytesRef(bytes: move(bytes), invalidPositions: ip, persisted: persisted)
+  let ipLen = (bytes.len + 7) div 8
+  CodeBytesRef(
+    bytes: move(bytes), invalidPositions: newSeq[byte](ipLen), persisted: persisted)
 
 func init*(
     T: type CodeBytesRef, bytes: openArray[byte], persisted = false

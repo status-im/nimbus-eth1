@@ -90,15 +90,23 @@ iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
       continue
     yield peer
 
+func addSeenPeer(peers: var seq[NodeId], peerId: NodeId) =
+  ## Register `peerId` as an announcer, keeping the list duplicate free.
+  if peerId notin peers:
+    peers.add peerId
+
+func delSeenPeer(peers: var seq[NodeId], peerId: NodeId) =
+  let i = peers.find(peerId)
+  if 0 <= i:
+    peers.del(i) # order is irrelevant here, so the O(1) swap-remove is fine
+
 proc markSeen(wire: EthWireRef, txHash: Hash32, peerId: NodeId) =
   wire.seenTransactions.withValue(txHash, seen):
     seen[].lastSeen = getTime()
-    seen[].peers.incl(peerId)
+    seen[].peers.addSeenPeer(peerId)
   do:
-    var peers = initHashSet[NodeId]()
-    peers.incl(peerId)
     wire.seenTransactions[txHash] =
-      SeenObject(lastSeen: getTime(), peers: peers)
+      SeenObject(lastSeen: getTime(), peers: @[peerId])
 
 proc syncerRunning*(wire: EthWireRef): bool =
   # Disable transactions gossip and processing when
@@ -187,8 +195,9 @@ proc refetchFromAlternate*(wire: EthWireRef, failedId: NodeId,
     if h in wire.txPool:
       continue
     wire.seenTransactions.withValue(h, seen):
-      seen[].peers.excl(failedId)
-      candidates.incl(seen[].peers)
+      seen[].peers.delSeenPeer(failedId)
+      for id in seen[].peers:
+        candidates.incl(id)
     retryTypes.add packet.txTypes[i]
     retrySizes.add packet.txSizes[i]
     retryHashes.add h
@@ -384,6 +393,17 @@ proc fetchPooledTxs(wire: EthWireRef, peer: Peer,
       await sleepAsync(ZeroDuration)
       awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
 
+    # A peer may legally answer with a subset: the hash may have left its pool,
+    # or the response hit SOFT_RESPONSE_LIMIT. Release the dedupe slot for
+    # everything it did not deliver -- otherwise a later announcement of the
+    # same hash, from this or any other peer, is dropped as "already seen"
+    # until cleanupSeenTransactions ages it out twenty minutes later, and the
+    # transaction never reaches the pool.
+    for h in msg.txHashes:
+      if h notin wire.txPool:
+        wire.seenTransactions.del(h)
+      awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
+
 proc handleTxHashesBroadcast*(wire: EthWireRef,
                               packet: NewPooledTransactionHashesPacket,
                               peer: Peer) {.async: (raises: [CancelledError]).} =
@@ -421,13 +441,11 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       continue
     wire.seenTransactions.withValue(h, seen):
       seen[].lastSeen = nowTime
-      seen[].peers.incl(peerId)
+      seen[].peers.addSeenPeer(peerId)
       continue
     do:
-      var peers = initHashSet[NodeId]()
-      peers.incl(peerId)
       wire.seenTransactions[h] =
-        SeenObject(lastSeen: nowTime, peers: peers)
+        SeenObject(lastSeen: nowTime, peers: @[peerId])
       novelTypes.add packet.txTypes[i]
       novelSizes.add packet.txSizes[i]
       novelHashes.add h
