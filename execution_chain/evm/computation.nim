@@ -69,10 +69,13 @@ template getGasPrice*(c: Computation): GasInt =
   c.vmState.txCtx.gasPrice
 
 template getVersionedHash*(c: Computation, index: int): VersionedHash =
-  c.vmState.txCtx.versionedHashes[index]
+  c.vmState.txCtx.tx.versionedHashes[index]
 
 template getVersionedHashesLen*(c: Computation): int =
-  c.vmState.txCtx.versionedHashes.len
+  if c.vmState.txCtx.tx.isNil:
+    0
+  else:
+    c.vmState.txCtx.tx.versionedHashes.len
 
 template getBlobBaseFee*(c: Computation): UInt256 =
   c.vmState.txCtx.blobBaseFee
