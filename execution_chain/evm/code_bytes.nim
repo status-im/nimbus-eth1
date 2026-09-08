@@ -18,7 +18,7 @@ type CodeBytesRef* = ref object
   ## destinations - `bytes` is immutable once instances is created while
   ## `invalidPositions` will be built up on demand
   bytes: seq[byte]
-  invalidPositions: seq[byte] # bit seq of invalid jump positions TODO: make this lazy
+  invalidPositions: seq[byte] # bit seq of invalid jump positions
   processed: int
   persisted*: bool ## This code stream has been persisted to the database
 
@@ -28,9 +28,7 @@ template bitpos(pos: int): (int, byte) =
 func init*(
     T: type CodeBytesRef, bytes: sink seq[byte], persisted = false
 ): CodeBytesRef =
-  let ipLen = (bytes.len + 7) div 8
-  CodeBytesRef(
-    bytes: move(bytes), invalidPositions: newSeq[byte](ipLen), persisted: persisted)
+  CodeBytesRef(bytes: move(bytes), persisted: persisted)
 
 func init*(
     T: type CodeBytesRef, bytes: openArray[byte], persisted = false
@@ -61,8 +59,12 @@ template invalidPosition(c: CodeBytesRef, pos: int): bool =
 
 func isValidOpcode*(c: CodeBytesRef, position: int): bool =
   if position >= len(c):
-    false
-  elif c.invalidPosition(position):
+    return false
+
+  if c.invalidPositions.len == 0:
+    c.invalidPositions.setLen((len(c) + 7) div 8)
+
+  if c.invalidPosition(position):
     false
   elif position <= c.processed:
     true
