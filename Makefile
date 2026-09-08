@@ -101,6 +101,9 @@ endif
 	evmstate_test \
 	stateless_guest_baremetal \
 	stateless_guest_native \
+	check_zkvm_gcc \
+	check_zisk_staticlib \
+	stateless_guest_zisk_gcc \
 	stateless_execution_test
 
 ifeq ($(NIM_PARAMS),)
@@ -424,8 +427,64 @@ stateless_guest_baremetal: | build deps
 # and write_output over stdin/stdout in place of a zkVM runtime.
 stateless_guest_native: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) --compile:"execution_chain/stateless/zkvm_io_stdio.c" -o:build/$@ "execution_chain/stateless/stateless_guest.nim" && \
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) --compile:"execution_chain/stateless/zkvm/native/zkvm_io_stdio.c" -o:build/$@ "execution_chain/stateless/stateless_guest.nim" && \
 		echo -e $(BUILD_END_MSG) "build/$@"
+
+# Builds the guest into a ZisK ELF. Unlike stateless_guest_baremetal, which stops
+# at Nim -> C, this compiles and links, so it is what proves the guest runs.
+
+# The ISA the riscv-target standard specifies. Must match what
+# libziskos_staticlib.a was built with.
+ZKVM_ARCH ?= -march=rv64im -mabi=lp64 -mcmodel=medany
+
+# To be built from a zisk checkout
+ZISK_LIB ?= build/libziskos_staticlib.a
+
+check_zisk_staticlib:
+	@[ -f "$(ZISK_LIB)" ] || { echo "ERROR: ZisK static library not found at $(ZISK_LIB)"; \
+		echo "  build it from a zisk checkout with:"; \
+		echo "    cargo +nightly build -p ziskos-staticlib --release \\"; \
+		echo "      --target riscv64im-unknown-none-elf -Z build-std=core,alloc \\"; \
+		echo "      --config 'profile.release.lto=\"fat\"' --features panic-handler"; \
+		echo "  then copy it to $(ZISK_LIB), or pass ZISK_LIB=<path>"; exit 1; }
+
+# A GNU cross toolchain with newlib, so the guest gets a C library
+ZKVM_GCC ?= riscv-none-elf-gcc
+
+# -nostdlib drops the default search paths, so ask the compiler where its
+# sysroot and libgcc live. Multilib selection keys off -march/-mabi, hence the
+# arch flags.
+#
+# Recursively expanded (= not :=) so they only run when a zkVM target is built.
+ZKVM_SYSROOT_LIBDIR = $(shell $(ZKVM_GCC) $(ZKVM_ARCH) -print-sysroot)/lib/$(shell $(ZKVM_GCC) $(ZKVM_ARCH) -print-multi-directory)
+ZKVM_LIBGCC_DIR = $(dir $(shell $(ZKVM_GCC) $(ZKVM_ARCH) -print-libgcc-file-name))
+
+# One-off guest debugging, eg ZKVM_EXTRA_PASSC=-DZKVM_SBRK_DEBUG,
+# ZKVM_EXTRA_NIM=-d:disableLTO, ZKVM_EXTRA_PASSL=-Wl,--wrap=memcpy
+ZKVM_EXTRA_PASSC ?=
+ZKVM_EXTRA_NIM ?=
+ZKVM_EXTRA_PASSL ?=
+
+check_zkvm_gcc:
+	@printf 'int main(void){return 0;}' | $(ZKVM_GCC) $(ZKVM_ARCH) -c -x c - -o /dev/null 2>/dev/null || { \
+		echo "ERROR: '$(ZKVM_GCC)' is missing or cannot emit $(ZKVM_ARCH)."; \
+		echo "  Point ZKVM_GCC at an xPack riscv-none-elf-gcc, or put it on PATH."; exit 1; }
+
+#   -D_POSIX_THREADS  newlib's <pthread.h> only declares the pthread_mutex_*
+#                     functions when this is set. newlib_glue.c defines them.
+#   -nostartfiles     drop crt0, whose _start would otherwise win over the
+#                     vendor archive's. Keeps the C library.
+#   -g0               nothing debugs the guest through DWARF, and it is most of
+#                     the file: 52M with it, 6.9M without.
+stateless_guest_zisk_gcc: | build deps check_zkvm_gcc check_zisk_staticlib
+	$(ENV_SCRIPT) $(NIMC) c $(STATELESS_GUEST_FLAGS) $(ZKVM_EXTRA_NIM) -d:release -d:zkvmTarget --debugger:off \
+		--cpu:riscv64 --os:any -d:enable_zkvm_accelerators \
+		--cc:gcc --gcc.exe:"$(ZKVM_GCC)" --gcc.linkerexe:"$(ZKVM_GCC)" \
+		--passC:"-D_POSIX_THREADS=1 $(ZKVM_ARCH) -ffunction-sections -fdata-sections -g0 $(ZKVM_EXTRA_PASSC)" \
+		--passL:"$(ZKVM_ARCH) -nostdlib -nostartfiles -Wl,--build-id=none -Wl,--gc-sections -T execution_chain/stateless/zkvm/zisk/link.ld -L$(ZKVM_SYSROOT_LIBDIR) -L$(ZKVM_LIBGCC_DIR) $(ZISK_LIB) -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group $(ZKVM_EXTRA_PASSL)" \
+		--compile:"execution_chain/stateless/zkvm/zisk/newlib_glue.c" \
+		-o:build/$@.elf "execution_chain/stateless/stateless_guest.nim"
+	@echo "built build/$@.elf"
 
 # Two runs: the full suite with standard flags, then the guest specific test
 # with flags closer to the zkVM guest.
