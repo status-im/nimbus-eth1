@@ -243,6 +243,17 @@ proc runCodeStreamTests() =
       check(codeStream.isValidOpcode(4))
       check(not codeStream.isValidOpcode(5))
 
+    test "code bytes accessors":
+      let code = CodeBytesRef.init(@[0x60'u8, 0x01, 0x5b, 0x00])
+      check(code.len == 4)
+      check(code == [0x60'u8, 0x01, 0x5b, 0x00])
+      check(not (code == [0x60'u8, 0x01]))
+      check(code.hasPrefix([0x60'u8, 0x01]))
+      check(code.hasPrefix([]))
+      check(not code.hasPrefix([0x60'u8, 0x02]))
+      check(not code.hasPrefix([0x60'u8, 0x01, 0x5b, 0x00, 0x00]))
+      check(slice[2](code, 1, 2) == [0x01'u8, 0x5b])
+
 
 proc initGasMeter(startGas: GasInt): GasMeter = result.init(startGas, 0)
 

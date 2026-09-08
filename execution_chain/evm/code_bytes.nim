@@ -18,7 +18,7 @@ type CodeBytesRef* = ref object
   ## destinations - `bytes` is immutable once instances is created while
   ## `invalidPositions` will be built up on demand
   bytes: seq[byte]
-  invalidPositions: seq[byte] # bit seq of invalid jump positions
+  invalidPositions: seq[byte] # bit seq of invalid jump positions TODO: make this lazy
   processed: int
   persisted*: bool ## This code stream has been persisted to the database
 
@@ -49,8 +49,8 @@ func fromHex*(T: type CodeBytesRef, hex: string): Opt[CodeBytesRef] =
 func bytes*(c: CodeBytesRef): lent seq[byte] {.inline.} =
   c[].bytes
 
-func len*(c: CodeBytesRef): int {.inline.} =
-  len(c.bytes)
+template len*(c: CodeBytesRef): int =
+  len(bytes(c))
 
 # Bounds checking done manually - this is a hotspot in the EVM
 {.push checks: off.}
@@ -85,16 +85,16 @@ func isValidOpcode*(c: CodeBytesRef, position: int): bool =
 
 {.pop.}
 
-func `==`*(a: CodeBytesRef, b: openArray[byte]): bool =
-  a.bytes == b
+template `==`*(a: CodeBytesRef, b: openArray[byte]): bool =
+  bytes(a) == b
 
-func hasPrefix*(a: CodeBytesRef, b: openArray[byte]): bool =
-  if b.len > a.bytes.len:
-    return false
-  for i in 0..<b.len:
-    if a.bytes[i] != b[i]:
-      return false
-  true
+template hasPrefix*(a: CodeBytesRef, b: openArray[byte]): bool =
+  let
+    code = a
+    prefixLen = b.len
+  prefixLen <= len(code) and bytes(code).toOpenArray(0, prefixLen - 1) == b
 
-func slice*[N: static[int]](a: CodeBytesRef, b, c: int): array[N, byte] =
-  assign(result, a.bytes.toOpenArray(b, c))
+template slice*[N: static[int]](a: CodeBytesRef, b, c: int): array[N, byte] =
+  var r: array[N, byte]
+  assign(r, bytes(a).toOpenArray(b, c))
+  r
