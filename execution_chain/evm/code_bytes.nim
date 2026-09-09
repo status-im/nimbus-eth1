@@ -28,9 +28,7 @@ template bitpos(pos: int): (int, byte) =
 func init*(
     T: type CodeBytesRef, bytes: sink seq[byte], persisted = false
 ): CodeBytesRef =
-  let ipLen = (bytes.len + 7) div 8
-  CodeBytesRef(
-    bytes: move(bytes), invalidPositions: newSeq[byte](ipLen), persisted: persisted)
+  CodeBytesRef(bytes: move(bytes), persisted: persisted)
 
 func init*(
     T: type CodeBytesRef, bytes: openArray[byte], persisted = false
@@ -49,8 +47,8 @@ func fromHex*(T: type CodeBytesRef, hex: string): Opt[CodeBytesRef] =
 func bytes*(c: CodeBytesRef): lent seq[byte] {.inline.} =
   c[].bytes
 
-func len*(c: CodeBytesRef): int {.inline.} =
-  len(c.bytes)
+template len*(c: CodeBytesRef): int =
+  len(bytes(c))
 
 # Bounds checking done manually - this is a hotspot in the EVM
 {.push checks: off.}
@@ -61,8 +59,12 @@ template invalidPosition(c: CodeBytesRef, pos: int): bool =
 
 func isValidOpcode*(c: CodeBytesRef, position: int): bool =
   if position >= len(c):
-    false
-  elif c.invalidPosition(position):
+    return false
+
+  if c.invalidPositions.len == 0:
+    c.invalidPositions.setLen((len(c) + 7) div 8)
+
+  if c.invalidPosition(position):
     false
   elif position <= c.processed:
     true
@@ -85,16 +87,16 @@ func isValidOpcode*(c: CodeBytesRef, position: int): bool =
 
 {.pop.}
 
-func `==`*(a: CodeBytesRef, b: openArray[byte]): bool =
-  a.bytes == b
+template `==`*(a: CodeBytesRef, b: openArray[byte]): bool =
+  bytes(a) == b
 
-func hasPrefix*(a: CodeBytesRef, b: openArray[byte]): bool =
-  if b.len > a.bytes.len:
-    return false
-  for i in 0..<b.len:
-    if a.bytes[i] != b[i]:
-      return false
-  true
+template hasPrefix*(a: CodeBytesRef, b: openArray[byte]): bool =
+  let
+    code = a
+    prefixLen = b.len
+  prefixLen <= len(code) and bytes(code).toOpenArray(0, prefixLen - 1) == b
 
-func slice*[N: static[int]](a: CodeBytesRef, b, c: int): array[N, byte] =
-  assign(result, a.bytes.toOpenArray(b, c))
+template slice*[N: static[int]](a: CodeBytesRef, b, c: int): array[N, byte] =
+  var r: array[N, byte]
+  assign(r, bytes(a).toOpenArray(b, c))
+  r

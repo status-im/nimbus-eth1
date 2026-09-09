@@ -30,10 +30,11 @@ const
   codeLruSize = 16*1024
     # An LRU cache of 16K items gives roughly 90% hit rate anecdotally on a
     # small range of test blocks - this number could be studied in more detail
-    # Per EIP-170, a the code of a contract can be up to `MAX_CODE_SIZE` = 24kb,
-    # which would cause a worst case of 386MB memory usage though in reality
-    # code sizes are much smaller - it would make sense to study these numbers
-    # in greater detail.
+    # Since EIP-7954, the code of a contract can be up to
+    # `EIP7954_MAX_CODE_SIZE` = 64kb (24kb before, per EIP-170), which would
+    # cause a worst case of 1GB memory usage though in reality code sizes are
+    # much smaller - it would make sense to study these numbers in greater
+    # detail.
   slotsLruSize = 16 * 1024
 
 type
