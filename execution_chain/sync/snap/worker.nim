@@ -97,13 +97,13 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
 
     of SnapResume:
       ctx.downloadInit(info).isOkOr:                # get cache DB ready
-        bodyRc = daemonWaitResumeInterval           # not yet? take a nap
+        bodyRc = daemonWaitResumeFailInterval       # not yet? take a nap
 
     of SnapClear:
       # Clear cache DB if needed.
       let hasData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr: false
       if hasData and not ctx.pool.cacheDB.clear(info):
-        bodyRc = daemonWaitClearInterval            # disk full?, failure
+        bodyRc = daemonWaitClearFailInterval        # take a nap
         break body
 
       ctx.resetServices info                        # reset system
@@ -111,17 +111,17 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       # Start headers download on the beacon sync server to run
       # in quasi-parallel mode to the snap sync daemon & peers.
       ctx.headerDownloadTrigger(info).isOkOr:
-        bodyRc = daemonWaitClearInterval            # take a nap
+        bodyRc = daemonWaitClearFailInterval        # take a nap
 
     of SnapReady:
       # Re-trigger headers fetch. This is effective only if the last attempt
       # was unsuccessful (maybe due to missing FC updates.)
       ctx.headerDownloadTrigger(info).isOkOr:
-        bodyRc = daemonWaitClearInterval            # take a nap
+        bodyRc = daemonWaitReadyFailInterval        # take a nap
 
       if ctx.pool.headersSynced:
         ctx.downloadInit(info).isOkOr:              # get ready
-          bodyRc = daemonWaitReadyInterval          # take a nap
+          bodyRc = daemonWaitReadyFailInterval      # take a nap
 
     of SnapDownload:
       # Download headers. The request will be silently ignored if the
@@ -133,10 +133,11 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
 
     of SnapBalsFetch:
-      bodyRc = daemonWaitElseInterval               # parallel peer action
+      discard ctx.headerDownloadTrigger(info)       # see `SnapDownload`
+      bodyRc = daemonWaitBalsFetchInterval          # parallel peer action
 
     of SnapBalsFetchFinish:
-      bodyRc = daemonWaitElseInterval               # wait for sync
+      bodyRc = daemonWaitBalsFetchFinishInterval    # wait for sync
 
     of SnapStateForward:
       ctx.stateForward(info).isOkOr:
