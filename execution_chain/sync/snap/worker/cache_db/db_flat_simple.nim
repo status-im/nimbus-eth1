@@ -47,6 +47,21 @@ proc hasAccMissingIntv*(
     db: CacheDbRef;
     info: static[string];
       ): Opt[bool] =
+  ## Returns `true` if there is an `AccMissingIntv` record, and `false` if
+  ## there is none (absent an error.)
+  var data = db.hasAccMissingIntv.valueOr:
+    error info.failedToFetch AccMissingIntvInfo, `error`=error
+    return err()
+  ok(move data)
+
+proc hasAccMissingIntvRange*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[bool] =
+  ## Returns `true` if a range exists. A `bool` is returned as
+  ## * `true` if the range is non-empty
+  ## * `false` if it is empty
+  ## An error is returned if there was no range.
   let data = db.getAccMissingIntv.valueOr:
     error info.failedToFetch AccMissingIntvInfo, `error`=error
     return err()

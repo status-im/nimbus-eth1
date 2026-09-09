@@ -51,6 +51,7 @@ proc applyCodeChange(
   ## Apply BAL to contract code
   ##
   if code.len == 0:
+    ?adb.delFlatCode(accPath, info)
     return ok(EMPTY_CODE_HASH)
 
   let newCode = code[^1].newCode

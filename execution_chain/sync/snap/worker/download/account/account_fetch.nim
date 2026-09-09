@@ -27,6 +27,9 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc registerPeerNoData(buddy: SnapPeerRef; root: StateRoot) =
+  buddy.only.failedReq.stateRoot = root
+
 proc registerPeerError(buddy: SnapPeerRef; root: StateRoot; slowPeer=false) =
   ## Do not repeat the same time-consuming failed request
   buddy.accFetchRegisterError(slowPeer)
@@ -195,7 +198,7 @@ template fetchAccounts*(
     elif nRespProof == 0:
       # No data available for this state root.
       #
-      buddy.registerPeerError(stateRoot)
+      buddy.registerPeerNoData(stateRoot)           # not an error per se
       trace recvInfo & " not available", peer, root, reqAcc, nReqAcc,
         ela, syncState, nErrors=buddy.nErrors.fetch.acc
       bodyRc = typeof(bodyRc).err(ENoDataAvailable)
