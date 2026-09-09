@@ -17,7 +17,7 @@ import
   ../engine/types
 
 type
-  ProofQuery = (Address, seq[UInt256], Hash32)
+  ProofQuery = (Address, seq[Bytes32], Hash32)
   AccessListQuery = (TransactionArgs, Hash32)
   CodeQuery = (Address, Hash32)
   # the query would normally also include the reward percentiles
@@ -64,7 +64,7 @@ template loadBlock*(t: TestApiState, blk: BlockObject) =
 template loadProof*(
     t: TestApiState,
     address: Address,
-    slots: seq[UInt256],
+    slots: seq[Bytes32],
     blk: BlockObject,
     proof: ProofResponse,
 ) =
@@ -264,7 +264,7 @@ proc initTestExecutionBackend*(t: TestApiState): ExecutionApiBackend =
         err((BackendFetchError, e.msg, UNTAGGED))
 
     getProofProc = proc(
-        address: Address, slots: seq[UInt256], blkNum: BlockTag
+        address: Address, slots: seq[Bytes32], blkNum: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
       try:
         # we directly use number here because the verified proxy should never use aliases
