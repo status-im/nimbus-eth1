@@ -50,6 +50,7 @@ proc postExecutionCreate(c: Computation, child: Computation, newAccountCharged: 
       c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
       c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
       c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
+      c.gasMeter.repayStateGasSpill()
     c.merge(child)
     c.stack.lsTop child.msg.contractAddress
   else:

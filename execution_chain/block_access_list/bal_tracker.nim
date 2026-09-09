@@ -171,8 +171,11 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
     for address, newNonce in tracker.pendingCallFrame.nonceChanges:
       tracker.parentCallFrame.nonceChanges[address] = newNonce
 
-    for address, newCode in tracker.pendingCallFrame.codeChanges:
-      tracker.parentCallFrame.codeChanges[address] = newCode
+    for address, newCode in tracker.pendingCallFrame.codeChanges.mpairs:
+      swap(
+        tracker.parentCallFrame.codeChanges.mgetOrPut(address, default(seq[byte])),
+        newCode,
+      )
 
     # Merge the pending call frame reads into the parent
     tracker.parentCallFrame.touchedAddresses.incl(

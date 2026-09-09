@@ -1047,8 +1047,8 @@ func memoryTxHashesForBlock*(c: ForkedChainRef, blockHash: Hash32): Opt[seq[Hash
     )
   Opt.some(cachedTxHashes.mapIt(it[0]))
 
-proc latestBlock*(c: ForkedChainRef): Block =
-  c.latest.txFrame.getEthBlock(c.latest.hash).expect("latestBlock exists")
+proc latestBlock*(c: ForkedChainRef): Result[Block, string] =
+  c.latest.txFrame.getEthBlock(c.latest.hash)
 
 proc getBadBlocks*(c: ForkedChainRef): seq[(Block, Opt[BlockAccessListRef])] =
   var blks: seq[(Block, Opt[BlockAccessListRef])]
@@ -1081,17 +1081,17 @@ func safeHeader*(c: ForkedChainRef): Header =
 
   c.base.header
 
-proc finalizedBlock*(c: ForkedChainRef): Block =
+proc finalizedBlock*(c: ForkedChainRef): Result[Block, string] =
   c.hashToBlock.withValue(c.latestFinalized.hash, loc):
-    return loc[].txFrame.getEthBlock(loc[].hash).expect("finalizedBlock exists")
+    return loc[].txFrame.getEthBlock(loc[].hash)
 
-  c.baseTxFrame.getEthBlock(c.base.hash).expect("base finalizedBlock exists")
+  c.baseTxFrame.getEthBlock(c.base.hash)
 
-proc safeBlock*(c: ForkedChainRef): Block =
+proc safeBlock*(c: ForkedChainRef): Result[Block, string] =
   c.hashToBlock.withValue(c.fcuSafe.hash, loc):
-    return loc[].txFrame.getEthBlock(loc[].hash).expect("safeBlock exists")
+    return loc[].txFrame.getEthBlock(loc[].hash)
 
-  c.baseTxFrame.getEthBlock(c.base.hash).expect("base safeBlock exists")
+  c.baseTxFrame.getEthBlock(c.base.hash)
 
 proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string] =
   c.hashToBlock.withValue(blockHash, loc):

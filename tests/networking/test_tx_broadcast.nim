@@ -14,7 +14,7 @@
 {.used.}
 
 import
-  std/[json, os, strutils, times, sets],
+  std/[json, os, strutils, times],
   unittest2,
   chronos,
   chronos/ratelimit,
@@ -289,6 +289,97 @@ suite "Tx broadcast queue":
 
     waitFor runTest()
 
+  test "repeated announcements from one peer do not grow the announcer list":
+    ## `SeenObject.peers` is a `seq`, not a `HashSet` — one of these exists per
+    ## tracked hash and a `HashSet` allocated 128 slots of 40 bytes to hold a
+    ## single 32-byte id. The seq has to dedupe on insert itself: without that,
+    ## a hash that keeps being re-announced grows its announcer list without
+    ## bound, which is the memory problem this replaced.
+    proc runTest() {.async.} =
+      setupEnvPair(env1, env2)
+
+      env2.node.startListening()
+      let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+      check connRes.isOk()
+      let peer = connRes.get()
+
+      check not env1.wire.syncerRunning()
+
+      # Keep the fetch action queued but never run: its failure paths delete
+      # the seenTransactions entry we are about to inspect.
+      for fut in env1.wire.actionHeartbeat:
+        await fut.cancelAndWait()
+
+      let
+        txHash = default(Hash32)
+        packet = NewPooledTransactionHashesPacket(
+          txTypes: @[2.byte],
+          txSizes: @[100.uint64],
+          txHashes: @[txHash],
+        )
+
+      for _ in 0 ..< 5:
+        await env1.wire.handleTxHashesBroadcast(packet, peer)
+
+      check txHash in env1.wire.seenTransactions
+      check env1.wire.seenTransactions[txHash].peers == @[peer.id]
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "hashes a peer does not deliver release their dedupe slot":
+    ## A peer may legally answer GetPooledTransactions with a subset -- the
+    ## hash left its pool, or the response hit SOFT_RESPONSE_LIMIT. A
+    ## conforming peer replies with an EMPTY list rather than staying silent,
+    ## so the `res.isNone` guard never fires and, before the fix, nothing
+    ## released the dedupe slot for the undelivered hashes.
+    ##
+    ## The cost is not just the retained SeenObject: while the entry stands,
+    ## handleTxHashesBroadcast treats a re-announcement of that hash from ANY
+    ## peer as "already seen" and never schedules a fetch, so the transaction
+    ## stays out of the pool for the full POOLED_STORAGE_TIME_LIMIT.
+    proc runTest() {.async.} =
+      setupEnvPair(env1, env2)
+
+      env2.node.startListening()
+      let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+      check connRes.isOk()
+      let peer = connRes.get()
+
+      check not env1.wire.syncerRunning()
+
+      # Run the fetch action by hand so we know when it has completed.
+      for fut in env1.wire.actionHeartbeat:
+        await fut.cancelAndWait()
+
+      let
+        txHash = default(Hash32)
+        packet = NewPooledTransactionHashesPacket(
+          txTypes: @[2.byte],
+          txSizes: @[100.uint64],
+          txHashes: @[txHash],
+        )
+
+      await env1.wire.handleTxHashesBroadcast(packet, peer)
+      check env1.wire.actionQueue.len == 1
+      # The announcement claimed the dedupe slot.
+      check txHash in env1.wire.seenTransactions
+
+      # env2 holds no such transaction, so it answers with an empty list.
+      let action = await env1.wire.actionQueue.popFirst()
+      let completed = await withTimeout(action(), chronos.seconds(5))
+      check completed
+
+      # Slot released, so a later announcement can retrigger the fetch.
+      check txHash notin env1.wire.seenTransactions
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
   test "tx hashes action exits early when peer is disconnecting":
     ## Fix: the queued action checks peer.connectionState at the start
     ## of its body. If the peer moved to Disconnecting before the action
@@ -444,7 +535,7 @@ suite "Tx broadcast queue":
       let expiredAt = getTime() - initDuration(minutes = 25)
       for i in 0 ..< 32:
         env.wire.seenTransactions[mkHash(i)] =
-          SeenObject(lastSeen: expiredAt, peers: initHashSet[NodeId]())
+          SeenObject(lastSeen: expiredAt, peers: @[])
 
       # Make tickerLoop take its cleanup branch promptly: a short (but not-yet-
       # finished) cleanupTimer is kept and fires quickly; a long brUpdateTimer
@@ -469,7 +560,7 @@ suite "Tx broadcast queue":
         for i in 0 ..< 40:
           await sleepAsync(chronos.milliseconds(1))
           env.wire.seenTransactions[mkHash(1000 + i)] =
-            SeenObject(lastSeen: getTime(), peers: initHashSet[NodeId]())
+            SeenObject(lastSeen: getTime(), peers: @[])
 
       let mutatorFut = mutator()
       let action = await env.wire.actionQueue.popFirst()
@@ -761,9 +852,7 @@ suite "Tx propagation":
       # Simulate the post-failure state: the (now gone) peer A and peer B
       # are both recorded as announcers of the hash.
       let failedId = default(NodeId) # peer A, no longer connected
-      var announcers = initHashSet[NodeId]()
-      announcers.incl(failedId)
-      announcers.incl(peerB.id)
+      let announcers = @[failedId, peerB.id]
       env1.wire.seenTransactions[txHash] =
         SeenObject(lastSeen: getTime(), peers: announcers)
 

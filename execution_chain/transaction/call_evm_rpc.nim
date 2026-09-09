@@ -17,6 +17,7 @@ import
   ../evm/evm_errors,
   ../rpc/params,
   ./call_common,
+  ./call_evm,
   web3/eth_api_types,
   ../common/common
 
@@ -47,7 +48,10 @@ proc rpcCallEvm*(
   defer:
     vmState.dispose()
 
-  let params = ?toCallParams(vmState, args, globalGasCap, header)
+  let
+    tx = ? toTransaction(vmState, args, globalGasCap, header)
+    intrinsic = tx.intrinsicGas(vmState.hardFork, header.gasLimit, args.sender)
+    params = tx.callParams(args.sender, vmState, intrinsic)
 
   ok(runComputation(params, CallResult))
 
@@ -56,18 +60,21 @@ proc rpcCallEvm*(
 ): EvmResult[CallResult] =
   # TODO: globalGasCap should configurable by user
   let
-    params = ?toCallParams(vmState, args, globalGasCap, header)
+    tx = ? toTransaction(vmState, args, globalGasCap, header)
+    intrinsic = tx.intrinsicGas(vmState.hardFork, header.gasLimit, args.sender)
+    params = tx.callParams(args.sender, vmState, intrinsic)
   ok(runComputation(params, CallResult))
 
 proc rpcEstimateGas*(
     args: TransactionArgs, header: Header, vmState: BaseVMState, gasCap: GasInt
 ): Result[GasInt, (EvmErrorObj, OutputResult)] =
   # Binary search the gas requirement, as it may be higher than the amount used
-  let fork = vmState.fork
-  var params = toCallParams(vmState, args, gasCap, header).valueOr:
-    return err((evmErr(EvmInvalidParam), OutputResult()))
-
   let
+    fork = vmState.fork
+    tx = toTransaction(vmState, args, gasCap, header).valueOr:
+      return err((evmErr(EvmInvalidParam), OutputResult()))
+    intrinsic = tx.intrinsicGas(vmState.hardFork, header.gasLimit, args.sender)
+    params = tx.callParams(args.sender, vmState, intrinsic)
     txBaseCost = if fork >= FkAmsterdam: TX_BASE_COST_2780.GasInt
                  else: TX_BASE_COST.GasInt
 
@@ -118,7 +125,6 @@ proc rpcEstimateGas*(
     hi = gasCap
 
   let
-    intrinsic = intrinsicGas(params, vmState.hardFork, vmState.blockCtx.gasLimit, args.sender)
     minGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
 
   # Create a helper to check if a gas allowance results in an executable transaction
@@ -127,7 +133,7 @@ proc rpcEstimateGas*(
       # Special case, raise gas limit
       return err(OutputResult())
 
-    params.gasLimit = gasLimit
+    params.tx.gasLimit = gasLimit
     # TODO: bail out on consensus error similar to validateTransaction
     # Each trial must run against pristine state; a successful run (e.g. a
     # CREATE2 deploy) otherwise commits into the shared ledger and leaks into
@@ -142,8 +148,8 @@ proc rpcEstimateGas*(
       ok(res)
 
   # Short circuit estimation check: plain value transfer (no data, to has no code)
-  if not params.isCreate and params.input.len == 0 and
-      vmState.readOnlyLedger.getCodeSize(params.to) == 0:
+  if not params.isCreate and tx.payload.len == 0 and
+      vmState.readOnlyLedger.getCodeSize(tx.destination) == 0:
     if executable(txBaseCost).isOk:
       return ok(txBaseCost)
 

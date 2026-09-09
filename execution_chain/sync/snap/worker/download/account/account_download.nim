@@ -12,8 +12,11 @@
 
 import
   pkg/[chronicles, chronos, metrics, stew/interval_set],
-  ../../[extra_types, helpers, mpt, worker_desc],
+  ../../[extra_types, helpers, cache_db, mpt_build, worker_desc],
   ./account_fetch
+
+logScope:
+  topics = "snap sync"
 
 declareGauge nec_snap_accounts_coverage, "" &
   "Factor of accumulated account ranges"
@@ -26,8 +29,8 @@ proc accountDownloadMetricsReset*(ctx: SnapCtxRef) =
   metrics.set(nec_snap_accounts_coverage, 0)
 
 proc accountDownloadMetricsUpdate*(ctx: SnapCtxRef) =
-  metrics.set(nec_snap_accounts_coverage, 1.0 - ctx.accUnproc.totalRatio)
-
+  if ctx.accUnproc.synced():
+    metrics.set(nec_snap_accounts_coverage, 1.0 - ctx.accUnproc.totalRatio)
 
 proc accountDownloadCommit*(
     ctx: SnapCtxRef;

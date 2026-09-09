@@ -241,6 +241,7 @@ proc execSubCall(c: Computation; childMsg: Message; code: CodeBytesRef;
         c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
         c.gasMeter.appendStateGasUsed(child.gasMeter.stateGasUsed)
         c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
+        c.gasMeter.repayStateGasSpill()
       c.merge(child)
       c.stack.lsTop(1)
     else:

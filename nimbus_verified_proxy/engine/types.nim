@@ -94,7 +94,7 @@ type
       blkNum: BlockTag, fullTransactions: bool
     ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).}
     eth_getProof*: proc(
-      address: Address, slots: seq[UInt256], blockId: BlockTag
+      address: Address, slots: seq[Bytes32], blockId: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).}
     eth_createAccessList*: proc(
       args: TransactionArgs, blockId: BlockTag
@@ -145,6 +145,8 @@ type
     eth_getCode*: proc(
       address: Address, blockId: BlockTag
     ): Future[EngineResult[seq[byte]]] {.async: (raises: [CancelledError]).}
+    # slots stay UInt256 here: the lenient reader accepts both minimal and
+    # padded keys from clients, while the backend sends padded Bytes32 only
     eth_getProof*: proc(
       address: Address, slots: seq[UInt256], blockId: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).}
@@ -398,6 +400,15 @@ proc registerBackend*(
   for cap in capabilities:
     engine.capabilityIndex[cap].add(idx)
   debug "Registered beacon backend", backendIdx = idx, capabilities
+
+func toStorageKey*(slot: UInt256): Bytes32 =
+  Bytes32(slot.toBytesBE())
+
+func toStorageKeys*(slots: seq[UInt256]): seq[Bytes32] =
+  var keys = newSeqOfCap[Bytes32](slots.len())
+  for slot in slots:
+    keys.add(slot.toStorageKey())
+  keys
 
 proc safeEncode*[T](v: T): string =
   when compiles(EthJson.encode(v)):

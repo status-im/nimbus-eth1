@@ -100,6 +100,7 @@ endif
 	evmstate \
 	evmstate_test \
 	stateless_guest_baremetal \
+	stateless_guest_native \
 	stateless_execution_test
 
 ifeq ($(NIM_PARAMS),)
@@ -418,6 +419,13 @@ STATELESS_GUEST_CPU ?= riscv64
 
 stateless_guest_baremetal: | build deps
 	$(ENV_SCRIPT) $(NIMC) c $(STATELESS_GUEST_FLAGS) --cpu:$(STATELESS_GUEST_CPU) --os:any --compileOnly --genScript "execution_chain/stateless/stateless_guest.nim"
+
+# The guest as an ordinary host binary, with zkvm_io_stdio.c supplying read_input
+# and write_output over stdin/stdout in place of a zkVM runtime.
+stateless_guest_native: | build deps
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) --compile:"execution_chain/stateless/zkvm_io_stdio.c" -o:build/$@ "execution_chain/stateless/stateless_guest.nim" && \
+		echo -e $(BUILD_END_MSG) "build/$@"
 
 # Two runs: the full suite with standard flags, then the guest specific test
 # with flags closer to the zkVM guest.

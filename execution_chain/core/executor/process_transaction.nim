@@ -196,7 +196,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
   ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
   ## contract with the new root.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
@@ -211,7 +211,7 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32) =
   ## processParentBlockHash stores the parent block hash in the
   ## history storage contract as per EIP-2935.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
@@ -226,7 +226,7 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], 
   ## processDequeueWithdrawalRequests applies the EIP-7002 system call
   ## to the withdrawal requests contract.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
@@ -242,7 +242,7 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
   ## to the consolidation requests contract.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
@@ -258,7 +258,7 @@ proc processBuilderDepositRequests*(vmState: BaseVMState): Result[seq[byte], str
   ## processBuilderDepositRequests applies the EIP-8282 system call
   ## to the builder deposit requests contract.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
@@ -274,7 +274,7 @@ proc processBuilderExitRequests*(vmState: BaseVMState): Result[seq[byte], string
   ## processBuilderExitRequests applies the EIP-8282 system call
   ## to the builder exit requests contract.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
