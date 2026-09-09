@@ -84,9 +84,6 @@ type
     cache: Table[Address, AccountRef]
       # Second-level cache for the ledger save point, which is cleared on every
       # persist
-    emptyCodeCache: CodeBytesRef
-      ## Shared instance handed out for accounts without code.
-
     code: LruCache[Hash32, CodeBytesRef]
       ## The code cache provides two main benefits:
       ##
@@ -457,11 +454,6 @@ proc makeDirty(ledger: LedgerRef, address: Address, cloneStorage = true): Accoun
   ledger.savePoint.cache[address] = result
   ledger.savePoint.dirty[address] = result
 
-proc emptyCode(ledger: LedgerRef): CodeBytesRef =
-  if ledger.emptyCodeCache.isNil:
-    ledger.emptyCodeCache = CodeBytesRef()
-  ledger.emptyCodeCache
-
 template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
   if acc.code == nil:
     if acc.statement.codeHash == EMPTY_CODE_HASH:
@@ -608,9 +600,9 @@ proc getCode*(ledger: LedgerRef,
 
   if acc.isNil:
     when returnHash:
-      return (EMPTY_CODE_HASH, ledger.emptyCode)
+      return (EMPTY_CODE_HASH, CodeBytesRef())
     else:
-      return ledger.emptyCode
+      return CodeBytesRef()
 
   if acc.code.isNil:
     acc.code =
@@ -622,13 +614,13 @@ proc getCode*(ledger: LedgerRef,
             # but still return empty code so the async EVM continues.
             warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
             ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
-            ledger.emptyCode
+            CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
             ledger.code.put(acc.statement.codeHash, newCode)
             newCode
       else:
-        ledger.emptyCode
+        CodeBytesRef()
 
   when returnHash:
     (acc.statement.codeHash, acc.code)
@@ -642,7 +634,7 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
 
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
-    return ledger.emptyCode
+    return CodeBytesRef()
 
   if acc.original.code.isNil:
     acc.original.code =
@@ -651,13 +643,13 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
           var rc = ledger.txFrame.get(contractHashKey(acc.original.statement.codeHash).toOpenArray)
           if rc.isErr:
             warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=($$rc.error)
-            ledger.emptyCode
+            CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
             ledger.code.put(acc.original.statement.codeHash, newCode)
             newCode
       else:
-        ledger.emptyCode
+        CodeBytesRef()
 
   acc.original.code
 
@@ -836,7 +828,7 @@ proc deleteAccount(ledger: LedgerRef, address: Address) =
     if acc.statement.codeHash != EMPTY_ACCOUNT.codeHash:
       acc.flags.incl CodeChanged
       acc.statement.codeHash = EMPTY_ACCOUNT.codeHash
-      acc.code = ledger.emptyCode
+      acc.code = CodeBytesRef.init(@[])
 
     if acc.isEmpty:
       ledger.kill acc
