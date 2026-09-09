@@ -373,6 +373,8 @@ proc buildHeaderVerifier(
     config: HistoryExportConf, network: string
 ): Result[HeaderVerifier, string] =
   let
+    nid = parseNetworkId(network).valueOr:
+      return err("Unsupported network '" & network & "': " & error)
     networkMetadata = getMetadataForNetwork(network)
     eraDirPath =
       if config.eraDir.isSome:
@@ -381,9 +383,16 @@ proc buildHeaderVerifier(
         defaultDataDir("", network) / "era"
     (historicalRoots, historicalSummaries) =
       ?loadHistoricalDataFromEraDir(networkMetadata.cfg, eraDirPath)
+    # Post-merge-only networks (e.g. hoodi) have no pre-merge history, so there
+    # is no baked-in accumulator to load.
+    historicalHashes =
+      if mergeBlockNumber(nid) == 0:
+        Opt.none(FinishedHistoricalHashesAccumulator)
+      else:
+        Opt.some(loadAccumulator(network))
   ok(
     HeaderVerifier(
-      historicalHashes: loadAccumulator(network),
+      historicalHashes: historicalHashes,
       historicalRoots: historicalRoots,
       historicalSummaries: historicalSummaries,
     )
