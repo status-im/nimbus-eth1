@@ -16,7 +16,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/times,
+  std/[os, times],
   chronos,
   results,
   ssz_serialization,
@@ -57,6 +57,16 @@ proc ensureStateLoaded(b: BeaconProofBuilder, beaconEra: uint64): Result[void, s
   b.hasCachedState = true
   ok()
 
+proc hasEraFiles(eraDir: string): bool =
+  ## Whether `eraDir` holds any `*.era` file, regardless of whether it follows
+  ## the naming convention of the configured network.
+  try:
+    for _ in walkFiles(eraDir / "*.era"):
+      return true
+  except OSError:
+    discard
+  false
+
 proc loadHistoricalDataFromEraDir*(
     cfg: RuntimeConfig, eraDir: string
 ): Result[(HistoricalRoots, HistoricalSummaries), string] =
@@ -64,7 +74,13 @@ proc loadHistoricalDataFromEraDir*(
   ## file in `eraDir`.
   let
     (latestEra, latestPath) = EraFile.latest(cfg, eraDir).valueOr:
-      return err("No era files found in " & eraDir)
+      # Era files are only picked up when their name starts with the network
+      # name of the runtime config, so a network mismatch looks like an empty
+      # directory.
+      if hasEraFiles(eraDir):
+        return err("Era files in " & eraDir & " do not match network " & cfg.name())
+      else:
+        return err("No era files found in " & eraDir)
     latestSlot = start_slot(latestEra)
     eraFile = EraFile.open(latestPath, latestEra).valueOr:
       return err("Cannot open latest era file " & latestPath & ": " & error)
