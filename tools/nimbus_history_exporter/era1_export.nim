@@ -36,10 +36,16 @@ proc exportEra1File(
     endNumber = era1.endNumber(era, mergeBlockNumber)
     tmpName = outputDir / era1FileName(networkName, era, default(Digest)) & ".tmp"
 
+  let e2 = openFile(tmpName, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
+    return err(ioErrorMsg(error))
+
+  var completed = false
+  defer:
+    if not completed:
+      discard io2.removeFile(tmpName)
+
   var accumulatorRoot: Digest
   block writeBlock:
-    let e2 = openFile(tmpName, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
-      return err(ioErrorMsg(error))
     defer:
       discard closeFile(e2)
 
@@ -70,7 +76,6 @@ proc exportEra1File(
   let finalName = outputDir / era1FileName(networkName, era, accumulatorRoot)
   if isFile(finalName):
     notice "Era1 file already exists", era = era.uint64, file = finalName
-    discard io2.removeFile(tmpName)
     return ok()
 
   # std/os.moveFile raises Exception (not raises-annotated), so we must catch
@@ -79,6 +84,8 @@ proc exportEra1File(
     moveFile(tmpName, finalName)
   except Exception as e:
     return err("Failed to rename era1 tmp file: " & e.msg)
+
+  completed = true
 
   notice "Exported era1 file", file = finalName
   ok()
