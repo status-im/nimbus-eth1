@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/typetraits,
@@ -31,7 +31,6 @@ type
 # ------------------------------------------------------------------------------
 
 func `==`*(a, b: DistinctHash32): bool = a.distinctBase == b.distinctBase
-func `!=`*(a, b: DistinctHash32): bool = a.distinctBase != b.distinctBase
 
 template to*[T: Hash32](w: DistinctHash32; _: type T): T = T(w)
 
