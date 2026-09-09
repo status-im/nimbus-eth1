@@ -100,14 +100,13 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         bodyRc = daemonWaitResumeInterval           # not yet? take a nap
 
     of SnapClear:
-      ctx.pool.coreDb2Path.reset                    # maybe failed DB assmbly
-      ctx.pool.resetReq = false                     # sanity measure
-
       # Clear cache DB if needed.
       let hasData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr: false
       if hasData and not ctx.pool.cacheDB.clear(info):
         bodyRc = daemonWaitClearInterval            # disk full?, failure
         break body
+
+      ctx.resetServices info                        # reset system
 
       # Start headers download on the beacon sync server to run
       # in quasi-parallel mode to the snap sync daemon & peers.

@@ -84,9 +84,15 @@ proc headerDownloadTrigger*(
     return ok()
 
   # Define event handler to complete beacon syncer download
-  proc storeTopHeaderCB(ok: bool) =
-    if ok:
+  proc storeTopHeaderCB(state: BeaconNotifierState) =
+    case state:
+    of ok:
       ctx.storeCachedHeaders(firstNum, info)
+    of reset:
+      error info & ": Reset request from beacon syncer"
+      ctx.pool.resetReq = true
+    of failed:
+      discard
     bcSync.singleReset().isOkOr:
       error info & ": Unable to reset header download", `error`=error
     ctx.pool.headersSynced = true                   # mark header update done
