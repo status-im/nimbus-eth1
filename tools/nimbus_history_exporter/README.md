@@ -34,6 +34,16 @@ Without `--debug-store-bodies` and `--debug-store-receipts`, the database will b
 
 > **Note:** These flags are currently marked hidden/debug and subject to change once the UX stabilises.
 
+## Network selection
+
+`--network` selects the Ethereum network (`mainnet`, `sepolia`, `hoodi`) and **defaults to `mainnet`**, so it has to be passed for anything else:
+
+```sh
+nimbus_history_exporter exportEre \
+  --network:hoodi \
+  --el-data-dir:/path/to/nimbus/hoodi \
+  --era-dir:/path/to/nimbus/hoodi/era
+```
 
 ## ere export from the EL data directory (primary method)
 
