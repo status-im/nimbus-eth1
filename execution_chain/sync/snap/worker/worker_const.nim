@@ -129,16 +129,20 @@ const
     ## these intervals are sparsely filled and there will be returned not
     ## more than ~1k accounts.
 
-  consHeadSupportWindowSize* = 144
-    ## This might be a bit more than the supported download states window,
-    ## which is 128. If the FCU update header is more than that distance
-    ## apart form the pivot state block number, a BAL download and forward
-    ## cycle will be triggerd.
-
-  nConsHeadCachedDeltaMax* = 128
+  nConsHeadCachedDeltaMin* = 24
     ## If the block number difference between FCU update header and cached
     ## header is larger than this contant, a beacon header fetch cycle is
     ## triggered to fill up the cache.
+
+  nConsHeadSupportWindowSize* = 128
+    ## If the FCU update header is more than that distance apart form the
+    ## pivot state block number, a BAL download and forward cycle will be
+    ## triggerd.
+
+  nConsHeadSupportWindowThreshold* =
+      nConsHeadSupportWindowSize - nConsHeadCachedDeltaMin
+    ## A bit thess than `consHeadSupportWindowSize` for triggering events
+    ## (providing a hysteresis.)
 
   # -----------
 
@@ -231,6 +235,7 @@ const
     ## Default maximum number of BALs for a single auto downloading session.
 
 static:
-  doAssert 0 < nConsHeadCachedDeltaMax
+  doAssert 0 < nConsHeadCachedDeltaMin
+  doAssert 0 < nConsHeadSupportWindowThreshold
 
 # End

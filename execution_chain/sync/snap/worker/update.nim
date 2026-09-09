@@ -97,7 +97,18 @@ proc balsFetchFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
 
 proc stateForwardNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
-  if ctx.pool.pivotNum < ctx.pool.forwardNum:       # must bring forward state
+  let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
+  if consHeadNum != 0 and
+     consHeadNum + nConsHeadSupportWindowThreshold < ctx.pool.pivotNum:
+    # The system is at the end or outside the supported download window, so
+    # more BAL data need to be fetched. This state transfers directly to the
+    # `SnapBalsFetch` state so avoiding time to sync peers when finishing
+    # download.
+    #
+    # Note that the `pivotNum` will be updated after a forward cycle has
+    # successfully processed.
+    return SnapBalsFetch
+  if ctx.pool.pivotNum < ctx.pool.forwardNum:       # state brought forward?
     return SnapStateForward
   SnapDownload
 
@@ -111,7 +122,7 @@ proc downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   # state when the `consHead` has moved enough so that the `pivot` falls
   # outside the download window.
   let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
-  if ctx.pool.pivotNum + consHeadSupportWindowSize < consHeadNum:
+  if ctx.pool.pivotNum < consHeadNum + nConsHeadSupportWindowSize:
     ctx.poolMode = true
     return SnapDownloadFinish                       # => sync peers
   ctx.allDownloaded(info).isErrOr:                  # download is complete?
