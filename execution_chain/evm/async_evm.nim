@@ -114,15 +114,6 @@ proc init*(
 proc dispose*(evm: AsyncEvm) =
   evm.com.db.close()
 
-template toCallResult(evmResult: EvmResult[CallResult]): Result[CallResult, string] =
-  let callResult =
-    ?evmResult.mapErr(
-      proc(e: EvmErrorObj): string =
-        "EVM execution failed: " & $e.code
-    )
-
-  ok(callResult)
-
 proc callFetchingState(
     evm: AsyncEvm,
     vmState: BaseVMState,
@@ -155,7 +146,7 @@ proc callFetchingState(
   var
     lastWitnessKeys: WitnessTable
     witnessKeys = vmState.ledger.getWitnessKeys()
-    evmResult: EvmResult[CallResult]
+    evmResult: Result[CallResult, string]
     evmCallCount = 0
 
   # Limit the max number of calls to prevent infinite loops and/or DOS in the
@@ -276,7 +267,7 @@ proc callFetchingState(
     except CatchableError as e:
       raiseAssert(e.msg) # Shouldn't happen
 
-  evmResult.toCallResult()
+  evmResult
 
 proc call(
     evm: AsyncEvm, vmState: BaseVMState, header: Header, tx: TransactionArgs
@@ -293,7 +284,7 @@ proc call(
     evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
   vmState.ledger.rollback(savePoint) # all state changes from the call are reverted
 
-  evmResult.toCallResult()
+  evmResult
 
 proc setupVmState(evm: AsyncEvm, txFrame: CoreDbTxRef, header: Header): BaseVMState =
   let blockContext = BlockContext(
@@ -428,10 +419,7 @@ proc estimateGas*(
   discard callResult
 
   let
-    evmResult = rpcEstimateGas(tx, header, vmState, EVM_CALL_GAS_CAP)
-    gasEstimate =
-      ?evmResult.mapErr(
-        proc(e: (EvmErrorObj, OutputResult)): string =
-          "EVM execution failed: " & $e[0].code
-      )
+    gasEstimate = rpcEstimateGas(tx, header, vmState, EVM_CALL_GAS_CAP).valueOr:
+      return err("EVM execution failed: " & error.error)
+
   ok(gasEstimate)
