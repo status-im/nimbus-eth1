@@ -64,6 +64,7 @@ type
     GetKeyUpdateNeeded
     GetTuvNotFound
     GetVtxNotFound
+    GetVtxNotCached
 
     # Path function `hikeUp()`
     HikeBranchMissingEdge

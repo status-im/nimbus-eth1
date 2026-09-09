@@ -76,6 +76,9 @@ func endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
 func getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
     proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[VertexRef,AristoError] =
+      if GetVtxFlag.CacheOnly in flags:
+        return err(GetVtxNotCached)
+
       # Fetch serialised data record
       let data = db.sTab.getOrDefault(rvid, EmptyBlob)
       if 0 < data.len:

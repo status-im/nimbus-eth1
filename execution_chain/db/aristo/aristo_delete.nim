@@ -118,7 +118,7 @@ proc deleteImpl(
         case nxt.vType
         of AccLeaf:
           let nxt = AccLeafRef(nxt)
-          AccLeafRef.init(pfx & nxt.pfx, nxt.account, nxt.stoID)
+          AccLeafRef.init(pfx & nxt.pfx, nxt.account, nxt.stoID, nxt.stoHint)
         of StoLeaf:
           let nxt = StoLeafRef(nxt)
           StoLeafRef.init(pfx & nxt.pfx, nxt.stoData)
@@ -275,6 +275,7 @@ proc deleteSlot*(
     # De-register the deleted storage tree from the account record
     let leaf = db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
     leaf.stoID.isValid = false
+    leaf.stoHint = 0
     db.layersPutAccLeaf(accPath, leaf)
 
   ok()
@@ -308,6 +309,7 @@ proc clearStorage*(
   # De-register the deleted storage tree from the accounts record
   let leaf = db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
   leaf.stoID.isValid = false
+  leaf.stoHint = 0
   db.layersPutAccLeaf(accPath, leaf)
 
   ok()

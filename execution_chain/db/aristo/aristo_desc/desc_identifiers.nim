@@ -110,10 +110,10 @@ func `-`*(a: VertexID; b: uint64): VertexID = (a.uint64-b).VertexID
 func `-`*(a, b: VertexID): uint64 = (a.uint64 - b.uint64)
 
 func `==`*(a, b: RootedVertexID): bool {.inline.} =
-  a.vid == b.vid
+  a.vid == b.vid and a.root == b.root
 
 func hash*(rvid: RootedVertexID): Hash {.inline.} =
-  hash(rvid.vid)
+  hash((rvid.root.uint64 * 0x9E3779B97F4A7C15'u64) xor rvid.vid.uint64)
 
 func `$`*(rvid: RootedVertexID): string =
   $rvid.root & "/" & $rvid.vid

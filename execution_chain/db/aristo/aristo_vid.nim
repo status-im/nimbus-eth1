@@ -51,6 +51,14 @@ proc vidFetch*(db: AristoTxRef, n = 1): VertexID =
   db.vTop.inc(n)
   ret
 
+proc stoVidFetch*(db: AristoTxRef, path: NibblesBuf, n = 1): VertexID =
+  ## Static vid for a storage trie vertex, computed from the slot path prefix
+  ## relative to the storage root; vids are only unique within the trie
+  if path.len <= STATIC_VID_LEVELS:
+    path.staticVid(path.len)
+  else:
+    db.vidFetch(n)
+
 proc accVidFetch*(db: AristoTxRef, path: NibblesBuf, n = 1): VertexID =
   ## Fetch next vertex ID.
   ##

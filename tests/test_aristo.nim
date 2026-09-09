@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
-import ./test_aristo/[test_blobify, test_compute, test_tx_frame, test_vid]
+import ./test_aristo/[test_blobify, test_compute, test_static_storage, test_tx_frame, test_vid]
 
 # ------------------------------------------------------------------------------
 # End
