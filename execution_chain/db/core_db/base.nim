@@ -170,9 +170,9 @@ proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
 
 proc get*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## This function always returns a non-empty `seq[byte]` or an error code.
-  let rc = kvt.kTx.get(key)
+  var rc = kvt.kTx.get(key)
   if rc.isOk:
-    ok(rc.value)
+    ok(move(rc.value))
   elif rc.error == GetNotFound:
     err(rc.error.toError("", KvtNotFound))
   else:
@@ -182,9 +182,9 @@ proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## Variant of `get()` returning an empty `seq[byte]` if the key is not found
   ## on the database.
   ##
-  let rc = kvt.kTx.get(key)
+  var rc = kvt.kTx.get(key)
   if rc.isOk:
-    ok(rc.value)
+    ok(move(rc.value))
   elif rc.error == GetNotFound:
     CoreDbRc[seq[byte]].ok(EmptyBlob)
   else:
@@ -226,6 +226,18 @@ proc put*(
     val: openArray[byte];
       ): CoreDbRc[void] =
   kvt.kTx.put(key, val).isOkOr:
+    return err(error.toError(""))
+
+  ok()
+
+proc putMove*(
+    kvt: CoreDbTxRef;
+    key: openArray[byte];
+    val: var seq[byte];
+      ): CoreDbRc[void] =
+  ## Variant of `put()` that takes over ownership of `val` instead of
+  ## copying it - the caller must not use `val` after this call
+  kvt.kTx.putMove(key, val).isOkOr:
     return err(error.toError(""))
 
   ok()

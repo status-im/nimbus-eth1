@@ -30,6 +30,11 @@ proc importRlpBlocks*(
     printBanner = false
     firstSkip = Opt.none(uint64)
 
+  chain.com.balPostExecValidation = true
+
+  defer:
+    chain.com.balPostExecValidation = false
+
   while not ProcessState.stopIt(notice("Shutting down", reason = it)) and rlp.hasData:
     blk =
       try:

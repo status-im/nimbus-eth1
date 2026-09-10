@@ -173,13 +173,16 @@ func validateEip4844Header*(
     maxBlobGasPerBlock = com.getMaxBlobGasPerBlock(fork)
 
   if blobGasUsed > maxBlobGasPerBlock:
-    return err("blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $maxBlobGasPerBlock)
+    return err("blobGasUsed " & $blobGasUsed &
+      " exceeds maximum allowance " & $maxBlobGasPerBlock)
 
   if headerBlobGasUsed != blobGasUsed:
-    return err("calculated blobGas not equal header.blobGasUsed")
+    return err("calculated blobGas: " & $blobGasUsed &
+      " not equal header.blobGasUsed: " & $headerBlobGasUsed)
 
   if headerExcessBlobGas != excessBlobGas:
-    return err("calculated excessBlobGas not equal header.excessBlobGas")
+    return err("calculated excessBlobGas: " & $excessBlobGas &
+      " not equal header.excessBlobGas: " & $headerExcessBlobGas)
 
   return ok()
 

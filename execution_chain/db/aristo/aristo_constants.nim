@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -43,6 +43,10 @@ const
       for i in 0..STATIC_VID_LEVELS:
         v += 1'u64 shl (i * 4)
       v
+
+  MAX_KEYS_FETCH* = 16
+    ## Maximum number of keys accepted by `GetKeysFn` in a single batch, sized
+    ## to the branch vertex fan-out.
 
   ACC_LRU_SIZE* = 1024 * 1024
     ## LRU cache size for accounts that have storage, see `.accLeaves` and

@@ -13,6 +13,11 @@
 import
   unittest2,
   results,
+  eth/common,
+  eth/rlp,
+  ../execution_chain/db/core_db,
+  ../execution_chain/db/core_db/memory_only,
+  ../execution_chain/db/storage_types,
   ../execution_chain/db/kvt,
   ../execution_chain/db/kvt/[kvt_init/memory_only, kvt_tx_frame, kvt_utils]
 
@@ -193,5 +198,99 @@ suite "Kvt TxFrame":
         values[0] == Opt.some(@[byte 0, 1, 4])
         values[1] == Opt.some(@[byte 0, 1, 6])
         values[2] == Opt.none(seq[byte])
+
+    db.close()
+
+suite "Kvt block hash cache":
+  const
+    hashA = hash32"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    hashB = hash32"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+  setup:
+    let db = newCoreDbRef(DefaultDbMemory, enableCaches = true)
+
+  test "Persisted block hashes are served from the cache":
+    let base = db.baseTxFrame()
+    base.addBlockNumberToHashLookup(BlockNumber(1), hashA)
+    db.persist(base)
+
+    check:
+      db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
+      db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
+
+    db.kvt.delBe(blockNumberToHashKey(BlockNumber(1)).toOpenArray).expect("del")
+    check db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
+
+    db.close()
+
+  test "Frame writes take precedence over the cache":
+    let base = db.baseTxFrame()
+    base.addBlockNumberToHashLookup(BlockNumber(1), hashA)
+    db.persist(base)
+
+    check db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
+
+    let fork = db.txFrameBegin()
+    fork.addBlockNumberToHashLookup(BlockNumber(1), hashB)
+
+    check:
+      fork.getBlockHash(BlockNumber(1)).expect("hash") == hashB
+      db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
+
+    db.close()
+
+  test "Persisting a new block hash updates the cache in place":
+    let base = db.baseTxFrame()
+    base.addBlockNumberToHashLookup(BlockNumber(1), hashA)
+    db.persist(base)
+
+    check db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
+
+    let fork = db.txFrameBegin()
+    fork.addBlockNumberToHashLookup(BlockNumber(1), hashB)
+    fork.checkpoint(BlockNumber(1))
+    db.persist(fork)
+
+    db.kvt.delBe(blockNumberToHashKey(BlockNumber(1)).toOpenArray).expect("del")
+    check db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashB
+
+    db.close()
+
+  test "Persisting inserts an uncached block hash into the cache":
+    let base = db.baseTxFrame()
+    base.addBlockNumberToHashLookup(BlockNumber(2), hashB)
+    db.persist(base)
+
+    db.kvt.delBe(blockNumberToHashKey(BlockNumber(2)).toOpenArray).expect("del")
+    check db.baseTxFrame().getBlockHash(BlockNumber(2)).expect("hash") == hashB
+
+    db.close()
+
+  test "A read miss fills the cache from the backend":
+    let batch = db.kvt.putBegFn().expect("batch")
+    db.kvt.putKvpFn(
+      batch, blockNumberToHashKey(BlockNumber(7)).toOpenArray, rlp.encode(hashA))
+    db.kvt.putEndFn(batch).expect("putEndFn")
+
+    check db.baseTxFrame().getBlockHash(BlockNumber(7)).expect("hash") == hashA
+
+    db.kvt.delBe(blockNumberToHashKey(BlockNumber(7)).toOpenArray).expect("del")
+    check db.baseTxFrame().getBlockHash(BlockNumber(7)).expect("hash") == hashA
+
+    db.close()
+
+  test "A deleted block hash is not resurrected by the cache":
+    let base = db.baseTxFrame()
+    base.addBlockNumberToHashLookup(BlockNumber(1), hashA)
+    db.persist(base)
+
+    check db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
+
+    let deleting = db.txFrameBegin()
+    deleting.del(blockNumberToHashKey(BlockNumber(1)).toOpenArray).expect("del")
+    deleting.checkpoint(BlockNumber(1))
+    db.persist(deleting)
+
+    check db.baseTxFrame().getBlockHash(BlockNumber(1)).isErr()
 
     db.close()

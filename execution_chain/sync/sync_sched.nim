@@ -53,6 +53,10 @@
 ##   repeated loops. To avoid continous looping, the number of `laps` is
 ##   limited (see `execPoolModeMax`, below.)
 ##
+##   If there was no peer available when `buddy.ctx.poolMode` wass set, the
+##   scheduler will wait until at least one peer is running. Then the
+##   `runPool()` cycle will be executed (with the single peer.)
+##
 ##   The argument `last` is set `true` if the last entry of the current loop
 ##   has been reached.
 ##

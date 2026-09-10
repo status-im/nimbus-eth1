@@ -47,16 +47,16 @@ proc commitOrRollbackDependingOnGasUsed(
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   let gasUsed = callResult.gasUsed
 
-  # EIP-8037: block validity is max(blockRegularGas, blockStateGas) <= gasLimit
+  # EIP-8037: block validity is max(blockExecutionGas, blockStateGas) <= gasLimit
   if vmState.fork >= FkAmsterdam:
     let limit2d = max(
-      vmState.blockRegularGasUsed + callResult.blockRegularGasUsed,
+      vmState.blockExecutionGasUsed + callResult.blockExecutionGasUsed,
       vmState.blockStateGasUsed + callResult.blockStateGasUsed)
     if vmState.blockCtx.gasLimit < limit2d:
       if vmState.balTrackerEnabled:
         vmState.balTracker.rollbackCallFrame(rollbackReads)
       vmState.ledger.rollback(savePoint)
-      return err(&"invalid tx: block gas limit reached (2D). gasLimit={vmState.blockCtx.gasLimit}, regularGas={vmState.blockRegularGasUsed}+{callResult.blockRegularGasUsed}, stateGas={vmState.blockStateGasUsed}+{callResult.blockStateGasUsed}")
+      return err(&"invalid tx: block gas limit reached (2D). gasLimit={vmState.blockCtx.gasLimit}, executionGas={vmState.blockExecutionGasUsed}+{callResult.blockExecutionGasUsed}, stateGas={vmState.blockStateGasUsed}+{callResult.blockStateGasUsed}")
   else:
     let limit = vmState.cumulativeGasUsed + gasUsed
     if vmState.blockCtx.gasLimit < limit:
@@ -80,7 +80,7 @@ proc commitOrRollbackDependingOnGasUsed(
   vmState.ledger.addBalance(vmState.coinbase(), txFee, checkEmptyAccount = vmState.fork < FkParis)
   vmState.ledger.commit(savePoint)
   vmState.cumulativeGasUsed += gasUsed
-  vmState.blockRegularGasUsed += callResult.blockRegularGasUsed
+  vmState.blockExecutionGasUsed += callResult.blockExecutionGasUsed
   vmState.blockStateGasUsed += callResult.blockStateGasUsed
   vmState.blobGasUsed += blobGasUsed
 
@@ -91,12 +91,12 @@ template check2dGasInclusion*(
     txGasLimit: GasInt;
     fail: untyped) =
   let
-    regularGasAvailable = vmState.blockCtx.gasLimit - vmState.blockRegularGasUsed
+    executionGasAvailable = vmState.blockCtx.gasLimit - vmState.blockExecutionGasUsed
     stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
     want = min(TX_GAS_LIMIT.GasInt, txGasLimit)
 
-  if want > regularGasAvailable:
-    fail("regular gas used exceeds limit, want: " & $want & ", available: " & $regularGasAvailable)
+  if want > executionGasAvailable:
+    fail("execution gas used exceeds limit, want: " & $want & ", available: " & $executionGasAvailable)
 
   if txGasLimit > stateGasAvailable:
     fail("state gas used exceeds limit, want: " & $txGasLimit & ", available: " & $stateGasAvailable)
@@ -196,7 +196,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =
   ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
   ## contract with the new root.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
@@ -211,7 +211,7 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32) =
   ## processParentBlockHash stores the parent block hash in the
   ## history storage contract as per EIP-2935.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
@@ -226,7 +226,7 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], 
   ## processDequeueWithdrawalRequests applies the EIP-7002 system call
   ## to the withdrawal requests contract.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
@@ -242,7 +242,7 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
   ## to the consolidation requests contract.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
@@ -258,7 +258,7 @@ proc processBuilderDepositRequests*(vmState: BaseVMState): Result[seq[byte], str
   ## processBuilderDepositRequests applies the EIP-8282 system call
   ## to the builder deposit requests contract.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,
@@ -274,7 +274,7 @@ proc processBuilderExitRequests*(vmState: BaseVMState): Result[seq[byte], string
   ## processBuilderExitRequests applies the EIP-8282 system call
   ## to the builder exit requests contract.
   let
-    call = CallParams(
+    call = SysCallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
       gasLimit : 30_000_000.GasInt,

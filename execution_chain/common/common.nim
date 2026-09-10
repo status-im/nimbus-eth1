@@ -137,6 +137,9 @@ type
       ## Execute the transactions of a block in parallel on background threads
       ## using the supplied block access list.
 
+    balPostExecValidation*: bool
+      ## Validate generated BAL after block execution
+
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------

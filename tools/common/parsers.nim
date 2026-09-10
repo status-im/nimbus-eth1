@@ -19,6 +19,7 @@ import
   eth/common/eth_types_rlp,
   eth/common/keys,
   eth/common/blocks,
+  eth/bloom,
   ../../execution_chain/transaction,
   ../../execution_chain/common/chain_config
 
@@ -31,6 +32,7 @@ createJsonFlavor Fixture,
 
 AccessPair.useDefaultSerializationIn Fixture
 Authorization.useDefaultSerializationIn Fixture
+Log.useDefaultSerializationIn Fixture
 
 template wrapValueError(body: untyped) =
   try:
@@ -84,6 +86,11 @@ proc readValue*(r: var JsonReader[Fixture], val: var UInt256)
        {.raises: [IOError, JsonReaderError].} =
   wrapValueError:
     val = parseHexOrInt[UInt256](r.parseString())
+
+proc readValue*(r: var JsonReader[Fixture], val: var bloom.BloomFilter)
+       {.raises: [IOError, JsonReaderError].} =
+  wrapValueError:
+    val.value = StUint[2048].fromHex(r.parseString())
 
 proc readValue*(r: var JsonReader[Fixture], val: var (uint8 | uint64))
        {.raises: [IOError, JsonReaderError].} =

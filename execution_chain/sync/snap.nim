@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[dirs, paths],
+  std/paths,
   pkg/[chronicles, chronos, results],
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,

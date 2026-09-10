@@ -14,12 +14,12 @@ import
   std/[atomics, strformat],
   chronicles,
   results,
-  eth/common/hashes_rlp,
+  eth/common/[base_rlp, hashes_rlp],
   ./[aristo_desc, aristo_get, aristo_layers, aristo_blobify, aristo_serialise],
   ./aristo_desc/desc_backend,
   ../../concurrency/[queue, shared_types]
 
-export aristo_desc, chronicles, hashes_rlp, shared_types
+export aristo_desc, chronicles, base_rlp, hashes_rlp, shared_types
 
 type
   WriteBatch* = object
@@ -179,6 +179,45 @@ proc getKey(
       return ok(keyVtxRes[])
 
   ok((?txRef.db.getKeyBe(rvid, flags), dbLevel))
+
+proc getKeys(
+    txRef: AristoTxRef,
+    root: VertexID,
+    vtx: BranchRef,
+    keyvtxs: var array[16, ((HashKey, VertexRef), int)],
+    skipLayers: static bool,
+    parallel: static bool,
+): Result[void, AristoError] =
+  const flags: set[GetVtxFlag] =
+    when parallel or skipLayers:
+      {GetVtxFlag.PeekCache}
+    else:
+      {}
+
+  var
+    rvids {.noinit.}: array[16, RootedVertexID]
+    nibbles {.noinit.}: array[16, uint8]
+    nFetch = 0
+
+  for n, subvid in vtx.pairs:
+    when not skipLayers:
+      let keyVtxRes = txRef.layersGetKeyOrVtx((root, subvid))
+      if keyVtxRes.isSome():
+        keyvtxs[n] = keyVtxRes[]
+        continue
+    rvids[nFetch] = (root, subvid)
+    nibbles[nFetch] = n
+    inc nFetch
+
+  if nFetch > 0:
+    var keyvtxsBe: array[16, (HashKey, VertexRef)]
+    ?txRef.db.getKeysBe(
+      rvids.toOpenArray(0, nFetch - 1), keyvtxsBe.toOpenArray(0, nFetch - 1), flags
+    )
+    for j in 0 ..< nFetch:
+      keyvtxs[nibbles[j].int] = (keyvtxsBe[j], dbLevel)
+
+  ok()
 
 template childVid(vp: VertexRef): VertexID =
   # If we have to recurse into a child, where would that recusion start?
@@ -371,8 +410,7 @@ proc computeKeyImpl(
       # to exploit their on-disk order
       let vtx = BranchRef(vtx)
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
-      for n, subvid in vtx.pairs:
-        keyvtxs[n] = ?txRef.getKey((rvid.root, subvid), skipLayers, parallel)
+      ?txRef.getKeys(rvid.root, vtx, keyvtxs, skipLayers, parallel)
 
       when spawnTpTasks:
         var

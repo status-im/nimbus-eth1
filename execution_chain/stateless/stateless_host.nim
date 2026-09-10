@@ -27,9 +27,9 @@ export stateless_types, results
 
 ## Stateless host interfaces
 ## Spec:
-## https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/stateless_host.py#L1
+## https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless_host.py#L1
 
-## https://github.com/ethereum/execution-specs/blob/e5a8caf1b8055e4d805c7fb169edfa710914b7da/src/ethereum/forks/amsterdam/transactions.py#L810
+## https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/transactions.py#L882
 func recover_transaction_public_key*(
     tx: Transaction
 ): Opt[ByteVector[PUBLIC_KEY_BYTES]] =
@@ -59,19 +59,6 @@ func deserialize_stateless_output*(
   except SerializationError as e:
     err("Failed to deserialize StatelessValidationResult: " & e.msg)
 
-func build_chain_config*(chain_id: uint64): StatelessChainConfig =
-  ## Build the chain configuration supported by this host.
-  ##
-  ## For now the Amsterdam stateless host only describes the Amsterdam fork.
-  StatelessChainConfig(
-    chain_id: chain_id,
-    active_fork: ForkConfig(
-      activation: ForkActivation(
-        block_number: List[uint64, MAX_OPTIONAL_FORK_ACTIVATION_VALUES].init(@[]),
-        timestamp: List[uint64, MAX_OPTIONAL_FORK_ACTIVATION_VALUES].init(@[0'u64]),
-      )
-    ),
-  )
 
 func build_stateless_input*(
     blk: Block,
@@ -112,7 +99,7 @@ func build_stateless_input*(
   # versioned hashes.
   var
     transactions = newSeqOfCap[gloas.Transaction](blk.transactions.len)
-    public_keys: List[ByteVector[PUBLIC_KEY_BYTES], MAX_PUBLIC_KEYS]
+    public_keys: seq[ByteVector[PUBLIC_KEY_BYTES]]
     versioned_hashes: seq[Digest]
   for tx in blk.transactions:
     transactions.add(gloas.Transaction.init(rlp.encode(tx)))
@@ -123,8 +110,7 @@ func build_stateless_input*(
       # decode. However, our block already holds the decoded transaction objects,
       # so invalid signature is the only failure that can occur here still.
       continue
-    if not public_keys.add(public_key):
-      return err("Too many public keys for the stateless input")
+    public_keys.add(public_key)
 
     if tx.txType == TxEip4844:
       for versioned_hash in tx.versionedHashes:
@@ -174,7 +160,7 @@ func build_stateless_input*(
     StatelessInput(
       new_payload_request: new_payload,
       witness: execution_witness,
-      chain_config: build_chain_config(chain_id),
+      chain_id: chain_id,
       public_keys: public_keys,
     )
   )

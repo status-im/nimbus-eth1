@@ -170,7 +170,8 @@ func decodePayload(data: seq[byte]; T: type): T =
 # ------------------------------------------------------------------------------
 
 proc putInfo(db: KvtTxRef; state: HccDbInfo) =
-  db.put(HccDbInfoKey.toOpenArray, encodePayload(state)).isOkOr:
+  var data = encodePayload(state)
+  db.putMove(HccDbInfoKey.toOpenArray, data).isOkOr:
     raiseAssert MsgPfx & "put(info) failed: " & $error
 
 proc getInfo(db: KvtTxRef): Opt[HccDbInfo] =
@@ -191,8 +192,8 @@ proc delInfo(db: KvtTxRef) =
 proc putHeader(db: KvtTxRef; h: Header) =
   ## Store the argument `header` indexed by block number, and the hash lookup
   ## of the parent header.
-  let data = encodePayload(h)
-  db.put(beaconHeaderKey(h.number).toOpenArray, data).isOkOr:
+  var data = encodePayload(h)
+  db.putMove(beaconHeaderKey(h.number).toOpenArray, data).isOkOr:
     raiseAssert MsgPfx & "put(header) failed: " & $error
 
   let parNumData = (h.number-1).toBytesBE
@@ -519,11 +520,13 @@ proc put*(
     let newMode = hc.tryFcParent(hc.session.ante)
     if newMode in {ready,orphan}:
       hc.session.mode = newMode
+      if newMode == orphan:
+        debug "wrong branch => orphan", ante=hc.session.ante.number
       return ok()
   elif hc.session.ante.number <= hc.session.stopNum.unsafeGet():
     # Oops, not allowed
     hc.session.mode = orphan
-    debug "stop node mismatch => orphan", ante=hc.session.ante.number,
+    debug "node mismatch => orphan", ante=hc.session.ante.number,
       stopNum=hc.session.stopNum.unsafeGet()
     return ok()
 
@@ -574,7 +577,7 @@ proc put*(
         hc.session.mode =
           (if hdr.parentHash == hc.session.stopHash: ready else: orphan)
         if hc.session.mode == orphan:
-          debug "stop node mismatch => orphan", hdr=hdr.number,
+          debug "node mismatch => orphan", hdr=hdr.number,
             stopNum=hc.session.stopNum.unsafeGet()
         revTopInx = n
         break

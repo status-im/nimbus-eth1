@@ -24,7 +24,7 @@ export base_desc
 # ------------------------------------------------------------------------------
 
 proc newMemoryCoreDbRef*(enableCaches: static bool): CoreDbRef =
-  CoreDbRef(mpt: AristoDbRef.init(enableCaches), kvt: KvtDbRef.init())
+  CoreDbRef(mpt: AristoDbRef.init(enableCaches), kvt: KvtDbRef.init(enableCaches))
 
 # ------------------------------------------------------------------------------
 # End

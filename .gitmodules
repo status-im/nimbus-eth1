@@ -249,3 +249,8 @@
 	url = https://github.com/vacp2p/nim-boringssl
 	ignore = dirty
 	branch = master
+[submodule "vendor/zkevm-standards"]
+	path = vendor/zkevm-standards
+	url = https://github.com/eth-act/zkevm-standards.git
+	ignore = untracked
+	branch = main

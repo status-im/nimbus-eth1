@@ -11,7 +11,7 @@
 
 import
   chronicles,
-  std/sequtils,
+  std/[sequtils, strutils],
   stint,
   web3/[conversions, eth_api_types],
   eth/common/[base, transaction_utils],
@@ -225,6 +225,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       data: Address, blockTag: BlockTag
     ): Quantity {.raises: [ValueError].} =
       ## Returns the number of transactions ak.s. nonce sent from an address.
+      ## With the "pending" tag the sender's gap-free pooled transactions are
+      ## counted as well.
+      if blockTag.kind == bidAlias and blockTag.alias.toLowerAscii == "pending":
+        return Quantity(api.txPool.getPendingNonce(data))
+
       let
         txFrame = api.frameFromTag(blockTag).valueOr:
           raise newException(ValueError, error)
@@ -302,7 +307,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         )
         return SyncingStatus(syncing: true, syncObject: sync)
 
-    proc eth_getLogs(filterOptions: FilterOptions): seq[FilterLog] {.raises: [ApplicationError, ValueError].} =
+    proc eth_getLogs(filterOptions: FilterOptions): seq[FilterLog] {.raises: [RpcResponseError, ValueError].} =
       ## filterOptions: settings for this filter.
       ## Returns a list of all logs matching a given filter object.
       ## TODO: Current implementation is pretty naive and not efficient
@@ -371,7 +376,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
         res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
-          raise newException(ValueError, "rpcCallEvm error: " & $error.code)
+          raise newException(ValueError, "rpcCallEvm error: " & error)
       res.output
 
     proc eth_getTransactionReceipt(data: Hash32): ReceiptObject =
@@ -400,7 +405,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       return populateReceipt(receipt, receipt.cumulativeGasUsed - prevGasUsed,
                             tx, txid, header, api.com)
 
-    proc eth_estimateGas(args: TransactionArgs): Quantity {.raises: [ApplicationError, ValueError].} =
+    proc eth_estimateGas(args: TransactionArgs): Quantity {.raises: [RpcResponseError, ValueError].} =
       ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
       ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
       ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
@@ -415,17 +420,19 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         txFrame = api.chain.txFrame(headerHash)
         # TODO: change 0 to configureable gas cap
         gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
-          let data = Opt.some(EthJson.encode(error[1].output.to0xHex()).JsonString)
-          raise (ref ApplicationError)(
+          let data = EthJson.encode(error.output.to0xHex()).JsonString
+          raise (ref RpcResponseError)(
             code: 3,
-            msg: $error[1].error,
+            msg: error.error,
             data: data,
           )
       Quantity(gasUsed)
 
-    proc eth_gasPrice(): Quantity =
+    proc eth_gasPrice(): Quantity {.raises: [ValueError].} =
       ## Returns an integer of the current gas price in wei.
-      w3Qty(calculateMedianGasPrice(api.chain).uint64)
+      let gasPrice = calculateMedianGasPrice(api.chain).valueOr:
+        raise newException(ValueError, error)
+      w3Qty(gasPrice.uint64)
 
     proc eth_accounts(): seq[Address] =
       ## Returns a list of addresses owned by client.
@@ -506,7 +513,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         txFrame = api.frameFromTag(blockId("latest")).valueOr:
           raise newException(ValueError, "Latest Block not found")
         accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
-        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
+        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId).valueOr:
+          raise newException(ValueError, error)
         eip155 = api.com.isEIP155(api.chain.latestNumber)
         signedTx = signTransaction(tx, acc.privateKey, eip155)
       return rlp.encode(signedTx)
@@ -529,7 +537,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
           raise newException(ValueError, "Latest Block not found")
         accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
 
-        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
+        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId).valueOr:
+          raise newException(ValueError, error)
         eip155 = api.com.isEIP155(api.chain.latestNumber)
         signedTx = signTransaction(tx, acc.privateKey, eip155)
         blobsBundle =
@@ -569,7 +578,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         txHash = data
         res = api.txPool.getItem(txHash)
       if res.isOk:
-        return populateTransactionObject(res.get().tx, Opt.none(Hash32), Opt.none(uint64))
+        return populateTransactionObject(res.get().tx, chainId = Opt.some(api.chain.com.chainId))
 
       let
         (blockHash, txId) = api.chain.txDetailsByTxHash(txHash).valueOr:
@@ -586,6 +595,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.number),
         Opt.some(blk.header.timestamp),
         Opt.some(txId),
+        Opt.some(api.chain.com.chainId),
       )
 
     proc eth_getTransactionByBlockHashAndIndex(
@@ -609,6 +619,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.number),
         Opt.some(blk.header.timestamp),
         Opt.some(index),
+        Opt.some(api.chain.com.chainId),
       )
 
     proc eth_getTransactionByBlockNumberAndIndex(
@@ -618,7 +629,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       ##
       ## quantityTag: a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
       ## quantity: the transaction index position.
-      ## NOTE : "pending" blockTag is not supported.
       let index = uint64(quantity)
       let blk = api.blockFromTag(quantityTag, noHash = true).valueOr:
         return nil
@@ -632,6 +642,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.number),
         Opt.some(blk.header.timestamp),
         Opt.some(index),
+        Opt.some(api.chain.com.chainId),
       )
 
     proc eth_getProof(
@@ -795,8 +806,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       api.oracle.feeHistory(blockCount.uint64, newestBlock, rewardPercentiles.get(@[])).valueOr:
         raise newException(ValueError, error)
 
-    proc eth_maxPriorityFeePerGas(): Quantity =
-      w3Qty(calculateMedianMaxPriorityFeePerGas(api.chain).uint64)
+    proc eth_maxPriorityFeePerGas(): Quantity {.raises: [ValueError].} =
+      let maxPriorityFee = calculateMedianMaxPriorityFeePerGas(api.chain).valueOr:
+        raise newException(ValueError, error)
+      w3Qty(maxPriorityFee.uint64)
 
     proc eth_getStorageValues(request: StorageValuesRequest, blockTag: BlockTag): StorageValuesResponse {.raises: [ValueError].} =
       let

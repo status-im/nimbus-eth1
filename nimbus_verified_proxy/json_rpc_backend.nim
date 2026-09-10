@@ -15,13 +15,10 @@ import
   ./engine/types,
   ./nimbus_verified_proxy_conf
 
-# for eth_feeHistory
-EthJson.automaticSerialization(int, true)
-
 # created a new sig for the feeHistory method on the RpcClient type
 createRpcSigsFromNim(RpcClient, EthJson):
   proc eth_feeHistory(
-    blockCount: Quantity, newestBlock: BlockIdentifier, rewardPercentiles: seq[int]
+    blockCount: Quantity, newestBlock: BlockIdentifier, rewardPercentiles: seq[float64]
   ): FeeHistoryResult
 
 type JsonRpcClient* = ref object
@@ -74,6 +71,9 @@ template rpcCall(body: untyped): untyped =
   except ErrorResponse as e:
     result = err(typeof(result), (BackendFetchError, e.msg, UNTAGGED))
     return
+  except RpcResponseError as e:
+    result = err(typeof(result), (BackendDecodingError, toJsonError(e), UNTAGGED))
+    return
   except JsonRpcError as e:
     result = err(typeof(result), (BackendDecodingError, e.msg, UNTAGGED))
     return
@@ -117,7 +117,7 @@ proc getExecutionApiBackend*(client: JsonRpcClient): ExecutionApiBackend =
         ok(res)
 
     getProofProc = proc(
-        address: Address, slots: seq[UInt256], blockId: BlockTag
+        address: Address, slots: seq[Bytes32], blockId: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
       rpcCall:
         ok(await client.resolveClient().eth_getProof(address, slots, blockId))
@@ -171,7 +171,7 @@ proc getExecutionApiBackend*(client: JsonRpcClient): ExecutionApiBackend =
         ok(await client.resolveClient().eth_getLogs(filterOptions))
 
     feeHistoryProc = proc(
-        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[float64]
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
       rpcCall:
         ok(

@@ -8,10 +8,12 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push gcsafe.}
+
 import
   std/[os, osproc, strutils, json, tables],
   unittest2,
-  "."/[types]
+  ./[types]
 
 type
   T8nInput = object
@@ -40,7 +42,7 @@ type
     path: string
     error: string
 
-proc t8nInput(alloc, txs, env, fork: string;
+func t8nInput(alloc, txs, env, fork: string;
               reward = "0"; chainid = ""): T8nInput =
   T8nInput(
     inAlloc : alloc,
@@ -51,7 +53,7 @@ proc t8nInput(alloc, txs, env, fork: string;
     chainid : chainid,
   )
 
-proc get(opt: T8nInput, base  : string): string =
+func get(opt: T8nInput, base  : string): string =
   result.add(" --input.alloc " & (base / opt.inAlloc))
   result.add(" --input.txs "   & (base / opt.inTxs))
   result.add(" --input.env "   & (base / opt.inEnv))
@@ -61,7 +63,7 @@ proc get(opt: T8nInput, base  : string): string =
   if opt.chainid.len > 0:
     result.add(" --state.chainid " & opt.chainid)
 
-proc get(opt: T8nOutput): string =
+func get(opt: T8nOutput): string =
   if opt.alloc and not opt.trace:
     result.add(" --output.alloc stdout")
   else:
@@ -85,7 +87,7 @@ template exit(jsc: var JsonComparator, msg: string) =
   jsc.error = msg
   return false
 
-proc cmp(jsc: var JsonComparator; a, b: JsonNode, path: string): bool =
+func cmp(jsc: var JsonComparator; a, b: JsonNode, path: string): bool =
   ## Check two nodes for equality
   if a.isNil:
     if b.isNil: return true
@@ -142,7 +144,7 @@ proc cmp(jsc: var JsonComparator; a, b: JsonNode, path: string): bool =
         if not jsc.cmp(val, b.fields[key], path & "/" & key):
           return false
 
-proc notRejectedError(path: string): bool =
+func notRejectedError(path: string): bool =
   # we only check error status, and not the error message
   # because each implementation can have different error
   # message
@@ -694,12 +696,40 @@ const
       output: T8nOutput(result: true),
       expExitCode: ErrorConfig.int,
     ),
+    TestSpec(
+      name  : "prepareDispatch isAccountAlive bug: leaf exists and empty",
+      base  : "testdata/00-530",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Amsterdam", "0",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "prepareDispatch isAccountAlive bug: leaf not exists",
+      base  : "testdata/00-531",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Amsterdam", "0",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "prepareDispatch isAccountAlive bug: leaf exists and not empty",
+      base  : "testdata/00-532",
+      input : t8nInput(
+        "alloc.json", "txs.json", "env.json", "Amsterdam", "0",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
   ]
 
 proc main() =
   suite "Transition tool (t8n) test suite":
     let appDir = getAppDir()
     for x in testSpec:
+      var x = x   # lent
       test x.name:
         check runTest(appDir, x)
 

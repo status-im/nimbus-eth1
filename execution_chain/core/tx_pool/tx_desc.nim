@@ -13,10 +13,10 @@
 import
   chronicles,
   metrics,
-  std/[times, tables],
+  std/[times, tables, typetraits],
   eth/eip1559,
   eth/common/transaction_utils,
-  stew/sorted_set,
+  stew/[sorted_set, bitseqs],
   web3/engine_api_types,
   ../../common/common,
   ../../evm/state,
@@ -196,6 +196,19 @@ func excessBlobGas(xp: TxPoolRef): GasInt =
 
 proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
+
+proc getPendingNonce*(xp: TxPoolRef; account: Address): AccountNonce =
+  ## Next nonce `account` can use once its pooled transactions are mined: the
+  ## head-state nonce advanced over the gap-free run of pooled transactions.
+  ## This is what `eth_getTransactionCount(account, "pending")` returns on
+  ## other clients.
+  var nonce = xp.getNonce(account)
+  let sn = xp.senderTab.getOrDefault(account)
+  if sn.isNil:
+    return nonce
+  while sn.list.eq(nonce).isOk:
+    inc nonce
+  nonce
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
@@ -525,6 +538,52 @@ func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2] =
         proofs: getProofs(np.proofs, val.blobIndex)))
 
   Opt.none(BlobAndProofV2)
+
+proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: BitArray[128]): Opt[BlobCellsAndProofsV1] =
+  type
+    KzgProof = engine_api_types.KzgProof
+    KzgCells = eip4844.KzgCells
+
+  func getNumIndices(indices: BitArray[128]): int =
+    for i in 0..<indices.len:
+      if indices[i]:
+        inc result
+
+  func getCellsAndProofs(indices: BitArray[128],
+                         cells: KzgCells,
+                         list: openArray[KzgProof],
+                         index: int,
+                         output: var BlobCellsAndProofsV1) =
+    let
+      startIndex = index * CELLS_PER_EXT_BLOB
+      endIndex   = startIndex + CELLS_PER_EXT_BLOB
+      numIndices = indices.getNumIndices
+
+    doAssert(list.len >= endIndex)
+
+    output.blob_cells = newSeqOfCap[Opt[seq[byte]]](numIndices)
+    output.proofs = newSeqOfCap[Opt[KzgProof]](numIndices)
+    for i in 0..<indices.len:
+      if indices[i]:
+        output.blob_cells.add(Opt.some(@(cells[i].bytes)))
+        output.proofs.add(Opt.some(list[startIndex + i]))
+
+  xp.blobTab.withValue(v, val):
+    let
+      np = val.item.pooledTx.blobsBundle
+      blob = cast[ptr eip4844.KzgBlob](np.blobs[val.blobIndex].addr)
+      cells = computeCells(blob[]).valueOr:
+        return Opt.none(BlobCellsAndProofsV1)
+    if np.wrapperVersion == WrapperVersionEIP7594:
+      var res = Opt.some(BlobCellsAndProofsV1())
+      indicesBitarray.getCellsAndProofs(
+        cells, np.proofs,
+        val.blobIndex,
+        res.value
+      )
+      return res
+
+  Opt.none(BlobCellsAndProofsV1)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters

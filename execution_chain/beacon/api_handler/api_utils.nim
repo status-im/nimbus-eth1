@@ -118,6 +118,9 @@ func invalidStatus*(
 func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatusV1 =
   invalidStatus(Opt.some(validHash), msg)
 
+func invalidStatus*(msg: string): PayloadStatusV1 =
+  invalidStatus(Opt.none(Hash32), msg)
+  
 func invalidStatus*(validHash = default(common.Hash32)): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.invalid,
@@ -141,44 +144,44 @@ func validStatus*(validHash: common.Hash32): PayloadStatusV1 =
     latestValidHash: toValidHash(validHash)
   )
 
-func invalidParams*(msg: string): ref ApplicationError =
-  (ref ApplicationError)(
+func invalidParams*(msg: string): ref RpcResponseError =
+  (ref RpcResponseError)(
     code: engineApiInvalidParams,
     msg: msg
   )
 
-func invalidForkChoiceState*(msg: string): ref ApplicationError =
-  (ref ApplicationError)(
+func invalidForkChoiceState*(msg: string): ref RpcResponseError =
+  (ref RpcResponseError)(
     code: engineApiInvalidForkchoiceState,
     msg: msg
   )
 
-func unknownPayload*(msg: string): ref ApplicationError =
-  (ref ApplicationError)(
+func unknownPayload*(msg: string): ref RpcResponseError =
+  (ref RpcResponseError)(
     code: engineApiUnknownPayload,
     msg: msg
   )
 
-func invalidAttr*(msg: string): ref ApplicationError =
-  (ref ApplicationError)(
+func invalidAttr*(msg: string): ref RpcResponseError =
+  (ref RpcResponseError)(
     code: engineApiInvalidPayloadAttributes,
     msg: msg
   )
 
-func unsupportedFork*(msg: string): ref ApplicationError =
-  (ref ApplicationError)(
+func unsupportedFork*(msg: string): ref RpcResponseError =
+  (ref RpcResponseError)(
     code: engineApiUnsupportedFork,
     msg: msg
   )
 
-func tooLargeRequest*(msg: string): ref ApplicationError =
-  (ref ApplicationError)(
+func tooLargeRequest*(msg: string): ref RpcResponseError =
+  (ref RpcResponseError)(
     code: engineApiTooLargeRequest,
     msg: msg
   )
 
-func parseError*(msg: string): ref ApplicationError =
-  (ref ApplicationError)(
+func parseError*(msg: string): ref RpcResponseError =
+  (ref RpcResponseError)(
     code: engineApiParseError,
     msg: msg
   )

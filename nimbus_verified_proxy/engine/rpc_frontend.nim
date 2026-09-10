@@ -563,16 +563,12 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
 
     let header = engine.penaltyOr(await engine.getHeader(blockId("latest")))
 
-    if header.blobGasUsed.isNone():
-      return
-        err((UnavailableDataError, "blobGasUsed missing from latest header", UNTAGGED))
     if header.excessBlobGas.isNone():
       return err(
         (UnavailableDataError, "excessBlobGas missing from latest header", UNTAGGED)
       )
     let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get, com, com.toHardFork(header)) *
-      header.blobGasUsed.get.u256
+      getBlobBaseFee(header.excessBlobGas.get, com, com.toHardFork(header))
 
     ok(blobBaseFee)
 
@@ -607,12 +603,14 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
 
     let (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
     let proof = engine.penaltyOr(
-      (await backend.eth_getProof(address, slots, blockId)).tagBackend(backendIdx)
+      (await backend.eth_getProof(address, slots.toStorageKeys(), blockId)).tagBackend(
+        backendIdx
+      )
     )
     ok(proof)
 
   frontend.eth_feeHistory = proc(
-      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[float64]
   ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
     trace "Received query",
       meth = "eth_feeHistory",

@@ -86,32 +86,36 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
     return err("Client is not initialized")
 
   for enp in unit.engineNewPayloads:
-
-    var status = env.sendNewPayload(enp.newPayloadVersion.uint64, enp.params).valueOr:
-      if enp.validationError.isSome():
-        continue
+    let res = env.sendNewPayload(enp.newPayloadVersion.uint64, enp.params)
+    if res.isErr:
+      if enp.errorCode.isSome:
+        if enp.errorCode.value in res.error:
+          continue
+        else:
+          return err("newPayload produce error code " & res.error &
+            ", expect " & enp.errorCode.value)
       else:
-        return err(error)
+        return err("Unexpected newPayload error: " & res.error)
+    else:
+      if enp.errorCode.isSome:
+        return err("newPayload failed to produce error code " & enp.errorCode.value &
+          ", got: " & $res.value)
 
-    discard status
-    when false:
-      # Skip validation error check, use `unit.lastblockhash` to
-      # determine if the test is pass.
-      if status.validationError.isSome:
-        return err(status.validationError.value)
+    let status = res.value
+    if status.validationError.isSome:
+      if enp.validationError.isNone:
+        return err("Expect no validation error, but got " & status.validationError.value)
+    else:
+      if enp.validationError.isSome:
+        return err("Expect validation error: " & enp.validationError.value & ", but got none")
 
     let y = env.sendFCU(enp.forkchoiceUpdatedVersion.uint64, enp.params).valueOr:
       return err(error)
 
+    # Test pass if the last block hash equal
     discard y
-    when false:
-      # ditto
-      status = y.payloadStatus
-      if status.validationError.isSome:
-        return err(status.validationError.value)
 
   let header = env.chain.latestHeader()
-
   if unit.lastblockhash != header.computeRlpHash:
     return err("last block hash mismatch")
 

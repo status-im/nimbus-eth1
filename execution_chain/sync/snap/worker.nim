@@ -11,13 +11,22 @@
 {.push raises:[].}
 
 import
-  #std/os,
-  pkg/[chronicles, chronos, minilru, results],
-  ./worker/[download, helpers, mpt, session, start_stop, state_db, update,
-            worker_desc]
+  pkg/[chronicles, chronos, minilru, results, stew/byteutils],
+  ./worker/[download, helpers, cache_db, import_coredb, state_forward,
+            start_stop, update, worker_desc]
 
 logScope:
   topics = "snap sync"
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc suspend(buddy: SnapPeerRef) =
+  buddy.only.stateExhausted = buddy.ctx.pool.pivotNum
+
+func isSuspended(buddy: SnapPeerRef): bool =
+  buddy.ctx.pool.pivotNum <= buddy.only.stateExhausted
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -84,49 +93,70 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   block body:
     case ctx.updateSnapState(info):                 # set next state
     of SnapIdle:
-      bodyRc = daemonWaitElseInterval               # take a nap
-
-    of SnapReady:
-      # Start headers download on the beacon sync server to run quasi-parallel
-      # mode to the snap sync.
-      ctx.headerDownloadTrigger(info).isOkOr:
-        bodyRc = daemonWaitReadyInterval            # take a nap
+      discard
 
     of SnapResume:
-      # If there is a pivot, then there is an assembled partial MPT. In that
-      # case, there no point resuming a downloading session.
-      if ctx.sessionPivotActivateCached(info) < PivotOnTrie:
-        # Import/reconstruct in-memory state DB from persistent cache DB.
-        ctx.sessionResume(info).isOkOr:
-           break body                               # shutdown?
+      ctx.downloadInit(info).isOkOr:                # get cache DB ready
+        bodyRc = daemonWaitResumeFailInterval       # not yet? take a nap
+
+    of SnapClear:
+      # Clear cache DB if needed.
+      let hasDataOrErr = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr: true
+      if hasDataOrErr and not ctx.pool.cacheDB.clear(info):
+        bodyRc = daemonWaitClearFailInterval        # take a nap
+        break body
+
+      ctx.resetServices info                        # reset system
+
+      # Start headers download on the beacon sync server to run
+      # in quasi-parallel mode to the snap sync daemon & peers.
+      ctx.headerDownloadTrigger(info).isOkOr:
+        bodyRc = daemonWaitClearFailInterval        # take a nap
+
+    of SnapReady:
+      # Re-trigger headers fetch. This is effective only if the last attempt
+      # was unsuccessful (maybe due to missing FC updates.)
+      ctx.headerDownloadTrigger(info).isOkOr:
+        bodyRc = daemonWaitReadyFailInterval        # take a nap
+
+      if ctx.pool.headersSynced:
+        ctx.downloadInit(info).isOkOr:              # get ready
+          bodyRc = daemonWaitReadyFailInterval      # take a nap
 
     of SnapDownload:
       # Download headers. The request will be silently ignored if the
       # distance to the CL head is too small.
-      discard ctx.headerDownloadTrigger(info, reducedNoise=true)
+      discard ctx.headerDownloadTrigger(info)
+      bodyRc = daemonWaitDownloadInterval           # parallel peer action
 
-      bodyRc = daemonWaitDownloadInterval           # snap dwnld handled by peer
     of SnapDownloadFinish:
       bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
 
-    of SnapMkTrie:
-      ctx.pool.stateDB.flush info                   # flush into persist. cache
+    of SnapBalsFetch:
+      discard ctx.headerDownloadTrigger(info)       # see `SnapDownload`
+      bodyRc = daemonWaitBalsFetchInterval          # parallel peer action
 
-      let ela {.used.} = ctx.sessionMkTrie(info).valueOr:
-        break body                                  # shutdown?
+    of SnapBalsFetchFinish:
+      bodyRc = daemonWaitBalsFetchFinishInterval    # wait for sync
 
-      debug info & ": Partial MPT assembled",
-        ela=ela.toStr, syncState=($ctx.syncState)
+    of SnapStateForward:
+      ctx.stateForward(info).isOkOr:
+        break body
 
-    of SnapAnalyse:
-      let stats {.used.} = ctx.sessionAnalyseFullTrie(info).valueOr:
-        break body                                  # shutdown?
+      # Prepare for next download cyle
+      discard ctx.downloadInit(info)                # get cache DB ready
 
-      # Update pivot state record on DB cache
-      discard ctx.sessionPivotTagUpdate(PivotMptAnalysed, info)
+      debug info & ": Forwarded state", pivotNum=ctx.pool.pivotNum,
+        forwardNum=ctx.pool.forwardNum
 
-      debug info & ": Partial MPT analysed",
-        ela=stats.ela.toStr, syncState=($ctx.syncState)
+    of SnapAssembleMpt:
+      let dbPath = ctx.importCoreDb(info).valueOr:
+        ctx.pool.resetReq = true                    # not much else possible
+        break body
+
+      ctx.pool.coreDb2Path = dbPath
+      debug info & ": CoreDb/Aristo available", dbPath
+      break body
 
     # of TBD ..
 
@@ -155,10 +185,21 @@ proc runPool*(
   ## argument `laps` (starting with `0`) indicated the currend lap of the
   ## repeated loops.
   ##
+  ## If there was no peer available when `buddy.ctx.poolMode` wass set, the
+  ## scheduler will wait until at least one peer is running. Then the
+  ## `runPool()` cycle will be executed (with the single peer.)
+  ##
   ## The argument `last` is set `true` if the last entry is reached.
   ##
   ## Note that this function does not run in `async` mode.
   ##
+  let ctx = buddy.ctx
+
+  if ctx.pool.syncState == SnapDownloadFinish:
+    ctx.downloadCommit(info).isOkOr:                # write back ranges to DB
+      error info & ": Error storing progress", `error`=error
+
+  ctx.statsStateLog info                            # print statistics
   true                                              # stop
 
 template runPeer*(
@@ -174,11 +215,66 @@ template runPeer*(
   ##
   var bodyRc = ZeroDuration
   block body:
-    case buddy.ctx.pool.syncState:
+    let
+      ctx = buddy.ctx
+      peer {.inject,used.} = $buddy.peer            # logging only
+
+    case ctx.pool.syncState:
     of SnapDownload:
+      if buddy.isSuspended():
+        #trace info & ": Suspended on current state", peer,
+        #  pivot=ctx.pool.pivotNum
+        bodyRc = peerWaitExhaustedInterval
+        break body
+
       # Download and cache accounts, storage slots, contracts
-      buddy.downloadAccountsAndStorage(info).isOkOr:
-        bodyRc = peerWaitDownloadInterval           # maybe no CL or peers yet
+      buddy.downloadState(info).isOkOr:
+        if error == ENoDataAvailable:
+          buddy.suspend()
+          debug info & ": Peer stopped downloading", peer,
+            pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
+            nSyncPeers=ctx.nSyncPeers(), `error`=error
+        bodyRc = peerWaitDownloadInterval
+        break body
+
+      bodyRc = peerWaitDownloadInterval
+
+    of SnapBalsFetch:
+      buddy.downloadBals(info).isOkOr:
+        if error == ELockError:
+          let now = Moment.now                      # reduce logging noise
+          if ctx.pool.lockedBalsLog + lockedBalsLogWaitInterval < now:
+            ctx.pool.lockedBalsLog = now
+            trace info & ": BALs downloading locked", peer,
+              pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
+              nSyncPeers=ctx.nSyncPeers()
+          bodyRc = peerWaitBalsLockedInterval
+          break body
+
+        if error == EHeadersMissing:
+          let now = Moment.now                      # reduce logging noise
+          if ctx.pool.lastNoHdrsLog + noHeadersLogWaitInterval < now:
+            ctx.pool.lastNoHdrsLog = now
+            trace info & ": No BALs downloading, headers missing", peer,
+              pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
+              nSyncPeers=ctx.nSyncPeers()
+          discard ctx.headerDownloadTrigger(info)
+          bodyRc = peerWaitHeadersInterval
+          break body
+
+        if error == EMissingEthContext:
+          let now = Moment.now                      # reduce logging noise
+          if ctx.pool.lastNoPeersLog + noPeersLogWaitInterval < now:
+            ctx.pool.lastNoPeersLog = now
+            trace info & ": No BALs supporting eth peers", peer,
+              pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
+              nSyncPeers=ctx.nSyncPeers()
+          bodyRc = peerWaitNoEthPeersInterval
+          break body
+
+        trace info & ": BALs download error", peer,
+          pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
+          nSyncPeers=ctx.nSyncPeers(), `error`=error
 
     else:
       bodyRc = peerWaitElseInterval

@@ -116,6 +116,7 @@ type
     ## Backend interface.
     getVtxFn*: GetVtxFn              ## Read vertex record
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
+    getKeysFn*: GetKeysFn            ## Read Merkle hashes/keys in batch
     getLstFn*: GetLstFn              ## Read saved state
 
     putBegFn*: PutBegFn              ## Start bulk store session

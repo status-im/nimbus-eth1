@@ -17,6 +17,7 @@ import
   ../evm/evm_errors,
   ../rpc/params,
   ./call_common,
+  ./call_evm,
   web3/eth_api_types,
   ../common/common
 
@@ -29,7 +30,7 @@ proc rpcCallEvm*(
     com: CommonRef,
     parentFrame: CoreDbTxRef,
     globalGasCap = 0.GasInt,
-): EvmResult[CallResult] =
+): Result[CallResult, string] =
   # TODO: globalGasCap should configurable by user
 
   let topHeader = Header(
@@ -47,27 +48,33 @@ proc rpcCallEvm*(
   defer:
     vmState.dispose()
 
-  let params = ?toCallParams(vmState, args, globalGasCap, header)
+  let
+    tx = ? toTransaction(vmState, args, globalGasCap, header)
+    intrinsic = tx.intrinsicGas(vmState.hardFork, header.gasLimit, args.sender)
+    params = tx.callParams(args.sender, vmState, intrinsic)
 
   ok(runComputation(params, CallResult))
 
 proc rpcCallEvm*(
     args: TransactionArgs, header: Header, vmState: BaseVMState, globalGasCap = 0.GasInt
-): EvmResult[CallResult] =
+): Result[CallResult, string] =
   # TODO: globalGasCap should configurable by user
   let
-    params = ?toCallParams(vmState, args, globalGasCap, header)
+    tx = ? toTransaction(vmState, args, globalGasCap, header)
+    intrinsic = tx.intrinsicGas(vmState.hardFork, header.gasLimit, args.sender)
+    params = tx.callParams(args.sender, vmState, intrinsic)
   ok(runComputation(params, CallResult))
 
 proc rpcEstimateGas*(
     args: TransactionArgs, header: Header, vmState: BaseVMState, gasCap: GasInt
-): Result[GasInt, (EvmErrorObj, OutputResult)] =
+): Result[GasInt, OutputResult] =
   # Binary search the gas requirement, as it may be higher than the amount used
-  let fork = vmState.fork
-  var params = toCallParams(vmState, args, gasCap, header).valueOr:
-    return err((evmErr(EvmInvalidParam), OutputResult()))
-
   let
+    fork = vmState.fork
+    tx = toTransaction(vmState, args, gasCap, header).valueOr:
+      return err(OutputResult(error: error))
+    intrinsic = tx.intrinsicGas(vmState.hardFork, header.gasLimit, args.sender)
+    params = tx.callParams(args.sender, vmState, intrinsic)
     txBaseCost = if fork >= FkAmsterdam: TX_BASE_COST_2780.GasInt
                  else: TX_BASE_COST.GasInt
 
@@ -80,24 +87,20 @@ proc rpcEstimateGas*(
     # block's gasLimit act as the gas ceiling
     hi = header.gasLimit
 
-  # Normalize the execution fee per gas used by the estimator.
-  if args.gasPrice.isSome and
-      (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
-    return err((evmErr(EvmInvalidParam), OutputResult()))
-
   let feeCap = params.gasPrice
 
   # Recap the highest gas limit with account's available balance.
   if feeCap > 0:
     if args.source.isNone:
-      return err((evmErr(EvmInvalidParam), OutputResult()))
+      return err(OutputResult(error: "source is none, expect some"))
 
     let balance = vmState.readOnlyLedger.getBalance(args.source.get)
     var available = balance
     if args.value.isSome:
       let value = args.value.get
       if value >= available:
-        return err((evmErr(EvmInvalidParam), OutputResult()))
+        return err(OutputResult(error: "available balance not enough: " &
+          $available & ", expect: " & $value))
       available -= value
 
     let allowance = available div feeCap.u256
@@ -118,16 +121,16 @@ proc rpcEstimateGas*(
     hi = gasCap
 
   let
-    intrinsic = intrinsicGas(params, vmState.hardFork, vmState.blockCtx.gasLimit, args.sender)
-    minGasLimit = max(intrinsic.regular, intrinsic.floorDataGas)
+    minGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
 
   # Create a helper to check if a gas allowance results in an executable transaction
   proc executable(gasLimit: GasInt): Result[CallResult, OutputResult] =
     if minGasLimit > gasLimit:
       # Special case, raise gas limit
-      return err(OutputResult())
+      return err(OutputResult(error: "min gas limit exceeds gas limit: " &
+        $minGasLimit & ", gasLimit: " & $gasLimit))
 
-    params.gasLimit = gasLimit
+    params.tx.gasLimit = gasLimit
     # TODO: bail out on consensus error similar to validateTransaction
     # Each trial must run against pristine state; a successful run (e.g. a
     # CREATE2 deploy) otherwise commits into the shared ledger and leaks into
@@ -142,14 +145,14 @@ proc rpcEstimateGas*(
       ok(res)
 
   # Short circuit estimation check: plain value transfer (no data, to has no code)
-  if not params.isCreate and params.input.len == 0 and
-      vmState.readOnlyLedger.getCodeSize(params.to) == 0:
+  if not params.isCreate and tx.payload.len == 0 and
+      vmState.readOnlyLedger.getCodeSize(tx.destination) == 0:
     if executable(txBaseCost).isOk:
       return ok(txBaseCost)
 
   # Execute at highest gas limit first; if it fails, return immediately (no binary search)
   let highResult = executable(hi).valueOr:
-    return err((evmErr(EvmInvalidParam), error))
+    return err(error)
 
   if highResult.gasUsed > 0:
     lo = max(lo, highResult.gasUsed - 1)
@@ -180,7 +183,7 @@ proc rpcEstimateGas*(
     com: CommonRef,
     parentFrame: CoreDbTxRef,
     gasCap: GasInt,
-): Result[GasInt, (EvmErrorObj, OutputResult)] =
+): Result[GasInt, OutputResult] =
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = Header(
     parentHash: headerHash,

@@ -101,10 +101,10 @@ func ethBlockAccessList*(
 
 func ethBlockAccessList*(
     bal: Opt[seq[byte]]): Opt[BlockAccessListRef] {.gcsafe, raises: [RlpError].} =
-  if bal.isNone():
+  if bal.isNone() or bal.value.len == 0:
     Opt.none(BlockAccessListRef)
   else:
-    Opt.some(ethBlockAccessList(bal.get))
+    Opt.some(ethBlockAccessList(bal.value))
 
 # ------------------------------------------------------------------------------
 # Eth types to Web3 types

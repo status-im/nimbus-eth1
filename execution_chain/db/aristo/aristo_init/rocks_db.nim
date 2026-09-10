@@ -95,6 +95,22 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
 
       err(GetKeyNotFound)
 
+proc getKeysFn(db: RdbBackendRef): GetKeysFn =
+  result =
+    proc(
+        rvids: openArray[RootedVertexID],
+        keyvtxs: var openArray[(HashKey, VertexRef)],
+        flags: set[GetVtxFlag],
+    ): Result[void,AristoError] =
+      db.rdb.getKeys(rvids, keyvtxs, flags).isOkOr:
+        return err(error[0])
+
+      for i in 0 ..< rvids.len:
+        if not (keyvtxs[i][0].isValid or keyvtxs[i][1].isValid):
+          return err(GetKeyNotFound)
+
+      ok()
+
 proc getLstFn(db: RdbBackendRef): GetLstFn =
   result =
     proc(): Result[SavedState,AristoError]=
@@ -200,6 +216,7 @@ proc rocksDbBackend*(
 
   db.getVtxFn = getVtxFn be
   db.getKeyFn = getKeyFn be
+  db.getKeysFn = getKeysFn be
   db.getLstFn = getLstFn be
 
   db.putBegFn = putBegFn be

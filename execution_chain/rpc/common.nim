@@ -102,14 +102,14 @@ proc setupAdminRpc*(nimbus: NimbusNode, config: ExecutionClientConf, server: Rpc
 
       return nodeInfo
 
-    proc admin_addPeer(enode: string): bool {.raises: [ApplicationError].} =
+    proc admin_addPeer(enode: string): bool {.raises: [RpcResponseError].} =
       var res = ENode.fromString(enode)
       if res.isOk:
         asyncSpawn node.connectToNode(res.get())
         return true
       # Weird it is, but when addPeer fails, the calee expect
       # invalid params `-32602`(kurtosis test)
-      raise (ref ApplicationError)(code: -32602, msg: "Invalid ENode")
+      raise (ref RpcResponseError)(code: -32602, msg: "Invalid ENode")
 
     proc admin_peers(): seq[PeerInfo] =
       var peers: seq[PeerInfo]

@@ -96,7 +96,7 @@ proc selfDestructEIP150Op(cpt: VmCpt): EvmResultVoid =
   ## selfDestructEip150 (auto generated comment)
   let
     beneficiary = ? cpt.stack.popAddress()
-    condition = not cpt.accountExists(beneficiary)
+    condition = not cpt.accountExistsOrAlive(beneficiary)
     gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
   ? cpt.opcodeGasCost(SelfDestruct,
@@ -110,7 +110,7 @@ proc selfDestructEIP161Op(cpt: VmCpt): EvmResultVoid =
 
   let
     beneficiary = ? cpt.stack.popAddress()
-    isDead      = not cpt.accountExists(beneficiary)
+    isDead      = not cpt.accountExistsOrAlive(beneficiary)
     balance     = cpt.getBalance(cpt.msg.contractAddress)
     condition   = isDead and not balance.isZero
     gasCost     = cpt.gasCosts[SelfDestruct].sc_handler(condition)
@@ -134,11 +134,11 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
   var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
   if beneficiaryIsCold:
     staticGasCosts += COLD_ACCOUNT_ACCESS_2929
-  if staticGasCosts > cpt.gasMeter.gasRemaining:
+  if staticGasCosts > cpt.gasMeter.executionGasLeft:
     return EvmResultVoid.err(gasErr(OutOfGas))
 
   let
-    isDead = not cpt.accountExists(beneficiary)
+    isDead = not cpt.accountExistsOrAlive(beneficiary)
     balance = cpt.getBalance(cpt.msg.contractAddress)
     condition = isDead and not balance.isZero
 
@@ -168,11 +168,11 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
   var staticGasCosts = cpt.gasCosts[SelfDestruct].sc_handler(false)
   if beneficiaryIsCold:
     staticGasCosts += COLD_ACCOUNT_ACCESS_8038
-  if staticGasCosts > cpt.gasMeter.gasRemaining:
+  if staticGasCosts > cpt.gasMeter.executionGasLeft:
     return EvmResultVoid.err(gasErr(OutOfGas))
 
   let
-    isNewAccount = not cpt.accountExists(beneficiary)
+    isNewAccount = not cpt.accountExistsOrAlive(beneficiary)
     balance = cpt.getBalance(cpt.msg.contractAddress)
     condition = isNewAccount and not balance.isZero
 
@@ -183,7 +183,7 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
       ledger.accessList(beneficiary)
       gasCost += COLD_ACCOUNT_ACCESS_8038
 
-  # Charge regular gas before state gas so that a regular-gas OOG
+  # Charge execution gas before state gas so that a execution-gas OOG
   # does not consume state gas that would inflate the parent's
   # reservoir on frame failure.
   ? cpt.opcodeGasCost(SelfDestruct,

@@ -52,22 +52,23 @@ proc validateAuthorization(auth: Authorization, vmState: BaseVMState): Opt[addre
 
   Opt.some(authority)
 
-proc setDelegation*(call: CallParams): int64 =
+proc setDelegation*(params: CallParams): int64 =
   var
-    regularRefund = 0'i64
+    executionRefund = 0'i64
 
   let
-    vmState = call.vmState
+    vmState = params.vmState
     ledger = vmState.ledger
+    tx = params.tx
 
   # EIP-7702
-  for auth in call.authorizationList:
+  for auth in tx.authorizationList:
     let authority = auth.validateAuthorization(vmState).valueOr:
       continue
 
     # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
     if ledger.accountExists(authority):
-      regularRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
+      executionRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
     # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
     let authCode =
@@ -81,24 +82,25 @@ proc setDelegation*(call: CallParams): int64 =
     # 9. Increase the nonce of authority by one.
     ledger.setNonce(authority, auth.nonce + 1)
 
-  regularRefund
+  executionRefund
 
-proc setDelegation*(call: CallParams, c: Computation): EvmResultVoid =
+proc setDelegation*(params: CallParams, c: Computation): EvmResultVoid =
   var
     writtenAccounts: HashSet[addresses.Address]
     delegationSetFor: HashSet[addresses.Address]
 
-  writtenAccounts.incl call.sender
-
-  if call.value.isZero.not:
-    writtenAccounts.incl call.to
+  writtenAccounts.incl params.sender
 
   let
-    vmState = call.vmState
+    vmState = params.vmState
     ledger = vmState.ledger
+    tx = params.tx
+
+  if tx.value.isZero.not:
+    writtenAccounts.incl tx[].destination
 
   # Authorities a delegation was set for earlier in this transaction.
-  for auth in call.authorizationList:
+  for auth in tx.authorizationList:
     let authority = auth.validateAuthorization(vmState).valueOr:
       continue
 

@@ -16,7 +16,7 @@ export rocksdb
 
 const
   LegacyFolder = "nimbus" / "aristo" # pre-alpha
-  DbFolder = "ecdb" # execution client db - must not collide with consensus
+  DbFolder* = "ecdb" # execution client db - must not collide with consensus
 
 type
   RocksDbInstanceRef* = ref object ## Shared handle to a single rocksdb instance

@@ -11,9 +11,9 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos, minilru],
+  pkg/[chronicles, chronos, minilru, stew/interval_set],
   ../../../../wire_protocol,
-  ../../[helpers, state_db, worker_desc],
+  ../../[helpers, worker_desc],
   ./account_helpers
 
 logScope:
@@ -27,10 +27,13 @@ type
 # Private helpers
 # ------------------------------------------------------------------------------
 
+proc registerPeerNoData(buddy: SnapPeerRef; root: StateRoot) =
+  buddy.only.failedReq.stateRoot = root
+
 proc registerPeerError(buddy: SnapPeerRef; root: StateRoot; slowPeer=false) =
   ## Do not repeat the same time-consuming failed request
   buddy.accFetchRegisterError(slowPeer)
-  buddy.only.failedReq.stateRoot.put(root,0u8)
+  buddy.only.failedReq.stateRoot = root
 
 proc maybeSlowPeerError(buddy: SnapPeerRef; ela: Duration; root: StateRoot) =
   ## Register slow response, definitely not fast enough
@@ -48,7 +51,7 @@ proc getAccounts(
   ## Wrapper around `getAccountRange()`
   let start = Moment.now()
 
-  buddy.only.failedReq.stateRoot.peek(StateRoot(req.rootHash)).isErrOr:
+  if buddy.only.failedReq.stateRoot == StateRoot(req.rootHash):
     return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
 
   var resp: AccountRangePacket
@@ -129,9 +132,9 @@ template fetchAccounts*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.accFetchRegisterError()
-        of EUnusedForFetch:
+        of EMissingEthContext, EUnusedForFetch:
           # Not allowed here -- internal error
-          raiseAssert "Unexpected error " & $rc.error.excp
+          raiseAssert "Unexpected fetch error " & $rc.error.excp
 
         # Debug message for other errors
         debug recvInfo & " error", peer, root, reqAcc, nReqAcc,
@@ -195,7 +198,7 @@ template fetchAccounts*(
     elif nRespProof == 0:
       # No data available for this state root.
       #
-      buddy.registerPeerError(stateRoot)
+      buddy.registerPeerNoData(stateRoot)           # not an error per se
       trace recvInfo & " not available", peer, root, reqAcc, nReqAcc,
         ela, syncState, nErrors=buddy.nErrors.fetch.acc
       bodyRc = typeof(bodyRc).err(ENoDataAvailable)

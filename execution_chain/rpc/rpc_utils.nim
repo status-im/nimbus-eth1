@@ -44,15 +44,16 @@ func median(prices: var openArray[GasInt]): GasInt =
 
   prices[middle]
 
-proc invalidParams*(msg: string): ref ApplicationError =
-  (ref ApplicationError)(
+proc invalidParams*(msg: string): ref RpcResponseError =
+  (ref RpcResponseError)(
     code: -32602,
     msg: msg,
   )
 
-proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
+proc calculateMedianGasPrice*(chain: ForkedChainRef): Result[GasInt, string] =
   const minGasPrice = 30_000_000_000.GasInt
-  var prices = chain.latestBlock.transactions.mapIt(it.gasPrice)
+  let blk = ?chain.latestBlock
+  var prices = blk.transactions.mapIt(it.gasPrice)
 
   # TODO: This should properly incorporate the base fee in the block data,
   # and recommend a gas fee that likely gets the block to confirm.
@@ -61,20 +62,20 @@ proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
   # sane minimum for compatibility to unblock testing.
   # Note: When this is fixed, update `tests/graphql/queries.toml` and
   # re-enable the "query.gasPrice" test case (remove `skip = true`).
-  result = max(median(prices), minGasPrice)
+  ok(max(median(prices), minGasPrice))
 
-proc calculateMedianMaxPriorityFeePerGas*(chain: ForkedChainRef): GasInt =
-  let blk = chain.latestBlock
+proc calculateMedianMaxPriorityFeePerGas*(chain: ForkedChainRef): Result[GasInt, string] =
+  let blk = ?chain.latestBlock
   var prices = blk.transactions
     .mapIt(it.effectiveGasTip(blk.header.baseFeePerGas))
     .filterIt(it > 0.GasInt)
 
-  median(prices)
+  ok(median(prices))
 
 proc unsignedTx*(tx: TransactionArgs,
                  chain: ForkedChainRef,
                  defaultNonce: AccountNonce,
-                 chainId: ChainId): Transaction =
+                 chainId: ChainId): Result[Transaction, string] =
   var res: Transaction
 
   if tx.to.isSome:
@@ -88,7 +89,7 @@ proc unsignedTx*(tx: TransactionArgs,
   if tx.gasPrice.isSome:
     res.gasPrice = tx.gasPrice.get.GasInt
   else:
-    res.gasPrice = calculateMedianGasPrice(chain)
+    res.gasPrice = ?calculateMedianGasPrice(chain)
 
   if tx.value.isSome:
     res.value = tx.value.get
@@ -103,13 +104,14 @@ proc unsignedTx*(tx: TransactionArgs,
   res.payload = tx.payload
   res.chainId = chainId
 
-  return res
+  ok(res)
 
 proc populateTransactionObject*(tx: Transaction,
                                 optionalHash: Opt[Hash32] = Opt.none(Hash32),
                                 optionalNumber: Opt[uint64] = Opt.none(uint64),
                                 optionalTimestamp: Opt[EthTime] = Opt.none(EthTime),
-                                txIndex: Opt[uint64] = Opt.none(uint64)): TransactionObject =
+                                txIndex: Opt[uint64] = Opt.none(uint64),
+                                chainId: Opt[UInt256] = Opt.none(UInt256)): TransactionObject =
   result = TransactionObject()
   result.`type` = Opt.some Quantity(tx.txType)
   result.blockHash = optionalHash
@@ -123,25 +125,30 @@ proc populateTransactionObject*(tx: Transaction,
   result.hash = tx.computeRlpHash
   result.input = tx.payload
   result.nonce = Quantity(tx.nonce)
-  result.to = Opt.some(tx.destination)
+  result.to = tx.to
   if txIndex.isSome:
     result.transactionIndex = Opt.some(Quantity(txIndex.get))
   result.value = tx.value
   result.v = Quantity(tx.V)
   result.r = tx.R
   result.s = tx.S
-  result.maxFeePerGas = Opt.some Quantity(tx.maxFeePerGas)
-  result.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
 
   if tx.txType >= TxEip2930:
     result.chainId = Opt.some(tx.chainId)
     result.accessList = Opt.some(tx.accessList)
+  else:
+    if chainId.isSome:
+      result.chainId = chainId
 
-  if tx.txType >= TxEip4844:
+  if tx.txType >= TxEip1559:
+    result.maxFeePerGas = Opt.some Quantity(tx.maxFeePerGas)
+    result.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
+
+  if tx.txType == TxEip4844:
     result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
     result.blobVersionedHashes = Opt.some(tx.versionedHashes)
 
-  if tx.txType >= TxEip7702:
+  if tx.txType == TxEip7702:
     result.authorizationList = Opt.some(tx.authorizationList)
 
 proc populateBlockObject*(blockHash: Hash32,
@@ -322,7 +329,7 @@ proc createAccessList*(header: Header,
       res     = rpcCallEvm(args, header, vmState).valueOr:
                   vmState.dispose()
                   txFrame.dispose()
-                  handleError("failed to call evm: " & $error.code)
+                  handleError("failed to call evm: " & error)
 
     vmState.dispose()
     txFrame.dispose()
@@ -448,7 +455,9 @@ proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, s
   of bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
-    of "latest":
+    of "latest", "pending":
+      # No pending block is assembled outside of payload building, so resolve
+      # "pending" to the head like erigon does instead of rejecting it.
       ok(chain.latestHeader)
     of "finalized":
       ok(chain.finalizedHeader)
@@ -469,12 +478,12 @@ proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag, noHash: bool = fal
   of bidAlias:
     let tag = blockTag.alias.toLowerAscii
     case tag
-    of "latest":
-      ok(chain.latestBlock)
+    of "latest", "pending":
+      chain.latestBlock
     of "finalized":
-      ok(chain.finalizedBlock)
+      chain.finalizedBlock
     of "safe":
-      ok(chain.safeBlock)
+      chain.safeBlock
     # wait till pruner pr is merged for tail semantics to be available, which is the appropriate way to resolve this tag
     of "earliest":
       chain.blockByNumber(base.BlockNumber(0))

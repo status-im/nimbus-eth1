@@ -17,6 +17,9 @@
 # ExecutionPayload in the BeaconBlock to proving that this BeaconBlock is rooted
 # in the historical_summaries.
 #
+# From Gloas onwards the chain starts at the parent block hash in the payload
+# bid instead, see `block_proof_common.nim`.
+#
 # The historical_summaries accumulator is updated for every period since Capella.
 # It can thus be used for block proofs for blocks after the Capella fork.
 #
@@ -70,6 +73,15 @@ type
     beaconBlockProof*: BeaconBlockProofHistoricalSummaries
     beaconBlockRoot*: Digest
     executionBlockProof*: ExecutionBlockProofDeneb
+    slot*: Slot
+
+  BlockProofHistoricalSummariesGloas* = object
+    # Note: `slot` and `beaconBlockRoot` are those of the BeaconBlock that
+    # confirms the execution block, not of the one it was committed in.
+    # Total size (13 + 1 + 14) * 32 bytes + 8 bytes = 904 bytes
+    beaconBlockProof*: BeaconBlockProofHistoricalSummaries
+    beaconBlockRoot*: Digest
+    executionBlockProof*: ExecutionBlockProofGloas
     slot*: Slot
 
   HistoricalSummaries* = HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT]
@@ -127,7 +139,7 @@ func buildProof*(
     blockRoots: array[SLOTS_PER_HISTORICAL_ROOT, Eth2Digest],
     beaconBlock:
       deneb.TrustedBeaconBlock | deneb.BeaconBlock | electra.TrustedBeaconBlock |
-      electra.BeaconBlock,
+      electra.BeaconBlock | fulu.TrustedBeaconBlock | fulu.BeaconBlock,
 ): Result[BlockProofHistoricalSummariesDeneb, string] =
   let
     blockRootIndex = getBlockRootsIndex(beaconBlock)
@@ -136,6 +148,26 @@ func buildProof*(
 
   ok(
     BlockProofHistoricalSummariesDeneb(
+      beaconBlockRoot: hash_tree_root(beaconBlock),
+      beaconBlockProof: beaconBlockProof,
+      executionBlockProof: executionBlockProof,
+      slot: beaconBlock.slot,
+    )
+  )
+
+func buildProof*(
+    blockRoots: array[SLOTS_PER_HISTORICAL_ROOT, Eth2Digest],
+    beaconBlock:
+      gloas.TrustedBeaconBlock | gloas.BeaconBlock | heze.TrustedBeaconBlock |
+      heze.BeaconBlock,
+): Result[BlockProofHistoricalSummariesGloas, string] =
+  let
+    blockRootIndex = getBlockRootsIndex(beaconBlock)
+    executionBlockProof = ?beaconBlock.buildProof()
+    beaconBlockProof = ?blockRoots.buildProof(blockRootIndex)
+
+  ok(
+    BlockProofHistoricalSummariesGloas(
       beaconBlockRoot: hash_tree_root(beaconBlock),
       beaconBlockProof: beaconBlockProof,
       executionBlockProof: executionBlockProof,
@@ -155,7 +187,9 @@ func verifyProof*(
 
 func verifyProof*(
     historical_summaries: HistoricalSummaries,
-    proof: BlockProofHistoricalSummaries | BlockProofHistoricalSummariesDeneb,
+    proof:
+      BlockProofHistoricalSummaries | BlockProofHistoricalSummariesDeneb |
+      BlockProofHistoricalSummariesGloas,
     blockHash: Digest,
     cfg: RuntimeConfig,
 ): bool =

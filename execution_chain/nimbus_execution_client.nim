@@ -163,7 +163,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
     # The user-facing flag is --discv5, but discv4 is still enabled alongside
     # it until the discv4 code is removed.
     nimbus.ethNode.connectToNetwork(
-      enableDiscV4 = config.discv5,
+      enableDiscV4 = false,
       enableDiscV5 = config.discv5,
     )
 
@@ -451,11 +451,25 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   else:
     let (com, keyCacheEnabled) = setupCommonRef(config, params, 0)
 
-  if keyCacheEnabled:
-    # Make sure key cache isn't empty
-    discard com.db.mpt.txRef.computeStateRoot(skipLayers = true).valueOr:
-      fatal "Cannot compute root keys", msg = error
-      quit(QuitFailure)
+  block checkKeyCache:
+    let
+      txFrame = com.db.baseTxFrame()
+      baseNum = txFrame.getSavedStateBlockNumber()
+      base = txFrame.getBlockHeader(baseNum).valueOr:
+        fatal "Cannot load base block header",
+          baseNum, err = error
+        quit(QuitFailure)
+
+    if base.stateRoot == EMPTY_ROOT_HASH:
+      # Prevent calling computeStateRoot if base have no accounts
+      # Usually a genesis block
+      break checkKeyCache
+
+    if keyCacheEnabled:
+      # Make sure key cache isn't empty
+      discard com.db.mpt.txRef.computeStateRoot(skipLayers = true).valueOr:
+        fatal "Cannot compute root keys", msg = error
+        quit(QuitFailure)
 
   defer:
     com.db.close()

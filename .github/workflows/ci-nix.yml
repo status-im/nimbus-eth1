@@ -9,8 +9,8 @@ on:
 
 jobs:
   build:
-    name: '${{ matrix.system }} / ${{ matrix.test }}'
-    timeout-minutes: 25
+    name: '${{ matrix.system }} / ${{ matrix.nixpkg }}'
+    timeout-minutes: 30
     runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false
@@ -38,7 +38,7 @@ jobs:
 
       - name: 'Run Nix build for ${{ matrix.nixpkg }}'
         shell: bash
-        run: nix build -L '.?submodules=1#${{ matrix.nixpkg }}'
+        run: nix build --fallback -L '.?submodules=1#${{ matrix.nixpkg }}'
 
       - name: 'Run NixOS service check for ${{ matrix.nixpkg }}'
         if: ${{ matrix.nixpkg == 'execution-client' }}

@@ -14,6 +14,7 @@
 {.push raises: [].}
 
 import
+  std/tables,
   results,
   "."/[kvt_desc, kvt_layers]
 
@@ -66,20 +67,30 @@ proc delRangeBe*(
 
 # ------------
 
-proc put*(
+proc putMove*(
     db: KvtTxRef;                     # Database
     key: openArray[byte];             # Key of database record to store
-    data: openArray[byte];            # Value of database record to store
+    data: var seq[byte];              # Value of database record to store
       ): Result[void,KvtError] =
   ## For the argument `key` associated the argument `data` as value (which
-  ## will be marked in the top layer cache.)
+  ## will be marked in the top layer cache.) The contents of `data` are taken
+  ## over, leaving it empty.
   if key.len == 0:
     return err(KeyInvalid)
   if data.len == 0:
     return err(DataInvalid)
 
-  db.layersPut(key, data)
+  db.layersPutMove(key, data)
   ok()
+
+proc put*(
+    db: KvtTxRef;                     # Database
+    key: openArray[byte];             # Key of database record to store
+    data: openArray[byte];            # Value of database record to store
+      ): Result[void,KvtError] =
+  ## Variant of `putMove()` copying `data` into the top layer cache.
+  var data = @data
+  db.putMove(key, data)
 
 
 proc del*(
@@ -106,10 +117,12 @@ proc get*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  var data = db.layersGet(key).valueOr:
-    return db.db.getBe key
+  let key = @key
+  for w in db.rstack:
+    w.sTab.withValue(key, item):
+      return ok(item[])
 
-  return ok(move(data))
+  db.db.getBe key
 
 proc len*(
     db: KvtTxRef;                     # Database
@@ -138,9 +151,9 @@ proc multiGet*(
 
   # First fetch each key from the in memory layers
   for i, k in keys:
-    let value = db.layersGet(k)
+    var value = db.layersGet(k)
     if value.isSome():
-      values[i] = value
+      values[i] = move(value)
     else:
       remainingKeys.add(k)
       keyIndexes.add(i)
@@ -150,9 +163,8 @@ proc multiGet*(
     var remainingValues = newSeq[Opt[seq[byte]]](remainingKeys.len())
     ?db.db.multiGetBe(remainingKeys, remainingValues)
 
-    for i, v in remainingValues:
-      let index = keyIndexes[i]
-      values[index] = v
+    for i, v in remainingValues.mpairs:
+      values[keyIndexes[i]] = move(v)
 
   ok()
 
@@ -191,6 +203,7 @@ proc close*(db: KvtDbRef; wipe = false) =
   ## depending on the type of backend (e.g. the `BackendMemory` backend will
   ## always wipe on close.)
   ##
+  db.disposeInstance()
   db.closeFn wipe
 
 # ------------------------------------------------------------------------------

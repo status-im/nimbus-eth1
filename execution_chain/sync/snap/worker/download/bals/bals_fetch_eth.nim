@@ -38,11 +38,11 @@ proc ethGetBals*(
     seenID: HashSet[Hash]
 
   while count < nFetchBalEthPeersMax:
-    var ethBuddy: BeaconPeerRef
+    var ethBuddy = BeaconPeerRef(nil)
 
     # Will not `for()` loop and activate the network here as any peer list
     # might change after the next thread switch.
-    for w in buddy.getEthPeers().items:             # get a buddy not seen yet.
+    for w in buddy.ctx.getEthPeers().items:         # get a buddy not seen yet.
       if w.only.supportsBal and
          w.peerID notin seenID:
         seenID.incl w.peerID
@@ -52,7 +52,7 @@ proc ethGetBals*(
       break                                         # no more peers
 
     let peerID = ethBuddy.peerID
-    buddy.only.failedReq.ethBalHash.get(peerID).isErrOr:
+    buddy.ctx.pool.failedEthBalId.get(peerID).isErrOr:
       if value == zeroHash32 or
          value == req.blockHashes[0]:
         error = err((EAlreadyTriedAndFailed,"","",Moment.now()-start,peerID))

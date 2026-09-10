@@ -21,6 +21,8 @@ import
   ../../execution_chain/sync/wire_protocol,
   ../../execution_chain/sync/wire_protocol/eth/eth_handler {.all.},
   ../../execution_chain/sync/beacon/worker/blocks/blocks_fetch_bal,
+  ../../execution_chain/sync/beacon/worker/worker_desc,
+  ../../execution_chain/core/chain/header_chain_cache,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/core_db/core_apps,
@@ -262,6 +264,86 @@ procSuite "devp2p eth/71 Tests":
 
     for i, balBytes in resp.accessLists:
       check BlockAccessList.decode(balBytes.distinctBase()).expect("valid BAL") == bals[i]
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "fetchBlockAccessListsAll - every requested BAL is returned":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    const numSeeded = 3
+    var
+      hashes: seq[Hash32]
+      bals: seq[BlockAccessList]
+    for i in 1 .. numSeeded:
+      var bal: BlockAccessList = newSeq[AccountChanges](1)
+      bal[0].address.data[19] = i.byte
+
+      let blockHash = makeHash(i)
+      seedBal(env2, blockHash, bal)
+      hashes.add blockHash
+      bals.add bal
+
+    let ctx = BeaconCtxRef()
+    ctx.pool.hdrCache = HeaderChainRef()
+    let buddy = BeaconPeerRef(peer: peer, ctx: ctx)
+    buddy.only.supportsBal = true
+
+    let
+      req = BlockAccessListsRequest(blockHashes: hashes)
+      raws = buddy.fetchBlockAccessListsAll(req)
+
+    check raws.isSome()
+    check raws.value.len() == numSeeded
+
+    for i, balBytes in raws.value:
+      check BlockAccessList.decode(balBytes.distinctBase()).expect("valid BAL") ==
+        bals[i]
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "fetchBlockAccessListsAll - single hash request":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let blockHash = makeHash(1)
+    var bal: BlockAccessList = newSeq[AccountChanges](1)
+    bal[0].address = Address.fromHex("0x1234567890123456789012345678901234567890")
+    seedBal(env2, blockHash, bal)
+
+    let ctx = BeaconCtxRef()
+    ctx.pool.hdrCache = HeaderChainRef()
+    let buddy = BeaconPeerRef(peer: peer, ctx: ctx)
+    buddy.only.supportsBal = true
+
+    let
+      req = BlockAccessListsRequest(blockHashes: @[blockHash])
+      raws = buddy.fetchBlockAccessListsAll(req)
+
+    check raws.isSome()
+    check raws.value.len() == 1
+    check BlockAccessList.decode(raws.value[0].distinctBase()).expect("valid BAL") ==
+      bal
 
     await env2.close()
     await env1.close()

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,6 +17,9 @@ import
   results,
   ./kvt_init/init_common,
   ./[kvt_desc, kvt_layers]
+
+when compileOption("threads"):
+  import eth/common/hashes_rlp, eth/rlp, ../storage_types
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -59,6 +62,16 @@ proc persist*(
   # Store structural single trie entries
   for k,v in txFrame.sTab:
     db.putKvpFn(batch, k, v)
+    when compileOption("threads"):
+      if k.isBlockNumberToHashKey():
+        let number = k.blockNumberFromHashKey()
+        if v.len == 0:
+          db.blockHashes.del(number)
+        else:
+          try:
+            db.blockHashes.put(number, rlp.decode(v, Hash32))
+          except RlpError:
+            db.blockHashes.del(number)
   # TODO above, we only prepare the changes to the database but don't actually
   #      write them to disk - the code below that updates the frame should
   #      really run after things have been written (to maintain sync betweeen

@@ -25,6 +25,9 @@ import
 # ------------------------------------------------------------------------------
 
 proc writeGenesisAlloc*(alloc: GenesisAlloc, db: CoreDbTxRef): Hash32 =
+  if alloc.len == 0:
+    return EMPTY_ROOT_HASH
+
   let ledger = LedgerRef.init(db)
 
   for address, account in alloc:
@@ -86,7 +89,7 @@ proc writeGenesis*(g: Genesis, db: CoreDbTxRef, fork: HardFork): Header =
 
   if fork >= Amsterdam:
     result.blockAccessListHash = Opt.some(EMPTY_BLOCK_ACCESS_LIST_HASH)
-    result.slotNumber = Opt.some(0'u64)
+    result.slotNumber = Opt.some g.slotNumber.get(0'u64)
 
 proc writeGenesis*(params: NetworkParams, db: CoreDbTxRef): Header =
   ## Generate the genesis block header from the `genesis` and `config`

@@ -34,4 +34,5 @@ export
   forkchoiceUpdated,
   getBlobsV1,
   getBlobsV2,
-  getBlobsV3
+  getBlobsV3,
+  getBlobsV4

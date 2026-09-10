@@ -153,7 +153,7 @@ proc extCodeSizeEIP2929Op(cpt: VmCpt): EvmResultVoid =
 proc extCodeSizeEIP8038Op(cpt: VmCpt): EvmResultVoid =
   ## 0x3b, Get size of an account's code (EIP-2929)
   template ecsEIP8038(address): auto =
-    let gasCost = cpt.gasEip8038AccountCheck(address) + WarmStorageReadCost
+    let gasCost = cpt.gasEip8038AccountCheck(address) + WARM_ACCESS
     ? cpt.opcodeGasCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP8038")
     cpt.getCodeSize(address)
 
@@ -207,7 +207,7 @@ proc extCodeCopyEIP8038Op(cpt: VmCpt): EvmResultVoid =
     codePos = cpt.stack.lsPeekMemRef(^3)
     len     = cpt.stack.lsPeekMemRef(^4)
     gasCost = cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len) +
-                cpt.gasEip8038AccountCheck(address) + WarmStorageReadCost
+                cpt.gasEip8038AccountCheck(address) + WARM_ACCESS
 
   cpt.stack.lsShrink(4)
   ? cpt.opcodeGasCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP8038")

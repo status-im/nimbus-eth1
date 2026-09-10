@@ -16,7 +16,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/times,
+  std/[os, times],
   chronos,
   results,
   ssz_serialization,
@@ -57,6 +57,16 @@ proc ensureStateLoaded(b: BeaconProofBuilder, beaconEra: uint64): Result[void, s
   b.hasCachedState = true
   ok()
 
+proc hasEraFiles(eraDir: string): bool =
+  ## Whether `eraDir` holds any `*.era` file, regardless of whether it follows
+  ## the naming convention of the configured network.
+  try:
+    for _ in walkFiles(eraDir / "*.era"):
+      return true
+  except OSError:
+    discard
+  false
+
 proc loadHistoricalDataFromEraDir*(
     cfg: RuntimeConfig, eraDir: string
 ): Result[(HistoricalRoots, HistoricalSummaries), string] =
@@ -64,7 +74,13 @@ proc loadHistoricalDataFromEraDir*(
   ## file in `eraDir`.
   let
     (latestEra, latestPath) = EraFile.latest(cfg, eraDir).valueOr:
-      return err("No era files found in " & eraDir)
+      # Era files are only picked up when their name starts with the network
+      # name of the runtime config, so a network mismatch looks like an empty
+      # directory.
+      if hasEraFiles(eraDir):
+        return err("Era files in " & eraDir & " do not match network " & cfg.name())
+      else:
+        return err("No era files found in " & eraDir)
     latestSlot = start_slot(latestEra)
     eraFile = EraFile.open(latestPath, latestEra).valueOr:
       return err("Cannot open latest era file " & latestPath & ": " & error)
@@ -135,8 +151,61 @@ proc init*(
     )
   )
 
-proc buildProof*(b: BeaconProofBuilder, timestamp: uint64): Result[Proof, string] =
-  ## Build a post-merge block proof for the EL block with the given timestamp.
+proc gloasProof(
+    b: BeaconProofBuilder, slot: Slot, blockHash: Eth2Digest
+): Result[Proof, string] =
+  ## Build the proof for the execution block with `blockHash`, whose payload was
+  ## committed to at `slot`. It is built from the first beacon block after
+  ## `slot`, as that is the block that confirms the payload.
+  # Nothing bounds the number of consecutive empty slots, but a gap of a full
+  # era means the chain is not producing blocks at all, so rather than scanning
+  # on indefinitely, give up there.
+  for confirmingSlot in (slot + 1) .. (slot + SLOTS_PER_HISTORICAL_ROOT):
+    var bytes: seq[byte]
+    ?b.db.getBlockSSZ(b.historicalRoots, b.historicalSummaries, confirmingSlot, bytes)
+
+    if bytes.len() == 0: # Empty slot
+      continue
+
+    let blck =
+      try:
+        readSszForkedSignedBeaconBlock(b.cfg, bytes)
+      except SerializationError as exc:
+        return err(
+          "Cannot deserialize beacon block at slot " & $confirmingSlot & ": " & exc.msg
+        )
+
+    # The confirming block can be in the era after the one committing the payload
+    ?b.ensureStateLoaded(confirmingSlot.uint64 div SLOTS_PER_HISTORICAL_ROOT)
+
+    withBlck(blck):
+      when consensusFork >= ConsensusFork.Gloas:
+        let bid = forkyBlck.message.body.signed_execution_payload_bid.message
+        if bid.parent_block_hash != blockHash:
+          # The payload was never revealed, so it never became canonical
+          return err(
+            "Beacon block at slot " & $confirmingSlot &
+              " does not confirm execution block " & $blockHash
+          )
+
+        let proof = ?block_proof_historical_summaries.buildProof(
+          b.cachedState.block_roots.data, forkyBlck.message
+        )
+
+        return ok(Proof.init(proof))
+      else:
+        return err("Beacon block at slot " & $confirmingSlot & " is pre-Gloas")
+
+  err(
+    "No beacon block found after slot " & $slot &
+      ", the era files may not reach far enough yet"
+  )
+
+proc buildProof*(
+    b: BeaconProofBuilder, timestamp: uint64, blockHash: Eth2Digest
+): Result[Proof, string] =
+  ## Build a post-merge block proof for the EL block with the given timestamp
+  ## and block hash.
   ## Returns a Proof with the proof type set and SSZ-encoded proof data.
   let (afterGenesis, tsSlot) = b.clock.toSlot(times.fromUnix(timestamp.int64))
 
@@ -153,42 +222,26 @@ proc buildProof*(b: BeaconProofBuilder, timestamp: uint64): Result[Proof, string
   ?b.ensureStateLoaded(beaconEra)
 
   let epoch = slot.epoch()
-  if epoch >= b.cfg.GLOAS_FORK_EPOCH:
-    # Gloas removed the execution payload from the BeaconBlockBody
-    err("Gloas fork and later not yet supported for proof building")
-  elif epoch >= b.cfg.DENEB_FORK_EPOCH:
+
+  template summariesProof(T: type): Proof =
     let
       blck = b.db.getBlock(
-        b.historicalRoots,
-        b.historicalSummaries,
-        slot,
-        Opt.none(Eth2Digest),
-        deneb.TrustedSignedBeaconBlock,
+        b.historicalRoots, b.historicalSummaries, slot, Opt.none(Eth2Digest), T
       ).valueOr:
-        return err("No Deneb beacon block found at slot " & $slot)
-
-      proof = ?block_proof_historical_summaries.buildProof(
+        return err("No beacon block found at slot " & $slot)
+      proof = block_proof_historical_summaries.buildProof(
         b.cachedState.block_roots.data, blck.message
-      )
-
-    ok(Proof.init(proof))
-  elif epoch >= b.cfg.CAPELLA_FORK_EPOCH:
-    let
-      blck = b.db.getBlock(
-        b.historicalRoots,
-        b.historicalSummaries,
-        slot,
-        Opt.none(Eth2Digest),
-        capella.TrustedSignedBeaconBlock,
       ).valueOr:
-        return err("No Capella beacon block found at slot " & $slot)
+        return err(error)
 
-      proof = ?block_proof_historical_summaries.buildProof(
-        b.cachedState.block_roots.data, blck.message
-      )
+    Proof.init(proof)
 
-    ok(Proof.init(proof))
-  elif epoch >= b.cfg.BELLATRIX_FORK_EPOCH:
+  case b.cfg.consensusForkAtEpoch(epoch)
+  of ConsensusFork.Phase0, ConsensusFork.Altair:
+    err(
+      "Slot " & $slot & " in epoch " & $epoch & " is pre-Bellatrix, no execution payload"
+    )
+  of ConsensusFork.Bellatrix:
     let
       blck = b.db.getBlock(
         b.historicalRoots,
@@ -197,7 +250,7 @@ proc buildProof*(b: BeaconProofBuilder, timestamp: uint64): Result[Proof, string
         Opt.none(Eth2Digest),
         bellatrix.TrustedSignedBeaconBlock,
       ).valueOr:
-        return err("No Bellatrix beacon block found at slot " & $slot)
+        return err("No beacon block found at slot " & $slot)
 
       batch = HistoricalBatch(
         block_roots: b.cachedState.block_roots.data,
@@ -206,7 +259,13 @@ proc buildProof*(b: BeaconProofBuilder, timestamp: uint64): Result[Proof, string
       proof = ?block_proof_historical_roots.buildProof(batch, blck.message)
 
     ok(Proof.init(proof))
-  else:
-    err(
-      "Slot " & $slot & " in epoch " & $epoch & " is pre-Bellatrix, no execution payload"
-    )
+  of ConsensusFork.Capella:
+    ok(summariesProof(capella.TrustedSignedBeaconBlock))
+  of ConsensusFork.Deneb:
+    ok(summariesProof(deneb.TrustedSignedBeaconBlock))
+  of ConsensusFork.Electra:
+    ok(summariesProof(electra.TrustedSignedBeaconBlock))
+  of ConsensusFork.Fulu:
+    ok(summariesProof(fulu.TrustedSignedBeaconBlock))
+  of ConsensusFork.Gloas, ConsensusFork.Heze:
+    b.gloasProof(slot, blockHash)
