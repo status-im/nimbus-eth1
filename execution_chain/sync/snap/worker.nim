@@ -114,7 +114,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         bodyRc = daemonWaitReadyFailInterval        # take a nap
 
       ctx.downloadInit(info).isOkOr:                # get ready
-          bodyRc = daemonWaitReadyFailInterval      # take a nap
+        bodyRc = daemonWaitReadyFailInterval        # take a nap
 
     of SnapDownload:
       # Download headers. The request will be silently ignored if the
