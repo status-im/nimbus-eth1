@@ -127,7 +127,7 @@ func buildProof*(
     blockRoots: array[SLOTS_PER_HISTORICAL_ROOT, Eth2Digest],
     beaconBlock:
       deneb.TrustedBeaconBlock | deneb.BeaconBlock | electra.TrustedBeaconBlock |
-      electra.BeaconBlock,
+      electra.BeaconBlock | fulu.TrustedBeaconBlock | fulu.BeaconBlock,
 ): Result[BlockProofHistoricalSummariesDeneb, string] =
   let
     blockRootIndex = getBlockRootsIndex(beaconBlock)

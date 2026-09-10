@@ -148,7 +148,9 @@ template downloadState*(
     # * bit 1: do storages
     # * bit 2: do contract codes
     #
-    var doEntity = toMask[int](0..2)
+    var
+      didSomething = false                          # logging only
+      doEntity = toMask[int](0..2)
     while buddy.ctrl.running and doEntity != 0:
 
       if doEntity.testBit(0):
@@ -156,6 +158,7 @@ template downloadState*(
           if error != ECompleted:
             bodyRc = typeof(bodyRc).err(error)
             break
+          didSomething = true                       # logging only
           doEntity.clearBit(0)                      # done with accounts
         doEntity.setBit(1)                          # re-activate storage & code
         doEntity.setBit(2)
@@ -167,6 +170,7 @@ template downloadState*(
           if error != ECompleted:
             bodyRc = typeof(bodyRc).err(error)
             break
+          didSomething = true                       # logging only
           doEntity.clearBit(1)                      # done with storage so far
 
       if doEntity.testBit(2):
@@ -176,6 +180,7 @@ template downloadState*(
           if error != ECompleted:
             bodyRc = typeof(bodyRc).err(error)
             break
+          didSomething = true                       # logging only
           doEntity.clearBit(2)                      # done with code so far
       # End `while ..`
 
@@ -184,9 +189,12 @@ template downloadState*(
         syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
       break body
 
-    debug info & ": Downloaded data", peer, accountsDone=data.accDone,
-      storageDone=data.stoDone, codeDone=data.codeDone,
-      syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
+    if didSomething:
+      debug info & ": Downloaded data", peer, accountsDone=data.accDone,
+        storageDone=data.stoDone, codeDone=data.codeDone,
+        syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
+      discard
+
     # End `block body`
 
   bodyRc                                            # return value

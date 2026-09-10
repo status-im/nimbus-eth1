@@ -31,7 +31,12 @@ type
 
   # -------------------
 
-  BeaconNotifier* = proc(ok: bool) {.gcsafe, raises: [].}
+  BeaconNotifierState* = enum
+    failed
+    reset
+    ok
+
+  BeaconNotifier* = proc(state: BeaconNotifierState) {.gcsafe, raises: [].}
     ## Used for single sprint notification when the header chain is complete.
 
   BeaconError* = tuple

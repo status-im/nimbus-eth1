@@ -27,6 +27,7 @@ type
 proc init*(udb: var UnprocItemKeys) =
   udb.unprocessed = ItemKeyRangeSet.init()
   udb.borrowed = ItemKeyRangeSet.init()
+  udb.syncedOk = false
 
 proc init*(udb: var UnprocItemKeys; initRange: ItemKeyRange) =
   udb.init()

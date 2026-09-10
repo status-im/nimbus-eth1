@@ -617,7 +617,7 @@ proc buildAccumulator*(f: EreFile): Result[EpochRecordCached, string] =
   ok(EpochRecordCached.init(headerRecords))
 
 type HeaderVerifier* = object
-  historicalHashes*: FinishedHistoricalHashesAccumulator
+  historicalHashes*: Opt[FinishedHistoricalHashesAccumulator]
   historicalRoots*: HistoricalRoots
   historicalSummaries*: HistoricalSummaries
 
@@ -625,9 +625,14 @@ proc verifyProof(
     proof: Proof, header: headers.Header, v: HeaderVerifier, cfg: RuntimeConfig
 ): Result[void, string] =
   if proof.proofType == ProofTypeHistoricalHashesAccumulator:
-    let decodedProof = decodeSsz(proof.proofData, HistoricalHashesAccumulatorProof).valueOr:
-      return err("Invalid HistoricalHashesAccumulatorProof: $error")
-    if not v.historicalHashes.verifyProof(header, decodedProof):
+    let
+      decodedProof = decodeSsz(proof.proofData, HistoricalHashesAccumulatorProof).valueOr:
+        return err("Invalid HistoricalHashesAccumulatorProof: $error")
+      historicalHashes = v.historicalHashes.valueOr:
+        return err(
+          "Invalid HistoricalHashesAccumulatorProof: no accumulator for this network"
+        )
+    if not historicalHashes.verifyProof(header, decodedProof):
       return err("Invalid HistoricalHashesAccumulatorProof: verification failed")
   elif proof.proofType == ProofTypeHistoricalRoots:
     let decodedProof = decodeSsz(proof.proofData, BlockProofHistoricalRoots).valueOr:

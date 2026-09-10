@@ -37,8 +37,8 @@ suite "Bootnodes":
 
   test "one malformed entry does not drop the rest of the list":
     let bn = [
-      # discovery-only, TCP port 0 -> "enode: incorrect TCP port"
-      "enode://a9ab68c77cb408e200cd1249202ee8f8d32a948fbdcc8c7b55e0afd7e7238b55e4d0b521f26f8020866e8af4b631825b599e6c5726d3b7573f20da488e0dd596@159.223.116.60:0?discport=9010",
+      # TCP port 0 without a discport -> "enode: incorrect TCP port"
+      "enode://a9ab68c77cb408e200cd1249202ee8f8d32a948fbdcc8c7b55e0afd7e7238b55e4d0b521f26f8020866e8af4b631825b599e6c5726d3b7573f20da488e0dd596@159.223.116.60:0",
       "enode://2c82017536b1b74b62aa2a81769f4a1213ac9edd3a1df43af5fd008f3305e92bfd9351db9881c9c09de2afc79d3f7f6c271cf2f7231f9021926c0674dc02035c@159.223.116.60:30303?discport=30303",
       "enode://c34353f4d5fcc777863c511a09b3b57f1a9df066578b3432fa1e58d8b0a5d35ca0456b9cd1c38bc9cf30ac9bfecf8b13f0712aae1f1ae5537df8794b622f8ad1@157.230.233.160:30303?discport=30303",
       "enode://fec6d370e61500d2b314a064fd371dbddde6ddcc5b864218dc8af597817e0c09d39dfb3ca29a109266ec9a5e77258f7820685f3a920b550aeedd4783786ee3a1@147.182.209.19:30303?discport=30303",
@@ -60,3 +60,10 @@ suite "Bootnodes":
     var boot: BootstrapNodes
     check parseBootstrapNodes(bn, boot).isOk
     check boot.enodes.len == 2
+
+  test "discovery-only enode keeps its discport and trailing comment":
+    var boot: BootstrapNodes
+    check parseBootstrapNodes(["enode://a9ab68c77cb408e200cd1249202ee8f8d32a948fbdcc8c7b55e0afd7e7238b55e4d0b521f26f8020866e8af4b631825b599e6c5726d3b7573f20da488e0dd596@159.223.116.60:0?discport=9010 # nodeops-bootnode"], boot).isOk
+    check boot.enodes.len == 1
+    check boot.enodes[0].address.tcpPort == Port(0)
+    check boot.enodes[0].address.udpPort == Port(9010)

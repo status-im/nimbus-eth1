@@ -74,7 +74,7 @@ proc headerDownloadTrigger*(
   # Ignoring a beacon header fetch cycle unless there are enough headers
   # available to fetch.
   let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
-  if consHeadNum < firstNum + nConsHeadCachedDeltaMax - 1 and
+  if consHeadNum < firstNum + nConsHeadCachedDeltaMin - 1 and
      not ctx.pool.beaconTarget:                     # maybe manual target set?
     let now = Moment.now()
     if ctx.pool.lastNoHdrsLog + noHeadersLogWaitInterval < now:
@@ -84,9 +84,15 @@ proc headerDownloadTrigger*(
     return ok()
 
   # Define event handler to complete beacon syncer download
-  proc storeTopHeaderCB(ok: bool) =
-    if ok:
+  proc storeTopHeaderCB(state: BeaconNotifierState) =
+    case state:
+    of ok:
       ctx.storeCachedHeaders(firstNum, info)
+    of reset:
+      error info & ": Reset request from beacon syncer"
+      ctx.pool.resetReq = true
+    of failed:
+      discard
     bcSync.singleReset().isOkOr:
       error info & ": Unable to reset header download", `error`=error
     ctx.pool.headersSynced = true                   # mark header update done

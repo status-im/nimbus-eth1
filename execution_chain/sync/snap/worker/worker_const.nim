@@ -76,28 +76,37 @@ const
   lockedBalsLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 
+  # ---------
 
-  daemonWaitResumeInterval* = chronos.seconds(5)
-    ## ..
+  daemonWaitResumeFailInterval* = chronos.seconds(5)
+    ## Need some extra time when initialised too early.
 
-  daemonWaitClearInterval* = chronos.seconds(10)
-    ## ..
+  daemonWaitClearFailInterval* = chronos.seconds(10)
+    ## Something failed in `SnapClear` state, e.g. starting header
+    ## download (just avoiding some extra polling.)
 
-  daemonWaitReadyInterval* = chronos.seconds(47)
+  daemonWaitReadyInterval* = chronos.seconds(5)
     ## Some polling interval time waiting until the system gets into download
     ## state when the the FCU modue hash provides a finalised header and there
     ## are eth/xx download peers available.
 
+  daemonWaitReadyFailInterval* = chronos.seconds(10)
+    ## Something failed in `SnapReady` state, e.g. starting header
+    ## download (just avoiding some extra polling.)
+
   daemonWaitDownloadInterval* = chronos.seconds(10)
-    ## Some waiting time at the end of the daemon task which always lingers
-    ## in the background. This one is for `SnapDownload` state.
+    ## Poll waiting for peers downloading snap data.
 
-  daemonWaitDownloadFinishInterval* = chronos.seconds(5)
-    ## Poll waiting for all downloading peers to have stopped
+  daemonWaitDownloadFinishInterval* = chronos.seconds(1)
+    ## Poll waiting for all peers to have stopped
 
-  daemonWaitElseInterval* = chronos.seconds(10)
-    ## Ditto for other states.
+  daemonWaitBalsFetchInterval* = chronos.seconds(5)
+    ## Poll waiting for some peer to download BALs
 
+  daemonWaitBalsFetchFinishInterval* = chronos.seconds(1)
+    ## Poll waiting for all peers to have stopped
+
+  # ---------
 
   peerWaitDownloadInterval* = chronos.seconds(5)
     ## Some waiting time at the end of the daemon task which always lingers
@@ -129,16 +138,20 @@ const
     ## these intervals are sparsely filled and there will be returned not
     ## more than ~1k accounts.
 
-  consHeadSupportWindowSize* = 144
-    ## This might be a bit more than the supported download states window,
-    ## which is 128. If the FCU update header is more than that distance
-    ## apart form the pivot state block number, a BAL download and forward
-    ## cycle will be triggerd.
-
-  nConsHeadCachedDeltaMax* = 128
+  nConsHeadCachedDeltaMin* = 24
     ## If the block number difference between FCU update header and cached
     ## header is larger than this contant, a beacon header fetch cycle is
     ## triggered to fill up the cache.
+
+  nConsHeadSupportWindowSize* = 128
+    ## If the FCU update header is more than that distance apart form the
+    ## pivot state block number, a BAL download and forward cycle will be
+    ## triggerd.
+
+  nConsHeadSupportWindowThreshold* =
+      nConsHeadSupportWindowSize - nConsHeadCachedDeltaMin
+    ## A bit thess than `consHeadSupportWindowSize` for triggering events
+    ## (providing a hysteresis.)
 
   # -----------
 
@@ -231,6 +244,7 @@ const
     ## Default maximum number of BALs for a single auto downloading session.
 
 static:
-  doAssert 0 < nConsHeadCachedDeltaMax
+  doAssert 0 < nConsHeadCachedDeltaMin
+  doAssert 0 < nConsHeadSupportWindowThreshold
 
 # End

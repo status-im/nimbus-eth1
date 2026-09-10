@@ -33,24 +33,39 @@ template setLastPeerSeen(ctx: SnapCtxRef) =
   ctx.pool.lastNoPeersLog = ctx.pool.lastPeerSeen
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Public helper
 # ------------------------------------------------------------------------------
 
-proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
-  ## Helper for `setup()`: Enable external call-back based services
-
+proc resetServices*(ctx: SnapCtxRef; info: static[string]) =
+  ## Initialisztion and reset/restart helper
+  ##
   # Initialise account range accounting
   ctx.accUnproc.init ItemKeyRangeMax
 
   # Set up accounts download metrics
   ctx.accountDownloadMetricsReset()
 
+  # Manage BAL fetching from eth peer
+  ctx.pool.failedEthBalId = EthBalHashSet.init ethBalFetchCapacity
+
+  # Miscellaneous parameters to reset
+  ctx.pool.pivotNum = 0
+  ctx.pool.forwardNum = 0
+  ctx.pool.coreDb2Path.reset
+  ctx.pool.resetReq = false
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
+  ## Helper for `setup()`: Enable external call-back based services
+
   # Set up assembly DB
   ctx.pool.cacheDB = CacheDbRef.init(ctx.pool.baseDir,info).valueOr:
     return false
 
-  # Manage BAL fetching from eth peer
-  ctx.pool.failedEthBalId = EthBalHashSet.init ethBalFetchCapacity
+  ctx.resetServices info
 
   # Set up manual beacon target request. If set, there is no point in
   # waiting for inital CL to sed updates.
