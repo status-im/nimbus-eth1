@@ -363,7 +363,7 @@ libverifproxy_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 	+ $(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
 		-Wno-incompatible-pointer-types \
 		-o build/$@ \
-		tests/library/test_api.c \
+		nimbus_verified_proxy/tests/test_api.c \
 		-lverifproxy $(VERIFPROXY_LDFLAGS)
 	./build/$@
 

@@ -12,30 +12,56 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
+const lightClientPath = "/eth/v1/beacon/light_client"
+
+func beaconRequestURL(baseURL string, endpoint string, params string) (string, error) {
+	var p struct {
+		BlockRoot   string      `json:"block_root"`
+		StartPeriod json.Number `json:"start_period"`
+		Count       json.Number `json:"count"`
+	}
+	if params != "" && params != "null" {
+		if err := json.Unmarshal([]byte(params), &p); err != nil {
+			return "", fmt.Errorf("beacon params for %s: %w", endpoint, err)
+		}
+	}
+
+	base := strings.TrimRight(baseURL, "/") + lightClientPath
+	switch endpoint {
+	case "getLightClientBootstrap":
+		return base + "/bootstrap/0x" + strings.TrimPrefix(p.BlockRoot, "0x"), nil
+	case "getLightClientUpdatesByRange":
+		q := url.Values{}
+		q.Set("start_period", p.StartPeriod.String())
+		q.Set("count", p.Count.String())
+		return base + "/updates?" + q.Encode(), nil
+	case "getLightClientOptimisticUpdate":
+		return base + "/optimistic_update", nil
+	case "getLightClientFinalityUpdate":
+		return base + "/finality_update", nil
+	}
+	return "", fmt.Errorf("unknown beacon endpoint: %s", endpoint)
+}
+
 func SendBeaconRequest(baseURL string, endpoint string, params string) (json.RawMessage, error) {
-	reqURL, err := url.Parse(baseURL + "/" + endpoint)
+	reqURL, err := beaconRequestURL(baseURL, endpoint, params)
 	if err != nil {
 		return nil, err
 	}
 
-	// params is a JSON object — add each key as a query parameter
-	if params != "" && params != "null" && params != "{}" {
-		var queryParams map[string]string
-		if err := json.Unmarshal([]byte(params), &queryParams); err == nil {
-			q := reqURL.Query()
-			for k, v := range queryParams {
-				q.Set(k, v)
-			}
-			reqURL.RawQuery = q.Encode()
-		}
+	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, err
 	}
+	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 
-	resp, err := client.Get(reqURL.String())
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
