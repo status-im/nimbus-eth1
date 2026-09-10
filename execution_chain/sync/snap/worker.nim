@@ -93,11 +93,10 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   block body:
     case ctx.updateSnapState(info):                 # set next state
     of SnapIdle:
-      discard
+      discard                                       # currently placeholder only
 
     of SnapResume:
-      ctx.downloadInit(info).isOkOr:                # get cache DB ready
-        bodyRc = daemonWaitResumeFailInterval       # not yet? take a nap
+      discard ctx.downloadInit(info)                # initialise download
 
     of SnapClear:
       # Clear cache DB if needed.
@@ -108,19 +107,13 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
 
       ctx.resetServices info                        # reset system
 
+    of SnapReady:
       # Start headers download on the beacon sync server to run
       # in quasi-parallel mode to the snap sync daemon & peers.
       ctx.headerDownloadTrigger(info).isOkOr:
-        bodyRc = daemonWaitClearFailInterval        # take a nap
-
-    of SnapReady:
-      # Re-trigger headers fetch. This is effective only if the last attempt
-      # was unsuccessful (maybe due to missing FC updates.)
-      ctx.headerDownloadTrigger(info).isOkOr:
         bodyRc = daemonWaitReadyFailInterval        # take a nap
 
-      if ctx.pool.headersSynced:
-        ctx.downloadInit(info).isOkOr:              # get ready
+      ctx.downloadInit(info).isOkOr:                # get ready
           bodyRc = daemonWaitReadyFailInterval      # take a nap
 
     of SnapDownload:
