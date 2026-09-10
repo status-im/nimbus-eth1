@@ -197,8 +197,28 @@ static void check_proxyCall_errors(Context *ctx) {
     TEST("proxyCall eth_call 2 params: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
-    proxyCall(ctx, "eth_feeHistory", "[4, \"latest\"]", collect_error_cb, &s);
+    proxyCall(ctx, "eth_feeHistory", "[\"0x4\", \"latest\"]", collect_error_cb, &s);
     TEST("proxyCall eth_feeHistory 2 params: error returned", s.called && s.status == RET_DESER_ERROR);
+
+    s = (CbState){0};
+    proxyCall(ctx, "eth_feeHistory", "[4, \"latest\", []]", collect_error_cb, &s);
+    TEST("proxyCall eth_feeHistory decimal blockCount: error returned", s.called && s.status == RET_DESER_ERROR);
+
+    s = (CbState){0};
+    proxyCall(ctx, "eth_feeHistory", "[\"four\", \"latest\", []]", collect_error_cb, &s);
+    TEST("proxyCall eth_feeHistory non-hex blockCount: error returned", s.called && s.status == RET_DESER_ERROR);
+
+    s = (CbState){0};
+    proxyCall(ctx, "eth_feeHistory", "[true, \"latest\", []]", collect_error_cb, &s);
+    TEST("proxyCall eth_feeHistory bool blockCount: error returned", s.called && s.status == RET_DESER_ERROR);
+
+    s = (CbState){0};
+    proxyCall(ctx, "eth_getTransactionByBlockNumberAndIndex", "[\"latest\", \"0x1x\"]", collect_error_cb, &s);
+    TEST("proxyCall eth_getTransactionByBlockNumberAndIndex bad hex index: error returned", s.called && s.status == RET_DESER_ERROR);
+
+    s = (CbState){0};
+    proxyCall(ctx, "eth_getTransactionByBlockNumberAndIndex", "[\"latest\", 1]", collect_error_cb, &s);
+    TEST("proxyCall eth_getTransactionByBlockNumberAndIndex decimal index: error returned", s.called && s.status == RET_DESER_ERROR);
 
     s = (CbState){0};
     proxyCall(ctx, "eth_getLogs", "[]", collect_error_cb, &s);
@@ -227,11 +247,23 @@ static char *read_file(const char *path) {
     return buf;
 }
 
+static char g_fee_history_params[256] = {0};
+
 static void execution_transport(
     Context *ctx, TransportDeliveryCallback cb, void *userData)
 {
     const char *name = execCtxName(userData);
     fprintf(stdout, "  [exec] %s  params=%s\n", name, execCtxParams(userData));
+
+    if (strcmp(name, "eth_feeHistory") == 0) {
+        snprintf(g_fee_history_params, sizeof g_fee_history_params, "%s",
+                 execCtxParams(userData));
+        cb(RET_SUCCESS,
+           "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"oldestBlock\":\"0x17a2d22\","
+           "\"baseFeePerGas\":[\"0x1\",\"0x1\",\"0x1\"],\"gasUsedRatio\":[0.5,0.5]}}",
+           userData);
+        return;
+    }
 
     const char *file = NULL;
     if (strcmp(name, "eth_getBlockByNumber") == 0 ||
@@ -303,11 +335,13 @@ static void check_event_loop(Context *ctx) {
     CbState prio_s    = {0};
     CbState latest_s  = {0};
     CbState chainid_s = {0};
+    CbState fee_s     = {0};
 
     eth_gasPrice(ctx, collect_error_cb, &gas_s);
     eth_maxPriorityFeePerGas(ctx, collect_error_cb, &prio_s);
     eth_getBlockByNumber(ctx, "latest", false, collect_error_cb, &latest_s);
     eth_chainId(ctx, collect_error_cb, &chainid_s);
+    proxyCall(ctx, "eth_feeHistory", "[\"0x2\", \"latest\", []]", collect_error_cb, &fee_s);
 
     drain(ctx, 2000);
 
@@ -315,10 +349,15 @@ static void check_event_loop(Context *ctx) {
     TEST("eth_maxPriorityFeePerGas: callback fired", prio_s.called);
     TEST("eth_getBlockByNumber latest: callback fired", latest_s.called);
     TEST("eth_chainId: callback fired",              chainid_s.called);
+    TEST("proxyCall eth_feeHistory hex blockCount: callback fired", fee_s.called);
     TEST("eth_gasPrice: RET_SUCCESS",                gas_s.status  == RET_SUCCESS);
     TEST("eth_maxPriorityFeePerGas: RET_SUCCESS",    prio_s.status == RET_SUCCESS);
     TEST("eth_getBlockByNumber latest: RET_SUCCESS", latest_s.status == RET_SUCCESS);
     TEST("eth_chainId: RET_SUCCESS",                 chainid_s.status == RET_SUCCESS);
+    TEST("proxyCall eth_feeHistory hex blockCount: RET_SUCCESS", fee_s.status == RET_SUCCESS);
+    TEST("proxyCall eth_feeHistory hex blockCount: forwarded as 0x2, not 0x0",
+         strstr(g_fee_history_params, "\"0x2\"") != NULL &&
+         strstr(g_fee_history_params, "\"0x0\"") == NULL);
 }
 
 int main(void) {
