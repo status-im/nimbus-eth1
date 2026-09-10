@@ -11,8 +11,9 @@ import
   std/[tables],
   eth/common/[hashes, headers],
   chronicles,
+  chronos,
   minilru,
-  web3/execution_types,
+  web3/[conversions, execution_types],
   ./web3_eth_conv,
   ./payload_conv,
   ./api_handler/api_utils,
@@ -33,9 +34,22 @@ type
     blobsBundle*: BlobsBundle
     executionRequests*: Opt[seq[seq[byte]]]
 
+  # Payload assembly runs in a background worker so that the engine API can
+  # answer forkchoiceUpdated before the (CPU-heavy) block packing happens.
+  # The LRU stores the pending/finished build future; getPayload awaits it.
+  PayloadBuildFut* = Future[Result[ExecutionBundle, string]]
+    .Raising([CancelledError])
+
+  PayloadBuildTask = object
+    headHash: Hash32
+    attrs   : PayloadAttributes
+    fut     : PayloadBuildFut # same future object as stored in `queue`
+
   BeaconEngineRef* = ref object
     txPool: TxPoolRef
-    queue : LruCache[Bytes8, ExecutionBundle]
+    queue : LruCache[Bytes8, PayloadBuildFut]
+    buildQueue: AsyncQueue[PayloadBuildTask]
+    buildLoopFut: Future[void].Raising([CancelledError])
 
     # The forkchoice update and new payload method require us to return the
     # latest valid hash in an invalid chain. To support that return, we need
@@ -105,34 +119,6 @@ func setInvalidAncestor(ben: BeaconEngineRef,
   ben.invalidTipsets[origin.computeBlockHash] = invalid
   inc ben.invalidBlocksHits.mgetOrPut(invalid.computeBlockHash, 0)
 
-# ------------------------------------------------------------------------------
-# Constructors
-# ------------------------------------------------------------------------------
-
-func new*(_: type BeaconEngineRef,
-          txPool: TxPoolRef): BeaconEngineRef =
-  let ben = BeaconEngineRef(
-    txPool: txPool,
-    queue : LruCache[Bytes8, ExecutionBundle].init(MaxTrackedPayloads),
-  )
-
-  txPool.com.notifyBadBlock = proc(invalid, origin: Header)
-    {.gcsafe, raises: [].} =
-    ben.setInvalidAncestor(invalid, origin)
-
-  ben
-
-# ------------------------------------------------------------------------------
-# Public functions, setters
-# ------------------------------------------------------------------------------
-
-func putPayloadBundle*(ben: BeaconEngineRef, id: Bytes8,
-          payload: ExecutionBundle) =
-  ben.queue.put(id, payload)
-
-# ------------------------------------------------------------------------------
-# Public functions, getters
-# ------------------------------------------------------------------------------
 func com*(ben: BeaconEngineRef): CommonRef =
   ben.txPool.com
 
@@ -142,12 +128,6 @@ func chain*(ben: BeaconEngineRef): ForkedChainRef =
 func txPool*(ben: BeaconEngineRef): TxPoolRef =
   ben.txPool
 
-func getPayloadBundle*(ben: BeaconEngineRef, id: Bytes8): Opt[ExecutionBundle] =
-  ben.queue.get(id)
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
 proc generateExecutionBundle*(
   ben: BeaconEngineRef,
   headHash: Hash32,
@@ -194,6 +174,112 @@ proc generateExecutionBundle*(
       blockValue: bundle.blockValue,
       executionRequests: bundle.executionRequests)
 
+proc buildLoop(ben: BeaconEngineRef) {.async: (raises: [CancelledError]).} =
+  while true:
+    let task = await ben.buildQueue.popFirst()
+    # Cooperative concurrency: packing is CPU-heavy and shares the thread
+    # with networking, so give pending I/O (e.g. the forkchoiceUpdated
+    # response that scheduled this build) a chance to flush first.
+    discard await idleAsync().withTimeout(10.milliseconds)
+    if task.fut.finished:
+      # Completed by stop() while still queued
+      continue
+    let res = ben.generateExecutionBundle(task.headHash, task.attrs)
+    if res.isOk:
+      let bundle = res.value
+      info "Created payload for block proposal",
+        number = bundle.payload.blockNumber,
+        hash = bundle.payload.blockHash.short,
+        txs = bundle.payload.transactions.len,
+        gasUsed = bundle.payload.gasUsed,
+        blobGasUsed = bundle.payload.blobGasUsed.get(Quantity(0)),
+        txPoolLen = ben.txPool.len,
+        attrs = task.attrs
+    else:
+      error "Failed to create sealing payload", err = res.error
+    task.fut.complete(res)
+
+# ------------------------------------------------------------------------------
+# Constructors
+# ------------------------------------------------------------------------------
+
+proc new*(_: type BeaconEngineRef,
+          txPool: TxPoolRef): BeaconEngineRef =
+  let ben = BeaconEngineRef(
+    txPool: txPool,
+    queue : LruCache[Bytes8, PayloadBuildFut].init(MaxTrackedPayloads),
+    buildQueue: newAsyncQueue[PayloadBuildTask](),
+  )
+
+  txPool.com.notifyBadBlock = proc(invalid, origin: Header)
+    {.gcsafe, raises: [].} =
+    ben.setInvalidAncestor(invalid, origin)
+
+  ben.buildLoopFut = ben.buildLoop()
+  ben
+
+proc stop*(ben: BeaconEngineRef) {.async: (raises: []).} =
+  if not ben.buildLoopFut.isNil:
+    await ben.buildLoopFut.cancelAndWait()
+  # Unblock any getPayload waiter whose build will never run
+  for fut in ben.queue.values:
+    if not fut.finished:
+      fut.complete(Result[ExecutionBundle, string].err(
+        "beacon engine shutting down"))
+
+# ------------------------------------------------------------------------------
+# Public functions, payload building
+# ------------------------------------------------------------------------------
+
+proc startPayloadBuild*(ben: BeaconEngineRef, id: Bytes8,
+                        headHash: Hash32, attrs: PayloadAttributes) =
+  ## Schedule a background build for `id` and return immediately; the
+  ## assembled payload is retrieved (awaited) via `getPayloadBundle`.
+  let fut = PayloadBuildFut.init("beacon_engine.startPayloadBuild")
+  ben.queue.put(id, fut)
+  try:
+    ben.buildQueue.addLastNoWait(
+      PayloadBuildTask(headHash: headHash, attrs: attrs, fut: fut))
+  except AsyncQueueFullError:
+    raiseAssert "unbounded queue cannot be full"
+
+func hasPayloadBundle*(ben: BeaconEngineRef, id: Bytes8): bool =
+  ## True if a build for `id` is in flight or completed successfully.
+  ## A failed build reports false so that a repeated fcU with the same
+  ## attributes schedules a fresh attempt.
+  # `get` (not `contains`) refreshes LRU recency
+  let fut = ben.queue.get(id).valueOr:
+    return false
+  if fut.finished:
+    not fut.cancelled() and fut.value.isOk
+  else:
+    true
+
+func payloadBuildFinished*(ben: BeaconEngineRef, id: Bytes8): Opt[bool] =
+  ## Whether the build for `id` has completed; none if `id` is not tracked.
+  let fut = ben.queue.get(id).valueOr:
+    return Opt.none(bool)
+  Opt.some(fut.finished)
+
+proc getPayloadBundle*(ben: BeaconEngineRef, id: Bytes8):
+    Future[Opt[ExecutionBundle]] {.async: (raises: [CancelledError]).} =
+  let fut = ben.queue.get(id).valueOr:
+    return Opt.none(ExecutionBundle)
+  if not fut.finished:
+    # `join` is multi-waiter safe: cancelling this getPayload call does
+    # not cancel the shared build future.
+    await fut.join()
+  if fut.cancelled():
+    return Opt.none(ExecutionBundle)
+  # Build futures are only ever completed with a value, never failed
+  let res = fut.value
+  if res.isErr:
+    return Opt.none(ExecutionBundle)
+  Opt.some(res.value)
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 func setInvalidAncestor*(ben: BeaconEngineRef, header: Header, blockHash: Hash32) =
   ben.invalidBlocksHits[blockHash] = 1
   ben.invalidTipsets[blockHash] = header
