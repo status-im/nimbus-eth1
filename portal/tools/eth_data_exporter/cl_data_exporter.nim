@@ -487,7 +487,10 @@ proc exportBlockProof*(
     cfg = networkData.metadata.cfg
     slot = Slot(slotNumber)
 
-  if slot.epoch() >= cfg.DENEB_FORK_EPOCH:
+  if slot.epoch() >= cfg.GLOAS_FORK_EPOCH:
+    error "Block proofs for Gloas and later are not supported by this tool", slotNumber
+    quit QuitFailure
+  elif slot.epoch() >= cfg.DENEB_FORK_EPOCH:
     let (proof, blockNumber, blockHash) =
       getBlockProofDeneb(dataDir, eraDir, slotNumber, network)
 

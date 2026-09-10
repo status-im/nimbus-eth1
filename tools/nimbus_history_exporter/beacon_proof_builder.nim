@@ -151,8 +151,61 @@ proc init*(
     )
   )
 
-proc buildProof*(b: BeaconProofBuilder, timestamp: uint64): Result[Proof, string] =
-  ## Build a post-merge block proof for the EL block with the given timestamp.
+proc gloasProof(
+    b: BeaconProofBuilder, slot: Slot, blockHash: Eth2Digest
+): Result[Proof, string] =
+  ## Build the proof for the execution block with `blockHash`, whose payload was
+  ## committed to at `slot`. It is built from the first beacon block after
+  ## `slot`, as that is the block that confirms the payload.
+  # Nothing bounds the number of consecutive empty slots, but a gap of a full
+  # era means the chain is not producing blocks at all, so rather than scanning
+  # on indefinitely, give up there.
+  for confirmingSlot in (slot + 1) .. (slot + SLOTS_PER_HISTORICAL_ROOT):
+    var bytes: seq[byte]
+    ?b.db.getBlockSSZ(b.historicalRoots, b.historicalSummaries, confirmingSlot, bytes)
+
+    if bytes.len() == 0: # Empty slot
+      continue
+
+    let blck =
+      try:
+        readSszForkedSignedBeaconBlock(b.cfg, bytes)
+      except SerializationError as exc:
+        return err(
+          "Cannot deserialize beacon block at slot " & $confirmingSlot & ": " & exc.msg
+        )
+
+    # The confirming block can be in the era after the one committing the payload
+    ?b.ensureStateLoaded(confirmingSlot.uint64 div SLOTS_PER_HISTORICAL_ROOT)
+
+    withBlck(blck):
+      when consensusFork >= ConsensusFork.Gloas:
+        let bid = forkyBlck.message.body.signed_execution_payload_bid.message
+        if bid.parent_block_hash != blockHash:
+          # The payload was never revealed, so it never became canonical
+          return err(
+            "Beacon block at slot " & $confirmingSlot &
+              " does not confirm execution block " & $blockHash
+          )
+
+        let proof = ?block_proof_historical_summaries.buildProof(
+          b.cachedState.block_roots.data, forkyBlck.message
+        )
+
+        return ok(Proof.init(proof))
+      else:
+        return err("Beacon block at slot " & $confirmingSlot & " is pre-Gloas")
+
+  err(
+    "No beacon block found after slot " & $slot &
+      ", the era files may not reach far enough yet"
+  )
+
+proc buildProof*(
+    b: BeaconProofBuilder, timestamp: uint64, blockHash: Eth2Digest
+): Result[Proof, string] =
+  ## Build a post-merge block proof for the EL block with the given timestamp
+  ## and block hash.
   ## Returns a Proof with the proof type set and SSZ-encoded proof data.
   let (afterGenesis, tsSlot) = b.clock.toSlot(times.fromUnix(timestamp.int64))
 
@@ -215,5 +268,4 @@ proc buildProof*(b: BeaconProofBuilder, timestamp: uint64): Result[Proof, string
   of ConsensusFork.Fulu:
     ok(summariesProof(fulu.TrustedSignedBeaconBlock))
   of ConsensusFork.Gloas, ConsensusFork.Heze:
-    # Gloas removed the execution payload from the BeaconBlockBody
-    err("Gloas fork and later not yet supported for proof building")
+    b.gloasProof(slot, blockHash)

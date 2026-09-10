@@ -218,6 +218,7 @@ const
   ProofTypeHistoricalRoots* = 0x01'u64
   ProofTypeHistoricalSummaries* = 0x02'u64
   ProofTypeHistoricalSummariesDeneb* = 0x03'u64
+  ProofTypeHistoricalSummariesGloas* = 0x04'u64
 
 func init*(_: type Proof, proof: HistoricalHashesAccumulatorProof): Proof =
   Proof(proofType: ProofTypeHistoricalHashesAccumulator, proofData: SSZ.encode(proof))
@@ -230,6 +231,9 @@ func init*(_: type Proof, proof: BlockProofHistoricalSummaries): Proof =
 
 func init*(_: type Proof, proof: BlockProofHistoricalSummariesDeneb): Proof =
   Proof(proofType: ProofTypeHistoricalSummariesDeneb, proofData: SSZ.encode(proof))
+
+func init*(_: type Proof, proof: BlockProofHistoricalSummariesGloas): Proof =
+  Proof(proofType: ProofTypeHistoricalSummariesGloas, proofData: SSZ.encode(proof))
 
 proc init*(
     T: type EreGroup,
@@ -655,6 +659,13 @@ proc verifyProof(
       decodedProof, Digest(data: header.computeRlpHash().data), cfg
     ):
       return err("Invalid BlockProofHistoricalSummariesDeneb: verification failed")
+  elif proof.proofType == ProofTypeHistoricalSummariesGloas:
+    let decodedProof = decodeSsz(proof.proofData, BlockProofHistoricalSummariesGloas).valueOr:
+      return err("Invalid BlockProofHistoricalSummariesGloas: $error")
+    if not v.historicalSummaries.verifyProof(
+      decodedProof, Digest(data: header.computeRlpHash().data), cfg
+    ):
+      return err("Invalid BlockProofHistoricalSummariesGloas: verification failed")
   else:
     return err("Invalid proof type")
 
