@@ -65,7 +65,7 @@ suite "test fees verification":
 
   # we are only testing the API and params encoding for this method
   # since it is only passed through to the provider (no verification)
-  test "eth_feeHistory accepts integer percentiles":
+  test "eth_feeHistory accepts fractional percentiles":
     let
       ts = TestApiState.init(1.u256)
       (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
@@ -73,7 +73,7 @@ suite "test fees verification":
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
       blockCount = Quantity(4) # arbitrary number
       newestBlock = blockId(blk.number)
-      percentiles = @[25, 50, 75]
+      percentiles = @[12.5, 50.0, 99.9]
       expectedFeeHistory = FeeHistoryResult(
         oldestBlock: blk.number,
         baseFeePerGas: @[blk.baseFeePerGas.get(0.u256)],
