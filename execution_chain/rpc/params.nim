@@ -10,13 +10,13 @@
 {.push raises: [].}
 
 import
+  results,
   chronicles,
   eth/common/[addresses, headers],
   web3/eth_api_types,
   ../transaction,
   ../transaction/call_common,
   ../evm/types,
-  ../evm/evm_errors,
   ../constants
 
 const
@@ -39,12 +39,12 @@ func txType(n: TransactionArgs): TxType =
 proc toTransaction*(vmState: BaseVMState,
                     args: TransactionArgs,
                     globalGasCap: GasInt,
-                    header: Header): EvmResult[Transaction] =
+                    header: Header): Result[Transaction, string] =
 
   # Reject invalid combinations of pre- and post-1559 fee styles
   if args.gasPrice.isSome and
     (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
-    return err(evmErr(EvmInvalidParam))
+    return err("Invalid combinations of pre and post 1559 fee styles")
 
   # Set default gas & gas price if none were set
   var gasLimit = globalGasCap

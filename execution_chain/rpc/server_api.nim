@@ -376,7 +376,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
         res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
-          raise newException(ValueError, "rpcCallEvm error: " & $error.code)
+          raise newException(ValueError, "rpcCallEvm error: " & error)
       res.output
 
     proc eth_getTransactionReceipt(data: Hash32): ReceiptObject =
@@ -420,10 +420,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         txFrame = api.chain.txFrame(headerHash)
         # TODO: change 0 to configureable gas cap
         gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
-          let data = EthJson.encode(error[1].output.to0xHex()).JsonString
+          let data = EthJson.encode(error.output.to0xHex()).JsonString
           raise (ref RpcResponseError)(
             code: 3,
-            msg: $error[1].error,
+            msg: error.error,
             data: data,
           )
       Quantity(gasUsed)
