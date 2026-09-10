@@ -97,16 +97,29 @@ proc balsFetchFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
 
 proc stateForwardNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
+  #
+  # The supported download window range is
+  # ::
+  #    consHeadNum - nConsHeadSupportWindowSize .. consHeadNum
+  #
+  # If the pivot is below the right end range the supported download window
+  # range
+  # ::
+  #    consHeadNum - nConsHeadSupportWindowTopMargin .. consHeadNum
+  #
+  #    where
+  #
+  #    nConsHeadSupportWindowTopMargin < nConsHeadSupportWindowSize
+  #
+  # then more BAL data need to be fetched. This state transfers directly
+  # to the `SnapBalsFetch` state so avoiding time to sync peers when
+  # finishing download.
+  #
+  # Note that the `pivotNum` will be updated after the forward cycle has
+  # successfully terminated.
+  #
   let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
-  if consHeadNum != 0 and
-     consHeadNum + nConsHeadSupportWindowThreshold < ctx.pool.pivotNum:
-    # The system is at the end or outside the supported download window, so
-    # more BAL data need to be fetched. This state transfers directly to the
-    # `SnapBalsFetch` state so avoiding time to sync peers when finishing
-    # download.
-    #
-    # Note that the `pivotNum` will be updated after a forward cycle has
-    # successfully processed.
+  if ctx.pool.pivotNum + nConsHeadSupportWindowTopMargin < consHeadNum:
     return SnapBalsFetch
   if ctx.pool.pivotNum < ctx.pool.forwardNum:       # state brought forward?
     return SnapStateForward
@@ -118,16 +131,34 @@ proc downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.resetReq:                             # Oops, something failed
     return SnapClear
+
   # Check whether one should BAL fetch and forward the downloaded partial
-  # state when the `consHead` has moved enough so that the `pivot` falls
-  # outside the download window.
-  let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
-  if ctx.pool.pivotNum < consHeadNum + nConsHeadSupportWindowSize:
+  # state when the `consHead` has increased too far so that the `pivot` falls
+  # outside the download range
+  # ::
+  #    consHeadNum - nConsHeadSupportWindowSize .. consHeadNum
+  #
+  # i.e. the `pivotNum` is smaller than the left end of the above range.
+  #
+  # This can be re-phrased as checking whether the ever increading `consHead`
+  # is still in the `pivot` window
+  # ::
+  #    pivotNum .. pivotNum + nConsHeadSupportWindowSize
+  #
+  # The constant `nConsHeadSupportWindowSize` is of size 128 and possibly
+  # some slack added.
+  #
+  let
+    consHeadNum = ctx.hdrCache.latestConsHeadNumber() 
+    pvTop = ctx.pool.pivotNum + nConsHeadSupportWindowSize
+  if pvTop < consHeadNum:                           # pivot window too far left?
     ctx.poolMode = true
     return SnapDownloadFinish                       # => sync peers
+
   ctx.allDownloaded(info).isErrOr:                  # download is complete?
     ctx.poolMode = true
     return SnapDownloadFinish                       # => sync peers
+
   SnapDownload                                      # keep downloading
 
 proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
