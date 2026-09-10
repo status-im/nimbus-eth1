@@ -12,11 +12,14 @@
 
 import
   std/paths,
-  pkg/chronicles,
+  pkg/[chronicles, metrics],
   ./[cache_db, worker_const, worker_desc]
 
 logScope:
   topics = "snap sync"
+
+declareGauge nec_snap_download_window, "" &
+  "Factor of download window availability"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -45,6 +48,7 @@ proc allDownloaded(ctx: SnapCtxRef; info: static[string]): Opt[void] =
 
 proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
+  metrics.set(nec_snap_download_window, 0)          # initialise
   if ctx.pool.contPrevSession:
     return SnapResume
   SnapClear
@@ -155,16 +159,20 @@ proc downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
     ctx.poolMode = true
     return SnapDownloadFinish                       # => sync peers
 
+  if consHeadNum != 0:
+    let dw = (pvTop - consHeadNum).float / nConsHeadSupportWindowSize.float
+    metrics.set(nec_snap_download_window, dw)
+
   ctx.allDownloaded(info).isErrOr:                  # download is complete?
     ctx.poolMode = true
     return SnapDownloadFinish                       # => sync peers
-
   SnapDownload                                      # keep downloading
 
 proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
     return SnapDownloadFinish
+  metrics.set(nec_snap_download_window, 0)          # download window done
   ctx.allDownloaded(info).isErrOr:                  # download is complete?
     return SnapAssembleMpt
   SnapBalsFetch

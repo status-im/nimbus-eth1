@@ -94,8 +94,9 @@ const
     ## Something failed in `SnapReady` state, e.g. starting header
     ## download (just avoiding some extra polling.)
 
-  daemonWaitDownloadInterval* = chronos.seconds(10)
-    ## Poll waiting for peers downloading snap data.
+  daemonWaitDownloadInterval* = chronos.seconds(2)
+    ## Poll waiting for peers downloading snap data. The polling cycle also
+    ## triggers some metrics updates.
 
   daemonWaitDownloadFinishInterval* = chronos.seconds(1)
     ## Poll waiting for all peers to have stopped
