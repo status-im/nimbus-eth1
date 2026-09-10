@@ -624,6 +624,8 @@ type HeaderVerifier* = object
   historicalHashes*: Opt[FinishedHistoricalHashesAccumulator]
   historicalRoots*: HistoricalRoots
   historicalSummaries*: HistoricalSummaries
+  # Only needed for PoS only networks
+  genesisBlockHash*: Opt[Hash32]
 
 proc verifyProof(
     proof: Proof, header: headers.Header, v: HeaderVerifier, cfg: RuntimeConfig
@@ -697,7 +699,17 @@ proc verify*(
       if header.receiptsRoot != calcReceiptsRoot(receipts):
         return err("Invalid receipts root: blocknumber " & $blockNumber)
 
-    if not f.blockIdx.noProofs:
+    if blockNumber == 0 and f.mergeBlockNumber == 0:
+      # The genesis block of a PoS only network predates the beacon chain: the
+      # beacon chain holds it only in its genesis state and never in a beacon
+      # block, so it cannot be proven like the other blocks. It is verified
+      # against the genesis block of the network instead.
+      let genesisBlockHash = v.genesisBlockHash.valueOr:
+        return err("No genesis block hash to verify the genesis block with")
+
+      if header.computeRlpHash() != genesisBlockHash:
+        return err("Invalid genesis block: does not match the network genesis block")
+    elif not f.blockIdx.noProofs:
       let proof = ?getProof(f, blockNumber)
       ?verifyProof(proof, header, v, cfg)
 

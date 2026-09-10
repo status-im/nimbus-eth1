@@ -19,7 +19,7 @@ import
   ../../execution_chain/history/block_proofs/block_proof_historical_hashes_accumulator,
   ../../execution_chain/history/block_proofs/block_proof_historical_roots,
   ../../execution_chain/history/block_proofs/block_proof_historical_summaries,
-  ../../execution_chain/common/[hardforks, chain_config],
+  ../../execution_chain/common/[hardforks, chain_config, genesis],
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/core_db/persistent,
   ../../execution_chain/db/opts,
@@ -353,7 +353,7 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
     networkName = config.network
 
   if mergeBlockNumber == 0:
-    fatal "exportEreFromEra1 is not supported for post-merge-only networks",
+    fatal "exportEreFromEra1 is not supported for PoS only networks",
       network = networkName
     quit(QuitFailure)
 
@@ -423,18 +423,27 @@ proc buildHeaderVerifier(
         defaultDataDir("", network) / "era"
     (historicalRoots, historicalSummaries) =
       ?loadHistoricalDataFromEraDir(networkMetadata.cfg, eraDirPath)
-    # Post-merge-only networks (e.g. hoodi) have no pre-merge history, so there
-    # is no baked-in accumulator to load.
+    isPosOnly = mergeBlockNumber(nid) == 0
+    # PoS only networks (e.g. hoodi) have no pre-merge history, so there is no
+    # baked-in accumulator to load.
     historicalHashes =
-      if mergeBlockNumber(nid) == 0:
+      if isPosOnly:
         Opt.none(FinishedHistoricalHashesAccumulator)
       else:
         Opt.some(loadAccumulator(network))
+    # Their genesis block cannot be proven, so it gets verified against the
+    # genesis block of the network itself.
+    genesisHash =
+      if isPosOnly:
+        Opt.some(genesisBlockHash(networkParams(nid)))
+      else:
+        Opt.none(Hash32)
   ok(
     HeaderVerifier(
       historicalHashes: historicalHashes,
       historicalRoots: historicalRoots,
       historicalSummaries: historicalSummaries,
+      genesisBlockHash: genesisHash,
     )
   )
 

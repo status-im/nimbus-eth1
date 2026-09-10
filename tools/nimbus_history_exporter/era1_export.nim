@@ -96,8 +96,7 @@ proc exportEra1*(config: HistoryExportConf) =
     networkName = config.network
 
   if mergeBlockNumber == 0:
-    fatal "exportEra1 is not supported for post-merge-only networks",
-      network = networkName
+    fatal "exportEra1 is not supported for PoS only networks", network = networkName
     quit(QuitFailure)
 
   let
