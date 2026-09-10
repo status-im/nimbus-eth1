@@ -253,7 +253,12 @@ proc exportEreFile(
               "--era-dir required for post-merge proof building (block " & $blockNumber &
                 ")"
             )
-          ?group.update(e2, blockNumber, ?builder.buildProof(header.timestamp.uint64))
+          # The block hash is only needed from Gloas onwards, where the proof is
+          # built from the beacon block that confirms this execution block
+          let proof = ?builder.buildProof(
+            header.timestamp.uint64, Digest(data: header.computeRlpHash().data)
+          )
+          ?group.update(e2, blockNumber, proof)
 
     # Step 5: total difficulty, only in pre-merge and merge eras
     # https://github.com/eth-clients/e2store-format-specs/blob/ca2523a6420d64336000f5607c0b59df1a08c83b/formats/ere.md#merge-transition
