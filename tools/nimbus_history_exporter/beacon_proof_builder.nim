@@ -209,7 +209,7 @@ proc buildProof*(
   ## Returns a Proof with the proof type set and SSZ-encoded proof data.
   let (afterGenesis, tsSlot) = b.clock.toSlot(times.fromUnix(timestamp.int64))
 
-  # On PoS-only networks (e.g. hoodi), GENESIS_DELAY > 0 means the EL
+  # On PoS only networks (e.g. hoodi), GENESIS_DELAY > 0 means the EL
   # genesis block's timestamp predates the CL genesis time. The genesis beacon
   # block at slot 0 holds the genesis EL payload, so we use slot 0.
   let slot =
