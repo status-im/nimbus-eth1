@@ -19,6 +19,13 @@ import
   results,
   "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike, aristo_vid]
 
+const
+  STO_PROBE_SHALLOW = 3
+    ## Largest depth hint at which a storage trie counts as shallow
+  STO_PROBE_BIAS = 2
+    ## Levels above the hint to start probing a shallow storage trie, trading
+    ## a lookup that no cache can serve for a cacheable one
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -166,8 +173,12 @@ proc retrieveStoLeaf(
       ): Result[VertexRef,AristoError] =
   ## Walk the storage trie as far as the in-memory caches reach, then probe the
   ## static vids from `hint` down to the first uncached level before reading
-  ## the rest of the path from the backend.
-  let full = NibblesBuf.fromBytes(stoPath.data)
+  ## the rest of the path from the backend, skipping the probe when it cannot
+  ## reach below the level the caches already resolved.
+  let
+    full = NibblesBuf.fromBytes(stoPath.data)
+    probeHint =
+      if hint <= STO_PROBE_SHALLOW: max(0, hint - STO_PROBE_BIAS) else: hint
   var
     path = full
     next = stoID
@@ -186,37 +197,38 @@ proc retrieveStoLeaf(
     level += common
     next = nxt
 
-  for sl in countdown(hint, level + 1):
-    let vtx = db.getVtxRc((stoID, full.staticVid(sl))).valueOr:
-      continue
-    case vtx[0].vType
-    of Leaves:
-      return
-        if LeafRef(vtx[0]).pfx != full.slice(sl):
-          err FetchPathNotFound
-        else:
-          ok vtx[0]
-    of BoundaryNode:
-      let vtx = BoundaryNodeRef(vtx[0])
-      if full.slice(sl).sharedPrefixLen(vtx.pfx) < vtx.pfx.len:
-        return err FetchPathNotFound
-      return err HikeBranchUnresolvedEdge
-    of ExtBranch:
-      let vtx = ExtBranchRef(vtx[0])
-      if vtx.pfx != full.slice(sl, sl + vtx.pfx.len):
-        return err FetchPathNotFound
-      next = vtx.bVid(full[sl + vtx.pfx.len])
-      if not next.isValid():
-        return err FetchPathNotFound
-      path = full.slice(sl + vtx.pfx.len + 1)
-      break
-    of Branch:
-      let vtx = BranchRef(vtx[0])
-      next = vtx.bVid(full[sl])
-      if not next.isValid():
-        return err FetchPathNotFound
-      path = full.slice(sl + 1)
-      break
+  if level + 2 <= probeHint:
+    for sl in countdown(probeHint, level + 1):
+      let vtx = db.getVtxRc((stoID, full.staticVid(sl))).valueOr:
+        continue
+      case vtx[0].vType
+      of Leaves:
+        return
+          if LeafRef(vtx[0]).pfx != full.slice(sl):
+            err FetchPathNotFound
+          else:
+            ok vtx[0]
+      of BoundaryNode:
+        let vtx = BoundaryNodeRef(vtx[0])
+        if full.slice(sl).sharedPrefixLen(vtx.pfx) < vtx.pfx.len:
+          return err FetchPathNotFound
+        return err HikeBranchUnresolvedEdge
+      of ExtBranch:
+        let vtx = ExtBranchRef(vtx[0])
+        if vtx.pfx != full.slice(sl, sl + vtx.pfx.len):
+          return err FetchPathNotFound
+        next = vtx.bVid(full[sl + vtx.pfx.len])
+        if not next.isValid():
+          return err FetchPathNotFound
+        path = full.slice(sl + vtx.pfx.len + 1)
+        break
+      of Branch:
+        let vtx = BranchRef(vtx[0])
+        next = vtx.bVid(full[sl])
+        if not next.isValid():
+          return err FetchPathNotFound
+        path = full.slice(sl + 1)
+        break
 
   db.retrieveLeaf(stoID, path, next)
 
