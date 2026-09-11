@@ -1,0 +1,146 @@
+# Nimbus
+# Copyright (c) 2026 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+# Everything that builds the stateless guest: the bare-metal cross-compile, the
+# host binary and the zkVM ELFs.
+#
+# Separate from ci.yml because each zkVM brings its own toolchain and vendor
+# archive.
+
+name: Stateless guest CI
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - 'doc/**'
+      - 'portal/**'
+      - '**/*.md'
+      - 'hive_integration/**'
+      - 'nimbus_verified_proxy/**'
+      - 'docker/**'
+      - 'metrics/**'
+
+  pull_request:
+    paths-ignore:
+      - 'doc/**'
+      - 'portal/**'
+      - '**/*.md'
+      - 'hive_integration/**'
+      - 'nimbus_verified_proxy/**'
+      - 'docker/**'
+      - 'metrics/**'
+
+  workflow_dispatch:
+
+concurrency: # Cancel stale PR builds (but not push builds)
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  stateless_guest:
+    name: Stateless guest (bare-metal + ZisK)
+
+    strategy:
+      matrix:
+        os: [linux]
+        cpu: [amd64]
+
+    runs-on: ubuntu-22.04
+
+    # Pinned, so a toolchain or vendor bump is a visible commit rather than a
+    # silent change in what CI proved.
+    env:
+      XPACK_GCC_VERSION: 15.2.0-1
+      ZISK_REF: v1.0.0-alpha
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout nimbus-eth1
+        uses: actions/checkout@v6
+
+      - id: shared-action
+        uses: ./.github/actions/shared
+        with:
+          nim-cache: true
+
+      # ~400 MB extracted, so cache on the version rather than refetch per run.
+      - name: Cache xPack riscv-none-elf-gcc
+        id: xpack-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.local/xPacks/riscv-none-elf-gcc
+          key: xpack-riscv-none-elf-gcc-${{ env.XPACK_GCC_VERSION }}
+
+      - name: Install xPack riscv-none-elf-gcc
+        if: steps.xpack-cache.outputs.cache-hit != 'true'
+        run: |
+          V="${XPACK_GCC_VERSION}"
+          B="https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v$V"
+          A="xpack-riscv-none-elf-gcc-$V-linux-x64.tar.gz"
+          curl -sSLO "$B/$A"
+          curl -sSLO "$B/$A.sha"
+          sha256sum -c "$A.sha"   # verify before extracting
+          D="$HOME/.local/xPacks/riscv-none-elf-gcc"
+          mkdir -p "$D"
+          tar -xzf "$A" -C "$D" --strip-components=1
+
+      # ZisK does not ship this as a binary, it has to come from a checkout.
+      # riscv64im-unknown-none-elf is a Tier 3 target: no prebuilt core/alloc
+      # ships for it, so nightly plus rust-src are needed for -Z build-std to
+      # compile them.
+      - name: Cache ZisK static library
+        id: zisk-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.local/zisk/libziskos_staticlib.a
+          key: ziskos-staticlib-${{ env.ZISK_REF }}
+
+      - name: Build ZisK static library
+        if: steps.zisk-cache.outputs.cache-hit != 'true'
+        run: |
+          rustup toolchain install nightly --component rust-src
+          git clone --depth 1 --branch "${ZISK_REF}" \
+            https://github.com/0xPolygonHermez/zisk.git /tmp/zisk
+          cd /tmp/zisk
+          cargo +nightly build -p ziskos-staticlib --release \
+            --target riscv64im-unknown-none-elf -Z build-std=core,alloc \
+            --config 'profile.release.lto="fat"' --features panic-handler
+          mkdir -p "$HOME/.local/zisk"
+          cp target/riscv64im-unknown-none-elf/release/libziskos_staticlib.a \
+             "$HOME/.local/zisk/"
+
+      - name: Build the guest
+        run: |
+          ./env.sh nim --version
+          DEFAULT_MAKE_FLAGS="-j$(nproc)"
+          GCC="$HOME/.local/xPacks/riscv-none-elf-gcc/bin/riscv-none-elf-gcc"
+          $GCC --version | head -1
+
+          # Nim -> C for a bare-metal riscv target. Stops before the C compiler,
+          # so this is only a check that the guest still builds under
+          # os:any/standalone.
+          make ${DEFAULT_MAKE_FLAGS} stateless_guest_baremetal
+
+          # Host binary, reading and writing over stdin/stdout.
+          make ${DEFAULT_MAKE_FLAGS} stateless_guest_native
+
+          # The real artifact: cross-compiled and linked against the vendor
+          # archive. Catches anything the two above cannot, since only this one
+          # links.
+          make ${DEFAULT_MAKE_FLAGS} \
+            ZKVM=zisk \
+            ZKVM_GCC="$GCC" \
+            ZISK_LIB="$HOME/.local/zisk/libziskos_staticlib.a" \
+            stateless_guest_zkvm
