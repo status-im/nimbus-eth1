@@ -22,7 +22,6 @@ import
   ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/ledger,
   ../../execution_chain/history/db/ere_db,
-  ../../execution_chain/rpc/debug,
   ../../execution_chain/stateless/[stateless_execution, stateless_execution_helpers]
 
 const
