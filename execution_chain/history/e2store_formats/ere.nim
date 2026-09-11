@@ -381,16 +381,26 @@ func ereFileName*(
 
 func parseEreFileName*(
     path: string
-): Result[tuple[network: string, noProofs: bool, noReceipts: bool], string] =
-  ## Parses the network name and profile flags from an ere filename.
+): Result[tuple[network: string, era: Era, noProofs: bool, noReceipts: bool], string] =
+  ## Parses the network name, era and profile flags from an ere filename.
   ## Format: {network}-{era:05}-{hash}[-noproofs][-noreceipts].ere
-  let name = splitFile(path).name.toLowerAscii()
-  let dashPos = name.find('-')
-  if dashPos <= 0:
-    return err("Cannot parse network name from filename: " & path)
+  let
+    name = splitFile(path).name.toLowerAscii()
+    parts = name.split('-')
+
+  if parts.len() < 3 or parts[0].len() == 0:
+    return err("Cannot parse ere filename: " & path)
+
+  let era =
+    try:
+      parseBiggestUInt(parts[1])
+    except ValueError:
+      return err("Cannot parse era from filename: " & path)
+
   ok(
     (
-      network: name[0 ..< dashPos],
+      network: parts[0],
+      era: Era(era),
       noProofs: "noproofs" in name,
       noReceipts: "noreceipts" in name,
     )
