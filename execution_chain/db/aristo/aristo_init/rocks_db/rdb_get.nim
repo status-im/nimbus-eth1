@@ -16,7 +16,7 @@
 import
   rocksdb,
   results,
-  ../../[aristo_blobify, aristo_desc],
+  ../../[aristo_blobify, aristo_desc, aristo_fetch_stats],
   ./rdb_desc,
   std/concurrency/atomics
 
@@ -327,6 +327,8 @@ proc getVtx*(
 
   if GetVtxFlag.CacheOnly in flags:
     return err((GetVtxNotCached, ""))
+
+  countDbGet()
 
   # Otherwise fetch from backend database
   var

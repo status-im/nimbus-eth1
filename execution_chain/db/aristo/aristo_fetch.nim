@@ -17,7 +17,8 @@ import
   std/[atomics, typetraits],
   eth/common/[base, hashes],
   results,
-  "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike, aristo_vid]
+  "."/[aristo_compute, aristo_desc, aristo_fetch_stats, aristo_get, aristo_layers,
+       aristo_hike, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -338,15 +339,28 @@ proc fetchLastCheckpoint*(
   let state = ?db.db.getLstBe()
   ok state.serial
 
+proc fetchAccountImpl(
+    db: AristoTxRef;
+    accPath: Hash32;
+      ): Result[AristoAccount,AristoError] =
+  let leafVtx = ? db.retrieveAccLeaf(accPath)
+
+  ok leafVtx.account
+
 proc fetchAccount*(
     db: AristoTxRef;
     accPath: Hash32;
       ): Result[AristoAccount,AristoError] =
   ## Fetch an account record from the database indexed by `accPath`.
   ##
-  let leafVtx = ? db.retrieveAccLeaf(accPath)
-
-  ok leafVtx.account
+  when LeafFetchStats:
+    let
+      counters = fetchCounters()
+      before = counters.mark()
+    result = db.fetchAccountImpl(accPath)
+    counters.recordAccFetch(before)
+  else:
+    db.fetchAccountImpl(accPath)
 
 proc fetchStateRoot*(
     db: AristoTxRef;
@@ -374,15 +388,11 @@ proc hasAccount*(
     return ok(false)
   err(error)
 
-proc fetchSlot*(
+proc fetchSlotImpl(
     db: AristoTxRef;
     accPath: Hash32;
     stoPath: Hash32;
       ): Result[UInt256,AristoError] =
-  ## For a storage tree related to account `accPath`, fetch the data record
-  ## from the database indexed by `path`. Returns err(FetchPathNotFound) if the
-  ## account does not exist and 0'u256 if the account has not stored anything
-  ## at the given slot
   let mixPath = mixUp(accPath, stoPath)
 
   db.layersGetStoLeaf(mixPath).isErrOr:
@@ -397,7 +407,16 @@ proc fetchSlot*(
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
 
+  when LeafFetchStats:
+    let
+      accCounters = fetchCounters()
+      accBefore = accCounters.mark()
+
   let (stoID, hint) = ?db.fetchStorageInfo(accPath)
+
+  when LeafFetchStats:
+    accCounters.recordSlotAccLookup(accBefore)
+
   if not stoID.isValid():
     db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
     return ok 0'u256
@@ -420,6 +439,24 @@ proc fetchSlot*(
   let leaf = StoLeafRef(leafRc.value)
   db.cacheStoLeaf(mixPath, CachedStoLeaf.init(leaf.pfx, leaf.stoData))
   return ok leaf.toStoData()
+
+proc fetchSlot*(
+    db: AristoTxRef;
+    accPath: Hash32;
+    stoPath: Hash32;
+      ): Result[UInt256,AristoError] =
+  ## For a storage tree related to account `accPath`, fetch the data record
+  ## from the database indexed by `path`. Returns err(FetchPathNotFound) if the
+  ## account does not exist and 0'u256 if the account has not stored anything
+  ## at the given slot
+  when LeafFetchStats:
+    let
+      counters = fetchCounters()
+      before = counters.mark()
+    result = db.fetchSlotImpl(accPath, stoPath)
+    counters.recordSlotFetch(before)
+  else:
+    db.fetchSlotImpl(accPath, stoPath)
 
 proc fetchStorageRoot*(
     db: AristoTxRef;
