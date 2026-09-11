@@ -11,6 +11,7 @@
 
 import
   ../aristo_desc,
+  ../aristo_fetch_stats,
   ../aristo_desc/desc_backend
 
 from ../../opts import defaultMaxSnapshots
@@ -113,6 +114,8 @@ proc close*(db: AristoDbRef; wipe = false) =
   ##
   ## This distructor may be used on already *destructed* descriptors.
   ##
+  logLeafFetchStats()
+
   when compileOption("threads"):
     db.accLeaves.dispose()
     db.stoLeaves.dispose()

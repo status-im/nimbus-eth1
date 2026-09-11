@@ -15,7 +15,7 @@
 
 import
   results,
-  "."/[aristo_desc, aristo_layers]
+  "."/[aristo_desc, aristo_fetch_stats, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -68,6 +68,8 @@ proc getVtxRc*(
       ): Result[(VertexRef, int),AristoError] =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ##
+  countVtxLookup()
+
   block body:
     # If the vertex marked is to be deleted on the backend, a `VertexRef(nil)`
     # entry is kept in the local table in which case it is returned as the
@@ -78,6 +80,8 @@ proc getVtxRc*(
       return ok vtx
     else:
       return err(GetVtxNotFound)
+
+  countBackendLookup()
 
   ok (?db.db.getVtxBe(rvid, flags), dbLevel)
 
