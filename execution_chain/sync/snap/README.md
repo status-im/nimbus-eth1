@@ -105,13 +105,12 @@ TODO
 Metrics
 -------
 
-| *Variable*                           | *Logic type*    | *Short description*     |
-|:-------------------------------------|:---------------:|:------------------------|
-|                                      |                 |                         |
-| nec_snap_accumulated_states_coverage | factor of 2^256 | active account ranges   |
-| nec_snap_archived_states_coverage    | factor of 2^256 | archived account ranges |
-| nec_snap_active_states               | number          | number of active states |
-| nec_snap_merged_mpt_coverage         | factor of 2^256 | MPT bulder completeness |
+| *Variable*                 | *Logic type*      | *Short description*     |
+|:---------------------------|:-----------------:|:------------------------|
+|                            |                   |                         |
+| nec_snap_accounts_coverage | factor 0.0 .. 1.0 | account ranges covered  |
+| nec_snap_download_window   | factor 0.0 .. 1.0 | window availability     |
+| nec_snap_snap_peers        | number            | active snap peers       |
 
 ###  Graphana example
 
