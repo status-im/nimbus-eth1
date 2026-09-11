@@ -90,6 +90,7 @@ type
     mode: HeaderChainMode       # header chain state
     stopNum: Opt[BlockNumber]   # syncing against a fixed base header
     stopHash: Hash32            # ditto
+    finNum: Opt[BlockNumber]    # block number of finalised header from request
     ante: Header                # antecedent, bottom of header chain
     head: Header                # top end of header chain, highest block number
     headHash: Hash32
@@ -281,9 +282,9 @@ proc tryFcParent(hc: HeaderChainRef; hdr: Header): HeaderChainMode =
   # that this function is called with decreasing block numbers.)
   let baseNum = hc.chain.baseNumber()
   if baseNum + 1 < hdr.number:
-    return collecting                          # inconclusive
+    return collecting                               # inconclusive
 
-  return orphan                                # maybe on the wrong branch
+  return orphan                                     # maybe on the wrong branch
 
 # ------------------------------------------------------------------------------
 # Private fork choice call back function
@@ -328,7 +329,8 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
       # Update `FC` module
       hc.chain.pendingFCU = f
       if f == hc.session.headHash:
-        # Note that `tryUpdatePendingFCU()` wil reset `pendingFCU`.
+        hc.session.finNum = Opt.some(h.number)      # needed by snap sync
+        # Note that `tryUpdatePendingFCU()` will reset `pendingFCU`.
         discard hc.chain.tryUpdatePendingFCU(f, h.number)
 
       # Inform client app about that a new session has started.
@@ -526,7 +528,7 @@ proc put*(
   elif hc.session.ante.number <= hc.session.stopNum.unsafeGet():
     # Oops, not allowed
     hc.session.mode = orphan
-    debug "node mismatch => orphan", ante=hc.session.ante.number,
+    debug "block number mismatch => orphan", ante=hc.session.ante.number,
       stopNum=hc.session.stopNum.unsafeGet()
     return ok()
 
@@ -561,6 +563,7 @@ proc put*(
         return err("Parent hash mismatch for rev[" & $n & "].number=" & $bn)
 
       if hash == hc.chain.pendingFCU:
+        hc.session.finNum = Opt.some(hdr.number)    # needed by snap sync
         if hc.chain.tryUpdatePendingFCU(hash, hdr.number):
           debug "PendingFCU resolved to block number",
             hash=hash.short,
@@ -577,8 +580,10 @@ proc put*(
         hc.session.mode =
           (if hdr.parentHash == hc.session.stopHash: ready else: orphan)
         if hc.session.mode == orphan:
-          debug "node mismatch => orphan", hdr=hdr.number,
-            stopNum=hc.session.stopNum.unsafeGet()
+          error "parent mismatch => orphan", hdr=hdr.number, hash=hash.short,
+            parentHash=hdr.parentHash.short, expected=hc.session.stopHash.short
+          return err("Stop node hash mismatch for" &
+            " rev[" & $n & "].number=" & $bn)
         revTopInx = n
         break
 
@@ -690,6 +695,12 @@ func antecedent*(hc: HeaderChainRef): Header =
     return hc.session.ante
   # Header()
 
+func finNum*(hc: HeaderChainRef): Opt[BlockNumber] =
+  ## Bloack number of finalised FCU hash if it could be resolved by chaining
+  ## headers using the `put()` directive.
+  ##
+  hc.session.finNum
+
 # --------------------
 
 func latestConsHead*(hc: HeaderChainRef): Header =
@@ -718,14 +729,14 @@ proc updateMetrics*(hc: HeaderChainRef) =
     metrics.set(nec_sync_consensus_head, hc.chain.latestNumber.int64)
     metrics.set(nec_sync_distance_to_sync, 0)
 
+proc headTargetUpdate*(hc: HeaderChainRef; h: Header; f: Hash32) =
+  ## Emulate request from `CL` (mainly for fringe action purposes)
+  if not hc.notify.isNil:
+    hc.headUpdateFromCL(h, f)
+
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
-
-proc headTargetUpdate*(hc: HeaderChainRef; h: Header; f: Hash32) =
-  ## Emulate request from `CL` (mainly for debugging purposes)
-  if not hc.notify.isNil:
-    hc.headUpdateFromCL(h, f)
 
 proc verify*(hc: HeaderChainRef): Result[void,string] =
   ## Verify that the descriptor range is on the database as well
