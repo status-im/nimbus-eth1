@@ -166,7 +166,7 @@ proc exportEreFile(
     endNumber = era.endNumber()
 
     isPreMerge = endNumber < mergeBlockNumber
-    isMergeEra = startNumber <= mergeBlockNumber and mergeBlockNumber <= endNumber
+    isMergeEra = startNumber < mergeBlockNumber and mergeBlockNumber <= endNumber
 
     endHeaderHash = (?db.getBlockHeader(endNumber)).computeRlpHash()
     filename =
