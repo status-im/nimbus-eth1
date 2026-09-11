@@ -144,7 +144,7 @@ proc readDynamicBlockIndex*(
 
   let expectedComponentCount =
     2 + (if noReceipts: 0 else: 1) + (if noProofs: 0 else: 1) +
-    (if era(blockNumber) <= era(mergeBlockNumber): 1 else: 0)
+    (if blockNumber < mergeBlockNumber: 1 else: 0) # td, pre-merge + merge era
   if componentCount.int != expectedComponentCount:
     return err(
       "component-count mismatch: expected " & $expectedComponentCount & ", got " &
@@ -248,7 +248,7 @@ proc init*(
   let componentCount =
     2 + # header + body
     (if noReceipts: 0 else: 1) + (if noProofs: 0 else: 1) +
-    (if era(startNumber) <= era(mergeBlockNumber): 1 else: 0) # td pre-merge + merge era
+    (if startNumber < mergeBlockNumber: 1 else: 0) # td pre-merge + merge era
 
   # TODO: Not great ... Perhaps just make one big sequence and play with indexes.
   var indexesList = newSeq[Indexes](MaxEreSize)
@@ -730,7 +730,8 @@ proc verify*(
         HeaderRecord(blockHash: header.computeRlpHash(), totalDifficulty: td)
       )
 
-  if era(startNumber) <= era(f.mergeBlockNumber):
+  # The accumulator root is only written for files that hold pre-merge blocks
+  if startNumber < f.mergeBlockNumber:
     let
       expectedRoot = ?f.getAccumulatorRoot()
       accumulatorRoot = getEpochRecordRoot(headerRecords)
