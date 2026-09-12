@@ -27,11 +27,19 @@ const
   LEAVES_PER_BLOCK = 1_000_000
   READS = 200_000
   ROUNDS = 2
+  BENCH_ACCOUNTS = ACCOUNTS + CONTRACTS + BIG_CONTRACTS
+  BENCH_SLOTS = CONTRACTS * SLOTS_PER_CONTRACT + BIG_CONTRACTS * BIG_SLOTS
+  MAINNET_ACCOUNTS = 300_000_000
+  MAINNET_SLOTS = 1_100_000_000
+  BENCH_LEAVES = BENCH_ACCOUNTS + BENCH_SLOTS
+  MAINNET_LEAVES = MAINNET_ACCOUNTS + MAINNET_SLOTS
+
   MINIMAL_CACHES {.booldefine.} = false
     ## Shrink the Aristo vertex/key/branch LRUs to 1 MiB and the leaf LRUs to
     ## 1024 entries so reads are served by RocksDB alone; its caches are unchanged
-  LEAF_LRU_SIZES =
-    when MINIMAL_CACHES: [1024] else: [1024, 1024 * 1024]
+  LARGE_CACHES {.booldefine.} = false
+    ## Cache a large share of the benchmark state, an upper bound rather than a
+    ## forecast of production behaviour
   BUILD_INDEX {.booldefine.} = true
     ## Build the database without the leaf index (master layout) and run only
     ## the walk strategy, for a true master baseline at the same scale
@@ -49,6 +57,39 @@ type
     usPerOp: float
     checksum: uint64
 
+func scaleToState(prodSize: int64, benchPop, mainnetPop: int): int =
+  ## Production cache size cut to the share of the state it covers on mainnet
+  int(prodSize * benchPop.int64 div mainnetPop.int64)
+
+const
+  VTX_CACHE_SIZE =
+    if MINIMAL_CACHES: 1024 * 1024
+    elif LARGE_CACHES: 64 * 1024 * 1024
+    else: scaleToState(defaultRdbVtxCacheSize.int64, BENCH_LEAVES, MAINNET_LEAVES)
+  KEY_CACHE_SIZE =
+    if MINIMAL_CACHES: 1024 * 1024
+    elif LARGE_CACHES: 128 * 1024 * 1024
+    else: scaleToState(defaultRdbKeyCacheSize.int64, BENCH_LEAVES, MAINNET_LEAVES)
+  BRANCH_CACHE_SIZE =
+    if MINIMAL_CACHES: 1024 * 1024
+    elif LARGE_CACHES: 64 * 1024 * 1024
+    else: scaleToState(defaultRdbBranchCacheSize.int64, BENCH_LEAVES, MAINNET_LEAVES)
+  BLOCK_CACHE_SIZE =
+    if MINIMAL_CACHES or LARGE_CACHES: 256 * 1024 * 1024
+    else: scaleToState(defaultBlockCacheSize, BENCH_LEAVES, MAINNET_LEAVES)
+  ACC_LEAF_LRU =
+    if MINIMAL_CACHES: 1024
+    elif LARGE_CACHES: ACC_LRU_SIZE
+    else: scaleToState(ACC_LRU_SIZE.int64, BENCH_ACCOUNTS, MAINNET_ACCOUNTS)
+  STO_LEAF_LRU =
+    if MINIMAL_CACHES: 1024
+    elif LARGE_CACHES: ACC_LRU_SIZE
+    else: scaleToState(ACC_LRU_SIZE.int64, BENCH_SLOTS, MAINNET_SLOTS)
+  CACHE_MODE =
+    if MINIMAL_CACHES: "minimal"
+    elif LARGE_CACHES: "large"
+    else: "mainnet-proportional"
+
 let benchTmpDir = mkdtemp(prefix = "bench_leaf_", dir = getEnv("BENCH_DIR", getAppDir()))
 
 proc makeDbOpts(): DbOptions =
@@ -56,10 +97,10 @@ proc makeDbOpts(): DbOptions =
     maxOpenFiles = 512,
     writeBufferSize = 64 * 1024 * 1024,
     rowCacheSize = 0,
-    blockCacheSize = 256 * 1024 * 1024,
-    rdbVtxCacheSize = (if MINIMAL_CACHES: 1 else: 64) * 1024 * 1024,
-    rdbKeyCacheSize = (if MINIMAL_CACHES: 1 else: 128) * 1024 * 1024,
-    rdbBranchCacheSize = (if MINIMAL_CACHES: 1 else: 64) * 1024 * 1024,
+    blockCacheSize = BLOCK_CACHE_SIZE,
+    rdbVtxCacheSize = VTX_CACHE_SIZE,
+    rdbKeyCacheSize = KEY_CACHE_SIZE,
+    rdbBranchCacheSize = BRANCH_CACHE_SIZE,
     maxSnapshots = 2,
     parallelStateRootComputation = false,
     threadSafeCaches = false,
@@ -72,7 +113,8 @@ proc openBaseDb(basePath: string, dbOpts: DbOptions, wipe: bool): RocksDbInstanc
     .expect("open benchmark RocksDB")
 
 proc openAristoDb(
-    basePath: string, dbOpts: DbOptions, wipe, directLeafFetch: bool, leafLruSize: int
+    basePath: string, dbOpts: DbOptions, wipe, directLeafFetch: bool,
+    accLruSize, stoLruSize: int
 ): (AristoDbRef, RocksDbInstanceRef) =
   let
     baseDb = openBaseDb(basePath, dbOpts, wipe)
@@ -81,8 +123,8 @@ proc openAristoDb(
     dbOpts.maxSnapshots,
     dbOpts.parallelStateRootComputation,
     threadSafeCaches = dbOpts.threadSafeCaches,
-    accLeavesLruSize = leafLruSize,
-    stoLeavesLruSize = leafLruSize,
+    accLeavesLruSize = accLruSize,
+    stoLeavesLruSize = stoLruSize,
     stoStatic = directLeafFetch,
   ).expect("aristo db")
   (db, baseDb)
@@ -140,7 +182,7 @@ proc persistFrame(db: AristoDbRef, txFrame: AristoTxRef, blockNumber: uint64): f
   ms(getMonoTime() - t0)
 
 proc buildDb(basePath: string, dbOpts: DbOptions) =
-  let (db, baseDb) = openAristoDb(basePath, dbOpts, wipe = true, directLeafFetch = true, 1024)
+  let (db, baseDb) = openAristoDb(basePath, dbOpts, wipe = true, directLeafFetch = true, 1024, 1024)
   var
     txFrame = db.txFrameBegin(db.txRef)
     blockNumber = 1'u64
@@ -250,9 +292,10 @@ proc runReads(
   )
 
 proc runWorkload(
-    basePath: string, dbOpts: DbOptions, workload: Workload, direct: bool, leafLruSize: int
+    basePath: string, dbOpts: DbOptions, workload: Workload, direct: bool
 ): (ReadStats, ReadStats) =
-  let (db, _) = openAristoDb(basePath, dbOpts, wipe = false, direct, leafLruSize)
+  let (db, _) = openAristoDb(
+    basePath, dbOpts, wipe = false, direct, ACC_LEAF_LRU, STO_LEAF_LRU)
   let
     cold = db.runReads(workload, 0)
     warm = db.runReads(workload, 0)
@@ -265,22 +308,27 @@ let
 
 try:
   echo &"building database: {ACCOUNTS} EOAs, {CONTRACTS} contracts x {SLOTS_PER_CONTRACT} slots, " &
-    &"{BIG_CONTRACTS} contracts x {BIG_SLOTS} slots, index={BUILD_INDEX}, minimalCaches={MINIMAL_CACHES}"
+    &"{BIG_CONTRACTS} contracts x {BIG_SLOTS} slots, index={BUILD_INDEX}"
+  echo &"caches ({CACHE_MODE}): vtx {VTX_CACHE_SIZE div (1024 * 1024)} MiB, " &
+    &"key {KEY_CACHE_SIZE div (1024 * 1024)} MiB, " &
+    &"branch {BRANCH_CACHE_SIZE div (1024 * 1024)} MiB, " &
+    &"block {BLOCK_CACHE_SIZE div (1024 * 1024)} MiB, " &
+    &"leaf LRU {ACC_LEAF_LRU} acc / {STO_LEAF_LRU} sto entries"
   buildDb(dbDir, dbOpts)
 
-  for leafLruSize in LEAF_LRU_SIZES:
-    echo &"\nreads: {READS} per pass, leaf LRU {leafLruSize} entries, database reopened per workload"
+  block:
+    echo &"\nreads: {READS} per pass, database reopened per workload"
     echo &"  {\"workload\":<14} {\"strategy\":<8} {\"cold us/op\":>11} {\"warm us/op\":>11}"
     for round in 1 .. ROUNDS:
       echo &"  round {round}"
       for workload in Workload:
         let (walkCold, walkWarm) =
-          runWorkload(dbDir, dbOpts, workload, direct = false, leafLruSize)
+          runWorkload(dbDir, dbOpts, workload, direct = false)
         if not BUILD_INDEX:
           echo &"  {$workload:<14} {\"walk\":<8} {walkCold.usPerOp:>11.3f} {walkWarm.usPerOp:>11.3f}"
           continue
         let (directCold, directWarm) =
-          runWorkload(dbDir, dbOpts, workload, direct = true, leafLruSize)
+          runWorkload(dbDir, dbOpts, workload, direct = true)
         doAssert walkCold.checksum == directCold.checksum and
           walkWarm.checksum == directWarm.checksum,
           "walk and direct fetch disagree on " & $workload
