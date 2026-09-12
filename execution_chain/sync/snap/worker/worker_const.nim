@@ -94,8 +94,9 @@ const
     ## Something failed in `SnapReady` state, e.g. starting header
     ## download (just avoiding some extra polling.)
 
-  daemonWaitDownloadInterval* = chronos.seconds(10)
-    ## Poll waiting for peers downloading snap data.
+  daemonWaitDownloadInterval* = chronos.seconds(2)
+    ## Poll waiting for peers downloading snap data. The polling cycle also
+    ## triggers some metrics updates.
 
   daemonWaitDownloadFinishInterval* = chronos.seconds(1)
     ## Poll waiting for all peers to have stopped
@@ -138,19 +139,23 @@ const
     ## these intervals are sparsely filled and there will be returned not
     ## more than ~1k accounts.
 
-  nConsHeadCachedDeltaMin* = 24
-    ## If the block number difference between FCU update header and cached
-    ## header is larger than this contant, a beacon header fetch cycle is
-    ## triggered to fill up the cache.
-
   nConsHeadSupportWindowSize* = 128
     ## If the FCU update header is more than that distance apart form the
     ## pivot state block number, a BAL download and forward cycle will be
     ## triggerd.
 
-  nConsHeadSupportWindowThreshold* =
-      nConsHeadSupportWindowSize - nConsHeadCachedDeltaMin
-    ## A bit thess than `consHeadSupportWindowSize` for triggering events
+  nConsHeadCachedDeltaMin* = 1 + nConsHeadSupportWindowSize div 9
+    ## If the block number difference between FCU update header and cached
+    ## header is larger than this contant, a beacon header fetch cycle is
+    ## triggered to fill up the cache.
+
+  nConsHeadSupportWindowTopMargin* = nConsHeadSupportWindowSize div 3
+    ## Top (or right end) acceptance margin for the download window. The
+    ## state of the patrtial MPT representation is forwarded until it falls
+    ## in the range
+    ## ::
+    ##    consensus-head - nConsHeadSupportWindowTopMargin .. consensus-head
+    ##
     ## (providing a hysteresis.)
 
   # -----------
@@ -245,6 +250,6 @@ const
 
 static:
   doAssert 0 < nConsHeadCachedDeltaMin
-  doAssert 0 < nConsHeadSupportWindowThreshold
+  doAssert 0 < nConsHeadSupportWindowTopMargin
 
 # End

@@ -34,8 +34,6 @@ import
   ./eest_helpers,
   ./bal_parser
 
-from ../../execution_chain/rpc/debug import getExecutionWitness
-
 proc fromJson(T: type ExecutionWitness, n: JsonNode): ExecutionWitness =
   var res: ExecutionWitness
   for item in n["state"]:
