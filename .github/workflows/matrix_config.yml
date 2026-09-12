@@ -39,11 +39,13 @@ jobs:
 
       - name: Prepare matrix JSON object
         id: prepare
+        env:
+          EXCLUDE_FIELD: ${{ inputs.exclude_field }}
         run: |
           PREFIX='json={"include":'
           SUFFIX='}'
           CONF='.github/workflows/matrix_config.json'
-          PARAM='${{ inputs.exclude_field }}'
+          PARAM="$EXCLUDE_FIELD"
 
           if [[ '$PARAM' == '' ]]; then
             echo "$PREFIX$(jq -c . < $CONF)$SUFFIX" >> $GITHUB_OUTPUT
