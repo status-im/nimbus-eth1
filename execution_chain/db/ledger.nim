@@ -146,7 +146,6 @@ type
       ## Caches codeHashes deployed via CREATE in this savepoint.
     pendingCode: Table[Hash32, CodeBytesRef]
       ## Executed initcode awaiting successful commit of all enclosing frames.
-      ## Keep it out of the LRU until the transaction is accepted.
 
 const
   resetFlags = {
