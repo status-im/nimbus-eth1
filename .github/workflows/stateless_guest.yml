@@ -60,7 +60,7 @@ jobs:
     # silent change in what CI proved.
     env:
       XPACK_GCC_VERSION: 15.2.0-1
-      ZISK_REF: v1.0.0-alpha
+      ZISK_REF: v1.1.0-alpha
 
     defaults:
       run:
