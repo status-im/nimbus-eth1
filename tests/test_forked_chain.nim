@@ -21,6 +21,8 @@ import
   ../execution_chain/conf,
   ../execution_chain/utils/utils,
   ../execution_chain/core/chain/forked_chain,
+  ../execution_chain/core/tx_pool,
+  ../hive_integration/tx_sender,
   ../execution_chain/core/chain/forked_chain/chain_desc,
   ../execution_chain/core/chain/forked_chain/chain_serialize,
   ../execution_chain/core/chain/forked_chain/chain_branch,
@@ -1467,3 +1469,137 @@ procSuite "ForkedChain mainnet replay":
       check (await f).isErr()
 
     check (await fc.importBlock(blk2)).isOk()
+
+type
+  FcTxEnv = object
+    com  : CommonRef
+    chain: ForkedChainRef
+    xp   : TxPoolRef
+    mx   : TxSender
+
+proc setupFcTxEnv(): FcTxEnv =
+  ## `ForkedChain` + a real tx pool, so assembled blocks carry real txs.
+  let
+    params = setupEnv().params
+    mx     = TxSender.new(params, 5)   # funds its accounts in `params` - first!
+    com    = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
+    chain  = ForkedChainRef.init(com)
+    xp     = TxPoolRef.new(chain)
+
+  xp.feeRecipient = address"0000000000000000000000000000000000000212"
+  FcTxEnv(com: com, chain: chain, xp: xp, mx: mx)
+
+proc assemble(env: FcTxEnv, parent: Hash32, ts: uint64): Block =
+  env.xp.timestamp = EthTime(ts)
+  let bundle = env.xp.assembleBlock(parent).expect("assembleBlock OK")
+  bundle.blk
+
+proc addTx(env: FcTxEnv, accIdx: int): Hash32 =
+  let
+    acc = env.mx.getAccount(accIdx)
+    ptx = env.mx.makeTx(BaseTx(
+      gasLimit : 75_000,
+      recipient: Opt.some(acc.address),
+      amount   : 1.u256,
+    ), acc, 0)
+  doAssert env.xp.addTx(ptx).isOk
+  ptx.tx.computeRlpHash
+
+suite "ForkedChain transactions shared between branches":
+  # The same tx can sit in blocks on two competing branches. Pruning one branch
+  # must not make it unreachable on the branch that survives.
+  test "pruned branch must not evict the tx of a surviving sibling":
+    let
+      env   = setupFcTxEnv()
+      chain = env.chain
+      xp    = env.xp
+
+    template assemble(parent: Hash32, ts: uint64): Block =
+      env.assemble(parent, ts)
+    template addTx(accIdx: int): Hash32 =
+      env.addTx(accIdx)
+
+    # genesis - blk1 -+- A2(tx) - A3
+    #                 |
+    #                 +- B2(tx) - B3
+    let blk1 = assemble(chain.latestHash, 1)
+    checkImportBlock(chain, blk1)
+
+    # `shared` goes into both siblings, `bOnly` into B only.
+    let shared = addTx(3)
+    let A2 = assemble(blk1.blockHash, 2)
+    checkImportBlock(chain, A2)
+
+    let bOnly = addTx(4)
+    let B2 = assemble(blk1.blockHash, 3)   # `shared` is still pooled
+    checkImportBlock(chain, B2)
+    xp.removeNewBlockTxs(B2)
+
+    check A2.transactions.len == 1
+    check B2.transactions.len == 2
+    check A2.blockHash != B2.blockHash
+
+    let A3 = assemble(A2.blockHash, 4)
+    checkImportBlock(chain, A3)
+    let B3 = assemble(B2.blockHash, 5)
+    checkImportBlock(chain, B3)
+    check chain.heads.len == 2
+
+    template checkTxIn(txHash: Hash32, blk: Block) =
+      ## Must point at `blk`, at an index that really holds `txHash`.
+      let res = chain.txDetailsByTxHash(txHash)
+      check res.isOk
+      if res.isOk:
+        check res.value[0] == blk.blockHash
+        let tx = chain.txByBlockHashAndIndex(res.value[0], res.value[1])
+        check tx.isOk
+        if tx.isOk:
+          check tx.value.computeRlpHash == txHash
+      else:
+        debugEcho "TX NOT FOUND: ", res.error
+
+    # `latest` is B3, so `shared` resolves on the B lineage. A2's copy of it
+    # does not shadow B2's.
+    block:
+      checkTxIn(shared, B2)
+    check chain.memoryTxHashesForBlock(A2.blockHash) == Opt.some(@[shared])
+
+    # Finalizing A2 prunes the B branch: `shared` survives in A2, `bOnly` goes.
+    checkForkChoice(chain, A3, A2)
+    check chain.heads.len == 1
+
+    block:
+      checkTxIn(shared, A2)
+    check chain.txDetailsByTxHash(bOnly).isErr
+
+  test "tx index of an in-memory block survives a serialize round trip":
+    # The index used to ride in the serialized FC state; now it rides in the
+    # per-block txFrame blob.
+    let
+      env   = setupFcTxEnv()
+      chain = env.chain
+
+    let blk1 = env.assemble(chain.latestHash, 1)
+    checkImportBlock(chain, blk1)
+
+    let txHash = env.addTx(3)
+    let blk2 = env.assemble(blk1.blockHash, 2)
+    checkImportBlock(chain, blk2)
+    check blk2.transactions.len == 1
+
+    check chain.serialize(chain.baseTxFrame).isOk
+    env.com.db.persist(chain.baseTxFrame)
+
+    let fc = ForkedChainRef.init(env.com)
+    check fc.deserialize().isOk
+    check fc.latestHash == blk2.blockHash
+
+    let res = fc.txDetailsByTxHash(txHash)
+    check res.isOk
+    if res.isOk:
+      check res.value[0] == blk2.blockHash
+      check res.value[1] == 0'u64
+    else:
+      debugEcho "TX NOT FOUND AFTER RESTART: ", res.error
+
+    check fc.memoryTxHashesForBlock(blk2.blockHash) == Opt.some(@[txHash])

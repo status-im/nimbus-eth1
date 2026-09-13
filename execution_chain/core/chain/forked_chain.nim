@@ -11,7 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, algorithm, sets, strformat],
+  std/[tables, sets, strformat],
   chronicles,
   results,
   chronos,
@@ -216,14 +216,8 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
     c.vmState = nil
     c.vmStateBlockHash.reset()
 
-  # Collect and remove tx records belonging to this block
-  var toRemove: seq[Hash32]
-  for txHash, (blkHash, _) in c.txRecords.pairs:
-    if blkHash == b.hash:
-      toRemove.add(txHash)
-  for txHash in toRemove:
-    c.txRecords.del(txHash)
-
+  # The tx index lives in `b.txFrame` and dies with it. Siblings keep their
+  # own copy in their own frame - nothing to unwind here.
   b.txFrame.dispose()
 
   # Mark it as removed, don't remove it twice
@@ -537,8 +531,8 @@ proc validateBlock(
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  let txHashes = c.processBlock(
-      parent, txFrame, blk, blockAccessList, blkHash, finalized).valueOr:
+  c.processBlock(
+      parent, txFrame, blk, blockAccessList, blkHash, finalized).isOkOr:
     txFrame.dispose()
     return err(error)
 
@@ -548,9 +542,6 @@ proc validateBlock(
   txFrame.checkpoint(blk.header.number, skipSnapshot = false)
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame)
-
-  for i, txHash in txHashes:
-    c.txRecords[txHash] = (blkHash, uint64(i))
 
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
@@ -1014,9 +1005,6 @@ func baseNumber*(c: ForkedChainRef): BlockNumber =
 func baseHash*(c: ForkedChainRef): Hash32 =
   c.base.hash
 
-func txRecords*(c: ForkedChainRef, txHash: Hash32): (Hash32, uint64) =
-  c.txRecords.getOrDefault(txHash, (Hash32.default, 0'u64))
-
 func isInMemory*(c: ForkedChainRef, blockHash: Hash32): bool =
   c.hashToBlock.hasKey(blockHash)
 
@@ -1026,28 +1014,20 @@ func isHistoryExpiryActive*(c: ForkedChainRef): bool =
 func isPortalActive(c: ForkedChainRef): bool =
   (not c.portal.isNil) and c.portal.portalEnabled
 
-proc memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[(Transaction, BlockNumber)] =
-  let (blockHash, index) = c.txRecords.getOrDefault(txHash, (Hash32.default, 0'u64))
+proc memoryTxHashesForBlock*(c: ForkedChainRef, blockHash: Hash32): Opt[seq[Hash32]] =
+  ## Tx hashes of an in-memory block, in block order.
+  ## `Opt.none` = not in memory, or no txs; caller resolves them one by one.
   let b = c.hashToBlock.getOrDefault(blockHash)
-  if b.isOk:
-    let tx = b.txFrame.getTransactionByIndex(b.header.txRoot, index.uint16).valueOr:
-      return Opt.none((Transaction, BlockNumber))
-    return Opt.some((tx, b.number))
-  return Opt.none((Transaction, BlockNumber))
-
-func memoryTxHashesForBlock*(c: ForkedChainRef, blockHash: Hash32): Opt[seq[Hash32]] =
-  var cachedTxHashes = newSeq[(Hash32, uint64)]()
-  for txHash, (blkHash, txIdx) in c.txRecords.pairs:
-    if blkHash == blockHash:
-      cachedTxHashes.add((txHash, txIdx))
-
-  if cachedTxHashes.len <= 0:
+  if b.isNil:
     return Opt.none(seq[Hash32])
 
-  cachedTxHashes.sort(proc(a, b: (Hash32, uint64)): int =
-      cmp(a[1], b[1])
-    )
-  Opt.some(cachedTxHashes.mapIt(it[0]))
+  let body = b.txFrame.getBlockBody(b.header).valueOr:
+    return Opt.none(seq[Hash32])
+
+  if body.transactions.len == 0:
+    return Opt.none(seq[Hash32])
+
+  Opt.some(body.transactions.mapIt(it.computeRlpHash))
 
 proc latestBlock*(c: ForkedChainRef): Result[Block, string] =
   c.latest.txFrame.getEthBlock(c.latest.hash)
@@ -1102,12 +1082,19 @@ proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string]
   c.baseTxFrame.getBlockHeader(blockHash)
 
 proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint64), string] =
-  if c.txRecords.hasKey(txHash):
-    let (blockHash, txid) = c.txRecords(txHash)
-    return ok((blockHash, txid))
+  ## Locate `txHash` on the `latest` lineage: `(block hash, index)`.
+  ##
+  ## Branch-local by construction: `writeBaggage` writes the index into each
+  ## block's own `txFrame`, and frames are layered per branch. A sibling holding
+  ## the same tx keeps its own record - it can neither shadow this one, nor take
+  ## it down when pruned.
+  let txDetails = ?c.latest.txFrame.getTransactionKey(txHash)
+
+  # A miss reads back as the zero key. Genesis has no txs, so block 0 is a miss.
+  if txDetails.blockNumber == 0:
+    return err("Transaction not found: " & txHash.short)
 
   let
-    txDetails = ?c.baseTxFrame.getTransactionKey(txHash)
     header = ?c.headerByNumber(txDetails.blockNumber)
     blockHash = header.computeBlockHash
   return ok((blockHash, txDetails.index))
