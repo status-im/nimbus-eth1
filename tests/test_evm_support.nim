@@ -6,7 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[importutils, sequtils],
+  std/[importutils, sequtils, tables],
+  minilru,
+  stew/byteutils,
   unittest2,
   eth/common/[keys, transaction_utils],
   ../execution_chain/common,
@@ -19,10 +21,16 @@ import
   ../execution_chain/evm/memory,
   ../execution_chain/evm/code_stream,
   ../execution_chain/evm/internals,
+  ../execution_chain/evm/computation,
+  ../execution_chain/evm/interpreter_dispatch,
   ../execution_chain/constants,
   ../execution_chain/core/pow/header,
+  ../execution_chain/core/executor/process_transaction,
   ../execution_chain/db/ledger,
-  ../execution_chain/transaction/call_evm
+  ../execution_chain/transaction/call_evm,
+  ../execution_chain/utils/utils
+
+from macro_assembler import initVMEnv
 
 template testPush(value: untyped, expected: untyped): untyped =
   privateAccess(EvmStack)
@@ -390,6 +398,179 @@ proc runTestOverflow() =
     # After gasCall values always on positive, this test become OOG
     check res.error == "Opcode Dispatch Error: OutOfGas, depth=1"
 
+const
+  factoryAddress = address"0000000000000000000000000000000000001000"
+  factoryCaller = address"0000000000000000000000000000000000002000"
+
+func factoryCode(op: Op, revertAfter = false, salt = 0.byte): seq[byte] =
+  # Copy calldata to memory and use it as initcode.
+  result = hexToSeqByte("366000600037")
+  if op == Create2:
+    result.add @[Push1.byte, salt]
+  result.add hexToSeqByte("3660006000")
+  result.add op.byte
+  if revertAfter:
+    result.add hexToSeqByte("60006000fd")
+  else:
+    result.add Stop.byte
+
+proc runFactory(vm: BaseVMState, code, initcode: seq[byte], gas = 1_000_000.GasInt): Computation =
+  let msg = Message(
+    kind: CallKind.Call,
+    gas: gas,
+    sender: factoryCaller,
+    contractAddress: factoryAddress,
+    codeAddress: factoryAddress,
+    data: initcode)
+  result = newComputation(vm, keepStack = true, msg, CodeBytesRef.init(code))
+  result.execCallOrCreate()
+
+proc runCreateCacheTests() =
+  privateAccess(LedgerRef)
+  privateAccess(LedgerSpRef)
+  privateAccess(CodeBytesRef)
+
+  # Jump over a PUSH containing a fake JUMPDEST, then deploy one STOP byte.
+  let initcode = hexToSeqByte("600656605b005b60016000f3")
+  let codeHash = keccak256(initcode)
+
+  for creationOp in [Create, Create2]:
+    let op = creationOp
+    suite $op & " initcode cache":
+      setup:
+        let vm = initVMEnv("Cancun")
+        let ledger = vm.ledger
+        ledger.setNonce(factoryAddress, 1)
+
+      teardown:
+        vm.dispose()
+
+      test "successful execution admits its jump filter only on transaction commit":
+        let outer = ledger.beginSavePoint()
+        let cold = vm.runFactory(factoryCode(op), initcode)
+        require cold.isSuccess
+        require cold.finalStack.len == 1
+        check cold.finalStack[0] != 0.u256
+        check ledger.peekCode(codeHash).isNone
+        require outer.pendingCode.hasKey(codeHash)
+        let executed = outer.pendingCode[codeHash]
+        check:
+          executed.processed >= 6
+          not executed.isValidOpcode(4) # PUSH data, despite being 0x5b
+          not executed.persisted
+
+        let expectedAddress =
+          if op == Create2:
+            generateSafeAddress(factoryAddress, ZERO_CONTRACTSALT, initcode)
+          else:
+            generateAddress(factoryAddress, 1)
+        check cold.finalStack[0] == UInt256.fromBytesBE(expectedAddress.data)
+        check ledger.getCode(expectedAddress) == [0x00.byte]
+
+        ledger.commit(outer)
+        check ledger.peekCode(codeHash).get == executed
+
+        let other = CodeBytesRef.init(@[0xfe.byte])
+        ledger.code.put(keccak256(other.bytes), other)
+        let order = toSeq(ledger.code.keys)
+        let next = ledger.beginSavePoint()
+        let warm = vm.runFactory(factoryCode(op, salt = 1), initcode)
+        require warm.isSuccess
+        check warm.finalStack[0] != 0.u256
+        check warm.gasMeter.executionGasUsed == cold.gasMeter.executionGasUsed
+        check toSeq(ledger.code.keys) == order
+        require next.pendingCode.hasKey(codeHash)
+        check next.pendingCode[codeHash] == executed
+        ledger.commit(next)
+        check toSeq(ledger.code.keys)[0] == codeHash
+
+      test "successful execution followed by transaction rollback does not admit code":
+        let outer = ledger.beginSavePoint()
+        let c = vm.runFactory(factoryCode(op), initcode)
+        require c.isSuccess
+        require outer.pendingCode.hasKey(codeHash)
+        ledger.rollback(outer)
+        check ledger.peekCode(codeHash).isNone
+
+      test "transaction inclusion and prefetch rollbacks leave initcode uncached":
+        vm.blockCtx.gasLimit = 2_000_000
+        ledger.setCode(factoryAddress, factoryCode(op))
+        ledger.setBalance(factoryCaller, 10_000_000.u256)
+        let tx = Transaction(
+          gasLimit: 1_000_000, gasPrice: 1, to: Opt.some(factoryAddress),
+          payload: initcode, V: 27, R: 1.u256, S: 1.u256)
+
+        vm.prefetchTransaction(tx, factoryCaller)
+        check vm.status # execution succeeded before prefetch rolled it back
+        check ledger.peekCode(codeHash).isNone
+
+        vm.cumulativeGasUsed = vm.blockCtx.gasLimit - 1
+        let rejected = vm.processTransaction(tx, factoryCaller, persist = false)
+        check rejected.isErr
+        check vm.status # execution succeeded before the gas-limit check
+        check ledger.peekCode(codeHash).isNone
+
+        vm.cumulativeGasUsed = 0
+        let accepted = vm.processTransaction(tx, factoryCaller)
+        require accepted.isOk
+        check vm.status
+        require ledger.peekCode(codeHash).isSome
+        check not ledger.peekCode(codeHash).get.persisted
+
+      test "failed creation stays excluded even when the caller succeeds":
+        for badCode in [
+            "60006000fd", # REVERT
+            "fe", # invalid opcode
+            "600456605b00", # jump into PUSH data
+            "60ef60005360016000f3", # forbidden runtime-code prefix
+            "6160016000f3" # runtime code exceeds EIP-170 size limit
+          ]:
+          let failedInitcode = hexToSeqByte(badCode)
+          let c = vm.runFactory(factoryCode(op), failedInitcode)
+          require c.isSuccess
+          check c.finalStack == @[0.u256]
+          check ledger.peekCode(keccak256(failedInitcode)).isNone
+
+      test "code deposit out of gas does not admit initcode":
+        let c = vm.runFactory(factoryCode(op), initcode, gas = 32_100)
+        require c.isSuccess
+        check c.finalStack == @[0.u256]
+        check ledger.peekCode(codeHash).isNone
+
+      test "outer revert neither admits new code nor refreshes cached code":
+        let c = vm.runFactory(factoryCode(op, revertAfter = true), initcode)
+        check c.isError
+        check ledger.peekCode(codeHash).isNone
+
+        let cached = CodeBytesRef.init(initcode)
+        ledger.code.put(codeHash, cached)
+        let other = CodeBytesRef.init(@[0xfe.byte])
+        ledger.code.put(keccak256(other.bytes), other)
+        let order = toSeq(ledger.code.keys)
+        let warm = vm.runFactory(factoryCode(op, revertAfter = true), initcode)
+        check warm.isError
+        check cached.processed >= 6 # the cached instance was executed
+        check toSeq(ledger.code.keys) == order
+
+      test "reverted enclosing CALL excludes creation from a successful transaction":
+        let innerAddress = address"0000000000000000000000000000000000003000"
+        ledger.setCode(innerAddress, factoryCode(op, revertAfter = true))
+        var caller = hexToSeqByte("36600060003760006000366000600073")
+        caller.add innerAddress.data
+        caller.add hexToSeqByte("5af100") # GAS, CALL, STOP
+        let c = vm.runFactory(caller, initcode)
+        require c.isSuccess
+        check c.finalStack == @[0.u256]
+        check ledger.peekCode(codeHash).isNone
+
+  test "top-level deployment initcode is not admitted":
+    let vm = initVMEnv("Cancun")
+    defer: vm.dispose()
+    let tx = Transaction(gasLimit: 1_000_000, payload: initcode)
+    let res = testCallEvm(tx, factoryCaller, vm)
+    check res.error.len == 0
+    check vm.ledger.peekCode(codeHash).isNone
+
 proc evmSupportMain() =
   runStackTests()
   runMemoryTests()
@@ -397,5 +578,6 @@ proc evmSupportMain() =
   runGasMeterTests()
   runMiscTests()
   runTestOverflow()
+  runCreateCacheTests()
 
 evmSupportMain()

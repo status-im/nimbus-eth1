@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[strformat, strutils, importutils],
+  std/[strformat, strutils, importutils, sequtils, tables],
   eth/common/[keys, transaction_utils],
   stew/[byteutils, endians2],
   minilru,
@@ -363,6 +363,8 @@ proc runLedgerTransactionTests(noisy = true) =
         env.runTrial4(ledger, n, rollback = true)
 
 proc runLedgerBasicOperationsTests() =
+  privateAccess(LedgerRef)
+  privateAccess(LedgerSpRef)
   suite "Ledger basic operations tests":
     setup:
       const emptyAcc {.used.} = Account.init()
@@ -373,6 +375,63 @@ proc runLedgerBasicOperationsTests() =
         address {.used.} = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         stateRoot {.used.} : Hash32
+
+    test "initcode cache admission waits for the outermost commit":
+      let
+        codeHash = keccak256(code)
+        executed = CodeBytesRef.init(code)
+        outer = ledger.beginSavePoint()
+        inner = ledger.beginSavePoint()
+      ledger.cacheCodeOnCommit(codeHash, executed)
+      check ledger.peekCode(codeHash).isNone
+      ledger.commit(inner)
+      check ledger.peekCode(codeHash).isNone
+      ledger.commit(outer)
+      check:
+        ledger.peekCode(codeHash).get == executed
+        not executed.persisted
+        inner.pendingCode.len == 0
+        outer.pendingCode.len == 0
+        ledger.savePoint.pendingCode.len == 0
+
+    test "initcode cache peek and rollback preserve LRU entries and order":
+      ledger.code = typeof(ledger.code).init(2)
+      let
+        codeHash = keccak256(code)
+        executed = CodeBytesRef.init(code)
+        other = CodeBytesRef.init(@[0x00.byte])
+        otherHash = keccak256(other.bytes)
+      ledger.code.put(codeHash, executed)
+      ledger.code.put(otherHash, other)
+      let before = toSeq(ledger.code.keys)
+      check ledger.peekCode(codeHash).get == executed
+      let
+        outer = ledger.beginSavePoint()
+        inner = ledger.beginSavePoint()
+      ledger.cacheCodeOnCommit(codeHash, executed)
+      ledger.cacheCodeOnCommit(keccak256([0xfe.byte]), CodeBytesRef.init(@[0xfe.byte]))
+      ledger.commit(inner)
+      ledger.rollback(outer)
+      check:
+        toSeq(ledger.code.keys) == before
+        ledger.code.len == 2
+        outer.pendingCode.len == 0
+
+      let successful = ledger.beginSavePoint()
+      ledger.cacheCodeOnCommit(codeHash, executed)
+      check toSeq(ledger.code.keys) == before
+      ledger.commit(successful)
+      check toSeq(ledger.code.keys) == @[codeHash, otherHash]
+
+    test "rolled back child initcode is excluded from a successful parent":
+      let
+        codeHash = keccak256(code)
+        outer = ledger.beginSavePoint()
+        inner = ledger.beginSavePoint()
+      ledger.cacheCodeOnCommit(codeHash, CodeBytesRef.init(code))
+      ledger.rollback(inner)
+      ledger.commit(outer)
+      check ledger.peekCode(codeHash).isNone
 
     test "accountExists and isAccountAlive":
       check ledger.accountExists(address) == false

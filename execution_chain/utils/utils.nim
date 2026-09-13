@@ -134,10 +134,9 @@ func generateAddress*(address: Address, nonce: AccountNonce): Address =
 const ZERO_CONTRACTSALT* = default(Bytes32)
 
 func generateSafeAddress*(address: Address, salt: Bytes32,
-                          data: openArray[byte]): Address =
+                          dataHash: Hash32): Address =
   const prefix = [0xff.byte]
   let
-    dataHash = keccak256(data)
     hashResult = withKeccak256:
       h.update(prefix)
       h.update(address.data)
@@ -145,6 +144,10 @@ func generateSafeAddress*(address: Address, salt: Bytes32,
       h.update(dataHash.data)
 
   hashResult.to(Address)
+
+func generateSafeAddress*(address: Address, salt: Bytes32,
+                          data: openArray[byte]): Address =
+  generateSafeAddress(address, salt, keccak256(data))
 
 proc crc32*(crc: uint32, buf: openArray[byte]): uint32 =
   const kcrc32 = [ 0'u32, 0x1db71064, 0x3b6e20c8, 0x26d930ac, 0x76dc4190,
