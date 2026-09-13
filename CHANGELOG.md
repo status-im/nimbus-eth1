@@ -1,7 +1,64 @@
+2026-09-13 v0.4.1
+=================
+
+The Nimbus Ethereum client `v0.4.1` beta and Nimbus verified proxy are `medium-urgency` releases which improve performance and compatibility.
+
+### Improvements
+
+- Support Web3 API `pending` block tag:
+  https://github.com/status-im/nimbus-eth1/pull/4687
+
+- More compatible verified proxy encoding and decoding:
+  https://github.com/status-im/nimbus-eth1/pull/4740
+
+- Optimize state root computation by 20%:
+  https://github.com/status-im/nimbus-eth1/pull/4709
+
+- Decrease EVM performance overhead 15% across opcodes and precompiles:
+  https://github.com/status-im/nimbus-eth1/pull/4626
+
+- Double Keccak hashing-related speed, including of the `KECCAK256` opcode:
+  https://github.com/status-im/nimbus-eth1/pull/4590
+
+- Decrease devp2p blob-handling time by 99%:
+  https://github.com/status-im/nimbus-eth1/pull/4594
+
+- Improve performance by caching transaction sender recovery:
+  https://github.com/status-im/nimbus-eth1/pull/4607
+
+- Avoid non-uniformly distributed Ethereum address slowdowns:
+  https://github.com/status-im/nimbus-eth1/pull/4612
+
+- Update engine_getClientVersionV1 identification code to `NE`:
+  https://github.com/status-im/nimbus-eth1/pull/4447
+
+### Fixes
+
+- Close unified client databases properly at exit:
+  https://github.com/status-im/nimbus-eth1/pull/4630
+
+- Fix unified client hang at shutdown:
+  https://github.com/status-im/nimbus-eth1/pull/4629
+
+- Clearer eth_estimateGas error messages:
+  https://github.com/status-im/nimbus-eth1/pull/4764
+
+- Increase accuracy of engine_newPayload response rejections:
+  https://github.com/status-im/nimbus-eth1/pull/4651
+
+- Return correct engine API error code for incorrect PayloadAttributes versions:
+  https://github.com/status-im/nimbus-eth1/pull/4658
+
+- Fix verified proxy fee handling:
+  https://github.com/status-im/nimbus-eth1/pull/4741
+
+- Fix verified proxy Go transport bindings:
+  https://github.com/status-im/nimbus-eth1/pull/4772
+
 2026-07-29 v0.4.0
 =================
 
-The Nimbus Ethereum client `0.4.0` beta, along with the Nimbus verified proxy, are `medium-urgency` releases which improves performance, stability, and observability, as well as expanding verified proxy Web3 API coverage. This release marks the transition for the unified and execution clients from alpha to beta, reflecting increased suitability for testing and deployment.
+The Nimbus Ethereum client `0.4.0` beta, along with the Nimbus verified proxy, are `medium-urgency` releases which improve performance, stability, and observability, as well as expanding verified proxy Web3 API coverage. This release marks the transition for the unified and execution clients from alpha to beta, reflecting increased suitability for testing and deployment.
 
 ### Improvements
 
