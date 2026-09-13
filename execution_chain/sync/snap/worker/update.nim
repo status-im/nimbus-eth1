@@ -61,15 +61,14 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
 
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  let haveData = ctx.pool.cacheDB.hasAccMissingIntvRange(info).valueOr:
-    return SnapClear                                # DB problem, failure
-  if haveData and ctx.accUnproc.synced():
+  if ctx.accUnproc.synced():
     info info & ": Resuming previous session"
+    ctx.allDownloaded(info).isErrOr:
+       return SnapAssembleMpt
     return SnapBalsFetch
-  info info & ": No previous session available", haveData,
-    synced=ctx.accUnproc.synced()
-  if true: raiseAssert info & ": Oops, not here"
-  SnapClear
+  ctx.pool.contPrevSession = false                  # Oops, something went wrong
+  error info & ": Cnnot resume session, initialisation error"
+  SnapIdle
 
 proc clearNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
@@ -212,34 +211,34 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   #
   # State machine
   # ::
-  #                         idle --------------.
-  #                           |                |
-  #                           v                v
-  #                        resume -----+---> clear <---.
-  #                           |        |       |       |
-  #                           v        |       v       |
-  #                .----> balsFetch ---'     ready     |
-  #                |          |                |       |
-  #                |          v                |       |
-  #                |    balsFetchFinish        |       |
-  #                |          |                |       |
-  #                |          v                |       |
-  #                +---- stateForward          |       |
-  #                |          |                |       |
-  #                |          v                |       |
-  #                |       download <----------'       |
-  #                |          |                        |
-  #                |          v                        |
-  #                `--- downloadFinish                 |
-  #                           |                        |
-  #                           v                        |
-  #                       assembleMpt -----------------'
-  #                           |
-  #                           v
-  #                         [...]
-  #                           |
-  #                           v
-  #                         stop
+  #               .-----------> idle ------------.
+  #               |               |              |
+  #               |               v              |
+  #               +----------- resume            |
+  #               |               |              |
+  #               |               v              v
+  #               |    .----> balsFetch -----> clear <---.
+  #               |    |          |              |       |
+  #               |    |          v              V       |
+  #               |    |    balsFetchFinish    ready     |
+  #               |    |          |              |       |
+  #               |    |          v              |       |
+  #               |    +---- stateForward        |       |
+  #               |    |          |              |       |
+  #               |    |          v              |       |
+  #               |    |       download <--------'       |
+  #               |    |          |                      |
+  #               |    |          v                      |
+  #               |    `--- downloadFinish               |
+  #               |               |                      |
+  #               |               v                      |
+  #               `---------> assembleMpt ---------------'
+  #                               |
+  #                               v
+  #                             [...]
+  #                               |
+  #                               v
+  #                             stop
   #
   let newState =
     case ctx.pool.syncState:
