@@ -96,7 +96,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       discard                                       # currently placeholder only
 
     of SnapResume:
-      discard ctx.downloadInit(info)                # initialise download
+      discard ctx.downloadInit(info)                # init download if possible
 
     of SnapClear:
       # Clear cache DB if needed.

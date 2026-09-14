@@ -90,14 +90,15 @@ proc nFlatSlots(db: CacheDbRef, info: static[string]): int =
 
 proc statsWalk(
     db: CacheDbRef;
+    peer: string;
     info: static[string];
     shallowCheck = false;
       ): Opt[FlatStatsWalk] =
   var stats: FlatStatsWalk
   for w in db.walkFlatAcc():
     if 0 < w.error.len:
-      error info & ": Error walking accounts", accPath=w.accPath.toStr,
-        nAccSoFar=stats.nAcc, `error`=w.error
+      error info & ": Error walking accounts",
+        peer, accPath=w.accPath.toStr, nAccSoFar=stats.nAcc, `error`=w.error
       return err()
 
     stats.nAcc.inc
@@ -113,24 +114,24 @@ proc statsWalk(
         stats.nMissCode.inc
         if not w.data.dirtyCode:
           error info & ": Error dirtyCode should be set for missing code",
-            accPath=w.accPath.toStr
+            peer, accPath=w.accPath.toStr
       elif ?db.hasCodeLock(w.accPath, info):
         stats.nLockCode.inc
         if not w.data.dirtyCode:
           error info & ": Error dirtyCode must be set for locked sub-MPT",
-            accPath=w.accPath.toStr
+            peer, accPath=w.accPath.toStr
       else:
         stats.nCodeBlob.inc
         if w.data.dirtyCode:
           if shallowCheck:
             error info & ": Error dirtyCode unexpected",
-              accPath=w.accPath.toStr
+              peer, accPath=w.accPath.toStr
           elif ?db.hasFlatCode(w.accPath, info):
             error info & ": Error dirtyCode set for exixting code",
-              accPath=w.accPath.toStr
+              peer, accPath=w.accPath.toStr
           else:
             error info & ": Error missing contract code on cache DB",
-              accPath=w.accPath.toStr
+              peer, accPath=w.accPath.toStr
 
     if w.data.account.storageRoot != EMPTY_ROOT_HASH:
       stats.nStoSubMpt.inc
@@ -143,34 +144,34 @@ proc statsWalk(
           stats.nPartStoRange.inc
         if not w.data.dirtyStorage:
           error info & ": Error dirtyStorage must be set for partial sub-MPT",
-            accPath=w.accPath.toStr
+            peer, accPath=w.accPath.toStr
         elif ?db.hasStoLock(w.accPath, info):
           error info & ": Error partial sub-MPT must not be locked",
-            accPath=w.accPath.toStr
+            peer, accPath=w.accPath.toStr
       elif ?db.hasStoLock(w.accPath, info):
         stats.nLockStoRange.inc
         if not w.data.dirtyStorage:
           error info & ": Error dirtyStorage must be set for locked sub-MPT",
-            accPath=w.accPath.toStr
+            peer, accPath=w.accPath.toStr
       else:
         stats.nEmptyStoRange.inc
         if w.data.dirtyStorage:
           if shallowCheck:
             error info & ": Error dirtyStorage unexpected",
-              accPath=w.accPath.toStr
+              peer, accPath=w.accPath.toStr
           elif ?db.hasFlatSlot(w.accPath, info):
             error info & ": Error dirtyStorage set for complete sub-MPT",
-              accPath=w.accPath.toStr
+              peer, accPath=w.accPath.toStr
           else:
             error info & ": Error missing storage slots on cache DB",
-              accPath=w.accPath.toStr
+              peer, accPath=w.accPath.toStr
 
       if not shallowCheck:
         var nSlots = 0
         for w in db.walkFlatSlot(w.accPath):
           if 0 < w.error.len:
             error info & ": Error walking storage slots (per account)",
-              accPath=w.accPath.toStr, nSlotsSoFar=nSlots,
+              peer, accPath=w.accPath.toStr, nSlotsSoFar=nSlots,
               slotKey=w.slotKey.toStr, `error`=w.error
             return err()
           nSlots.inc
@@ -180,13 +181,14 @@ proc statsWalk(
 
 proc codeStatsWalk(
     db: CacheDbRef;
+    peer: string;
     info: static[string];
       ): Opt[FlatStatsWalk] =
   var stats: FlatStatsWalk
   for w in db.walkFlatAcc():
     if 0 < w.error.len:
       error info & ": Error walking accounts", accPath=w.accPath.toStr,
-        nAccSoFar=stats.nAcc, `error`=w.error
+        peer, nAccSoFar=stats.nAcc, `error`=w.error
       return err()
 
     stats.nAcc.inc
@@ -200,21 +202,21 @@ proc codeStatsWalk(
         stats.nMissCode.inc
         if not w.data.dirtyCode:
           error info & ": Error dirtyCode should be set for missing code",
-            accPath=w.accPath.toStr
+            peer, accPath=w.accPath.toStr
       elif ?db.hasCodeLock(w.accPath, info):
         stats.nLockCode.inc
         if not w.data.dirtyCode:
           error info & ": Error dirtyCode must be set for locked sub-MPT",
-            accPath=w.accPath.toStr
+            peer, accPath=w.accPath.toStr
       else:
         stats.nCodeBlob.inc
         if w.data.dirtyCode:
           if ?db.hasFlatCode(w.accPath, info):
             error info & ": Error dirtyCode set for exixting code",
-              accPath=w.accPath.toStr
+              peer, accPath=w.accPath.toStr
           else:
             error info & ": Error missing contract code on cache DB",
-              accPath=w.accPath.toStr
+              peer, accPath=w.accPath.toStr
 
   ok(stats)
 
@@ -239,7 +241,7 @@ proc statsStateImpl(
   case logNoise:
   of codeOnly:
     let
-      stats = db.codeStatsWalk(info).valueOr:
+      stats = db.codeStatsWalk(peer, info).valueOr:
         chronicles.info info & ": Error collecting stats", peer
         return
 
@@ -271,7 +273,7 @@ proc statsStateImpl(
       ela=(Moment.now() - start).toStr
 
   of minimal:
-    let stats = db.statsWalk(info, shallowCheck=true).valueOr:
+    let stats = db.statsWalk(peer, info, shallowCheck=true).valueOr:
       chronicles.info info & ": Error collecting stats", peer
       return
 
@@ -294,7 +296,7 @@ proc statsStateImpl(
 
   of check, full:
     let
-      stats = db.statsWalk(info, shallowCheck=false).valueOr:
+      stats = db.statsWalk(peer, info, shallowCheck=false).valueOr:
         chronicles.info info & ": Error collecting stats", peer
         return
 

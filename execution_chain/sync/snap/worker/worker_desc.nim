@@ -136,7 +136,6 @@ type
     lastNoHdrsLog*: chronos.Moment   ## Control update messages
     lastMaxHdrsLog*: chronos.Moment  ## Control update messages
     lockedBalsLog*: chronos.Moment   ## Control messages about missing peers
-    ticker*: Ticker                  ## Ticker function to run in background
 
 # ------------------------------------------------------------------------------
 # Public helpers
