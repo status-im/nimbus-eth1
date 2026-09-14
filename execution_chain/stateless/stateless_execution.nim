@@ -12,8 +12,9 @@
 import
   std/tables,
   results,
+  secp256k1,
   stew/endians2,
-  eth/common/[headers, blocks, hashes],
+  eth/common/[headers, blocks, hashes, keys, transaction_utils],
   eth/trie/ordered_trie,
   beacon_chain/spec/eth2_merkleization,
   beacon_chain/spec/datatypes/constants,
@@ -43,8 +44,50 @@ func toExecutionWitness*(w: ExecutionWitnessWithKeys): ExecutionWitness =
     discard res.headers.add(ByteList[MAX_BYTES_PER_HEADER].init(header))
   res
 
+# https://github.com/ethereum/execution-specs/blob/tests-zkevm%40v0.8.4/src/ethereum/forks/amsterdam/transactions.py#L895
+template recoverSenderFromPublicKey(
+    tx: Transaction, key: ByteVector[PUBLIC_KEY_BYTES], index: int
+): Address =
+  ## Verify that `key` is the transaction sender's canonical uncompressed SEC1
+  ## public key.
+  ##
+  ## Like the reference implementation, the supplied key is verified by
+  ## recovering the canonical public key from the transaction signature and
+  ## comparing the two.
+  ##
+  ## TODO: optimized implementations may avoid full public-key recovery, but
+  ## must still verify that the supplied key validates the signature and is
+  ## consistent with the transaction's recovery id / y-parity bit. Otherwise,
+  ## another valid recovery candidate could derive a different sender address.
+  ##
+  ## Returns the sender address derived from the verified public key.
+  block:
+    let recovered = tx.recoverKey().valueOr:
+      return err("Invalid transaction signature at index " & $index)
+
+    if SkPublicKey(recovered).toRaw() != key:
+      return err("Transaction public key mismatch at index " & $index)
+
+    recovered.to(Address)
+
+func recoverSendersFromPublicKeys(
+    txs: openArray[Transaction], keys: openArray[ByteVector[PUBLIC_KEY_BYTES]]
+): Result[seq[Address], string] =
+  # https://github.com/ethereum/execution-specs/blob/tests-zkevm%40v0.8.4/src/ethereum/forks/amsterdam/fork.py#L312
+  if keys.len != txs.len:
+    return err("Transaction public key count does not match block transactions")
+
+  var senders = newSeqOfCap[Address](txs.len)
+  for i, tx in txs:
+    senders.add(recoverSenderFromPublicKey(tx, keys[i], i))
+
+  ok(senders)
+
 proc statelessProcessBlock*(
-    witness: ExecutionWitness, com: CommonRef, blk: Block
+    witness: ExecutionWitness,
+    com: CommonRef,
+    blk: Block,
+    senders = Opt.none(seq[Address]),
 ): Result[void, string] =
   let
     verifiedHeaders = ?witness.verifyHeaders(blk.header)
@@ -99,6 +142,7 @@ proc statelessProcessBlock*(
   # Execute the block with all validations enabled
   ?memoryVmState.processBlock(
     blk,
+    senders = senders,
     skipValidation = false,
     skipReceipts = false,
     skipUncles = true,
@@ -309,7 +353,9 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
       return err("Failed to decode block access list: " & error)
     ?bal.validate(expectedBalHash, blk.header.gasLimit)
 
-  statelessProcessBlock(input.witness, com, blk)
+  let senders = ?recoverSendersFromPublicKeys(blk.transactions, input.public_keys)
+
+  statelessProcessBlock(input.witness, com, blk, Opt.some(senders))
 
 # https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless.py#L229
 proc verify_stateless_new_payload*(input: StatelessInput): StatelessValidationResult =
