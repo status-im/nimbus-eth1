@@ -69,23 +69,24 @@ proc storeValidatedSlots(
     adb = buddy.ctx.pool.cacheDB
     peer {.inject,used.} = $buddy.peer              # logging only
 
-  # Validate and store sub-MPT data without proof (i.e. full sub-MPTs)
+  # Validate and store sub-MPT data without proof records (i.e. full sub-MPTs)
   for n in 0 ..< data.slots.len:
     let
       slots = data.slots[n]
       stoRoot = stoRoots[qStart + n]
+      accPath = stoQ[qStart + n].accPath
 
     # Validate full sub-MPT.
     stoRoot.validate(ivReq.minPt, slots, emptyProof).isOkOr:
       buddy.ctrl.zombie = true                      # peer not useful
       debug info & ": Storage full sub-MPT validation failed", peer,
-        stoRoot=stoRoot.toStr, nth=n, syncState=($buddy.syncState)
+        accPath=accPath.toStr, nth=n, stoRoot=stoRoot.toStr,
+        syncState=($buddy.syncState)
       # Stop here. Inevitably, the sub-MPT entries following will be lost.
       return err(EValidationError)
 
     # Store validated full sub-MPT slot entries.
     for w in data.slots[n]:
-      let accPath = stoQ[qStart + n].accPath
       adb.putFlatSlot(accPath, w.slotHash, w.slotData, info).isOkOr:
         return err(ECacheError)
 
@@ -103,13 +104,13 @@ proc storeValidatedSlots(
     let mpt = stoRoot.validate(ivReq.minPt, data.partial, data.proof).valueOr:
       buddy.ctrl.zombie = true                      # peer not useful
       debug info & ": Storage partial sub-MPT validation failed", peer,
-        stoRoot=stoRoot.toStr, nProof=data.proof.len,
+        stoRoot=stoRoot.toStr, nPartial=data.partial.len, nProof=data.proof.len,
         syncState=($buddy.syncState)
       return err(EValidationError)
 
     # Store probably partial sub-MPT
+    let accPath = stoQ[qStart + topInx].accPath
     for w in data.partial:
-      let accPath = stoQ[qStart + topInx].accPath
       adb.putFlatSlot(accPath, w.slotHash, w.slotData, info).isOkOr:
         return err(ECacheError)
 
@@ -296,19 +297,18 @@ template queueAndDownload(
       bodyRc = typeof(bodyRc).err(error)            # maybe completed, already
       break body
 
-    let ivReq =
-      # If the first entry is a fully missing sub-MPT, then all queue enties
-      # are fully missing sub-MPTs.
-      if stoQ[0].data.ranges.isFullRange():
-        trace info & ": Requesting full storage sub-MPTs", peer, root, number,
-          nStoMPTs=stoQ.len
-        ItemKeyRangeMax                             # sort of `don't care` entry
-      else:
-        doAssert stoQ.len == 1
-        let iv = stoQ[0].data.ranges.fetchLeast(high UInt256).valueOr:
-          raiseAssert "Empty range unexpected" &
-            ", ranges=" & stoQ[0].data.ranges.flStr
-        iv                                          # download partial sub-MPT
+    let
+      reqRef = stoQ[0].data.ranges
+      ivReq =
+        # If the first entry is a fully missing sub-MPT, then all queue enties
+        # are fully missing sub-MPTs (no partial storage sub-MPT.)
+        if reqRef.isFullRange():
+          ItemKeyRangeMax                           # sort of `don't care` entry
+        else:
+          reqRef.ge().valueOr:                      # download partial sub-MPT
+            raiseAssert "Empty range unexpected, peer=" & peer &
+              ", root=" & root &
+              ", number=" & $number
 
     # Download a list of full sub-MPTs, or a single one with a sub-range.
     # The `downloadImpl()` directive below will store any success in the

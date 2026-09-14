@@ -157,22 +157,6 @@ func to*(w: UInt256; _: type float): float =
 # Functions extending the `ItemKeyRange` basic functionality
 # ------------------------------------------------------------------------------
 
-proc fetchLeast*(ikrs: ItemKeyRangeSet; maxLen: UInt256): Opt[ItemKeyRange] =
-  ## Borrowed from `unproc_item_keys.nim` for a single `ItemKeyRangeSet`
-  ## (w/o the `borrowed` part.)
-  ##
-  let
-    jv = ikrs.ge().valueOr:
-      return err()
-    kv = block:
-      if maxLen.isZero or (jv.len.isZero.not and jv.len <= maxLen):
-        jv
-      else:
-        ItemKeyRange.new(jv.minPt, jv.minPt + (maxLen - 1.u256))
-
-  discard ikrs.reduce(kv)
-  ok(kv)
-
 func per256*(w: UInt256): float =
   ## Represents the quotiont `w / 2^256` as `float` value. Note that the
   ## result is non-negaive and always smaller than `1f`.
