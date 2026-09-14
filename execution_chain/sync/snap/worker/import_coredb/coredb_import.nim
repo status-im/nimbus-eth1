@@ -60,7 +60,7 @@ proc mergeAccAndStoImpl(
   # Clear storage trie
   tx2.clearStorage(accPath).isOkOr:
     error info & ": Failed clearing storage slots",
-      accPath=accPath.toStr, `error`=($$error  )
+      accPath=accPath.toStr, `error`=($$error)
     return err()
 
   var nSlots = 0u
@@ -74,6 +74,18 @@ proc mergeAccAndStoImpl(
         nSlotsSoFar=nSlots, slotKey=w.slotKey.toStr, `error`=($$error)
       return err()
     nSlots.inc
+
+  # Verify storage sub-MPT if there is a storage root
+  if account.storageRoot != zeroHash32:
+    var stoRoot = tx2.fetchStorageRoot(accPath).valueOr:
+      error info & ": Failed computing storage root",
+        accPath=accPath.toStr, `error`=($$error)
+      return err()
+    if account.storageRoot != stoRoot:
+      error info & ": Mismatch with pre-set storage root",
+        accPath=accPath.toStr, stoRoot=stoRoot.toStr,
+        expected=account.storageRoot.toStr
+      return err()
 
   ok(nSlots)
 
