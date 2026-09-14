@@ -104,6 +104,9 @@ func parseTx*(n: Txo, index: Index): Result[Transaction, string] =
   defaultZero(tx.versionedHashes, n.blobVersionedHashes)
   defaultZero(tx.authorizationList, n.authorizationList)
 
+  if n.chainId.isNone and tx.txType > TxLegacy:
+    tx.chainId = 1.u256
+
   try:
     if n.to != "":
       tx.to = Opt.some(Address.fromHex(n.to))
