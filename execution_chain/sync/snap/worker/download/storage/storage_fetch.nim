@@ -176,8 +176,8 @@ template fetchStorage*(
         break body                                  # return err()
 
       let
-        nTop = nRespSto - 1                        # Index of last slot
-        slot = rc.value.packet.slots[nTop]          # Last slot
+        nTop = nRespSto - 1                         # index of last slot
+        partial = rc.value.packet.slots[nTop]       # last sub-MPT, maybe part'l
 
       # Check by item. Only the last slot might be incomplete and needs a
       # proof. This is handles below somewhere in the next `if` clauses.
@@ -195,10 +195,10 @@ template fetchStorage*(
       # There was a `doAssert` at the beginning of this template that made
       # sure that there is a range request only when `nRespSlots == 1`.
       if nRespSto == 1:                             # => `nTop == 0`
-        if 0 < slot.len:
+        if 0 < partial.len:
           let
-            slMin = slot[0].slotHash.to(ItemKey)
-            slMax = slot[^1].slotHash.to(ItemKey)
+            slMin = partial[0].slotHash.to(ItemKey)
+            slMax = partial[^1].slotHash.to(ItemKey)
             nRespSlot {.inject,used.} = (slMin,slMax).flStr # logging only
 
           if slMin < ivReq.minPt:
@@ -212,8 +212,8 @@ template fetchStorage*(
           # account beyond is to be returned. This leads to implementations
           # like `Geth` to always return the next slot beyond the requested
           # range regardless of the number of slots within.
-          if 1 < slot.len:
-            let respPreMax = slot[^2].slotHash.to(ItemKey)
+          if 1 < partial.len:
+            let respPreMax = partial[^2].slotHash.to(ItemKey)
             if ivReq.maxPt < respPreMax:
               # Bogus peer returning additional rubbish
               buddy.stoFetchRegisterError(forceZombie=true)
@@ -235,9 +235,9 @@ template fetchStorage*(
 
       # Add last item and proof
       if rc.value.packet.proof.len == 0:
-         stoData.slots.add slot
+         stoData.slots.add partial                # was a full sub-MPT
       else:
-        stoData.slot = slot
+        stoData.partial = partial
         stoData.proof = rc.value.packet.proof
 
     elif nRespProof == 0:
@@ -283,7 +283,7 @@ template fetchStorage*(
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one/error
 
     trace recvInfo, peer, root, nReqAcc, reqRng, nReqRng,
-      nRespSto=($stoData.slots.len & "+" & $(0 < stoData.slot.len).ord),
+      nRespSto=($stoData.slots.len & "+" & $(0 < stoData.partial.len).ord),
       nRespProof, ela, syncState, nErrors=buddy.nErrors.fetch.sto
 
     bodyRc = typeof(bodyRc).ok(stoData)

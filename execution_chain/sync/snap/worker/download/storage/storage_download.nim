@@ -100,7 +100,7 @@ proc storeValidatedSlots(
       stoRoot = stoRoots[qStart + topInx]
 
     # Validate slots, some partial sub-MPT for this storage sub-MPT
-    let mpt = stoRoot.validate(ivReq.minPt, data.slot, data.proof).valueOr:
+    let mpt = stoRoot.validate(ivReq.minPt, data.partial, data.proof).valueOr:
       buddy.ctrl.zombie = true                      # peer not useful
       debug info & ": Storage partial sub-MPT validation failed", peer,
         stoRoot=stoRoot.toStr, nProof=data.proof.len,
@@ -108,7 +108,7 @@ proc storeValidatedSlots(
       return err(EValidationError)
 
     # Store probably partial sub-MPT
-    for w in data.slot:
+    for w in data.partial:
       let accPath = stoQ[qStart + topInx].accPath
       adb.putFlatSlot(accPath, w.slotHash, w.slotData, info).isOkOr:
         return err(ECacheError)
@@ -117,7 +117,7 @@ proc storeValidatedSlots(
     if mpt.rightMost():                             # no more right leafs
       rngRef.clear()                                # set MPT complete
     else:
-      discard rngRef.reduce(ivReq.minPt, data.slot[^1].slotHash.to(ItemKey))
+      discard rngRef.reduce(ivReq.minPt, data.partial[^1].slotHash.to(ItemKey))
 
   ok()
 

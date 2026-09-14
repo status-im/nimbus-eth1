@@ -78,7 +78,7 @@ type
   StorageRangesData* = tuple
     ## Derived from `StorageRangesPacket`
     slots: seq[seq[StorageItem]]                    # Slots without proof
-    slot: seq[StorageItem]                          # Incomplete slot with proof
+    partial: seq[StorageItem]                       # Incomplete slot with proof
     proof: seq[ProofNode]                           # Prof for `slot`
 
   Ticker* =
