@@ -82,7 +82,7 @@ proc downloadInit*(
         pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
     else:
       let
-        number = ?adb.lastHeaderNumber(info)
+        number = ?adb.lastHeaderNumber(info)        # => err() unless headers
         accRng = ItemKeyRangeSet.init ItemKeyRangeMax
       ?adb.putAccMissingIntv(number, accRng, info)  # new state
       ctx.accUnproc.init ItemKeyRangeMax

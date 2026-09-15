@@ -71,10 +71,6 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   # waiting for inital CL to sed updates.
   ctx.pool.beaconTarget = ctx.beaconInitTarget()
 
-  # Set up ticker, disabled by default
-  if ctx.pool.ticker.isNil:
-    ctx.pool.ticker = proc(ctx: SnapCtxRef) = discard
-
   ctx.daemon = true                                 # disabled by default
   true
 
