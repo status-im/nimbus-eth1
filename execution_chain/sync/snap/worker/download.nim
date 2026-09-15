@@ -78,8 +78,8 @@ proc downloadInit*(
       let accState = ?adb.getAccMissingIntv(info)
       ctx.accUnproc.unprocessed = accState.ranges   # copy reference (!)
       ctx.pool.pivotNum = accState.number           # set pivot
-      debug info & ": Continue downloading", pivotNum=ctx.pool.pivotNum,
-        forwardNum=ctx.pool.forwardNum
+      debug info & ": Continue downloading accounts",
+        pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
     else:
       let
         number = ?adb.lastHeaderNumber(info)
@@ -87,8 +87,8 @@ proc downloadInit*(
       ?adb.putAccMissingIntv(number, accRng, info)  # new state
       ctx.accUnproc.init ItemKeyRangeMax
       ctx.pool.pivotNum = number                    # set pivot
-      debug info & ": Start downloading", pivotNum=ctx.pool.pivotNum,
-        forwardNum=ctx.pool.forwardNum
+      debug info & ": Start downloading accounts",
+        pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
 
     ctx.accUnproc.synced = true
     ctx.accountDownloadMetricsUpdate()

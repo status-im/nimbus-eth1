@@ -610,7 +610,7 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
     ok(proof)
 
   frontend.eth_feeHistory = proc(
-      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[float64]
   ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
     trace "Received query",
       meth = "eth_feeHistory",

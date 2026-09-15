@@ -329,7 +329,7 @@ proc createAccessList*(header: Header,
       res     = rpcCallEvm(args, header, vmState).valueOr:
                   vmState.dispose()
                   txFrame.dispose()
-                  handleError("failed to call evm: " & $error.code)
+                  handleError("failed to call evm: " & error)
 
     vmState.dispose()
     txFrame.dispose()

@@ -21,14 +21,16 @@ import
   ../common/evmforks,
   ../core/eip4844,
   ../compile_info,
-  ./modexp,
   ./evm_errors,
   ./computation,
-  ./secp256r1verify,
   ../transaction,
   eth/common/[base, addresses]
 
-from boringssl as bssl import nil
+when enable_zkvm_accelerators:
+  import ../stateless/zkvm/zkvm_accelerators
+else:
+  import ./modexp, ./secp256r1verify
+  from boringssl as bssl import nil
 
 when enable_mcl_lib:
   import ./bncurve_mcl
@@ -207,10 +209,13 @@ func sha256(c: Computation): EvmResultVoid =
 
   # Skip zero-filling since SHA256 overwrites all 32 bytes
   c.output.setLenUninit(32)
-  {.cast(noSideEffect).}:
-    let data = if c.msg.data.len > 0: addr c.msg.data[0] else: nil
-    discard bssl.SHA256(data, csize_t(c.msg.data.len),
-      cast[ptr array[32, byte]](addr c.output[0])[])
+  when enable_zkvm_accelerators:
+    sha256Into(c.msg.data, cast[ptr array[32, byte]](addr c.output[0])[])
+  else:
+    {.cast(noSideEffect).}:
+      let data = if c.msg.data.len > 0: addr c.msg.data[0] else: nil
+      discard bssl.SHA256(data, csize_t(c.msg.data.len),
+        cast[ptr array[32, byte]](addr c.output[0])[])
   ok()
 
 func ripemd160(c: Computation): EvmResultVoid =

@@ -22,16 +22,23 @@ import
 proc storeCachedHeaders(
     ctx: SnapCtxRef;
     leastBn: BlockNumber;
+    topBn: BlockNumber;
     info: static[string];
       ) =
   var count = 0
   for header in ctx.hdrCache.incrFrom():
+    # Range is leastBn .. topBn
     if leastBn <= header.number:
+      if topBn < header.number:
+        break
       ctx.pool.cacheDB.putHeader(header, info).isOkOr:
         return
       count.inc
-  trace info & ": Registered headers",
-    count, head=ctx.hdrCache.head.number, syncState=($ctx.syncState)
+  let
+    head {.used.} = ctx.hdrCache.head.number
+    consHead {.used.} = ctx.hdrCache.latestConsHeadNumber
+  trace info & ": Registered headers", leastBn, topBn, count,
+    head, consHead, slack=(consHead - head), syncState=($ctx.syncState)
 
 proc stateNum(ctx: SnapCtxRef): BlockNumber =
   # Get block number from saved state (if any)
@@ -74,7 +81,7 @@ proc headerDownloadTrigger*(
   # Ignoring a beacon header fetch cycle unless there are enough headers
   # available to fetch.
   let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
-  if consHeadNum < firstNum + nConsHeadCachedDeltaMin - 1 and
+  if consHeadNum < firstNum + nFinHeadCachedDeltaMin - 1 and
      not ctx.pool.beaconTarget:                     # maybe manual target set?
     let now = Moment.now()
     if ctx.pool.lastNoHdrsLog + noHeadersLogWaitInterval < now:
@@ -87,9 +94,13 @@ proc headerDownloadTrigger*(
   proc storeTopHeaderCB(state: BeaconNotifierState) =
     case state:
     of ok:
-      ctx.storeCachedHeaders(firstNum, info)
+      let finNum = ctx.hdrCache.finNum.get(otherwise = 0)
+      if firstNum <= finNum:
+        ctx.storeCachedHeaders(firstNum, finNum, info)
+      else:
+        trace info & ": No finalised header for now"
     of reset:
-      error info & ": Reset request from beacon syncer"
+      error info & ": Header chain wrong branch => reset"
       ctx.pool.resetReq = true
     of failed:
       discard

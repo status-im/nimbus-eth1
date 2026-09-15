@@ -265,7 +265,7 @@ proc getExecutionApiBackend*(
       return ok(r.get())
 
     feeHistoryProc = proc(
-        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[float64]
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
       let
         blockCountSer = packArg(blockCount).valueOr:

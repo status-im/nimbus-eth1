@@ -30,7 +30,7 @@ proc rpcCallEvm*(
     com: CommonRef,
     parentFrame: CoreDbTxRef,
     globalGasCap = 0.GasInt,
-): EvmResult[CallResult] =
+): Result[CallResult, string] =
   # TODO: globalGasCap should configurable by user
 
   let topHeader = Header(
@@ -57,7 +57,7 @@ proc rpcCallEvm*(
 
 proc rpcCallEvm*(
     args: TransactionArgs, header: Header, vmState: BaseVMState, globalGasCap = 0.GasInt
-): EvmResult[CallResult] =
+): Result[CallResult, string] =
   # TODO: globalGasCap should configurable by user
   let
     tx = ? toTransaction(vmState, args, globalGasCap, header)
@@ -67,12 +67,12 @@ proc rpcCallEvm*(
 
 proc rpcEstimateGas*(
     args: TransactionArgs, header: Header, vmState: BaseVMState, gasCap: GasInt
-): Result[GasInt, (EvmErrorObj, OutputResult)] =
+): Result[GasInt, OutputResult] =
   # Binary search the gas requirement, as it may be higher than the amount used
   let
     fork = vmState.fork
     tx = toTransaction(vmState, args, gasCap, header).valueOr:
-      return err((evmErr(EvmInvalidParam), OutputResult()))
+      return err(OutputResult(error: error))
     intrinsic = tx.intrinsicGas(vmState.hardFork, header.gasLimit, args.sender)
     params = tx.callParams(args.sender, vmState, intrinsic)
     txBaseCost = if fork >= FkAmsterdam: TX_BASE_COST_2780.GasInt
@@ -87,24 +87,20 @@ proc rpcEstimateGas*(
     # block's gasLimit act as the gas ceiling
     hi = header.gasLimit
 
-  # Normalize the execution fee per gas used by the estimator.
-  if args.gasPrice.isSome and
-      (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
-    return err((evmErr(EvmInvalidParam), OutputResult()))
-
   let feeCap = params.gasPrice
 
   # Recap the highest gas limit with account's available balance.
   if feeCap > 0:
     if args.source.isNone:
-      return err((evmErr(EvmInvalidParam), OutputResult()))
+      return err(OutputResult(error: "source is none, expect some"))
 
     let balance = vmState.readOnlyLedger.getBalance(args.source.get)
     var available = balance
     if args.value.isSome:
       let value = args.value.get
       if value >= available:
-        return err((evmErr(EvmInvalidParam), OutputResult()))
+        return err(OutputResult(error: "available balance not enough: " &
+          $available & ", expect: " & $value))
       available -= value
 
     let allowance = available div feeCap.u256
@@ -131,7 +127,8 @@ proc rpcEstimateGas*(
   proc executable(gasLimit: GasInt): Result[CallResult, OutputResult] =
     if minGasLimit > gasLimit:
       # Special case, raise gas limit
-      return err(OutputResult())
+      return err(OutputResult(error: "min gas limit exceeds gas limit: " &
+        $minGasLimit & ", gasLimit: " & $gasLimit))
 
     params.tx.gasLimit = gasLimit
     # TODO: bail out on consensus error similar to validateTransaction
@@ -155,7 +152,7 @@ proc rpcEstimateGas*(
 
   # Execute at highest gas limit first; if it fails, return immediately (no binary search)
   let highResult = executable(hi).valueOr:
-    return err((evmErr(EvmInvalidParam), error))
+    return err(error)
 
   if highResult.gasUsed > 0:
     lo = max(lo, highResult.gasUsed - 1)
@@ -186,7 +183,7 @@ proc rpcEstimateGas*(
     com: CommonRef,
     parentFrame: CoreDbTxRef,
     gasCap: GasInt,
-): Result[GasInt, (EvmErrorObj, OutputResult)] =
+): Result[GasInt, OutputResult] =
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = Header(
     parentHash: headerHash,

@@ -15,13 +15,10 @@ import
   ./engine/types,
   ./nimbus_verified_proxy_conf
 
-# for eth_feeHistory
-EthJson.automaticSerialization(int, true)
-
 # created a new sig for the feeHistory method on the RpcClient type
 createRpcSigsFromNim(RpcClient, EthJson):
   proc eth_feeHistory(
-    blockCount: Quantity, newestBlock: BlockIdentifier, rewardPercentiles: seq[int]
+    blockCount: Quantity, newestBlock: BlockIdentifier, rewardPercentiles: seq[float64]
   ): FeeHistoryResult
 
 type JsonRpcClient* = ref object
@@ -174,7 +171,7 @@ proc getExecutionApiBackend*(client: JsonRpcClient): ExecutionApiBackend =
         ok(await client.resolveClient().eth_getLogs(filterOptions))
 
     feeHistoryProc = proc(
-        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[float64]
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
       rpcCall:
         ok(

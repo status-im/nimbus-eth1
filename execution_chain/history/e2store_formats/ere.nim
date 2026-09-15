@@ -144,7 +144,7 @@ proc readDynamicBlockIndex*(
 
   let expectedComponentCount =
     2 + (if noReceipts: 0 else: 1) + (if noProofs: 0 else: 1) +
-    (if era(blockNumber) <= era(mergeBlockNumber): 1 else: 0)
+    (if blockNumber < mergeBlockNumber: 1 else: 0) # td, pre-merge + merge era
   if componentCount.int != expectedComponentCount:
     return err(
       "component-count mismatch: expected " & $expectedComponentCount & ", got " &
@@ -218,6 +218,7 @@ const
   ProofTypeHistoricalRoots* = 0x01'u64
   ProofTypeHistoricalSummaries* = 0x02'u64
   ProofTypeHistoricalSummariesDeneb* = 0x03'u64
+  ProofTypeHistoricalSummariesGloas* = 0x04'u64
 
 func init*(_: type Proof, proof: HistoricalHashesAccumulatorProof): Proof =
   Proof(proofType: ProofTypeHistoricalHashesAccumulator, proofData: SSZ.encode(proof))
@@ -230,6 +231,9 @@ func init*(_: type Proof, proof: BlockProofHistoricalSummaries): Proof =
 
 func init*(_: type Proof, proof: BlockProofHistoricalSummariesDeneb): Proof =
   Proof(proofType: ProofTypeHistoricalSummariesDeneb, proofData: SSZ.encode(proof))
+
+func init*(_: type Proof, proof: BlockProofHistoricalSummariesGloas): Proof =
+  Proof(proofType: ProofTypeHistoricalSummariesGloas, proofData: SSZ.encode(proof))
 
 proc init*(
     T: type EreGroup,
@@ -244,7 +248,7 @@ proc init*(
   let componentCount =
     2 + # header + body
     (if noReceipts: 0 else: 1) + (if noProofs: 0 else: 1) +
-    (if era(startNumber) <= era(mergeBlockNumber): 1 else: 0) # td pre-merge + merge era
+    (if startNumber < mergeBlockNumber: 1 else: 0) # td pre-merge + merge era
 
   # TODO: Not great ... Perhaps just make one big sequence and play with indexes.
   var indexesList = newSeq[Indexes](MaxEreSize)
@@ -377,16 +381,26 @@ func ereFileName*(
 
 func parseEreFileName*(
     path: string
-): Result[tuple[network: string, noProofs: bool, noReceipts: bool], string] =
-  ## Parses the network name and profile flags from an ere filename.
+): Result[tuple[network: string, era: Era, noProofs: bool, noReceipts: bool], string] =
+  ## Parses the network name, era and profile flags from an ere filename.
   ## Format: {network}-{era:05}-{hash}[-noproofs][-noreceipts].ere
-  let name = splitFile(path).name.toLowerAscii()
-  let dashPos = name.find('-')
-  if dashPos <= 0:
-    return err("Cannot parse network name from filename: " & path)
+  let
+    name = splitFile(path).name.toLowerAscii()
+    parts = name.split('-')
+
+  if parts.len() < 3 or parts[0].len() == 0:
+    return err("Cannot parse ere filename: " & path)
+
+  let era =
+    try:
+      parseBiggestUInt(parts[1])
+    except ValueError:
+      return err("Cannot parse era from filename: " & path)
+
   ok(
     (
-      network: name[0 ..< dashPos],
+      network: parts[0],
+      era: Era(era),
       noProofs: "noproofs" in name,
       noReceipts: "noreceipts" in name,
     )
@@ -620,6 +634,8 @@ type HeaderVerifier* = object
   historicalHashes*: Opt[FinishedHistoricalHashesAccumulator]
   historicalRoots*: HistoricalRoots
   historicalSummaries*: HistoricalSummaries
+  # Only needed for PoS only networks
+  genesisBlockHash*: Opt[Hash32]
 
 proc verifyProof(
     proof: Proof, header: headers.Header, v: HeaderVerifier, cfg: RuntimeConfig
@@ -655,6 +671,13 @@ proc verifyProof(
       decodedProof, Digest(data: header.computeRlpHash().data), cfg
     ):
       return err("Invalid BlockProofHistoricalSummariesDeneb: verification failed")
+  elif proof.proofType == ProofTypeHistoricalSummariesGloas:
+    let decodedProof = decodeSsz(proof.proofData, BlockProofHistoricalSummariesGloas).valueOr:
+      return err("Invalid BlockProofHistoricalSummariesGloas: $error")
+    if not v.historicalSummaries.verifyProof(
+      decodedProof, Digest(data: header.computeRlpHash().data), cfg
+    ):
+      return err("Invalid BlockProofHistoricalSummariesGloas: verification failed")
   else:
     return err("Invalid proof type")
 
@@ -686,7 +709,17 @@ proc verify*(
       if header.receiptsRoot != calcReceiptsRoot(receipts):
         return err("Invalid receipts root: blocknumber " & $blockNumber)
 
-    if not f.blockIdx.noProofs:
+    if blockNumber == 0 and f.mergeBlockNumber == 0:
+      # The genesis block of a PoS only network predates the beacon chain: the
+      # beacon chain holds it only in its genesis state and never in a beacon
+      # block, so it cannot be proven like the other blocks. It is verified
+      # against the genesis block of the network instead.
+      let genesisBlockHash = v.genesisBlockHash.valueOr:
+        return err("No genesis block hash to verify the genesis block with")
+
+      if header.computeRlpHash() != genesisBlockHash:
+        return err("Invalid genesis block: does not match the network genesis block")
+    elif not f.blockIdx.noProofs:
       let proof = ?getProof(f, blockNumber)
       ?verifyProof(proof, header, v, cfg)
 
@@ -697,7 +730,8 @@ proc verify*(
         HeaderRecord(blockHash: header.computeRlpHash(), totalDifficulty: td)
       )
 
-  if era(startNumber) <= era(f.mergeBlockNumber):
+  # The accumulator root is only written for files that hold pre-merge blocks
+  if startNumber < f.mergeBlockNumber:
     let
       expectedRoot = ?f.getAccumulatorRoot()
       accumulatorRoot = getEpochRecordRoot(headerRecords)

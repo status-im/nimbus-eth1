@@ -318,7 +318,7 @@ proc initTestExecutionBackend*(t: TestApiState): ExecutionApiBackend =
         err((BackendFetchError, e.msg, UNTAGGED))
 
     feeHistoryProc = proc(
-        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[float64]
     ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
       try:
         ok(t.feeHistories[(blockCount, newestBlock)])
