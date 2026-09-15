@@ -117,6 +117,17 @@ proc updAccMissingIntv*(
 
 const AccountInfo = "account"
 
+proc hasFlatAcc*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[bool] =
+  var data = db.hasFlatAcc(accPath).valueOr:
+    error info.failedToFetch "any " & AccountInfo, accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok(move data)
+
 proc getFlatAcc*(
     db: CacheDbRef;
     accPath: Hash32;

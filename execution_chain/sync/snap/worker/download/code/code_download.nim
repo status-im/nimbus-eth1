@@ -239,6 +239,10 @@ proc codeDownloadCommit*(
   ## In particular, for missing contract codes and lock records, its
   ## correspnding accounts are deleted.
   ##
+  if not ctx.accUnproc.synced():
+    error info & ": Cannot commit unsynced accounts ranges"
+    return err(ENoDataAvailable)
+
   let adb = ctx.pool.cacheDB
 
   # Collect paths for missing contract codes.

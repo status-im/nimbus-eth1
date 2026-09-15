@@ -349,6 +349,10 @@ proc storageDownloadCommit*(
   ## In particular, for partial storage sub-MPTs and lock records, its
   ## correspnding accounts and contract code are deleted.
   ##
+  if not ctx.accUnproc.synced():
+    error info & ": Cannot commit unsynced accounts ranges"
+    return err(ENoDataAvailable)
+
   let adb = ctx.pool.cacheDB
 
   # Collect paths for partial sub-MPTs.
