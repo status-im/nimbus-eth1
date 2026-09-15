@@ -18,9 +18,9 @@ import std/[os, strutils], stew/[assign2, ptrops]
 ## The zkVM implements these primitives natively, at a fraction of the proving
 ## cost of the same computation expressed in RISC-V.
 ##
-## TODO: bind the rest. Only the three replacing a BoringSSL backend are here;
-## the header also declares keccak256, secp256k1, bn254, bls12-381, kzg and
-## blake2f, all of which the guest currently computes in RISC-V instead.
+## TODO: bind the rest. Only the three replacing a BoringSSL backend plus
+## keccak256 are here; the header also declares secp256k1, bn254, bls12-381,
+## kzg and blake2f, all of which the guest currently computes in RISC-V instead.
 ##
 ## Every function returns `ZKVM_EOK` or `ZKVM_EFAIL`. A failure means the
 ## accelerator could not run at all, which is a broken guest rather than bad
@@ -65,6 +65,10 @@ proc c_zkvm_sha256(
   data: ptr byte, len: csize_t, output: ptr ZkvmBytes32
 ): ZkvmStatus {.importc: "zkvm_sha256", header: zkvmAccelHdr.}
 
+proc c_zkvm_keccak256(
+  data: ptr byte, len: csize_t, output: ptr ZkvmBytes32
+): ZkvmStatus {.importc: "zkvm_keccak256", header: zkvmAccelHdr.}
+
 proc c_zkvm_modexp(
   base: ptr byte,
   base_len: csize_t,
@@ -107,6 +111,18 @@ proc sha256Into*(data: openArray[byte], output: var array[32, byte]) =
   doAssert c_zkvm_sha256(
     (if data.len > 0: baseAddr(data) else: addr empty), csize_t(data.len), addr res
   ) == ZKVM_EOK, "zkvm_sha256 failed"
+
+  output = res.data
+
+proc keccak256Into*(data: openArray[byte], output: var array[32, byte]) =
+  ## Hash `data` into `output`.
+  var
+    res: ZkvmBytes32
+    empty: byte
+
+  doAssert c_zkvm_keccak256(
+    (if data.len > 0: baseAddr(data) else: addr empty), csize_t(data.len), addr res
+  ) == ZKVM_EOK, "zkvm_keccak256 failed"
 
   output = res.data
 
