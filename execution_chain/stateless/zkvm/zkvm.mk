@@ -62,9 +62,13 @@ check_zkvm_gcc:
 
 ZKVM_ELF := build/stateless_guest_$(ZKVM).elf
 
+# nim-eth and nim-ssz-serialization take their hash implementation from a
+# backend module on the search path: `keccak_external` and `sha256_external`,
+# both in $(ZKVM_DIR), hence the additional `--path`.
 stateless_guest_zkvm: | build deps check_zkvm_gcc $(ZKVM_CHECKS)
 	$(ENV_SCRIPT) $(NIMC) c $(STATELESS_GUEST_FLAGS) $(ZKVM_EXTRA_NIM) -d:release -d:zkvmTarget --debugger:off \
 		--cpu:$(ZKVM_CPU) --os:any -d:enable_zkvm_accelerators \
+		--path:"$(ZKVM_DIR)" -d:keccakExternalBackend -d:PREFER_EXTERNAL_SHA256 \
 		$(ZKVM_NIM_CC) \
 		--passC:"$(ZKVM_PASSC) $(ZKVM_EXTRA_PASSC)" \
 		--passL:"$(ZKVM_PASSL) $(ZKVM_EXTRA_PASSL)" \
