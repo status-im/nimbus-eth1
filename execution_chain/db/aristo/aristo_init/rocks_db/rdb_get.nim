@@ -325,9 +325,6 @@ proc getVtx*(
       )
       return ok(vtx)
 
-  if GetVtxFlag.CacheOnly in flags:
-    return err((GetVtxNotCached, ""))
-
   # Otherwise fetch from backend database
   var
     vtxBuf {.noinit.}: VertexBuf

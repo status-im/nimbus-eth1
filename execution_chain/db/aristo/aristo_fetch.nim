@@ -164,31 +164,18 @@ proc retrieveStoLeaf(
     stoPath: Hash32;
     hint: int;
       ): Result[VertexRef,AristoError] =
-  ## Walk the storage trie as far as the in-memory caches reach, then probe the
-  ## static vids from `hint` down to the first uncached level before reading
-  ## the rest of the path from the backend.
+  ## Probe the static vids from `hint` up towards the root, then read whatever
+  ## is left of the path from the backend
   let full = NibblesBuf.fromBytes(stoPath.data)
   var
     path = full
-    next = stoID
-    level = 0
+    next = VertexID(0)
 
-  while true:
-    let (vtx, common, nxt) = step(path, (stoID, next), db, {GetVtxFlag.CacheOnly}).valueOr:
-      if error == GetVtxNotCached:
-        break
-      if error in HikeAcceptableStopsNotFound:
-        return err(FetchPathNotFound)
-      return err(error)
-    if vtx.vType in Leaves:
-      return ok vtx
-    path = path.slice(common)
-    level += common
-    next = nxt
-
-  for sl in countdown(hint, level + 1):
-    let vtx = db.getVtxRc((stoID, full.staticVid(sl))).valueOr:
-      continue
+  for sl in countdown(hint, 0):
+    let
+      svid = if sl == 0: stoID else: full.staticVid(sl)
+      vtx = db.getVtxRc((stoID, svid)).valueOr:
+        continue
     case vtx[0].vType
     of Leaves:
       return

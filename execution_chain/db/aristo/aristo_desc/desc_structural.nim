@@ -121,8 +121,6 @@ type
     PeekCache
       ## Peek into, but don't update cache - useful on work loads that are
       ## unfriendly to caches
-    CacheOnly
-      ## Answer from the in-memory caches only, `GetVtxNotCached` otherwise
 
 const
   Leaves* = {VertexType.AccLeaf, VertexType.StoLeaf}

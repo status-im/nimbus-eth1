@@ -60,11 +60,10 @@ func legsTo*(hike: Hike; T: type NibblesBuf): T =
 # --------
 
 proc step*(
-    path: NibblesBuf, rvid: RootedVertexID, db: AristoTxRef,
-    flags: set[GetVtxFlag] = {},
+    path: NibblesBuf, rvid: RootedVertexID, db: AristoTxRef
       ): Result[(VertexRef, int, VertexID), AristoError] =
   # Fetch next vertex
-  let (vtx, _) = db.getVtxRc(rvid, flags).valueOr:
+  let (vtx, _) = db.getVtxRc(rvid).valueOr:
     if error != GetVtxNotFound:
       return err(error)
 
