@@ -123,6 +123,7 @@ type
     headersSynced*: bool             ## beacon sync headers
     pivotNum*: BlockNumber           ## Last applicable state block number
     forwardNum*: BlockNumber         ## Max possible BALs forward
+    lastConsNum*: BlockNumber        ## Wait a bit until next header download
     balsLocked*: SnapPeerRef         ## Only one peer can download BALs
     failedEthBalId*: EthBalHashSet   ## Ditto for eth peers
     coreDb2Path*: Path               ## Assembled core DM path

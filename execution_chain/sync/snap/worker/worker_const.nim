@@ -144,11 +144,6 @@ const
     ## form the pivot state block number, a BAL download and forward cycle
     ## will be triggerd.
 
-  nFinHeadCachedDeltaMin* = 20
-    ## If the block number difference between FCU update finalised header and
-    ## cached header is larger than this contant, a beacon header fetch cycle
-    ## is triggered to fill up the cache.
-
   nFinHeadSupportWindowTopMargin* = 45
     ## Top (or right end) acceptance margin for the download window. The
     ## state of the patrtial MPT representation is forwarded until it falls
@@ -157,6 +152,11 @@ const
     ##    finalised-head - nFinHeadSupportWindowTopMargin .. finalised-head
     ##
     ## (providing a hysteresis.)
+
+  nConsHeadCachedDeltaMin* = 20
+    ## If the block number difference between FCU update finalised header and
+    ## cached header is larger than this contant, a beacon header fetch cycle
+    ## is triggered to fill up the cache.
 
   # -----------
 
@@ -249,7 +249,7 @@ const
     ## Default maximum number of BALs for a single auto downloading session.
 
 static:
-  doAssert 0 < nFinHeadCachedDeltaMin
+  doAssert 0 < nConsHeadCachedDeltaMin
   doAssert 0 < nFinHeadSupportWindowTopMargin
 
 # End
