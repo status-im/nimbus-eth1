@@ -451,7 +451,7 @@ proc processTransactionsParallel*(
   var synced = 0
   defer:
     while synced < n:
-      discard sync(futs[synced])
+      discard sync(move(futs[synced]))
       inc synced
     for i in 0 ..< n:
       entries[i].logs.dispose()
@@ -460,14 +460,14 @@ proc processTransactionsParallel*(
   # Process each result as soon as its task completes so the main thread makes
   # progress while the remaining tasks keep running in the background.
   for i in 0 ..< n:
-    let ok = sync(futs[i])
+    let ok = sync(move(futs[i]))
     inc synced
     if not ok:
       # find the task that caused the failure
       var failIdx = i
       while entries[failIdx].preempted and failIdx + 1 < n:
         inc failIdx
-        discard sync(futs[failIdx])
+        discard sync(move(futs[failIdx]))
         inc synced
       return err(
         "Error processing tx with index " & $failIdx & ":" &
