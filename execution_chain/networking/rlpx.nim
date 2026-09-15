@@ -48,6 +48,19 @@ const
 
   connectionTimeout = 10.seconds
 
+  peerPingInterval = 15.seconds
+    ## Send a devp2p ping to a peer that has been quiet for this long, so as to
+    ## find out whether the connection is still alive.
+
+  peerIdleTimeout = 60.seconds
+    ## Disconnect a peer that has not sent anything for this long. Without it, a
+    ## connection whose remote end silently went away - NAT timeout, crashed
+    ## peer, blackholed route - is kept open forever: there is no TCP keepalive
+    ## on the socket and nothing else in the stack ever closes it.
+
+  peerLivenessInterval = 5.seconds
+    ## How often peers are examined for the above two conditions.
+
 # TODO: chronicles re-export here is added for the error
 # "undeclared identifier: 'activeChroniclesStream'", when the code using p2p
 # does not import chronicles. Need to resolve this properly.
@@ -222,6 +235,7 @@ proc recvMsg(
   var msgBody: seq[byte]
   try:
     msgBody = await peer.transport.recvMsg()
+    peer.lastReceived = Moment.now()
 
     trace "Received message",
       remote = peer.remote,
@@ -321,6 +335,9 @@ proc disconnect*(
 
     peer.connectionState = Disconnecting
 
+    if not peer.keepAlive.isNil and not peer.keepAlive.finished:
+      peer.keepAlive.cancelSoon()
+
     # Do this first so sub-protocols have time to clean up and stop sending
     # before this node closes transport to remote peer
     if not peer.dispatcher.isNil:
@@ -386,6 +403,38 @@ proc initPeerState(
   peer.lastReqId = Opt.some(0u64)
   peer.initPeerStates peer.dispatcher.activeProtocols
 
+proc keepAliveLoop(peer: Peer) {.async: (raises: [CancelledError]).} =
+  ## Reap connections whose remote end has gone away without closing the socket.
+  ## Nothing else does this: `dispatchMessages` blocks in `recvMsg` forever and
+  ## peers that the syncer has no slot for are never written to either, so a
+  ## dead connection is never noticed.
+  while peer.connectionState == Connected:
+    await sleepAsync(peerLivenessInterval)
+
+    let idle = Moment.now() - peer.lastReceived
+    if idle >= peerIdleTimeout:
+      debug "Peer timed out, closing connection",
+        remote = peer.remote, clientId = peer.clientId, idle
+      # Closing the transport makes the pending read in `dispatchMessages` fail,
+      # which runs the regular disconnect path - handlers, pool removal, metrics
+      peer.transport.close()
+      return
+
+    if idle >= peerPingInterval:
+      # A live peer answers with a pong, which resets `lastReceived`. The write
+      # is bounded because a peer that stopped reading fills our send buffer
+      # and would otherwise park this loop past the idle timeout.
+      try:
+        await peer.ping().wait(peerIdleTimeout)
+      except AsyncTimeoutError:
+        debug "Ping could not be delivered, closing connection",
+          remote = peer.remote, clientId = peer.clientId
+        peer.transport.close()
+        return
+      except EthP2PError as exc:
+        trace "Failed to send ping", remote = peer.remote, err = exc.msg
+        return
+
 proc postHelloSteps(
     peer: Peer, h: HelloPacket
 ) {.async: (raises: [CancelledError, EthP2PError]).} =
@@ -428,6 +477,8 @@ proc postHelloSteps(
       ClientQuitting, "messageProcessingLoop ended while connecting"
     )
   peer.connectionState = Connected
+  peer.lastReceived = Moment.now()
+  peer.keepAlive = keepAliveLoop(peer)
 
 template setSnappySupport(peer: Peer, hello: HelloPacket) =
   peer.snappyEnabled = hello.version >= devp2pSnappyVersion.uint64
@@ -650,6 +701,16 @@ proc rlpxAccept*(
 
   logScope:
     remote = peer.remote
+
+  # Enforce `--max-peers` on incoming connections. Without this the node accepts
+  # every dial-in on the network and, since nothing ever closes an established
+  # connection, keeps it until the process exits.
+  if node.peerPool.isFull:
+    debug "Too many peers, rejecting incoming connection",
+      numPeers = node.peerPool.numPeers, maxPeers = node.peerPool.maxPeers
+    await peer.disconnect(TooManyPeers, notifyRemote = true)
+    rlpx_accept_failure.inc(labelValues = [$TooManyPeers])
+    return nil
 
   let response =
     try:
