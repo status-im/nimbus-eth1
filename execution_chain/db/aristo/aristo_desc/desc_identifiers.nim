@@ -17,6 +17,7 @@
 import
   std/[algorithm, sequtils, sets, strutils, hashes],
   eth/common/[base, hashes],
+  eth/keccak/rapidhash,
   eth/rlp, eth/trie/nibbles,
   stew/byteutils,
   chronicles,
@@ -113,7 +114,8 @@ func `==`*(a, b: RootedVertexID): bool {.inline.} =
   a.vid == b.vid and a.root == b.root
 
 func hash*(rvid: RootedVertexID): Hash {.inline.} =
-  hash((rvid.root.uint64 * 0x9E3779B97F4A7C15'u64) xor rvid.vid.uint64)
+  static: doAssert sizeof(RootedVertexID) == 2 * sizeof(VertexID) # no padding
+  cast[Hash](rapidhashNano(cast[array[16, byte]](rvid)))
 
 func `$`*(rvid: RootedVertexID): string =
   $rvid.root & "/" & $rvid.vid
