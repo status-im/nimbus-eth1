@@ -18,8 +18,8 @@ import std/[os, strutils], stew/[assign2, ptrops]
 ## The zkVM implements these primitives natively, at a fraction of the proving
 ## cost of the same computation expressed in RISC-V.
 ##
-## TODO: bind the rest. The header also declares secp256k1_verify, bls12-381,
-## ripemd160 and blake2f, all of which the guest currently computes in RISC-V.
+## TODO: bind the rest. The header also declares secp256k1_verify and
+## bls12-381, which the guest currently computes in RISC-V.
 ##
 ## Every function returns `ZKVM_EOK` or `ZKVM_EFAIL`, but which of the two a
 ## bad *input* gets is per function: secp256r1 reports a rejected signature as
@@ -49,6 +49,9 @@ type
   # plain Nim object is a different struct type and the generated call does not
   # compile. It also puts the header's _Alignas(8) in charge of where locals
   # land, which is what the accelerators read a word at a time.
+  ZkvmBytes16 {.importc: "zkvm_bytes_16", header: zkvmAccelHdr.} = object
+    data: array[16, byte]
+
   ZkvmBytes32 {.importc: "zkvm_bytes_32", header: zkvmAccelHdr.} = object
     data: array[32, byte]
 
@@ -75,6 +78,10 @@ const ZKVM_EOK = ZkvmStatus(0)
 proc c_zkvm_sha256(
   data: ptr byte, len: csize_t, output: ptr ZkvmBytes32
 ): ZkvmStatus {.importc: "zkvm_sha256", header: zkvmAccelHdr.}
+
+proc c_zkvm_ripemd160(
+  data: ptr byte, len: csize_t, output: ptr ZkvmBytes32
+): ZkvmStatus {.importc: "zkvm_ripemd160", header: zkvmAccelHdr.}
 
 proc c_zkvm_keccak256(
   data: ptr byte, len: csize_t, output: ptr ZkvmBytes32
@@ -113,6 +120,10 @@ proc c_zkvm_bn254_pairing(
   pairs: ptr ZkvmBn254PairingPair, num_pairs: csize_t, verified: ptr bool
 ): ZkvmStatus {.importc: "zkvm_bn254_pairing", header: zkvmAccelHdr.}
 
+proc c_zkvm_blake2f(
+  rounds: uint32, h: ptr ZkvmBytes64, m: ptr ZkvmBytes128, t: ptr ZkvmBytes16, f: uint8
+): ZkvmStatus {.importc: "zkvm_blake2f", header: zkvmAccelHdr.}
+
 proc c_zkvm_kzg_point_eval(
   commitment: ptr ZkvmBytes48,
   z: ptr ZkvmBytes32,
@@ -146,6 +157,23 @@ proc sha256Into*(data: openArray[byte], output: var array[32, byte]) =
   doAssert c_zkvm_sha256(
     (if data.len > 0: baseAddr(data) else: addr empty), csize_t(data.len), addr res
   ) == ZKVM_EOK, "zkvm_sha256 failed"
+
+  output = res.data
+
+proc ripemd160Into*(data: openArray[byte], output: var array[32, byte]) =
+  ## Hash `data` into `output`: the 20-byte digest lands in bytes 12..31 and
+  ## bytes 0..11 are zeroed.
+  ##
+  ## Bound but unused: ZisK has no RIPEMD-160 state machine, so the vendor's
+  ## implementation proves as ordinary RISC-V in the same way as ours.
+  ## `precompiles.nim` keeps nimcrypto until some target has one.
+  var
+    res: ZkvmBytes32
+    empty: byte
+
+  doAssert c_zkvm_ripemd160(
+    (if data.len > 0: baseAddr(data) else: addr empty), csize_t(data.len), addr res
+  ) == ZKVM_EOK, "zkvm_ripemd160 failed"
 
   output = res.data
 
@@ -285,6 +313,31 @@ proc bn254Pairing*(pairs: openArray[byte], verified: var bool): bool =
   if c_zkvm_bn254_pairing(addr buf[0], csize_t(count), addr verified) != ZKVM_EOK:
     return false
 
+  true
+
+proc blake2fCompress*(
+    rounds: uint32,
+    state: var openArray[byte],
+    msg: openArray[byte],
+    offset: openArray[byte],
+    final: bool,
+): bool =
+  ## BLAKE2f compression, EIP-152.
+  if state.len != 64 or msg.len != 128 or offset.len != 16:
+    return false
+
+  var
+    h: ZkvmBytes64
+    m: ZkvmBytes128
+    t: ZkvmBytes16
+  assign(h.data, state)
+  assign(m.data, msg)
+  assign(t.data, offset)
+
+  doAssert c_zkvm_blake2f(rounds, addr h, addr m, addr t, uint8(final)) == ZKVM_EOK,
+    "zkvm_blake2f failed"
+
+  assign(state, h.data)
   true
 
 proc verifyKzgProofRaw*(
