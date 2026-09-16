@@ -62,8 +62,9 @@ proc slotBothWays(db: AristoDbRef, accPath, stoPath: Hash32): UInt256 =
   doAssert viaWalk == viaProbe, "static probe and walk disagree"
   viaProbe
 
-proc hintOf(db: AristoDbRef, accPath: Hash32): int =
-  db.txRef.fetchStorageInfo(accPath).expect("account")[1]
+proc probeLevelOf(db: AristoDbRef, accPath: Hash32): int =
+  let startLevel = db.txRef.fetchStorageInfo(accPath).expect("account")[1]
+  if startLevel.isSome: startLevel[] else: -1
 
 proc stoRoot(db: AristoDbRef, accPath: Hash32): VertexID =
   db.txRef.fetchStorageID(accPath).expect("storage")
@@ -80,7 +81,7 @@ suite "Aristo static storage vids":
       tx.mergeSlot(accA, slot1, 11.u256).isOk()
     db.persist(tx, 1)
     check:
-      db.hintOf(accA) == 1
+      db.probeLevelOf(accA) == 0
       db.slotBothWays(accA, slot1) == 11.u256
       db.slotBothWays(accA, slotMissing) == 0.u256
 
@@ -93,7 +94,7 @@ suite "Aristo static storage vids":
     db.persist(tx, 1)
     let root = db.stoRoot(accA)
     check:
-      db.hintOf(accA) == 1
+      db.probeLevelOf(accA) == 0
       db.txRef.getVtxRc((root, NibblesBuf.fromBytes(slot1.data).staticVid(1))).isOk()
       db.txRef.getVtxRc((root, NibblesBuf.fromBytes(slot3.data).staticVid(1))).isOk()
       db.slotBothWays(accA, slot1) == 11.u256
@@ -108,7 +109,7 @@ suite "Aristo static storage vids":
       tx0.mergeSlot(accA, slot2, 22.u256).isOk()
     db.persist(tx0, 1)
     check:
-      db.hintOf(accA) == 4
+      db.probeLevelOf(accA) == 3
       db.slotBothWays(accA, slot1) == 11.u256
       db.slotBothWays(accA, slot2) == 22.u256
       db.slotBothWays(accA, slot3) == 33.u256
@@ -117,7 +118,7 @@ suite "Aristo static storage vids":
     check tx1.deleteSlot(accA, slot2).isOk()
     db.persist(tx1, 2)
     check:
-      db.hintOf(accA) == 2
+      db.probeLevelOf(accA) == 1
       db.slotBothWays(accA, slot1) == 11.u256
       db.slotBothWays(accA, slot2) == 0.u256
       db.slotBothWays(accA, slot3) == 33.u256
@@ -129,13 +130,13 @@ suite "Aristo static storage vids":
       tx0.mergeSlot(accA, slot1, 11.u256).isOk()
       tx0.mergeSlot(accA, slot2, 22.u256).isOk()
     db.persist(tx0, 1)
-    check db.hintOf(accA) == 4
+    check db.probeLevelOf(accA) == 3
 
     let tx1 = db.txFrameBegin(db.txRef)
     check tx1.mergeSlot(accA, slot3, 33.u256).isOk()
     db.persist(tx1, 2)
     check:
-      db.hintOf(accA) == 2
+      db.probeLevelOf(accA) == 1
       db.slotBothWays(accA, slot1) == 11.u256
       db.slotBothWays(accA, slot2) == 22.u256
       db.slotBothWays(accA, slot3) == 33.u256
@@ -145,8 +146,51 @@ suite "Aristo static storage vids":
     check tx2.mergeSlot(accA, slot1, 111.u256).isOk()
     db.persist(tx2, 3)
     check:
-      db.hintOf(accA) == 2
+      db.probeLevelOf(accA) == 1
       db.slotBothWays(accA, slot1) == 111.u256
+
+  test "a branch-sibling collapse leaves the probe level alone":
+    # sB and sC share three nibbles, sA diverges at the first, so deleting sA
+    # collapses the root branch onto a branch rather than onto a leaf
+    let
+      sA = path(0x10, 0x01)
+      sB = path(0x20, 0x01)
+      sC = path(0x20, 0x02)
+    let tx = db.txFrameBegin(db.txRef)
+    check:
+      tx.mergeAccount(accA, account(1)).isOk()
+      tx.mergeSlot(accA, sA, 11.u256).isOk()
+      tx.mergeSlot(accA, sB, 22.u256).isOk()
+      tx.mergeSlot(accA, sC, 33.u256).isOk()
+    db.persist(tx, 1)
+    let root = db.stoRoot(accA)
+
+    proc leafLevel(sp: Hash32): int =
+      let nib = NibblesBuf.fromBytes(sp.data)
+      for lvl in 0 .. STATIC_VID_LEVELS:
+        let vid = if lvl == 0: root else: nib.staticVid(lvl)
+        let rc = db.txRef.getVtxRc((root, vid))
+        if rc.isOk and rc.value[0].vType in Leaves:
+          return lvl
+      -1
+
+    let before = leafLevel(sB)
+    check:
+      before == 4
+      db.probeLevelOf(accA) == 3
+
+    let tx1 = db.txFrameBegin(db.txRef)
+    check tx1.deleteSlot(accA, sA).isOk()
+    db.persist(tx1, 2)
+
+    # the promoted branch absorbs the freed nibble into its prefix and keeps its
+    # startVid, so the leaves below keep their level - the probe must not move
+    check:
+      leafLevel(sB) == before
+      db.probeLevelOf(accA) == 3
+      db.slotBothWays(accA, sB) == 22.u256
+      db.slotBothWays(accA, sC) == 33.u256
+      db.slotBothWays(accA, sA) == 0.u256
 
   test "two tries share static vids without interfering":
     let tx = db.txFrameBegin(db.txRef)
@@ -178,20 +222,20 @@ suite "Aristo static storage vids":
       tx0.mergeSlot(accA, slot1, 11.u256).isOk()
       tx0.mergeSlot(accA, slot2, 22.u256).isOk()
     db.persist(tx0, 1)
-    check db.hintOf(accA) == 4
+    check db.probeLevelOf(accA) == 3
 
     let tx1 = db.txFrameBegin(db.txRef)
     check tx1.clearStorage(accA).isOk()
     db.persist(tx1, 2)
     check:
-      db.hintOf(accA) == 0
+      db.probeLevelOf(accA) == -1
       db.slotBothWays(accA, slot1) == 0.u256
 
     let tx2 = db.txFrameBegin(db.txRef)
     check tx2.mergeSlot(accA, slot3, 33.u256).isOk()
     db.persist(tx2, 3)
     check:
-      db.hintOf(accA) == 1
+      db.probeLevelOf(accA) == 0
       db.slotBothWays(accA, slot3) == 33.u256
       db.slotBothWays(accA, slot1) == 0.u256
 
@@ -240,8 +284,8 @@ suite "Aristo static storage vids":
     block:
       let rdb = open(wipe = false)
       check:
-        rdb.hintOf(accA) == 4
-        rdb.hintOf(accB) == 4
+        rdb.probeLevelOf(accA) == 3
+        rdb.probeLevelOf(accB) == 3
         rdb.slotBothWays(accA, slot1) == 11.u256
         rdb.slotBothWays(accB, slot1) == 21.u256
         rdb.slotBothWays(accA, slot2) == 12.u256

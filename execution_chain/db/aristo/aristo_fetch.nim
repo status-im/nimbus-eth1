@@ -162,15 +162,15 @@ proc retrieveStoStatic(
     db: AristoTxRef;
     stoID: VertexID;
     stoPath: Hash32;
-    hint: int;
+    startLevel: int;
       ): Result[(StoLeafRef, NibblesBuf, VertexID),AristoError] =
   # Same search as `retrieveAccStatic` but in a storage trie, where the vids are
-  # static relative to the storage root and `hint` records the level a leaf was
-  # last placed at - level 0 being the storage root itself
+  # static relative to the storage root and `startLevel` is the level to begin
+  # probing at - level 0 being the storage root itself
   var path = NibblesBuf.fromBytes(stoPath.data)
   var next: VertexID
 
-  for sl in countdown(hint, 0):
+  for sl in countdown(startLevel, 0):
     let
       svid = if sl == 0: stoID else: path.staticVid(sl)
       vtx = db.getVtxRc((stoID, svid)).valueOr:
@@ -313,13 +313,16 @@ proc fetchStorageID*(
 proc fetchStorageInfo*(
     db: AristoTxRef;
     accPath: Hash32;
-      ): Result[(VertexID, int),AristoError] =
-  ## Storage root vid and static depth hint, `(0, 0)` when there is no storage
+      ): Result[(VertexID, Opt[int]),AristoError] =
+  ## Storage root vid and the static level to start probing slot leaves at,
+  ## `none` when the trie was not built with static vids
   let leafVtx = ?db.retrieveAccLeaf(accPath)
   ok if leafVtx.stoID.isValid:
-    (leafVtx.stoID.vid, int leafVtx.stoHint)
+    (leafVtx.stoID.vid,
+     if 0 < leafVtx.stoHint: Opt.some(int leafVtx.stoHint - 1)
+     else: Opt.none(int))
   else:
-    (default(VertexID), 0)
+    (default(VertexID), Opt.none(int))
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -396,7 +399,7 @@ proc fetchSlot*(
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
 
-  let (stoID, hint) = ?db.fetchStorageInfo(accPath)
+  let (stoID, startLevel) = ?db.fetchStorageInfo(accPath)
   if not stoID.isValid():
     db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
     return ok 0'u256
@@ -405,8 +408,8 @@ proc fetchSlot*(
     path = NibblesBuf.fromBytes(stoPath.data)
     next = VertexID(0)
 
-  if db.db.stoStatic and 0 < hint:
-    let (staticVtx, rest, nxt) = db.retrieveStoStatic(stoID, stoPath, hint - 1).valueOr:
+  if db.db.stoStatic and startLevel.isSome:
+    let (staticVtx, rest, nxt) = db.retrieveStoStatic(stoID, stoPath, startLevel[]).valueOr:
       if error == FetchPathNotFound:
         db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
         return ok 0'u256
