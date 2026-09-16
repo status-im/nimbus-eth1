@@ -66,7 +66,7 @@ const
   noPeersLogWaitInterval* = chronos.seconds(50)
     ## Reduce logging noise
 
-  noHeadersLogWaitInterval* = chronos.seconds(50)
+  noHeadersLogWaitInterval* = chronos.seconds(120)
     ## Reduce logging noise
 
   maxHeadersLogWaitInterval* = chronos.seconds(30)
@@ -102,9 +102,6 @@ const
 
   daemonWaitBalsFetchInterval* = chronos.seconds(5)
     ## Poll waiting for some peer to download BALs
-
-  daemonWaitBalsFetchFinishInterval* = chronos.seconds(1)
-    ## Poll waiting for all peers to have stopped
 
   # ---------
 

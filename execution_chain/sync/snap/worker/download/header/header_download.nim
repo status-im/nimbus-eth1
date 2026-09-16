@@ -37,7 +37,7 @@ proc storeCachedHeaders(
   ctx.pool.lastConsNum = ctx.hdrCache.head.number
   trace info & ": Registered headers", leastBn, topBn, count,
     lastConsHead=ctx.pool.lastConsNum,
-    newConsHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState)
+    consHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState)
 
 proc stateNum(ctx: SnapCtxRef): BlockNumber =
   # Get block number from saved state (if any)
@@ -77,8 +77,8 @@ proc headerDownloadTrigger*(
     #       clean up.
     return ok()                                     # nothing to do
 
-  # Here, a beacon header fetch cycle is not truggered unless there are
-  # enough expected headers available to fetch.
+  # A beacon header fetch cycle is not triggered unless there are enough
+  # expected headers available to fetch.
   #
   # When downloading headers, the CL head of the canonical chain is targeted,
   # but the downloaded chain is only used up until the finalised head, which
@@ -96,8 +96,9 @@ proc headerDownloadTrigger*(
     let now = Moment.now()
     if ctx.pool.lastNoHdrsLog + noHeadersLogWaitInterval < now:
       ctx.pool.lastNoHdrsLog = now
-      trace info & ": Not enough headers to download yet", firstNum,
-        consHeadNum, syncState=($ctx.syncState)
+      trace info & ": Not enough headers to download yet", firstHeader=firstNum,
+        lastConsHead=ctx.pool.lastConsNum, consHead=consHeadNum,
+        syncState=($ctx.syncState)
     return ok()
 
   # Define event handler to complete beacon syncer download
