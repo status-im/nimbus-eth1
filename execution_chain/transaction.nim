@@ -8,13 +8,10 @@
 {.push raises: [], gcsafe.}
 
 import
-  ./[constants, compile_info],
-  ./core/pooled_txs_rlp,
+  ./constants,
+  ./core/[pooled_txs_rlp, pubkey_recovery],
   eth/common/[addresses, keys, transactions, transactions_rlp, transaction_utils],
   results
-
-when enable_zkvm_accelerators:
-  import ./stateless/zkvm/zkvm_accelerators
 
 export addresses, keys, transactions, results
 
@@ -29,16 +26,9 @@ when senderCacheEnabled:
   cache.init(CACHE_CAPACITY, threadSafe = true)
 
 func recoverSender(msgHash: Hash32, sig: Signature): Opt[Address] =
-  when enable_zkvm_accelerators:
-    let raw = sig.toRaw() # r ‖ s ‖ recid
-    var pubkey {.noinit.}: array[64, byte]
-    if not ecRecoverRaw(msgHash.data, raw.toOpenArray(0, 63), raw[64], pubkey):
-      return Opt.none(Address)
-    Opt.some(keccak256(pubkey).to(Address))
-  else:
-    let pubkey = recover(sig, SkMessage(msgHash.data)).valueOr:
-      return Opt.none(Address)
-    Opt.some(pubkey.to(Address))
+  let pubkey = recoverPubkeyRaw(msgHash, sig).valueOr:
+    return Opt.none(Address)
+  Opt.some(keccak256(pubkey).to(Address))
 
 proc recoverSenderCached*(msgHash: Hash32, sig: Signature): Opt[Address] =
   when not senderCacheEnabled:
