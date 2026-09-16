@@ -18,6 +18,7 @@ import
   eth/trie/ordered_trie,
   beacon_chain/spec/eth2_merkleization,
   beacon_chain/spec/datatypes/constants,
+  ../compile_info,
   ../common/common,
   ../db/ledger,
   ../db/core_db/memory_only,
@@ -25,6 +26,9 @@ import
   ../core/executor/process_block,
   ../block_access_list/bal_validation,
   ./[witness_types, witness_verification, stateless_types]
+
+when enable_zkvm_accelerators:
+  import ./zkvm/zkvm_accelerators
 
 from beacon_chain/spec/datatypes/electra import
   DepositRequest, WithdrawalRequest, ConsolidationRequest
@@ -62,13 +66,30 @@ template recoverSenderFromPublicKey(
   ##
   ## Returns the sender address derived from the verified public key.
   block:
-    let recovered = tx.recoverKey().valueOr:
-      return err("Invalid transaction signature at index " & $index)
+    when enable_zkvm_accelerators:
+      let
+        sig = tx.signature().valueOr:
+          return err("Invalid transaction signature at index " & $index)
+        raw = sig.toRaw() # r ‖ s ‖ recid
+        sigHash = tx.rlpHashForSigning(tx.isEip155())
+      var pubkey {.noinit.}: array[64, byte]
+      if not ecRecoverRaw(sigHash.data, raw.toOpenArray(0, 63), raw[64], pubkey):
+        return err("Invalid transaction signature at index " & $index)
 
-    if SkPublicKey(recovered).toRaw() != key:
-      return err("Transaction public key mismatch at index " & $index)
+      # `key` is the full uncompressed SEC1 form, so it carries the 0x04 prefix
+      # that the accelerator's x ‖ y output does not.
+      if key[0] != 0x04'u8 or pubkey != key.toOpenArray(1, 64):
+        return err("Transaction public key mismatch at index " & $index)
 
-    recovered.to(Address)
+      keccak256(pubkey).to(Address)
+    else:
+      let recovered = tx.recoverKey().valueOr:
+        return err("Invalid transaction signature at index " & $index)
+
+      if SkPublicKey(recovered).toRaw() != key:
+        return err("Transaction public key mismatch at index " & $index)
+
+      recovered.to(Address)
 
 func recoverSendersFromPublicKeys(
     txs: openArray[Transaction], keys: openArray[ByteVector[PUBLIC_KEY_BYTES]]

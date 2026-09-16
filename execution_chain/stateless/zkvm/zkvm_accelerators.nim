@@ -69,6 +69,10 @@ proc c_zkvm_keccak256(
   data: ptr byte, len: csize_t, output: ptr ZkvmBytes32
 ): ZkvmStatus {.importc: "zkvm_keccak256", header: zkvmAccelHdr.}
 
+proc c_zkvm_secp256k1_ecrecover(
+  msg: ptr ZkvmBytes32, sig: ptr ZkvmBytes64, recid: uint8, output: ptr ZkvmBytes64
+): ZkvmStatus {.importc: "zkvm_secp256k1_ecrecover", header: zkvmAccelHdr.}
+
 proc c_zkvm_modexp(
   base: ptr byte,
   base_len: csize_t,
@@ -125,6 +129,34 @@ proc keccak256Into*(data: openArray[byte], output: var array[32, byte]) =
   ) == ZKVM_EOK, "zkvm_keccak256 failed"
 
   output = res.data
+
+proc ecRecoverRaw*(
+    msgHash: openArray[byte],
+    sig: openArray[byte],
+    recid: byte,
+    output: var array[64, byte],
+): bool =
+  ## Recover the public key that signed `msgHash` from the signature `sig`, the
+  ## big-endian `r ‖ s`. `output` receives the key's coordinates `x ‖ y`, which
+  ## is the uncompressed SEC1 form without its leading `0x04`.
+  ##
+  ## `false` also covers a rejected signature, not just a failed accelerator:
+  ## the vendor validates `r`, `s` and `recid` and reports both the same way.
+  if msgHash.len != 32 or sig.len != 64:
+    return false
+
+  var
+    msgBuf: ZkvmBytes32
+    sigBuf, keyBuf: ZkvmBytes64
+  assign(msgBuf.data, msgHash)
+  assign(sigBuf.data, sig)
+
+  if c_zkvm_secp256k1_ecrecover(addr msgBuf, addr sigBuf, uint8(recid), addr keyBuf) !=
+      ZKVM_EOK:
+    return false
+
+  output = keyBuf.data
+  true
 
 proc modExpInto*(b, e, m: openArray[byte], output: var openArray[byte]) =
   ## `output = b^e mod m`, big-endian, with `output.len == m.len`.

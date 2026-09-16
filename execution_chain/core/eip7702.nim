@@ -13,11 +13,15 @@
 import
   ../evm/code_bytes,
   ../constants,
+  ../compile_info,
   results,
   stew/assign2,
   eth/common/eth_types,
   eth/common/eth_types_rlp,
   eth/common/keys
+
+when enable_zkvm_accelerators:
+  import ../stateless/zkvm/zkvm_accelerators
 
 const
   PER_AUTH_BASE_COST* = 12500
@@ -41,13 +45,20 @@ func authority*(auth: Authorization): Opt[Address] =
   assign(bytes.toOpenArray(32, 63), auth.s.toBytesBE())
   bytes[64] = auth.yParity.byte
 
-  let sig = Signature.fromRaw(bytes).valueOr:
-    return Opt.none(Address)
+  when enable_zkvm_accelerators:
+    var pubkey {.noinit.}: array[64, byte]
+    if not ecRecoverRaw(sigHash.data, bytes.toOpenArray(0, 63), bytes[64], pubkey):
+      return Opt.none(Address)
 
-  let pubkey = recover(sig, SkMessage(sigHash.data)).valueOr:
-    return Opt.none(Address)
+    ok(keccak256(pubkey).to(Address))
+  else:
+    let sig = Signature.fromRaw(bytes).valueOr:
+      return Opt.none(Address)
 
-  ok(pubkey.toCanonicalAddress())
+    let pubkey = recover(sig, SkMessage(sigHash.data)).valueOr:
+      return Opt.none(Address)
+
+    ok(pubkey.toCanonicalAddress())
 
 func isDelegation*(code: openArray[byte]): bool =
   ## Returns true if `code` is a well-formed EIP-7702 delegation designator: the
