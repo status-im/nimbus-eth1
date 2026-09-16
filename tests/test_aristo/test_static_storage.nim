@@ -93,7 +93,7 @@ suite "Aristo static storage vids":
     db.persist(tx, 1)
     let root = db.stoRoot(accA)
     check:
-      db.hintOf(accA) == 2
+      db.hintOf(accA) == 1
       db.txRef.getVtxRc((root, NibblesBuf.fromBytes(slot1.data).staticVid(1))).isOk()
       db.txRef.getVtxRc((root, NibblesBuf.fromBytes(slot3.data).staticVid(1))).isOk()
       db.slotBothWays(accA, slot1) == 11.u256
@@ -108,7 +108,7 @@ suite "Aristo static storage vids":
       tx0.mergeSlot(accA, slot2, 22.u256).isOk()
     db.persist(tx0, 1)
     check:
-      db.hintOf(accA) == 5
+      db.hintOf(accA) == 4
       db.slotBothWays(accA, slot1) == 11.u256
       db.slotBothWays(accA, slot2) == 22.u256
       db.slotBothWays(accA, slot3) == 33.u256
@@ -117,7 +117,7 @@ suite "Aristo static storage vids":
     check tx1.deleteSlot(accA, slot2).isOk()
     db.persist(tx1, 2)
     check:
-      db.hintOf(accA) == 5
+      db.hintOf(accA) == 2
       db.slotBothWays(accA, slot1) == 11.u256
       db.slotBothWays(accA, slot2) == 0.u256
       db.slotBothWays(accA, slot3) == 33.u256
@@ -129,7 +129,7 @@ suite "Aristo static storage vids":
       tx0.mergeSlot(accA, slot1, 11.u256).isOk()
       tx0.mergeSlot(accA, slot2, 22.u256).isOk()
     db.persist(tx0, 1)
-    check db.hintOf(accA) == 5
+    check db.hintOf(accA) == 4
 
     let tx1 = db.txFrameBegin(db.txRef)
     check tx1.mergeSlot(accA, slot3, 33.u256).isOk()
@@ -178,7 +178,7 @@ suite "Aristo static storage vids":
       tx0.mergeSlot(accA, slot1, 11.u256).isOk()
       tx0.mergeSlot(accA, slot2, 22.u256).isOk()
     db.persist(tx0, 1)
-    check db.hintOf(accA) == 5
+    check db.hintOf(accA) == 4
 
     let tx1 = db.txFrameBegin(db.txRef)
     check tx1.clearStorage(accA).isOk()
@@ -240,8 +240,8 @@ suite "Aristo static storage vids":
     block:
       let rdb = open(wipe = false)
       check:
-        rdb.hintOf(accA) == 5
-        rdb.hintOf(accB) == 5
+        rdb.hintOf(accA) == 4
+        rdb.hintOf(accB) == 4
         rdb.slotBothWays(accA, slot1) == 11.u256
         rdb.slotBothWays(accB, slot1) == 21.u256
         rdb.slotBothWays(accA, slot2) == 12.u256

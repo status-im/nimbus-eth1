@@ -76,7 +76,7 @@ type
     account*: AristoAccount
     stoID*: StorageID              ## Storage vertex ID (if any)
     stoHint*: uint8
-      ## One more than the static level the last slot leaf was placed at,
+      ## One more than the static level to start probing slot leaves at,
       ## 0 when the storage trie was not built with static vids
 
   StoLeafRef* = ref object of LeafRef

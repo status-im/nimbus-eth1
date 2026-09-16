@@ -242,12 +242,18 @@ proc deleteSlot*(
   let otherVtx = ?db.deleteImpl(stoHike)
   db.layersPutStoLeaf(mixPath, nil)
 
+  var hint = accVtx.stoHint
   if otherVtx.isValid:
     if otherVtx.vType == StoLeaf:
       let
         sibStoPath = Hash32(getBytes(stoNibbles.replaceSuffix(StoLeafRef(otherVtx).pfx)))
         leafMixPath = mixUp(accPath, sibStoPath)
+        sibLevel = 64 - StoLeafRef(otherVtx).pfx.len
       db.layersPutStoLeaf(leafMixPath, StoLeafRef(otherVtx))
+      # Merging is the only other writer of the hint, so without this a
+      # collapsed trie keeps probing the levels the deleted leaves occupied
+      if 0 < hint:
+        hint = min(hint, uint8(min(sibLevel, STATIC_VID_LEVELS) + 1))
       if db.collectWitness:
         # Record the collapsed branch vid so we can check after all transactions
         # whether the collapse was re-expanded by a later insertion.
@@ -276,6 +282,10 @@ proc deleteSlot*(
     let leaf = db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
     leaf.stoID.isValid = false
     leaf.stoHint = 0
+    db.layersPutAccLeaf(accPath, leaf)
+  elif hint != accVtx.stoHint:
+    let leaf = db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
+    leaf.stoHint = hint
     db.layersPutAccLeaf(accPath, leaf)
 
   ok()

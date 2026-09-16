@@ -324,16 +324,25 @@ proc mergeSlot*(
       Hash32(getBytes(NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated[1].pfx)))
     db.layersPutStoLeaf(mixUp(accPath, otherPath), updated[2])
 
+  # A hint below the leaves costs a negative lookup per level, one above lands
+  # on a branch that the walk resolves from, so bias it shallow: follow a
+  # shallower placement at once, a deeper one only when it clears hint by two.
   let hint =
     if not stoStatic:
       0'u8
     elif 0 <= updated[3]:
-      uint8(min(updated[3], STATIC_VID_LEVELS) + 1)
+      let placed = uint8(min(updated[3], STATIC_VID_LEVELS) + 1)
+      if placed < accVtx.stoHint or accVtx.stoHint == 0:
+        placed
+      elif placed > accVtx.stoHint + 1:
+        placed - 1
+      else:
+        accVtx.stoHint
     else:
       accVtx.stoHint
   if not stoID.isValid or accVtx.stoHint != hint:
     # Make sure that there is an account that refers to that storage trie and
-    # remembers the level its leaves were last placed at
+    # remembers where to start probing for its leaves
     let leaf = db.layersUpdate((STATE_ROOT_VID, accHike.legs[^1].wp.vid), accVtx) # Dup on modify
     leaf.stoID = useID
     leaf.stoHint = hint
