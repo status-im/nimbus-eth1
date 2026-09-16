@@ -190,7 +190,7 @@ proc assembleMptNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.resetReq:                             # Oops, something failed
     return SnapClear
-  if 0 < ctx.pool.coreDb2Path.string.len:
+  if ctx.pool.newCoreDb.stateRoot != zeroHash32:
     return SnapStop                                 # FIXME, must change
   # Reaching here would be quite unusual as this state is handled
   # by the deamon in the foreground.
@@ -211,28 +211,28 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   #
   # State machine
   # ::
-  #               .-----------> idle ------------.
-  #               |               |              |
-  #               |               v              |
-  #               +----------- resume            |
-  #               |               |              |
-  #               |               v              v
-  #               |    .----> balsFetch -----> clear <---.
-  #               |    |          |              |       |
-  #               |    |          v              V       |
-  #               |    |    balsFetchFinish    ready     |
-  #               |    |          |              |       |
-  #               |    |          v              |       |
-  #               |    +---- stateForward        |       |
-  #               |    |          |              |       |
-  #               |    |          v              |       |
-  #               |    |       download <--------'       |
-  #               |    |          |                      |
-  #               |    |          v                      |
-  #               |    `--- downloadFinish               |
-  #               |               |                      |
-  #               |               v                      |
-  #               `---------> assembleMpt ---------------'
+  #               .------------> idle ------------.
+  #               |                |              |
+  #               |                v              |
+  #               +------------ resume            |
+  #               |                |              |
+  #               |                v              v
+  #               |    .--+--> balsFetch -----> clear <---.
+  #               |    |  |        |              |       |
+  #               |    |  |        v              V       |
+  #               |    |  |  balsFetchFinish    ready     |
+  #               |    |  |        |              |       |
+  #               |    |  |        v              |       |
+  #               |    |  `-- stateForward        |       |
+  #               |    |           |              |       |
+  #               |    |           v              |       |
+  #               |    |        download <--------'       |
+  #               |    |           |                      |
+  #               |    |           v                      |
+  #               |    `---- downloadFinish               |
+  #               |                |                      |
+  #               |                v                      |
+  #               `----------> assembleMpt ---------------'
   #                               |
   #                               v
   #                             [...]

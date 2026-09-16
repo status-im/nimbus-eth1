@@ -41,6 +41,12 @@ type
   EthBalHashSet* = LruCache[Hash,Hash32]
     ## Eth peer list of failed block access lists
 
+  SnapCoreDb2Ref* = ref object
+    ## Contains the specs of the assembled database as a result of the
+    ## snap sync process.
+    newDbPath*: string                              # Persistent path
+    stateRoot*: Hash32                              # State root (if any)
+
   # -------------------
 
   SnapError* = tuple
@@ -113,6 +119,7 @@ type
 
   SnapCtxData* = object
     ## Globally shared data extension
+    newCoreDb*: SnapCoreDb2Ref       ## Will become new database (or copy of)
     syncState*: SnapState            ## Last known layout state
     contPrevSession*: bool           ## Request resuming previous session
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
@@ -126,7 +133,6 @@ type
     lastConsNum*: BlockNumber        ## Wait a bit until next header download
     balsLocked*: SnapPeerRef         ## Only one peer can download BALs
     failedEthBalId*: EthBalHashSet   ## Ditto for eth peers
-    coreDb2Path*: Path               ## Assembled core DM path
     resetReq*: bool                  ## Restart system (problem with cache data)
 
     # Info, debugging, and error handling stuff
