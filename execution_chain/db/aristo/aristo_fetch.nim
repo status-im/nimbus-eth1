@@ -158,54 +158,66 @@ proc retrieveAccStatic(
   # We end up here when we have to continue the search down a branch
   ok (nil, path, next)
 
-proc retrieveStoLeaf(
+proc retrieveStoStatic(
     db: AristoTxRef;
     stoID: VertexID;
     stoPath: Hash32;
     hint: int;
-      ): Result[VertexRef,AristoError] =
-  ## Probe the static vids from `hint` up towards the root, then read whatever
-  ## is left of the path from the backend
-  let full = NibblesBuf.fromBytes(stoPath.data)
-  var
-    path = full
-    next = VertexID(0)
+      ): Result[(StoLeafRef, NibblesBuf, VertexID),AristoError] =
+  # Same search as `retrieveAccStatic` but in a storage trie, where the vids are
+  # static relative to the storage root and `hint` records the level a leaf was
+  # last placed at - level 0 being the storage root itself
+  var path = NibblesBuf.fromBytes(stoPath.data)
+  var next: VertexID
 
   for sl in countdown(hint, 0):
     let
-      svid = if sl == 0: stoID else: full.staticVid(sl)
+      svid = if sl == 0: stoID else: path.staticVid(sl)
       vtx = db.getVtxRc((stoID, svid)).valueOr:
         continue
+
     case vtx[0].vType
     of Leaves:
+      let vtx = StoLeafRef(vtx[0])
+
       return
-        if LeafRef(vtx[0]).pfx != full.slice(sl):
+        if vtx.pfx != path.slice(sl): # Same prefix, different path
           err FetchPathNotFound
         else:
-          ok vtx[0]
+          ok (vtx, path, next)
     of BoundaryNode:
       let vtx = BoundaryNodeRef(vtx[0])
-      if full.slice(sl).sharedPrefixLen(vtx.pfx) < vtx.pfx.len:
+      if path.slice(sl).sharedPrefixLen(vtx.pfx) < vtx.pfx.len:
         return err FetchPathNotFound
       return err HikeBranchUnresolvedEdge
     of ExtBranch:
       let vtx = ExtBranchRef(vtx[0])
-      if vtx.pfx != full.slice(sl, sl + vtx.pfx.len):
-        return err FetchPathNotFound
-      next = vtx.bVid(full[sl + vtx.pfx.len])
-      if not next.isValid():
-        return err FetchPathNotFound
-      path = full.slice(sl + vtx.pfx.len + 1)
-      break
-    of Branch:
-      let vtx = BranchRef(vtx[0])
-      next = vtx.bVid(full[sl])
-      if not next.isValid():
-        return err FetchPathNotFound
-      path = full.slice(sl + 1)
-      break
 
-  db.retrieveLeaf(stoID, path, next)
+      if vtx.pfx != path.slice(sl, sl + vtx.pfx.len): # Same prefix, different path
+        return err FetchPathNotFound
+
+      next = vtx.bVid(path[sl + vtx.pfx.len])
+
+      if not next.isValid():
+        return err FetchPathNotFound
+
+      path = path.slice(sl + vtx.pfx.len + 1)
+
+      break # Continue the search down the branch children, starting at `next`
+    of Branch: # Same as ExtBranch with vtx.pfx.len == 0!
+      let vtx = BranchRef(vtx[0])
+
+      next = vtx.bVid(path[sl])
+
+      if not next.isValid():
+        return err FetchPathNotFound
+
+      path = path.slice(sl + 1)
+
+      break # Continue the search down the branch children, starting at `next`
+
+  # We end up here when we have to continue the search down a branch
+  ok (nil, path, next)
 
 proc retrieveAccLeaf(
     db: AristoTxRef;
@@ -389,11 +401,27 @@ proc fetchSlot*(
     db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
     return ok 0'u256
 
-  let leafRc =
-    if db.db.stoStatic and 0 < hint:
-      db.retrieveStoLeaf(stoID, stoPath, hint)
-    else:
-      db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data))
+  var
+    path = NibblesBuf.fromBytes(stoPath.data)
+    next = VertexID(0)
+
+  if db.db.stoStatic and 0 < hint:
+    let (staticVtx, rest, nxt) = db.retrieveStoStatic(stoID, stoPath, hint).valueOr:
+      if error == FetchPathNotFound:
+        db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
+        return ok 0'u256
+      return err(error)
+
+    if staticVtx.isValid():
+      db.cacheStoLeaf(mixPath, CachedStoLeaf.init(staticVtx.pfx, staticVtx.stoData))
+      return ok staticVtx.toStoData()
+
+    path = rest
+    next = nxt
+
+  # Updated payloads are stored in the layers so if we didn't find them there,
+  # it must have been in the database
+  let leafRc = db.retrieveLeaf(stoID, path, next)
   if leafRc.isErr:
     if leafRc.error == FetchPathNotFound:
       db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
