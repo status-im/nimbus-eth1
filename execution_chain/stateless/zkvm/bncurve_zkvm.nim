@@ -15,11 +15,7 @@
 
 {.push raises: [].}
 
-import
-  results,
-  stew/assign2,
-  ../../evm/[evm_errors, types],
-  ./zkvm_accelerators
+import results, stew/assign2, ../../evm/[evm_errors, types], ./zkvm_accelerators
 
 template padded(c: Computation, input: var openArray[byte]) =
   ## Short calldata is zero-padded to the precompile's input size.
