@@ -19,7 +19,11 @@ import
   ./eip7691,
   ./pooled_txs,
   ../constants,
-  ../common/common
+  ../common/common,
+  ../compile_info
+
+when enable_zkvm_accelerators:
+  import ../stateless/zkvm/zkvm_accelerators
 
 from std/sequtils import mapIt
 
@@ -74,13 +78,19 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
     return err("versionedHash should equal to kzgToVersionedHash(commitment)")
 
   # Verify KZG proof
-  let res = kzg.verifyKzgProof(commitment, z, y, kzgProof)
-  if res.isErr:
-    return err(res.error)
+  when enable_zkvm_accelerators:
+    if not verifyKzgProofRaw(
+      commitment.bytes, z.bytes, y.bytes, kzgProof.bytes
+    ):
+      return err("Failed to verify KZG proof")
+  else:
+    let res = kzg.verifyKzgProof(commitment, z, y, kzgProof)
+    if res.isErr:
+      return err(res.error)
 
-  # The actual verify result
-  if not res.get():
-    return err("Failed to verify KZG proof")
+    # The actual verify result
+    if not res.get():
+      return err("Failed to verify KZG proof")
 
   ok()
 

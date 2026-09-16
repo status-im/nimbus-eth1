@@ -18,8 +18,8 @@ import std/[os, strutils], stew/[assign2, ptrops]
 ## The zkVM implements these primitives natively, at a fraction of the proving
 ## cost of the same computation expressed in RISC-V.
 ##
-## TODO: bind the rest. The header also declares secp256k1, bls12-381, kzg and
-## blake2f, all of which the guest currently computes in RISC-V instead.
+## TODO: bind the rest. The header also declares secp256k1_verify, bls12-381,
+## ripemd160 and blake2f, all of which the guest currently computes in RISC-V.
 ##
 ## Every function returns `ZKVM_EOK` or `ZKVM_EFAIL`, but which of the two a
 ## bad *input* gets is per function: secp256r1 reports a rejected signature as
@@ -52,14 +52,16 @@ type
   ZkvmBytes32 {.importc: "zkvm_bytes_32", header: zkvmAccelHdr.} = object
     data: array[32, byte]
 
+  ZkvmBytes48 {.importc: "zkvm_bytes_48", header: zkvmAccelHdr.} = object
+    data: array[48, byte]
+
   ZkvmBytes64 {.importc: "zkvm_bytes_64", header: zkvmAccelHdr.} = object
     data: array[64, byte]
 
   ZkvmBytes128 {.importc: "zkvm_bytes_128", header: zkvmAccelHdr.} = object
     data: array[128, byte]
 
-  ZkvmBn254PairingPair {.importc: "zkvm_bn254_pairing_pair", header: zkvmAccelHdr.} =
-    object
+  ZkvmBn254PairingPair {.importc: "zkvm_bn254_pairing_pair", header: zkvmAccelHdr.} = object
     g1: ZkvmBytes64
     g2: ZkvmBytes128
 
@@ -110,6 +112,14 @@ proc c_zkvm_bn254_g1_mul(
 proc c_zkvm_bn254_pairing(
   pairs: ptr ZkvmBn254PairingPair, num_pairs: csize_t, verified: ptr bool
 ): ZkvmStatus {.importc: "zkvm_bn254_pairing", header: zkvmAccelHdr.}
+
+proc c_zkvm_kzg_point_eval(
+  commitment: ptr ZkvmBytes48,
+  z: ptr ZkvmBytes32,
+  y: ptr ZkvmBytes32,
+  proof: ptr ZkvmBytes48,
+  verified: ptr bool,
+): ZkvmStatus {.importc: "zkvm_kzg_point_eval", header: zkvmAccelHdr.}
 
 # ------------------------------------------------------------------------------
 # Nim-facing wrappers
@@ -276,3 +286,28 @@ proc bn254Pairing*(pairs: openArray[byte], verified: var bool): bool =
     return false
 
   true
+
+proc verifyKzgProofRaw*(
+    commitment: openArray[byte],
+    z: openArray[byte],
+    y: openArray[byte],
+    proof: openArray[byte],
+): bool =
+  ## KZG point evaluation, EIP-4844.
+  if commitment.len != 48 or z.len != 32 or y.len != 32 or proof.len != 48:
+    return false
+
+  var
+    commitmentBuf, proofBuf: ZkvmBytes48
+    zBuf, yBuf: ZkvmBytes32
+    verified = false
+  assign(commitmentBuf.data, commitment)
+  assign(zBuf.data, z)
+  assign(yBuf.data, y)
+  assign(proofBuf.data, proof)
+
+  doAssert c_zkvm_kzg_point_eval(
+    addr commitmentBuf, addr zBuf, addr yBuf, addr proofBuf, addr verified
+  ) == ZKVM_EOK, "zkvm_kzg_point_eval failed"
+
+  verified
