@@ -41,16 +41,6 @@ proc layersPutLeaf[T](
   db.layersPutVtx(rvid, vtx)
   vtx
 
-type MergeResult[LeafType] = object
-  leaf: LeafType
-  leafLevel: int
-    ## Nibble depth of the merged leaf's vertex
-  placed: bool
-    ## The leaf was created or moved rather than updated in place
-  other: VertexRef
-    ## Displaced leaf with its original `pfx`, when a leaf was split
-  otherLeaf: LeafType
-
 proc mergePayloadImpl[LeafType, T](
     db: AristoTxRef, # Database, top layer
     root: VertexID, # MPT state root
@@ -58,7 +48,7 @@ proc mergePayloadImpl[LeafType, T](
     leaf: Opt[LeafType],
     payload: T, # Payload value
     stoStatic = true, # Storage trie children get static vids
-): Result[MergeResult[LeafType], AristoError] =
+): Result[(LeafType, VertexRef, LeafType, int), AristoError] =
   ## Merge the argument `(root,path)` key-value-pair into the top level vertex
   ## table of the database `db`. The `path` argument is used to address the
   ## leaf vertex with the payload. It is stored or updated on the database
@@ -74,7 +64,7 @@ proc mergePayloadImpl[LeafType, T](
 
       # We're at the root vertex and there is no data - this must be a fresh
       # VertexID!
-      return ok MergeResult[LeafType](leaf: db.layersPutLeaf((root, cur), path, payload), placed: true)
+      return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil, 0)
     vids: ArrayBuf[NibblesBuf.high + 1, VertexID]
     vtxs: ArrayBuf[NibblesBuf.high + 1, BranchRef]
 
@@ -112,7 +102,7 @@ proc mergePayloadImpl[LeafType, T](
               return err(MergeNoAction)
             let leafVtx = db.layersUpdate((root, cur), StoLeafRef(vtx))
             leafVtx.stoData = payload
-          MergeResult[LeafType](leaf: leafVtx, leafLevel: pos)
+          (leafVtx, nil, nil, -1)
         else:
           # Turn leaf into a branch (or extension) then insert the two leaves
           # into the branch
@@ -144,8 +134,7 @@ proc mergePayloadImpl[LeafType, T](
 
           # We need to return vtx here because its pfx member hasn't yet been
           # sliced off and is therefore shared with the hike
-          MergeResult[LeafType](
-            leaf: leafVtx, leafLevel: pos + n + 1, placed: true, other: vtx, otherLeaf: other)
+          (leafVtx, vtx, other, pos + n + 1)
 
       resetKeys()
       return ok(res)
@@ -177,7 +166,7 @@ proc mergePayloadImpl[LeafType, T](
             leafVtx = db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
 
           resetKeys()
-          return ok MergeResult[LeafType](leaf: leafVtx, leafLevel: pos + n + 1, placed: true)
+          return ok((leafVtx, nil, nil, pos + n + 1))
       else:
         # Partial path match - we need to split the existing branch at
         # the point of divergence, inserting a new branch
@@ -209,7 +198,7 @@ proc mergePayloadImpl[LeafType, T](
         db.layersPutVtx((root, cur), branch)
 
         resetKeys()
-        return ok MergeResult[LeafType](leaf: leafVtx, leafLevel: pos + n + 1, placed: true)
+        return ok((leafVtx, nil, nil, pos + n + 1))
 
     of BoundaryNode:
       let evtx = BoundaryNodeRef(vtx)
@@ -250,7 +239,7 @@ proc mergePayloadImpl[LeafType, T](
 
         db.layersPutVtx((root, cur), branch)
         resetKeys()
-        return ok MergeResult[LeafType](leaf: leafVtx, leafLevel: pos + n + 1, placed: true)
+        return ok((leafVtx, nil, nil, pos + n + 1))
 
   err(MergeHikeFailed)
 
@@ -279,11 +268,11 @@ proc mergeAccount*(
 
   # Update leaf cache both of the merged value and potentially the displaced
   # leaf resulting from splitting a leaf into a branch with two leaves
-  db.layersPutAccLeaf(accPath, updated.leaf)
-  if updated.other.isValid:
+  db.layersPutAccLeaf(accPath, updated[0])
+  if updated[1].isValid:
     let otherPath =
-      Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(updated.other.pfx)))
-    db.layersPutAccLeaf(otherPath, updated.otherLeaf)
+      Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(updated[1].pfx)))
+    db.layersPutAccLeaf(otherPath, updated[2])
 
   ok true
 
@@ -328,18 +317,18 @@ proc mergeSlot*(
 
   # Update leaf cache both of the merged value and potentially the displaced
   # leaf resulting from splitting a leaf into a branch with two leaves
-  db.layersPutStoLeaf(mixPath, updated.leaf)
+  db.layersPutStoLeaf(mixPath, updated[0])
 
-  if updated.other.isValid:
+  if updated[1].isValid:
     let otherPath =
-      Hash32(getBytes(NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated.other.pfx)))
-    db.layersPutStoLeaf(mixUp(accPath, otherPath), updated.otherLeaf)
+      Hash32(getBytes(NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated[1].pfx)))
+    db.layersPutStoLeaf(mixUp(accPath, otherPath), updated[2])
 
   let hint =
     if not stoStatic:
       0'u8
-    elif updated.placed:
-      uint8(max(1, min(updated.leafLevel, STATIC_VID_LEVELS)))
+    elif 0 <= updated[3]:
+      uint8(max(1, min(updated[3], STATIC_VID_LEVELS)))
     else:
       accVtx.stoHint
   if not stoID.isValid or accVtx.stoHint != hint:
