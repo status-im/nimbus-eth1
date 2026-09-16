@@ -32,7 +32,9 @@ else:
   import ./modexp, ./secp256r1verify
   from boringssl as bssl import nil
 
-when enable_mcl_lib:
+when enable_zkvm_accelerators:
+  import ../stateless/zkvm/bncurve_zkvm
+elif enable_mcl_lib:
   import ./bncurve_mcl
 else:
   import ./bncurve_nim
