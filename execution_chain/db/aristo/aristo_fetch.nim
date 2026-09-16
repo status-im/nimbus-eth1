@@ -406,7 +406,7 @@ proc fetchSlot*(
     next = VertexID(0)
 
   if db.db.stoStatic and 0 < hint:
-    let (staticVtx, rest, nxt) = db.retrieveStoStatic(stoID, stoPath, hint).valueOr:
+    let (staticVtx, rest, nxt) = db.retrieveStoStatic(stoID, stoPath, hint - 1).valueOr:
       if error == FetchPathNotFound:
         db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
         return ok 0'u256

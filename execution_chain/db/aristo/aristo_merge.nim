@@ -328,7 +328,7 @@ proc mergeSlot*(
     if not stoStatic:
       0'u8
     elif 0 <= updated[3]:
-      uint8(max(1, min(updated[3], STATIC_VID_LEVELS)))
+      uint8(min(updated[3], STATIC_VID_LEVELS) + 1)
     else:
       accVtx.stoHint
   if not stoID.isValid or accVtx.stoHint != hint:

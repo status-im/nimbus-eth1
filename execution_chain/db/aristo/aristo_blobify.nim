@@ -18,7 +18,7 @@ import
 
 export aristo_desc, results
 
-const MAX_VERTEX_BLOB_SIZE = 117
+const MAX_VERTEX_BLOB_SIZE = 118
 
 # Allocation-free version short big-endian encoding that skips the leading
 # zeroes
@@ -280,6 +280,8 @@ proc deblobifyLeaf(
     if (mask and 0x10) > 0:
       if data.len() < start + 1:
         return err(DeblobVtxTooShort)
+      if data[start] > STATIC_VID_LEVELS + 1:
+        return err(DeblobStoHintUnsupported)
       vtx.stoHint = data[start]
       inc start
 
