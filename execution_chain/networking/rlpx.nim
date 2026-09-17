@@ -408,6 +408,11 @@ proc keepAliveLoop(peer: Peer) {.async: (raises: [CancelledError]).} =
   ## Nothing else does this: `dispatchMessages` blocks in `recvMsg` forever and
   ## peers that the syncer has no slot for are never written to either, so a
   ## dead connection is never noticed.
+  ##
+  ## Every exit closes the transport. Some paths reach it already closed - a
+  ## failed `ping` can only raise via `disconnectAndRaise`, which has run the
+  ## full disconnect - but this loop is the peer's only reaper, so it must not
+  ## depend on an invariant held in another module. `close` is idempotent.
   while peer.connectionState == Connected:
     await sleepAsync(peerLivenessInterval)
 
@@ -415,10 +420,7 @@ proc keepAliveLoop(peer: Peer) {.async: (raises: [CancelledError]).} =
     if idle >= peerIdleTimeout:
       debug "Peer timed out, closing connection",
         remote = peer.remote, clientId = peer.clientId, idle
-      # Closing the transport makes the pending read in `dispatchMessages` fail,
-      # which runs the regular disconnect path - handlers, pool removal, metrics
-      peer.transport.close()
-      return
+      break
 
     if idle >= peerPingInterval:
       # A live peer answers with a pong, which resets `lastReceived`. The write
@@ -429,11 +431,14 @@ proc keepAliveLoop(peer: Peer) {.async: (raises: [CancelledError]).} =
       except AsyncTimeoutError:
         debug "Ping could not be delivered, closing connection",
           remote = peer.remote, clientId = peer.clientId
-        peer.transport.close()
-        return
+        break
       except EthP2PError as exc:
         trace "Failed to send ping", remote = peer.remote, err = exc.msg
-        return
+        break
+
+  # Closing the transport makes the pending read in `dispatchMessages` fail,
+  # which runs the regular disconnect path - handlers, pool removal, metrics.
+  peer.transport.close()
 
 proc postHelloSteps(
     peer: Peer, h: HelloPacket
