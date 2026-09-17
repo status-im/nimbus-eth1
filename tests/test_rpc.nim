@@ -935,7 +935,7 @@ proc rpcMain*() =
           address = regularAcc
           slot1Key = 0.u256
           slot2Key = 1.u256
-          proofResponse = await client.eth_getProof(address, @[slot1Key, slot2Key], blockId(1'u64))
+          proofResponse = await client.eth_getProof(address, @[slot1Key.to(Bytes32), slot2Key.to(Bytes32)], blockId(1'u64))
           storageProof = proofResponse.storageProof
 
         check:
@@ -958,7 +958,7 @@ proc rpcMain*() =
         let
           address = contractAccNoStorage
           slot1Key = 0.u256 # Doesn't exist
-          proofResponse = await client.eth_getProof(address, @[slot1Key], blockId(1'u64))
+          proofResponse = await client.eth_getProof(address, @[slot1Key.to(Bytes32)], blockId(1'u64))
           storageProof = proofResponse.storageProof
 
         check:
@@ -983,7 +983,11 @@ proc rpcMain*() =
           slot1Key = 0.u256
           slot2Key = 1.u256
           slot3Key = 2.u256 # Doesn't exist
-          proofResponse = await client.eth_getProof(address, @[slot1Key, slot2Key, slot3Key], blockId(1'u64))
+          proofResponse = await client.eth_getProof(
+            address,
+            @[slot1Key.to(Bytes32), slot2Key.to(Bytes32), slot3Key.to(Bytes32)],
+            blockId(1'u64),
+          )
           storageProof = proofResponse.storageProof
 
         check:
@@ -1031,7 +1035,7 @@ proc rpcMain*() =
         let
           address = contractAccWithStorage
           slot2Key = 1.u256
-          proofResponse = await client.eth_getProof(address, @[slot2Key], blockId(1'u64))
+          proofResponse = await client.eth_getProof(address, @[slot2Key.to(Bytes32)], blockId(1'u64))
           storageProof = proofResponse.storageProof
 
         check:

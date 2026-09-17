@@ -363,7 +363,7 @@ libverifproxy_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 	+ $(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
 		-Wno-incompatible-pointer-types \
 		-o build/$@ \
-		tests/library/test_api.c \
+		nimbus_verified_proxy/tests/test_api.c \
 		-lverifproxy $(VERIFPROXY_LDFLAGS)
 	./build/$@
 
@@ -424,8 +424,12 @@ stateless_guest_baremetal: | build deps
 # and write_output over stdin/stdout in place of a zkVM runtime.
 stateless_guest_native: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) --compile:"execution_chain/stateless/zkvm_io_stdio.c" -o:build/$@ "execution_chain/stateless/stateless_guest.nim" && \
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) --compile:"execution_chain/stateless/zkvm/native/zkvm_io_stdio.c" -o:build/$@ "execution_chain/stateless/stateless_guest.nim" && \
 		echo -e $(BUILD_END_MSG) "build/$@"
+
+# Everything for building the guest into a zkVM ELF, one file per vendor.
+# Included here so it can use ENV_SCRIPT, NIMC and STATELESS_GUEST_FLAGS.
+include execution_chain/stateless/zkvm/zkvm.mk
 
 # Two runs: the full suite with standard flags, then the guest specific test
 # with flags closer to the zkVM guest.

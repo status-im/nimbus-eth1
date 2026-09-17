@@ -14,4 +14,5 @@ import
   ./test_block_proof_historical_roots_vectors,
   ./test_block_proof_historical_summaries,
   ./test_block_proof_historical_summaries_deneb,
+  ./test_block_proof_historical_summaries_gloas,
   ./test_block_proof_historical_summaries_vectors

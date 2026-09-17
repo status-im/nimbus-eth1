@@ -90,10 +90,10 @@ type
     mode: HeaderChainMode       # header chain state
     stopNum: Opt[BlockNumber]   # syncing against a fixed base header
     stopHash: Hash32            # ditto
+    finNum: Opt[BlockNumber]    # block number of finalised header from request
     ante: Header                # antecedent, bottom of header chain
     head: Header                # top end of header chain, highest block number
     headHash: Hash32
-    consHead: Header            # for logging, metrics etc.
 
   # -----------------
 
@@ -123,6 +123,7 @@ type
     ## Module descriptor
     chain: ForkedChainRef       # descriptor will resolve into that in future
     session: HccSession         # additional session variables
+    consHead: Header            # for logging, metrics etc.
     notify: HeaderChainNotifyCB # client app notification
     kvt: KvtTxRef               # metadata and temporary headers storage with
                                 # it's own column family
@@ -148,7 +149,7 @@ func toStr(hc: HeaderChainRef): string =
   result &= ", " & $hc.session.ante.number
   if hc.session.ante != hc.session.head:
     result &= ".." & $hc.session.head.number
-  result &= "," & $hc.session.consHead.number
+  result &= "," & $hc.consHead.number
   result &= ")"
 
 # ------------------------------------------------------------------------------
@@ -281,9 +282,9 @@ proc tryFcParent(hc: HeaderChainRef; hdr: Header): HeaderChainMode =
   # that this function is called with decreasing block numbers.)
   let baseNum = hc.chain.baseNumber()
   if baseNum + 1 < hdr.number:
-    return collecting                          # inconclusive
+    return collecting                               # inconclusive
 
-  return orphan                                # maybe on the wrong branch
+  return orphan                                     # maybe on the wrong branch
 
 # ------------------------------------------------------------------------------
 # Private fork choice call back function
@@ -328,7 +329,8 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
       # Update `FC` module
       hc.chain.pendingFCU = f
       if f == hc.session.headHash:
-        # Note that `tryUpdatePendingFCU()` wil reset `pendingFCU`.
+        hc.session.finNum = Opt.some(h.number)      # needed by snap sync
+        # Note that `tryUpdatePendingFCU()` will reset `pendingFCU`.
         discard hc.chain.tryUpdatePendingFCU(f, h.number)
 
       # Inform client app about that a new session has started.
@@ -339,7 +341,7 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
     # any more. This happens if there is no need to catch up wholesale.
     # So, the `nec_sync_consensus_head` will just stay with its latest
     # value unless updated by `updateMetrics()`.
-    hc.session.consHead = h
+    hc.consHead = h
     metrics.set(nec_sync_consensus_head, h.number.int64)
     if hc.chain.latestNumber <= h.number:
       metrics.set(nec_sync_distance_to_sync,
@@ -520,11 +522,13 @@ proc put*(
     let newMode = hc.tryFcParent(hc.session.ante)
     if newMode in {ready,orphan}:
       hc.session.mode = newMode
+      if newMode == orphan:
+        debug "wrong branch => orphan", ante=hc.session.ante.number
       return ok()
   elif hc.session.ante.number <= hc.session.stopNum.unsafeGet():
     # Oops, not allowed
     hc.session.mode = orphan
-    debug "stop node mismatch => orphan", ante=hc.session.ante.number,
+    debug "block number mismatch => orphan", ante=hc.session.ante.number,
       stopNum=hc.session.stopNum.unsafeGet()
     return ok()
 
@@ -559,6 +563,7 @@ proc put*(
         return err("Parent hash mismatch for rev[" & $n & "].number=" & $bn)
 
       if hash == hc.chain.pendingFCU:
+        hc.session.finNum = Opt.some(hdr.number)    # needed by snap sync
         if hc.chain.tryUpdatePendingFCU(hash, hdr.number):
           debug "PendingFCU resolved to block number",
             hash=hash.short,
@@ -575,8 +580,10 @@ proc put*(
         hc.session.mode =
           (if hdr.parentHash == hc.session.stopHash: ready else: orphan)
         if hc.session.mode == orphan:
-          debug "stop node mismatch => orphan", hdr=hdr.number,
-            stopNum=hc.session.stopNum.unsafeGet()
+          error "parent mismatch => orphan", hdr=hdr.number, hash=hash.short,
+            parentHash=hdr.parentHash.short, expected=hc.session.stopHash.short
+          return err("Stop node hash mismatch for" &
+            " rev[" & $n & "].number=" & $bn)
         revTopInx = n
         break
 
@@ -688,6 +695,12 @@ func antecedent*(hc: HeaderChainRef): Header =
     return hc.session.ante
   # Header()
 
+func finNum*(hc: HeaderChainRef): Opt[BlockNumber] =
+  ## Bloack number of finalised FCU hash if it could be resolved by chaining
+  ## headers using the `put()` directive.
+  ##
+  hc.session.finNum
+
 # --------------------
 
 func latestConsHead*(hc: HeaderChainRef): Header =
@@ -697,11 +710,11 @@ func latestConsHead*(hc: HeaderChainRef): Header =
   ## number which is typically larger than `head()` and will increase over
   ## time while `head()` remains constant (for the current session.)
   ##
-  hc.session.consHead
+  hc.consHead
 
 func latestConsHeadNumber*(hc: HeaderChainRef): BlockNumber =
   ## Getter: block number of last `CL` head update (aka forkchoice update).
-  hc.session.consHead.number
+  hc.consHead.number
 
 proc updateMetrics*(hc: HeaderChainRef) =
   ## Update/adjust some metrics, i.p. `nec_sync_distance_to_sync`. If there
@@ -709,21 +722,21 @@ proc updateMetrics*(hc: HeaderChainRef) =
   ## from the last active session, the `nec_sync_consensus_head` will be set
   ## to the the latest execution head number.
   ##
-  if hc.chain.latestNumber <= hc.session.consHead.number:
+  if hc.chain.latestNumber <= hc.consHead.number:
     metrics.set(nec_sync_distance_to_sync,
-      (hc.session.consHead.number - hc.chain.latestNumber).int64)
+      (hc.consHead.number - hc.chain.latestNumber).int64)
   elif hc.session.mode == HeaderChainMode(0):
     metrics.set(nec_sync_consensus_head, hc.chain.latestNumber.int64)
     metrics.set(nec_sync_distance_to_sync, 0)
 
+proc headTargetUpdate*(hc: HeaderChainRef; h: Header; f: Hash32) =
+  ## Emulate request from `CL` (mainly for fringe action purposes)
+  if not hc.notify.isNil:
+    hc.headUpdateFromCL(h, f)
+
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
-
-proc headTargetUpdate*(hc: HeaderChainRef; h: Header; f: Hash32) =
-  ## Emulate request from `CL` (mainly for debugging purposes)
-  if not hc.notify.isNil:
-    hc.headUpdateFromCL(h, f)
 
 proc verify*(hc: HeaderChainRef): Result[void,string] =
   ## Verify that the descriptor range is on the database as well

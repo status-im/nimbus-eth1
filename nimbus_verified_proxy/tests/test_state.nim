@@ -49,9 +49,9 @@ suite "test state verification":
       latestTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "latest")
 
     # load proof also loads the block
-    ts.loadProof(address, @[slot], blk, proof)
+    ts.loadProof(address, @[slot.toStorageKey()], blk, proof)
     # upload the same proof to resolve for accounts
-    ts.loadProof(address, @[], blk, proof)
+    ts.loadProof(address, newSeq[Bytes32](), blk, proof)
     ts.loadCode(address, blk, contractCode)
     # this is for optimistic state fetch
     ts.loadAccessList(tx, blk, accessList)

@@ -93,6 +93,11 @@ proc headersStashOnDisk*(
   ## Convenience wrapper, makes it easy to produce comparable messages
   ## whenever it is called, similar to `blocksImport()`. Unless complete
   ## failure, this function returns the number of headers stored.
+  ##
+  ## In case of a failure, the calling process wil be left with a range
+  ## of headers to re-fetch. It is up to the caller to fix this situation
+  ## via calling `headersUnprocAppend()`.
+  ##
   let
     ctx = buddy.ctx
     peer {.inject,used.} = $buddy.peer           # logging only
@@ -107,7 +112,7 @@ proc headersStashOnDisk*(
 
     # Check whether it is enough to skip the current headers list, only
     if ctx.subState.procFailNum != dTop:
-      ctx.subState.procFailNum = dTop            # OK, this is a new block
+      ctx.subState.procFailNum = dTop            # OK, this is a new block hdr
       ctx.subState.procFailCount = 1
 
     else:
@@ -119,11 +124,11 @@ proc headersStashOnDisk*(
 
     # Proper logging ..
     if ctx.subState.cancelRequest:
-      warn "Header stash error (cancel this session)", iv=revHdrs.toStr,
+      error "Header stash error (cancel this session)", iv=revHdrs.toStr,
         state=($buddy.syncState), nErrors=buddy.hdrErrors(),
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
     else:
-      debug info & ": Header stash error (skip remaining)", peer,
+      warn info & ": Header stash error (skip remaining)", peer,
         iv=revHdrs.toStr, state=($buddy.syncState), nErrors=buddy.hdrErrors(),
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
 

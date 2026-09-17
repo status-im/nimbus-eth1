@@ -30,10 +30,11 @@ const
   codeLruSize = 16*1024
     # An LRU cache of 16K items gives roughly 90% hit rate anecdotally on a
     # small range of test blocks - this number could be studied in more detail
-    # Per EIP-170, a the code of a contract can be up to `MAX_CODE_SIZE` = 24kb,
-    # which would cause a worst case of 386MB memory usage though in reality
-    # code sizes are much smaller - it would make sense to study these numbers
-    # in greater detail.
+    # Since EIP-7954, the code of a contract can be up to
+    # `EIP7954_MAX_CODE_SIZE` = 64kb (24kb before, per EIP-170), which would
+    # cause a worst case of 1GB memory usage though in reality code sizes are
+    # much smaller - it would make sense to study these numbers in greater
+    # detail.
   slotsLruSize = 16 * 1024
 
 type
@@ -143,6 +144,8 @@ type
     accessList: ac_access_list.AccessList
     deployedCodeHashes: HashSet[Hash32]
       ## Caches codeHashes deployed via CREATE in this savepoint.
+    pendingCode: Table[Hash32, CodeBytesRef]
+      ## Executed initcode awaiting successful commit of all enclosing frames.
 
 const
   resetFlags = {
@@ -524,6 +527,13 @@ proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   ledger.savePoint.selfDestruct.mergeAndReset(savePoint.selfDestruct)
   ledger.savePoint.deployedCodeHashes.mergeAndReset(savePoint.deployedCodeHashes)
 
+  if ledger.savePoint.parentSavePoint.isNil:
+    for codeHash, code in savePoint.pendingCode:
+      ledger.code.put(codeHash, code)
+    savePoint.pendingCode.clear()
+  else:
+    ledger.savePoint.pendingCode.mergeAndReset(savePoint.pendingCode)
+
   savePoint.parentSavePoint = nil # Release memory
 
 proc dispose*(ledger: LedgerRef, savePoint: LedgerSpRef) =
@@ -766,6 +776,16 @@ proc setNonce*(ledger: LedgerRef, address: Address, nonce: AccountNonce) =
 
 proc incNonce*(ledger: LedgerRef, address: Address) =
   ledger.setNonce(address, ledger.getNonce(address) + 1)
+
+func peekCode*(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
+  ## Reuse executed code without updating cache membership or recency.
+  ledger.code.peek(codeHash)
+
+proc cacheCodeOnCommit*(ledger: LedgerRef, codeHash: Hash32, code: CodeBytesRef) =
+  ## Stage successfully executed initcode in the current call frame. A rollback
+  ## discards it; committing the outermost savepoint admits it to the code LRU.
+  doAssert not ledger.savePoint.parentSavePoint.isNil
+  ledger.savePoint.pendingCode[codeHash] = code
 
 proc setCode*(ledger: LedgerRef, address: Address, code: seq[byte]) =
   let acc = ledger.getAccount(address)

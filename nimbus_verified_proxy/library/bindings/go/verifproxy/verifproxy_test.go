@@ -46,7 +46,12 @@ func readData(name string) (json.RawMessage, error) {
 func execTransport(_ string, method, _ string) (json.RawMessage, error) {
 	switch method {
 	case "eth_getBlockByNumber", "eth_getBlockByHash":
-		return readData("block_0x17a2d23.json")
+		data, err := readData("block_0x17a2d23.json")
+		if err != nil {
+			return nil, err
+		}
+		// the library expects the JSON-RPC response envelope verbatim
+		return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":` + string(data) + `}`), nil
 	}
 	return nil, fmt.Errorf("exec: no mock for %s", method)
 }

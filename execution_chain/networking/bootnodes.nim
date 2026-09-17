@@ -35,8 +35,8 @@ func removeCommentAndSpaces(line: string, start = 0): string =
     if c.int > alphabet.decode.high:
       pos = i
       break
-    if c in {':', '/', '@', '.'}:
-      # URI chars
+    if c in {':', '/', '@', '.', '?', '='}:
+      # URI chars, including the `?discport=` query of a discovery-only enode
       continue
     if alphabet.decode[c.int] == -1:
       pos = i

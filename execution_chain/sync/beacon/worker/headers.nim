@@ -122,6 +122,8 @@ template headersCollect*(buddy: BeaconPeerRef; info: static[string]) =
 
         # Store it on the header chain cache
         let nHdrs = buddy.headersStashOnDisk(rev, buddy.peerID, info).valueOr:
+          # Re-register a unprocessed headers. So ther can be re-fetched
+          ctx.headersUnprocAppend(rev[^1].number, rev[0].number)
           break fetchHeadersBody                     # error => exit block
 
         if nHdrs == 0:
@@ -251,7 +253,7 @@ proc headersUnstage*(buddy: BeaconPeerRef; info: static[string]): bool =
       maxNum = qItem.data.revHdrs[0].number
       dangling = ctx.hdrCache.antecedent.number
     if maxNum + 1 < dangling:
-      let unprocTop = ctx.headersUnprocTotalTop()
+      let unprocTop = ctx.headersUnprocTotalTop()            # 0 => no ranges
       trace info & ": gap, serialisation postponed", peer,
         qItem=qItem.data.revHdrs.toStr, unprocTop,
         D=dangling, nStashed, nStagedQ=ctx.hdr.staged.len,

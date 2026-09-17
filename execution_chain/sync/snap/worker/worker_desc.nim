@@ -78,7 +78,7 @@ type
   StorageRangesData* = tuple
     ## Derived from `StorageRangesPacket`
     slots: seq[seq[StorageItem]]                    # Slots without proof
-    slot: seq[StorageItem]                          # Incomplete slot with proof
+    partial: seq[StorageItem]                       # Incomplete slot with proof
     proof: seq[ProofNode]                           # Prof for `slot`
 
   Ticker* =
@@ -123,6 +123,7 @@ type
     headersSynced*: bool             ## beacon sync headers
     pivotNum*: BlockNumber           ## Last applicable state block number
     forwardNum*: BlockNumber         ## Max possible BALs forward
+    lastConsNum*: BlockNumber        ## Wait a bit until next header download
     balsLocked*: SnapPeerRef         ## Only one peer can download BALs
     failedEthBalId*: EthBalHashSet   ## Ditto for eth peers
     coreDb2Path*: Path               ## Assembled core DM path
@@ -135,7 +136,6 @@ type
     lastNoHdrsLog*: chronos.Moment   ## Control update messages
     lastMaxHdrsLog*: chronos.Moment  ## Control update messages
     lockedBalsLog*: chronos.Moment   ## Control messages about missing peers
-    ticker*: Ticker                  ## Ticker function to run in background
 
 # ------------------------------------------------------------------------------
 # Public helpers

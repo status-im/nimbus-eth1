@@ -21,17 +21,7 @@ const
     "eest_zkevm"
   ]
 
-const skipFiles = [
-  # Currently skipped as still failing with statelessEnabled = true
-  #
-  # --- eest_zkevm files with failures ---
-  #
-  # No fail yet as we don't check/use public keys. We could check them easily
-  # but the better way is to use them as optimization and check automatically
-  # that way.
-  "stateless_input_invalid_public_key_is_rejected.json",
-  "stateless_input_opposite_y_parity_public_key_is_rejected.json",
-]
+const skipFiles = []
 
 runEESTSuite(
   eestReleases,

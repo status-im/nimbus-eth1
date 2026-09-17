@@ -51,6 +51,7 @@ proc applyCodeChange(
   ## Apply BAL to contract code
   ##
   if code.len == 0:
+    ?adb.delFlatCode(accPath, info)
     return ok(EMPTY_CODE_HASH)
 
   let newCode = code[^1].newCode
@@ -73,7 +74,10 @@ proc applyAccountChanges*(
      chng.codeChanges.len == 0:
     return ok()                                     # nothing to do
 
-  # Check for existing accounts that have not been fetched, yet
+  # Check for accounts in the downloaded range, i.e. they are not registered
+  # for downloading. If an account is in the downloaded range, it is a new
+  # account and must be added. Otherwise, there is no knowledge whether this
+  # is a new account, or a partial update.
   let
     adb = ctx.pool.cacheDB
     accPath = chng.address.computeAccPath

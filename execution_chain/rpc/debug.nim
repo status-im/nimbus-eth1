@@ -63,16 +63,6 @@ ExecutionWitnessWithKeys.useDefaultSerializationIn EthJson
 #     if opts.disableState.isTrue  : result.incl TracerFlags.DisableState
 #     if opts.disableStateDiff.isTrue: result.incl TracerFlags.DisableStateDiff
 
-proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[ExecutionWitnessWithKeys, string] =
-  let txFrame = chain.txFrame(blockHash).txFrameBegin()
-  defer:
-    txFrame.dispose()
-
-  let witness = txFrame.getWitness(blockHash).valueOr:
-    return err("Witness not found")
-
-  ok(ExecutionWitnessWithKeys.build(witness, txFrame))
-
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
     # chainDB = com.db

@@ -14,9 +14,7 @@ async function defaultExecutionTransport(url, name, params) {
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: name, params }),
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
-  const rpc = await r.json();
-  if (rpc.error) throw new Error(rpc.error.message ?? JSON.stringify(rpc.error));
-  return JSON.stringify(rpc.result ?? null);
+  return r.text();
 }
 
 async function defaultBeaconTransport(url, endpoint, params) {
@@ -51,7 +49,8 @@ export default class NimbusVerifiedProxy {
 
   // Loads the WASM module, registers user-supplied transports, and starts the proxy.
   //
-  // executionTransport(url, name, params) - async, must return the bare JSON result string.
+  // executionTransport(url, name, params) - async, must return the provider's JSON-RPC
+  //   response body verbatim (the full envelope, including result or error members).
   // beaconTransport(url, endpoint, params) - async, must return the raw response body string.
   async init(config, { executionTransport = defaultExecutionTransport, beaconTransport = defaultBeaconTransport } = {}) {
     this.#mod = await VerifProxyModule({

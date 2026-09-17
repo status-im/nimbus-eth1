@@ -10,7 +10,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/os,
+  std/[algorithm, os],
   chronicles,
   stew/[io2, byteutils],
   ../../execution_chain/history/e2store_formats/ere,
@@ -19,7 +19,7 @@ import
   ../../execution_chain/history/block_proofs/block_proof_historical_hashes_accumulator,
   ../../execution_chain/history/block_proofs/block_proof_historical_roots,
   ../../execution_chain/history/block_proofs/block_proof_historical_summaries,
-  ../../execution_chain/common/[hardforks, chain_config],
+  ../../execution_chain/common/[hardforks, chain_config, genesis],
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/core_db/persistent,
   ../../execution_chain/db/opts,
@@ -56,65 +56,82 @@ proc exportEreFileFromEra1(
     debug "Ere file already exists", era, file = filename
     return ok()
 
-  let e2 = openFile(filename, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
-    return err(ioErrorMsg(error))
+  let
+    tmpName = filename & ".tmp"
+    e2 = openFile(tmpName, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
+      return err(ioErrorMsg(error))
+
+  var completed = false
   defer:
-    discard closeFile(e2)
+    if not completed:
+      discard io2.removeFile(tmpName)
 
-  var group = ?EreGroup.init(e2, startNumber, mergeBlockNumber, noReceipts, noProofs)
+  block writeBlock:
+    defer:
+      discard closeFile(e2)
 
-  # Step 1: iterate to get all headers from Era1DB to be able to construct the HeaderRecord
-  # list, epochRecord and accumulatorRoot, + write the headers to the ere
-  var headerRecords: seq[historical_hashes_accumulator.HeaderRecord]
-  var headerList: seq[headers.Header]
-  for blockNumber in startNumber .. endNumber:
-    var header: headers.Header
-    ?db.getBlockHeader(blockNumber, header)
+    var group = ?EreGroup.init(e2, startNumber, mergeBlockNumber, noReceipts, noProofs)
 
-    let td = ?db.getTotalDifficulty(blockNumber)
+    # Step 1: iterate to get all headers from Era1DB to be able to construct the HeaderRecord
+    # list, epochRecord and accumulatorRoot, + write the headers to the ere
+    var headerRecords: seq[historical_hashes_accumulator.HeaderRecord]
+    var headerList: seq[headers.Header]
+    for blockNumber in startNumber .. endNumber:
+      var header: headers.Header
+      ?db.getBlockHeader(blockNumber, header)
 
-    headerRecords.add(
-      historical_hashes_accumulator.HeaderRecord(
-        blockHash: header.computeRlpHash(), totalDifficulty: td
+      let td = ?db.getTotalDifficulty(blockNumber)
+
+      headerRecords.add(
+        historical_hashes_accumulator.HeaderRecord(
+          blockHash: header.computeRlpHash(), totalDifficulty: td
+        )
       )
-    )
 
-    headerList.add(header)
+      headerList.add(header)
 
-    ?group.update(e2, blockNumber, header)
+      ?group.update(e2, blockNumber, header)
 
-  let accumulatorRoot = getEpochRecordRoot(headerRecords)
+    let accumulatorRoot = getEpochRecordRoot(headerRecords)
 
-  # Step 2: get all block bodies from EL db + write to ere
-  for blockNumber in startNumber .. endNumber:
-    var body: BlockBody
-    ?db.getBlockBody(blockNumber, body)
-
-    ?group.update(e2, blockNumber, body)
-
-  # Step 3 (optional): get all receipts from EL db + write to ere
-  if not noReceipts:
+    # Step 2: get all block bodies from EL db + write to ere
     for blockNumber in startNumber .. endNumber:
-      var receipts: seq[Receipt]
-      ?db.getReceipts(blockNumber, receipts)
+      var body: BlockBody
+      ?db.getBlockBody(blockNumber, body)
 
-      ?group.update(e2, blockNumber, receipts.to(seq[StoredReceipt]))
+      ?group.update(e2, blockNumber, body)
 
-  # Step 4 (optional): build proofs + write to ere
-  if not noProofs:
-    let epochRecord = EpochRecord.init(@headerRecords)
+    # Step 3 (optional): get all receipts from EL db + write to ere
+    if not noReceipts:
+      for blockNumber in startNumber .. endNumber:
+        var receipts: seq[Receipt]
+        ?db.getReceipts(blockNumber, receipts)
+
+        ?group.update(e2, blockNumber, receipts.to(seq[StoredReceipt]))
+
+    # Step 4 (optional): build proofs + write to ere
+    if not noProofs:
+      let epochRecord = EpochRecord.init(@headerRecords)
+      for blockNumber in startNumber .. endNumber:
+        let proof = ?buildProof(headerList[blockNumber - startNumber], epochRecord)
+
+        ?group.update(e2, blockNumber, Proof.init(proof))
+
+    # Step 5: total difficulty
     for blockNumber in startNumber .. endNumber:
-      let proof = ?buildProof(headerList[blockNumber - startNumber], epochRecord)
+      let td = ?db.getTotalDifficulty(blockNumber)
 
-      ?group.update(e2, blockNumber, Proof.init(proof))
+      ?group.update(e2, blockNumber, td)
 
-  # Step 5: total difficulty
-  for blockNumber in startNumber .. endNumber:
-    let td = ?db.getTotalDifficulty(blockNumber)
+    ?group.finish(e2, Opt.some(accumulatorRoot), era.endNumber())
 
-    ?group.update(e2, blockNumber, td)
-
-  ?group.finish(e2, Opt.some(accumulatorRoot), era.endNumber())
+  # std/os.moveFile raises Exception (not raises-annotated), so we must catch
+  # Exception here. Practically it will only ever raise OSError.
+  try:
+    moveFile(tmpName, filename)
+  except Exception as e:
+    return err("Failed to rename ere tmp file: " & e.msg)
+  completed = true
 
   notice "Exported ere file", file = filename
 
@@ -149,7 +166,7 @@ proc exportEreFile(
     endNumber = era.endNumber()
 
     isPreMerge = endNumber < mergeBlockNumber
-    isMergeEra = startNumber <= mergeBlockNumber and mergeBlockNumber <= endNumber
+    isMergeEra = startNumber < mergeBlockNumber and mergeBlockNumber <= endNumber
 
     endHeaderHash = (?db.getBlockHeader(endNumber)).computeRlpHash()
     filename =
@@ -159,97 +176,120 @@ proc exportEreFile(
     debug "Ere file already exists", era, file = filename
     return ok()
 
-  let e2 = openFile(filename, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
-    return err(ioErrorMsg(error))
+  let
+    tmpName = filename & ".tmp"
+    e2 = openFile(tmpName, {OpenFlags.Write, OpenFlags.Create, OpenFlags.Truncate}).valueOr:
+      return err(ioErrorMsg(error))
+
+  var completed = false
   defer:
-    discard closeFile(e2)
+    if not completed:
+      discard io2.removeFile(tmpName)
 
-  var group = ?EreGroup.init(e2, startNumber, mergeBlockNumber, noReceipts, noProofs)
+  block writeBlock:
+    defer:
+      discard closeFile(e2)
 
-  # Step 1: get all headers from EL db to be able to construct the HeaderRecord
-  # list, epochRecord and accumulatorRoot, and write the headers to the ere file.
-  var headerList: seq[headers.Header]
-  # headerRecords only gets populated for pre-merge blocks, required for proof + accumulator
-  var headerRecords: seq[historical_hashes_accumulator.HeaderRecord]
-  for blockNumber in startNumber .. endNumber:
-    let header = ?db.getBlockHeader(blockNumber)
-    headerList.add(header)
-    ?group.update(e2, blockNumber, header)
+    var group = ?EreGroup.init(e2, startNumber, mergeBlockNumber, noReceipts, noProofs)
 
-    if blockNumber < mergeBlockNumber:
-      let
-        blockHash = header.computeRlpHash()
-        td = db.getScore(blockHash).valueOr:
-          return err("No total difficulty for block " & $blockNumber)
-      headerRecords.add(
-        historical_hashes_accumulator.HeaderRecord(
-          blockHash: blockHash, totalDifficulty: td
-        )
-      )
-
-  # Set accumulator root for pre-merge and merge eras only
-  # https://github.com/eth-clients/e2store-format-specs/blob/ca2523a6420d64336000f5607c0b59df1a08c83b/formats/ere.md#merge-transition
-  let accumulatorRoot =
-    if headerRecords.len > 0:
-      Opt.some(getEpochRecordRoot(headerRecords))
-    else:
-      Opt.none(Digest)
-
-  # Step 2: get all block bodies from EL db + write to ere
-  for blockNumber in startNumber .. endNumber:
-    let body = ?db.getBlockBody(headerList[blockNumber - startNumber])
-    ?group.update(e2, blockNumber, body)
-
-  # Step 3 (optional): get all receipts from EL db + write to ere
-  if not noReceipts:
+    # Step 1: get all headers from EL db to be able to construct the HeaderRecord
+    # list, epochRecord and accumulatorRoot, and write the headers to the ere file.
+    var headerList: seq[headers.Header]
+    # headerRecords only gets populated for pre-merge blocks, required for proof + accumulator
+    var headerRecords: seq[historical_hashes_accumulator.HeaderRecord]
     for blockNumber in startNumber .. endNumber:
-      let receipts = ?db.getReceipts(headerList[blockNumber - startNumber].receiptsRoot)
-      ?group.update(e2, blockNumber, receipts)
+      let header = ?db.getBlockHeader(blockNumber)
+      headerList.add(header)
+      ?group.update(e2, blockNumber, header)
 
-  # Step 4 (optional): build proofs + write to ere
-  if not noProofs:
-    let epochRecord =
-      if isPreMerge or isMergeEra:
-        EpochRecord.init(@headerRecords)
-      else:
-        default(EpochRecord) # post-merge era, not used
-    for blockNumber in startNumber .. endNumber:
-      let header = headerList[blockNumber - startNumber]
       if blockNumber < mergeBlockNumber:
-        # Pre-merge: Use `HistoricalHashesAccumulatorProof`, no era files needed
-        let proof = ?buildProof(header, epochRecord)
-        ?group.update(e2, blockNumber, Proof.init(proof))
-      else:
-        # Post-merge: beacon chain proof built from era files
-        let builder = beaconBuilder.valueOr:
-          return err(
-            "--era-dir required for post-merge proof building (block " & $blockNumber &
-              ")"
+        let
+          blockHash = header.computeRlpHash()
+          td = db.getScore(blockHash).valueOr:
+            return err("No total difficulty for block " & $blockNumber)
+        headerRecords.add(
+          historical_hashes_accumulator.HeaderRecord(
+            blockHash: blockHash, totalDifficulty: td
           )
-        ?group.update(e2, blockNumber, ?builder.buildProof(header.timestamp.uint64))
+        )
 
-  # Step 5: total difficulty, only in pre-merge and merge eras
-  # https://github.com/eth-clients/e2store-format-specs/blob/ca2523a6420d64336000f5607c0b59df1a08c83b/formats/ere.md#merge-transition
-  if isPreMerge or isMergeEra:
-    # Total difficulty frozen at the merge block for all post-merge blocks in
-    # the merge era.
-    let mergeTD =
-      if isMergeEra:
-        let mergeHeader = ?db.getBlockHeader(mergeBlockNumber)
-        db.getScore(mergeHeader.computeRlpHash()).valueOr:
-          return err("No total difficulty for merge block " & $mergeBlockNumber)
+    # Set accumulator root for pre-merge and merge eras only
+    # https://github.com/eth-clients/e2store-format-specs/blob/ca2523a6420d64336000f5607c0b59df1a08c83b/formats/ere.md#merge-transition
+    let accumulatorRoot =
+      if headerRecords.len > 0:
+        Opt.some(getEpochRecordRoot(headerRecords))
       else:
-        default(UInt256) # pre-merge era, not used
-    for blockNumber in startNumber .. endNumber:
-      let td =
-        if blockNumber < mergeBlockNumber:
-          # TD already fetched and cached in headerRecords during step 1
-          headerRecords[blockNumber - startNumber].totalDifficulty
-        else:
-          mergeTD
-      ?group.update(e2, blockNumber, td)
+        Opt.none(Digest)
 
-  ?group.finish(e2, accumulatorRoot, era.endNumber())
+    # Step 2: get all block bodies from EL db + write to ere
+    for blockNumber in startNumber .. endNumber:
+      let body = ?db.getBlockBody(headerList[blockNumber - startNumber])
+      ?group.update(e2, blockNumber, body)
+
+    # Step 3 (optional): get all receipts from EL db + write to ere
+    if not noReceipts:
+      for blockNumber in startNumber .. endNumber:
+        let receipts =
+          ?db.getReceipts(headerList[blockNumber - startNumber].receiptsRoot)
+        ?group.update(e2, blockNumber, receipts)
+
+    # Step 4 (optional): build proofs + write to ere
+    if not noProofs:
+      let epochRecord =
+        if isPreMerge or isMergeEra:
+          EpochRecord.init(@headerRecords)
+        else:
+          default(EpochRecord) # post-merge era, not used
+      for blockNumber in startNumber .. endNumber:
+        let header = headerList[blockNumber - startNumber]
+        if blockNumber < mergeBlockNumber:
+          # Pre-merge: Use `HistoricalHashesAccumulatorProof`, no era files needed
+          let proof = ?buildProof(header, epochRecord)
+          ?group.update(e2, blockNumber, Proof.init(proof))
+        else:
+          # Post-merge: beacon chain proof built from era files
+          let builder = beaconBuilder.valueOr:
+            return err(
+              "--era-dir required for post-merge proof building (block " & $blockNumber &
+                ")"
+            )
+          # The block hash is only needed from Gloas onwards, where the proof is
+          # built from the beacon block that confirms this execution block
+          let proof = ?builder.buildProof(
+            header.timestamp.uint64, Digest(data: header.computeRlpHash().data)
+          )
+          ?group.update(e2, blockNumber, proof)
+
+    # Step 5: total difficulty, only in pre-merge and merge eras
+    # https://github.com/eth-clients/e2store-format-specs/blob/ca2523a6420d64336000f5607c0b59df1a08c83b/formats/ere.md#merge-transition
+    if isPreMerge or isMergeEra:
+      # Total difficulty frozen at the merge block for all post-merge blocks in
+      # the merge era.
+      let mergeTD =
+        if isMergeEra:
+          let mergeHeader = ?db.getBlockHeader(mergeBlockNumber)
+          db.getScore(mergeHeader.computeRlpHash()).valueOr:
+            return err("No total difficulty for merge block " & $mergeBlockNumber)
+        else:
+          default(UInt256) # pre-merge era, not used
+      for blockNumber in startNumber .. endNumber:
+        let td =
+          if blockNumber < mergeBlockNumber:
+            # TD already fetched and cached in headerRecords during step 1
+            headerRecords[blockNumber - startNumber].totalDifficulty
+          else:
+            mergeTD
+        ?group.update(e2, blockNumber, td)
+
+    ?group.finish(e2, accumulatorRoot, era.endNumber())
+
+  # std/os.moveFile raises Exception (not raises-annotated), so we must catch
+  # Exception here. Practically it will only ever raise OSError.
+  try:
+    moveFile(tmpName, filename)
+  except Exception as e:
+    return err("Failed to rename ere tmp file: " & e.msg)
+  completed = true
 
   notice "Exported ere file", file = filename
 
@@ -313,7 +353,7 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
     networkName = config.network
 
   if mergeBlockNumber == 0:
-    fatal "exportEreFromEra1 is not supported for post-merge-only networks",
+    fatal "exportEreFromEra1 is not supported for PoS only networks",
       network = networkName
     quit(QuitFailure)
 
@@ -349,7 +389,7 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
 proc verifyEreFile(ereFilename: string, v: HeaderVerifier): Result[void, string] =
   ## Verify a single ere file using a pre-loaded HeaderVerifier.
   let
-    (network, noProofs, noReceipts) = ?parseEreFileName(ereFilename)
+    (network, _, noProofs, noReceipts) = ?parseEreFileName(ereFilename)
     nid = parseNetworkId(network).valueOr:
       return err("Unsupported network in filename '" & ereFilename & "': " & error)
     networkMetadata = getMetadataForNetwork(network)
@@ -373,6 +413,8 @@ proc buildHeaderVerifier(
     config: HistoryExportConf, network: string
 ): Result[HeaderVerifier, string] =
   let
+    nid = parseNetworkId(network).valueOr:
+      return err("Unsupported network '" & network & "': " & error)
     networkMetadata = getMetadataForNetwork(network)
     eraDirPath =
       if config.eraDir.isSome:
@@ -381,11 +423,27 @@ proc buildHeaderVerifier(
         defaultDataDir("", network) / "era"
     (historicalRoots, historicalSummaries) =
       ?loadHistoricalDataFromEraDir(networkMetadata.cfg, eraDirPath)
+    isPosOnly = mergeBlockNumber(nid) == 0
+    # PoS only networks (e.g. hoodi) have no pre-merge history, so there is no
+    # baked-in accumulator to load.
+    historicalHashes =
+      if isPosOnly:
+        Opt.none(FinishedHistoricalHashesAccumulator)
+      else:
+        Opt.some(loadAccumulator(network))
+    # Their genesis block cannot be proven, so it gets verified against the
+    # genesis block of the network itself.
+    genesisHash =
+      if isPosOnly:
+        Opt.some(genesisBlockHash(networkParams(nid)))
+      else:
+        Opt.none(Hash32)
   ok(
     HeaderVerifier(
-      historicalHashes: loadAccumulator(network),
+      historicalHashes: historicalHashes,
       historicalRoots: historicalRoots,
       historicalSummaries: historicalSummaries,
+      genesisBlockHash: genesisHash,
     )
   )
 
@@ -393,38 +451,67 @@ proc verifyEreFile*(
     config: HistoryExportConf, ereFilename: string
 ): Result[void, string] =
   let
-    (network, _, _) = ?parseEreFileName(ereFilename)
+    (network, _, _, _) = ?parseEreFileName(ereFilename)
     v = ?buildHeaderVerifier(config, network)
   verifyEreFile(ereFilename, v)
 
 proc verifyEreDir*(config: HistoryExportConf, dirPath: string) =
   var
-    v: HeaderVerifier
-    verifierReady = false
-    count, failed = 0
+    files: seq[tuple[era: ere.Era, path: string]]
+    firstNetwork: string
   try:
     for kind, path in walkDir(dirPath):
-      if kind == pcFile and path.splitFile.ext == ".ere":
-        inc count
-        if not verifierReady:
-          let (network, _, _) = parseEreFileName(path).valueOr:
-            fatal "Cannot parse ere filename", file = path, error = error
-            quit(QuitFailure)
-          v = buildHeaderVerifier(config, network).valueOr:
-            fatal "Failed to load historical data from era files", error = error
-            quit(QuitFailure)
-          verifierReady = true
-        verifyEreFile(path, v).isOkOr:
-          warn "Verification failed", file = path, error = error
-          inc failed
+      if kind in {pcFile, pcLinkToFile} and path.splitFile.ext == ".ere":
+        let (network, era, _, _) = parseEreFileName(path).valueOr:
+          fatal "Cannot parse ere filename", file = path, error = error
+          quit(QuitFailure)
+
+        if firstNetwork.len() == 0:
+          firstNetwork = network
+        elif network != firstNetwork:
+          fatal "Directory holds ere files of multiple networks",
+            dir = dirPath, network = firstNetwork, otherNetwork = network, file = path
+          quit(QuitFailure)
+
+        files.add((era, path))
   except OSError as e:
     fatal "Failed to read directory", dir = dirPath, error = e.msg
     quit(QuitFailure)
 
-  if failed > 0:
-    fatal "Verification completed with failures", total = count, failed
-    quit(QuitFailure)
-  elif count == 0:
+  if files.len() == 0:
     notice "No ere files found to verify", dir = dirPath
+    return
+
+  # Verify in era order, so that the files are covered chronologically and the
+  # era range can be checked for gaps along the way.
+  files.sort()
+
+  let v = buildHeaderVerifier(config, firstNetwork).valueOr:
+    fatal "Failed to load historical data from era files", error = error
+    quit(QuitFailure)
+
+  var failed, missing, duplicateEras = 0
+  for i, (era, path) in files:
+    if i > 0:
+      let previousEra = files[i - 1].era
+      if era == previousEra:
+        warn "Multiple ere files for the same era", era, file = path
+        inc duplicateEras
+      elif era > previousEra + 1:
+        warn "Missing ere files", firstMissing = previousEra + 1, lastMissing = era - 1
+        missing += int(era - previousEra - 1)
+
+    verifyEreFile(path, v).isOkOr:
+      warn "Verification failed", file = path, error = error
+      inc failed
+
+  if failed > 0 or missing > 0 or duplicateEras > 0:
+    fatal "Verification completed with failures",
+      total = files.len(), failed, missing, duplicateEras
+    quit(QuitFailure)
   else:
-    notice "All ere files verified successfully", total = count, dir = dirPath
+    notice "All ere files verified successfully",
+      total = files.len(),
+      firstEra = files[0].era,
+      lastEra = files[^1].era,
+      dir = dirPath

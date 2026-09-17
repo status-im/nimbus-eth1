@@ -607,12 +607,14 @@ proc getExecutionApiFrontend*(
     let tag = opEngine.penaltyOr(await opEngine.resolveOpTag(blockId))
     let (backend, backendIdx) = ?(opEngine.executionBackendFor(GetProof))
     let proof = opEngine.penaltyOr(
-      (await backend.eth_getProof(address, slots, tag)).tagBackend(backendIdx)
+      (await backend.eth_getProof(address, slots.toStorageKeys(), tag)).tagBackend(
+        backendIdx
+      )
     )
     ok(proof)
 
   frontend.eth_feeHistory = proc(
-      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
+      blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[float64]
   ): Future[EngineResult[FeeHistoryResult]] {.async: (raises: [CancelledError]).} =
     trace "Received query",
       meth = "eth_feeHistory",

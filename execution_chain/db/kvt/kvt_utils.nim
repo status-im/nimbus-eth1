@@ -14,6 +14,7 @@
 {.push raises: [].}
 
 import
+  std/tables,
   results,
   "."/[kvt_desc, kvt_layers]
 
@@ -116,10 +117,12 @@ proc get*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  var data = db.layersGet(key).valueOr:
-    return db.db.getBe key
+  let key = @key
+  for w in db.rstack:
+    w.sTab.withValue(key, item):
+      return ok(item[])
 
-  return ok(move(data))
+  db.db.getBe key
 
 proc len*(
     db: KvtTxRef;                     # Database
@@ -148,9 +151,9 @@ proc multiGet*(
 
   # First fetch each key from the in memory layers
   for i, k in keys:
-    let value = db.layersGet(k)
+    var value = db.layersGet(k)
     if value.isSome():
-      values[i] = value
+      values[i] = move(value)
     else:
       remainingKeys.add(k)
       keyIndexes.add(i)
@@ -160,9 +163,8 @@ proc multiGet*(
     var remainingValues = newSeq[Opt[seq[byte]]](remainingKeys.len())
     ?db.db.multiGetBe(remainingKeys, remainingValues)
 
-    for i, v in remainingValues:
-      let index = keyIndexes[i]
-      values[index] = v
+    for i, v in remainingValues.mpairs:
+      values[keyIndexes[i]] = move(v)
 
   ok()
 

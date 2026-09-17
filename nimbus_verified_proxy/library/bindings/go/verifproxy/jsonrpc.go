@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -20,18 +21,6 @@ type RPCRequest struct {
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params"`
 	ID      int             `json:"id"`
-}
-
-type RPCResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	Result  json.RawMessage `json:"result"`
-	Error   *RPCError       `json:"error"`
-	ID      int             `json:"id"`
-}
-
-type RPCError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
 }
 
 func SendRPC(url string, method string, params string) (json.RawMessage, error) {
@@ -59,14 +48,12 @@ func SendRPC(url string, method string, params string) (json.RawMessage, error) 
 		return nil, fmt.Errorf("http error: %s", resp.Status)
 	}
 
-	var rpcResp RPCResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rpcResp); err != nil {
+	// the library expects the JSON-RPC response envelope verbatim; error
+	// members are surfaced by the library, not the transport
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return nil, err
 	}
 
-	if rpcResp.Error != nil {
-		return nil, fmt.Errorf("rpc error %d: %s", rpcResp.Error.Code, rpcResp.Error.Message)
-	}
-
-	return rpcResp.Result, nil
+	return json.RawMessage(body), nil
 }

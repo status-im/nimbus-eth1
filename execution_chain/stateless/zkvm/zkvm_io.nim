@@ -28,7 +28,7 @@ import std/[os, strutils], stew/ptrops
 # Location of the zkvm-standards' `zkvm_io.h`
 const zkvmIoDir =
   currentSourcePath.rsplit({DirSep, AltSep}, 1)[0] &
-  "/../../vendor/zkevm-standards/standards/io-interface"
+  "/../../../vendor/zkevm-standards/standards/io-interface"
 
 # quoteShell is not defined when compiling to bare metal
 when not defined(`any`) and not defined(standalone):
