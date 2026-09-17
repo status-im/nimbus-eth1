@@ -393,9 +393,10 @@ func compatible*(calc: ForkIdCalculator, forkId: ForkId, number: uint64, time: u
       localForkPos = i
       break
 
-  # Based on position of local fork ID, determine if the head is block or time based
+  # Based on position of local fork ID, determine if the head is block or time based.
+  # Without any time based forks, the head past the last block fork stays block based.
   let head =
-    if localForkPos >= calc.byBlock.len():
+    if localForkPos >= calc.byBlock.len() and calc.byTime.len() > 0:
       time
     else:
       number
