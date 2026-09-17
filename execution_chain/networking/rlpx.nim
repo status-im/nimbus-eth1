@@ -410,11 +410,24 @@ proc keepAliveLoop(peer: Peer) {.async: (raises: [CancelledError]).} =
   ## dead connection is never noticed.
   ##
   ## Every exit closes the transport. Some paths reach it already closed - a
-  ## failed `ping` can only raise via `disconnectAndRaise`, which has run the
-  ## full disconnect - but this loop is the peer's only reaper, so it must not
-  ## depend on an invariant held in another module. `close` is idempotent.
+  ## failed send runs the full disconnect inside `sendMsg` - but this loop is
+  ## the peer's only reaper, so it must not depend on an invariant held in
+  ## another module. `close` is idempotent.
+  var ping: Future[void].Raising([CancelledError, EthP2PError])
+
+  defer:
+    if not ping.isNil and not ping.finished:
+      ping.cancelSoon()
+
   while peer.connectionState == Connected:
     await sleepAsync(peerLivenessInterval)
+
+    if not ping.isNil and ping.finished:
+      if ping.failed:
+        # A failed send has already run the full disconnect, so the loop ends
+        # on the state check below.
+        trace "Failed to send ping", remote = peer.remote, err = ping.error.msg
+      ping = nil
 
     let idle = Moment.now() - peer.lastReceived
     if idle >= peerIdleTimeout:
@@ -422,19 +435,15 @@ proc keepAliveLoop(peer: Peer) {.async: (raises: [CancelledError]).} =
         remote = peer.remote, clientId = peer.clientId, idle
       break
 
-    if idle >= peerPingInterval:
-      # A live peer answers with a pong, which resets `lastReceived`. The write
-      # is bounded because a peer that stopped reading fills our send buffer
-      # and would otherwise park this loop past the idle timeout.
-      try:
-        await peer.ping().wait(peerIdleTimeout)
-      except AsyncTimeoutError:
-        debug "Ping could not be delivered, closing connection",
-          remote = peer.remote, clientId = peer.clientId
-        break
-      except EthP2PError as exc:
-        trace "Failed to send ping", remote = peer.remote, err = exc.msg
-        break
+    # A live peer answers with a pong, which resets `lastReceived`. The send is
+    # deliberately not awaited: a peer that has stopped reading fills our send
+    # buffer, and awaiting would stretch the tick by however long the write
+    # blocks - `peerLivenessInterval` has to remain the period at which the
+    # peer is examined, not the gap between examinations. At most one ping is
+    # in flight, and one that never reaches the wire needs no handling of its
+    # own: `lastReceived` stops advancing, so the idle check above reaps it.
+    if idle >= peerPingInterval and ping.isNil:
+      ping = peer.ping()
 
   # Closing the transport makes the pending read in `dispatchMessages` fail,
   # which runs the regular disconnect path - handlers, pool removal, metrics.
