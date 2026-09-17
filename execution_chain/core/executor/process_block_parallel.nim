@@ -65,7 +65,6 @@ type
     gasUsed: GasInt
     blockExecutionGasUsed: GasInt
     blockStateGasUsed: GasInt
-    intrinsic: IntrinsicGas
     blobGasUsed: uint64
     status: bool
     logs: SharedBytes
@@ -119,9 +118,7 @@ proc recoverAndPrefetchTask*(
   vmState.balTracker = nil
 
   # Execute the transaction discarding the results in order to fill the in memory caches.
-  var tx: Transaction
-  assign(tx, e[].tx[])
-  vmState.prefetchTransaction(tx, sender)
+  vmState.prefetchTransaction(e[].tx[], sender)
 
   true
 
@@ -402,9 +399,7 @@ proc processTxTask(
       BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
     vmState.balTracker.setBlockAccessIndex(e[].txIndex + 1)
 
-  var tx: Transaction
-  assign(tx, e[].tx[])
-  let logResult = vmState.processTransaction(tx, sender, persist = false).valueOr:
+  let logResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
     e[].error = SharedString.init(error)
     ctx[].cancelled.store(true, moRelease)
     return false
@@ -412,7 +407,6 @@ proc processTxTask(
   e[].gasUsed = logResult.gasUsed
   e[].blockExecutionGasUsed = vmState.blockExecutionGasUsed
   e[].blockStateGasUsed = vmState.blockStateGasUsed
-  e[].intrinsic = tx.intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
   e[].logs = packLogs(logResult.logEntries)

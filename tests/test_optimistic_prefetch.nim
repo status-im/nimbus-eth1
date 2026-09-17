@@ -108,13 +108,13 @@ when defined(gcRefc):
       defer:
         env.com.shutdownTaskpool()
 
-      # On the executing thread the create path retains the initcode payload
-      # until the next collection, which is what the probe below must detect
+      # The create path must copy the initcode into the EVM code buffer rather
+      # than take a reference to the caller's payload
       var probe = @[createTx(0, env.com.chainId)]
       let probeBefore = cellRefcount(probe[0].payload)
       env.vmState.prefetchTransaction(probe[0], env.sender)
       let probeAfter = cellRefcount(probe[0].payload)
-      check probeAfter == probeBefore + 1
+      check probeAfter == probeBefore
 
       var
         txs = @[createTx(0, env.com.chainId)]
