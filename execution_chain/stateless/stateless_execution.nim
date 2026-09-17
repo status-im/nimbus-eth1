@@ -252,6 +252,7 @@ func chainConfigForStateless(chainId: uint64): ChainConfig =
     transitions.blockNumberThresholds[f] = Opt.some(0.BlockNumber)
   transitions.mergeForkTransitionThreshold.number = Opt.some(0.BlockNumber)
   transitions.mergeForkTransitionThreshold.ttd = Opt.some(0.u256)
+  transitions.mergeNetsplitBlock = Opt.some(0.BlockNumber)
   for f in firstTimeBasedFork .. lastFork:
     transitions.timeThresholds[f] = Opt.some(0.EthTime)
 
