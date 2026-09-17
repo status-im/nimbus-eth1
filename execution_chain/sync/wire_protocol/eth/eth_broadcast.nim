@@ -134,7 +134,7 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
   if packet.transactions.len == 0:
     return
 
-  debug "Received new transactions",
+  trace "Received new transactions",
     number = packet.transactions.len
 
   if wire.actionQueue.full:
@@ -413,7 +413,7 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
   if packet.txHashes.len == 0:
     return
 
-  debug "Received new pooled tx hashes",
+  trace "Received new pooled tx hashes",
     hashes = packet.txHashes.len
 
   if packet.txHashes.len != packet.txSizes.len or
