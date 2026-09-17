@@ -48,7 +48,7 @@ proc mergePayloadImpl[LeafType, T](
     leaf: Opt[LeafType],
     payload: T, # Payload value
     stoStatic = true, # Storage trie children get static vids
-): Result[(LeafType, VertexRef, LeafType, int, int), AristoError] =
+): Result[(LeafType, VertexRef, LeafType, int), AristoError] =
   ## Merge the argument `(root,path)` key-value-pair into the top level vertex
   ## table of the database `db`. The `path` argument is used to address the
   ## leaf vertex with the payload. It is stored or updated on the database
@@ -64,7 +64,7 @@ proc mergePayloadImpl[LeafType, T](
 
       # We're at the root vertex and there is no data - this must be a fresh
       # VertexID!
-      return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil, 0, 0)
+      return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil, 0)
     vids: ArrayBuf[NibblesBuf.high + 1, VertexID]
     vtxs: ArrayBuf[NibblesBuf.high + 1, BranchRef]
 
@@ -102,7 +102,7 @@ proc mergePayloadImpl[LeafType, T](
               return err(MergeNoAction)
             let leafVtx = db.layersUpdate((root, cur), StoLeafRef(vtx))
             leafVtx.stoData = payload
-          (leafVtx, nil, nil, -1, -1)
+          (leafVtx, nil, nil, -1)
         else:
           # Turn leaf into a branch (or extension) then insert the two leaves
           # into the branch
@@ -134,7 +134,7 @@ proc mergePayloadImpl[LeafType, T](
 
           # We need to return vtx here because its pfx member hasn't yet been
           # sliced off and is therefore shared with the hike
-          (leafVtx, vtx, other, pos + n + 1, pos)
+          (leafVtx, vtx, other, pos + n + 1)
 
       resetKeys()
       return ok(res)
@@ -166,7 +166,7 @@ proc mergePayloadImpl[LeafType, T](
             leafVtx = db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
 
           resetKeys()
-          return ok((leafVtx, nil, nil, pos + n + 1, pos))
+          return ok((leafVtx, nil, nil, pos + n + 1))
       else:
         # Partial path match - we need to split the existing branch at
         # the point of divergence, inserting a new branch
@@ -198,7 +198,7 @@ proc mergePayloadImpl[LeafType, T](
         db.layersPutVtx((root, cur), branch)
 
         resetKeys()
-        return ok((leafVtx, nil, nil, pos + n + 1, pos))
+        return ok((leafVtx, nil, nil, pos + n + 1))
 
     of BoundaryNode:
       let evtx = BoundaryNodeRef(vtx)
@@ -239,7 +239,7 @@ proc mergePayloadImpl[LeafType, T](
 
         db.layersPutVtx((root, cur), branch)
         resetKeys()
-        return ok((leafVtx, nil, nil, pos + n + 1, pos))
+        return ok((leafVtx, nil, nil, pos + n + 1))
 
   err(MergeHikeFailed)
 
@@ -324,21 +324,18 @@ proc mergeSlot*(
       Hash32(getBytes(NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated[1].pfx)))
     db.layersPutStoLeaf(mixUp(accPath, otherPath), updated[2])
 
-  # A hint below the leaves costs a negative lookup per level while one on the
-  # branch above them is a positive lookup the walk resolves from, so bias it
-  # shallow: follow a shallower placement at once, a deeper one only as far as
-  # the branch the new leaf hangs from
+  # A hint below the leaves costs a negative lookup per level, one above lands
+  # on a branch that the walk resolves from, so bias it shallow: follow a
+  # shallower placement at once, a deeper one only when it clears hint by two.
   let hint =
     if not stoStatic:
       0'u8
     elif 0 <= updated[3]:
-      let
-        placed = uint8(min(updated[3], STATIC_VID_LEVELS) + 1)
-        branch = uint8(min(updated[4], STATIC_VID_LEVELS) + 1)
-      if accVtx.stoHint == 0 or placed < accVtx.stoHint:
+      let placed = uint8(min(updated[3], STATIC_VID_LEVELS) + 1)
+      if placed < accVtx.stoHint or accVtx.stoHint == 0:
         placed
-      elif branch > accVtx.stoHint:
-        branch
+      elif placed > accVtx.stoHint + 1:
+        placed - 1
       else:
         accVtx.stoHint
     else:
