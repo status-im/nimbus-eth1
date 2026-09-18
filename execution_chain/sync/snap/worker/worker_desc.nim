@@ -87,10 +87,6 @@ type
     partial: seq[StorageItem]                       # Incomplete slot with proof
     proof: seq[ProofNode]                           # Prof for `slot`
 
-  Ticker* =
-    proc(ctx: SnapCtxRef) {.gcsafe, raises: [].}
-      ## Some function that is invoked regularly
-
   # -------------------
 
   PeerErrors* = object

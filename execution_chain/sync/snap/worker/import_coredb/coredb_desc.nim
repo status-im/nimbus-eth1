@@ -22,11 +22,8 @@ import
   ../../../../db/[aristo, core_db, core_db/persistent, opts],
   ../worker_desc
 
-from ../../../../db/core_db/backend/rocksdb_desc
-  import DbFolder
-
 const
-  coreDb2Folder = DbFolder & ".new"
+  coreDb2Folder = Path "coredb.new"
 
 type
   AristoImportStats* = tuple
@@ -46,7 +43,7 @@ type
 proc init*(_: type CoreDb2Ref, ctx: SnapCtxRef, clean = false): CoreDb2Ref =
   let
     dbOpts = DbOptions.init()
-    dataDir = string(ctx.pool.cacheDB.dir / Path(coreDb2Folder))
+    dataDir = string(ctx.pool.cacheDB.dir.parentDir / coreDb2Folder)
   var
     db2 = AristoDbRocks.newCoreDbRef(dataDir, dbOpts)
   if clean:
