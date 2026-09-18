@@ -30,7 +30,8 @@ when enable_zkvm_accelerators:
   import ../stateless/zkvm/[zkvm_accelerators, blake2b_f_zkvm]
 else:
   import ./[blake2b_f, modexp, secp256r1verify]
-  from boringssl as bssl import nil
+  import ssz_serialization/digest
+  from ssz_serialization/types import Digest
 
 when enable_zkvm_accelerators:
   import ../stateless/zkvm/bncurve_zkvm
@@ -214,10 +215,7 @@ func sha256(c: Computation): EvmResultVoid =
   when enable_zkvm_accelerators:
     sha256Into(c.msg.data, cast[ptr array[32, byte]](addr c.output[0])[])
   else:
-    {.cast(noSideEffect).}:
-      let data = if c.msg.data.len > 0: addr c.msg.data[0] else: nil
-      discard bssl.SHA256(data, csize_t(c.msg.data.len),
-        cast[ptr array[32, byte]](addr c.output[0])[])
+    digest(c.msg.data, cast[ptr Digest](addr c.output[0])[])
   ok()
 
 func ripemd160(c: Computation): EvmResultVoid =
