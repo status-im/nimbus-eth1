@@ -51,8 +51,11 @@ proc resetServices*(ctx: SnapCtxRef; info: static[string]) =
   # Miscellaneous parameters to reset
   ctx.pool.pivotNum = 0
   ctx.pool.forwardNum = 0
-  ctx.pool.coreDb2Path.reset
   ctx.pool.resetReq = false
+  if ctx.pool.newCoreDb.isNil:
+    ctx.pool.newCoreDb = SnapCoreDb2Ref()
+  else:
+    ctx.pool.newCoreDb[].reset
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -60,7 +63,6 @@ proc resetServices*(ctx: SnapCtxRef; info: static[string]) =
 
 proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ## Helper for `setup()`: Enable external call-back based services
-
   # Set up assembly DB
   ctx.pool.cacheDB = CacheDbRef.init(ctx.pool.baseDir,info).valueOr:
     return false

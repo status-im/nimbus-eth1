@@ -17,7 +17,6 @@
 {.push raises: [].}
 
 import
-  std/paths,
   pkg/chronicles,
   ./import_coredb/[coredb_desc, coredb_import, coredb_stats],
   ./[helpers, cache_db, worker_desc]
@@ -33,7 +32,7 @@ export
 proc importCoreDb*(
     ctx: SnapCtxRef;
     info: static[string];
-      ): Opt[Path] =
+      ): Opt[void] =
   ## Import the flat tables into a version of CoreDb/Aristo, different from
   ## the active one. If successful, the installation path is returned.
   ##
@@ -53,7 +52,9 @@ proc importCoreDb*(
       stateRoot=header.stateRoot.toStr, expected=txStateRoot.toStr, txStats
     return err()
 
-  ok(db2Dir)
+  ctx.pool.newCoreDb.newDbPath = string db2Dir
+  ctx.pool.newCoreDb.stateRoot = header.stateRoot
+  ok()
 
 # ------------------------------------------------------------------------------
 # End
