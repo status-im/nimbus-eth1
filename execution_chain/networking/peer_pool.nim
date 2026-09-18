@@ -180,9 +180,17 @@ proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
   # initial cycle
   p.updateForkId()
   await p.discovery.start()
+
+  # The flag `p.running` has a double meaning. It is used to control the
+  # below `while` loop as well as an indication, that the listener is up
+  # and running. So this means that the `p.running` flag must be set
+  # before the `lookupPeers()`. Placing it later, there is a race condition
+  # when discovery is shut down early and `closeWait()` will not release
+  # the listener which remains blocked.
+  p.running = true
+
   await p.lookupPeers()
 
-  p.running = true
   while p.running:
     debug "Amount of peers", amount = p.connectedNodes.len()
 
