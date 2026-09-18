@@ -110,7 +110,24 @@ proc registerRequest(
   proc timeoutExpired(udata: pointer) {.gcsafe.} =
     requestResolver(nil, responseFuture)
 
-  discard setTimer(timeoutAt, timeoutExpired, nil)
+  let
+    timer = setTimer(timeoutAt, timeoutExpired, nil)
+    reqId = result
+  responseFuture.addCallback do(udata: pointer):
+    # A completed future owns its response. Release the timer's reference now,
+    # rather than keeping block bodies alive until the original deadline.
+    clearTimer(timer)
+
+    # Responses and disconnects already remove their requests. Also clean up
+    # timeouts, send failures and cancellations when no further replies arrive.
+    # Preserve order for protocols that match replies without request IDs.
+    template requests(): auto = peer.perMsgId[responseMsgId].outstandingRequest
+    for i in 0 ..< requests.len:
+      if requests[i].id == reqId:
+        for j in i ..< requests.len - 1:
+          requests[j] = requests[j + 1]
+        discard requests.popLast()
+        break
 
 proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
   result = ""
