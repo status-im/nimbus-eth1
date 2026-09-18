@@ -66,7 +66,7 @@ proc setupComputation(params: CallParams, keepStack: bool, vmState: BaseVMState,
     var
       code = if params.isCreate:
               msg.contractAddress = generateContractAddress(vmState, params.sender)
-              CodeBytesRef.init(params.tx.payload)
+              CodeBytesRef.initCopy(params.tx.payload)
             else:
               assign(msg.data, params.tx.payload)
               getRecipientCode(vmState, msg)
@@ -263,7 +263,7 @@ proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
       if params.isCreate:
         if ledger.originalAccountEmpty(c.msg.contractAddress):
           ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
-        CodeBytesRef.init(tx.payload)
+        CodeBytesRef.initCopy(tx.payload)
       else:
         if tx.value.isZero.not and not ledger.isAccountAlive(c.msg.contractAddress):
           ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")

@@ -30,6 +30,11 @@ func init*(
 ): CodeBytesRef =
   CodeBytesRef(bytes: move(bytes), persisted: persisted)
 
+func initCopy*(
+    T: type CodeBytesRef, bytes: seq[byte], persisted = false
+): CodeBytesRef =
+  CodeBytesRef(bytes: bytes, persisted: persisted)
+
 func init*(
     T: type CodeBytesRef, bytes: openArray[byte], persisted = false
 ): CodeBytesRef =
