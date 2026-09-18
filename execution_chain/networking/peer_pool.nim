@@ -62,6 +62,10 @@ type
     protocols*: seq[ProtocolInfoRef[PeerRef[Network], Network]]
 
 const
+  defaultMaxPeers* = 25
+    ## Fallback when `--max-peers` is not given. Exported so that `conf.nim`
+    ## and the `newPeerPool` / `newEthereumNode` defaults cannot drift apart.
+
   connectLoopSleep = chronos.milliseconds(2000)
   updateLoopSleep = chronos.seconds(15)
   maxConcurrentConnectionRequests = 40
@@ -227,7 +231,7 @@ proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
 func newPeerPool*[Network](
     network: Network,
     discovery: Eth1Discovery,
-    maxPeers = 25,
+    maxPeers = defaultMaxPeers,
     forkId = ForkIdProc(nil),
     ): PeerPoolRef[Network] =
   new result

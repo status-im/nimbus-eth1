@@ -35,7 +35,7 @@ proc newEthereumNode*(
     enrTcpPort, enrUdpPort: Opt[Port],
     networkId: NetworkId,
     clientId = "nim-eth-p2p",
-    maxPeers = 25,
+    maxPeers = defaultMaxPeers,
     bootstrapNodes = BootstrapNodes(),
     bindUdpPort: Port,
     bindTcpPort: Port,
