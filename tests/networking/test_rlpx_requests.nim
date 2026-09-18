@@ -36,7 +36,7 @@ proc completeResponse(peer: Peer) =
   response.payload = newSeq[byte](1024 * 1024)
   peer.resolveResponseFuture(0, addr response, id)
   doAssert future.completed
-  # Run completion callbacks without waiting for the request deadline.
+  # Let completion callbacks run.
   waitFor sleepAsync(1.milliseconds)
 
 suite "RLPx request lifetime":

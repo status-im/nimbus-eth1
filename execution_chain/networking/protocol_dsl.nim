@@ -114,14 +114,13 @@ proc registerRequest(
     timer = setTimer(timeoutAt, timeoutExpired, nil)
     reqId = result
   responseFuture.addCallback do(udata: pointer):
-    # A completed future owns its response. Release the timer's reference now,
-    # rather than keeping block bodies alive until the original deadline.
+    # Stop the timer from holding onto the response.
     clearTimer(timer)
 
-    # Responses and disconnects already remove their requests. Also clean up
-    # timeouts, send failures and cancellations when no further replies arrive.
-    # Preserve order for protocols that match replies without request IDs.
-    template requests(): auto = peer.perMsgId[responseMsgId].outstandingRequest
+    # Remove any leftover request, keeping order for replies without IDs.
+    template requests(): auto = 
+      peer.perMsgId[responseMsgId].outstandingRequest
+      
     for i in 0 ..< requests.len:
       if requests[i].id == reqId:
         for j in i ..< requests.len - 1:
