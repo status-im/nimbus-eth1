@@ -24,7 +24,7 @@ import
   beacon_chain/nimbus_binary_common,
   toml_serialization,
   eth/[common, net/nat, net/nat_toml],
-  ./networking/bootnodes,
+  ./networking/[bootnodes, peer_pool],
   ./[constants, compile_info, version_info],
   ./common/chain_config,
   ./common/chain_config_loader,
@@ -252,7 +252,7 @@ type
     maxPeersOpt {.
       desc: "Maximum number of peers to connect to"
       defaultValue: none(int)
-      defaultValueDesc: "25"
+      defaultValueDesc: $defaultMaxPeers
       name: "max-peers" .}: Option[int]
 
     elMaxPeersOpt {.
@@ -898,7 +898,7 @@ func maxPeers*(config: ExecutionClientConf): int =
   if config.elMaxPeersOpt.isSome:
     return config.elMaxPeersOpt.get
 
-  25
+  defaultMaxPeers
 
 {.pop.}
 
