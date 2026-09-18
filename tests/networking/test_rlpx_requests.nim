@@ -8,7 +8,7 @@
 {.used.}
 
 import
-  std/deques,
+  std/[heapqueue, sequtils, tables],
   unittest2,
   chronos,
   ../../execution_chain/networking/protocol_dsl {.all.}
@@ -16,38 +16,36 @@ import
 type Response = ref object
   payload: seq[byte]
 
-var responsesFreed = 0
-
-proc responseFreed(response: Response) {.gcsafe.} =
-  inc responsesFreed
-
-proc newPeer(): Peer =
-  Peer(
-    dispatcher: Dispatcher(messages: @[
-      MessageInfo(requestResolver: requestResolver[Response])]),
-    perMsgId: @[PerMsgId(outstandingRequest: initDeque[OutstandingRequest]())],
+proc newPeer(messageCount = 1): Peer =
+  result = Peer(
+    dispatcher: Dispatcher(messages: newSeq[MessageInfo](messageCount)),
+    perMsgId: newSeq[PerMsgId](messageCount),
   )
-
-proc completeResponse(peer: Peer) =
-  let future = newFuture[Opt[Response]]()
-  let id = peer.registerRequest(50.seconds, future, 0)
-  var response: Response
-  new(response, responseFreed)
-  response.payload = newSeq[byte](1024 * 1024)
-  peer.resolveResponseFuture(0, addr response, id)
-  doAssert future.completed
-  # Let completion callbacks run.
-  waitFor sleepAsync(1.milliseconds)
+  for message in result.dispatcher.messages.mitems:
+    message = MessageInfo(requestResolver: requestResolver[Response])
 
 suite "RLPx request lifetime":
-  test "successful response is released before its timeout":
+  test "successful response clears its timeout callback":
     let peer = newPeer()
-    let before = responsesFreed
-    completeResponse(peer)
-    GC_fullCollect()
+    let future = newFuture[Opt[Response]]()
+    let timersBefore = toSeq(getThreadDispatcher().timers.items)
+    let id = peer.registerRequest(50.seconds, future, 0)
+    var requestTimer: TimerCallback
+    for timer in getThreadDispatcher().timers.items:
+      if timer notin timersBefore:
+        requestTimer = timer
+    require requestTimer != nil
+    check not requestTimer.function.function.isNil
+
+    var response = Response(payload: newSeq[byte](1024 * 1024))
+    peer.resolveResponseFuture(0, addr response, id)
+    # Check the retaining reference directly; refc finalization is conservative.
+    waitFor sleepAsync(1.milliseconds)
     check:
+      future.completed
+      future.read().get() == response
       peer.perMsgId[0].outstandingRequest.len == 0
-      responsesFreed == before + 1
+      requestTimer.function.function.isNil
 
   test "timeout removes the outstanding request":
     let peer = newPeer()
@@ -69,7 +67,7 @@ suite "RLPx request lifetime":
       future.failed
       peer.perMsgId[0].outstandingRequest.len == 0
 
-  test "cancelling a request preserves the order of remaining requests":
+  test "cancelling a request leaves other requests pending":
     let peer = newPeer()
     let first = newFuture[Opt[Response]]()
     let middle = newFuture[Opt[Response]]()
@@ -82,8 +80,10 @@ suite "RLPx request lifetime":
     check:
       middle.cancelled
       peer.perMsgId[0].outstandingRequest.len == 2
-      peer.perMsgId[0].outstandingRequest[0].id == firstId
-      peer.perMsgId[0].outstandingRequest[1].id == lastId
+      peer.perMsgId[0].outstandingRequest.getOrDefault(firstId) == first
+      peer.perMsgId[0].outstandingRequest.getOrDefault(lastId) == last
+      not first.finished
+      not last.finished
     waitFor first.cancelAndWait()
     waitFor last.cancelAndWait()
     waitFor sleepAsync(1.milliseconds)
@@ -93,8 +93,9 @@ suite "RLPx request lifetime":
     let peer = newPeer()
     let future = newFuture[Opt[Response]]()
     discard peer.registerRequest(50.seconds, future, 0)
-    let req = peer.perMsgId[0].outstandingRequest.popFirst()
-    peer.dispatcher.messages[0].requestResolver(nil, req.future)
+    let pending = move(peer.perMsgId[0].outstandingRequest)
+    for request in pending.values:
+      peer.dispatcher.messages[0].requestResolver(nil, request)
     waitFor sleepAsync(1.milliseconds)
     check:
       future.completed
@@ -120,3 +121,47 @@ suite "RLPx request lifetime":
       pending.completed
       pending.read().get().payload == @[1.byte]
       peer.perMsgId[0].outstandingRequest.len == 0
+
+  test "out of order replies resolve the matching requests":
+    let peer = newPeer()
+    let first = newFuture[Opt[Response]]()
+    let second = newFuture[Opt[Response]]()
+    let firstId = peer.registerRequest(50.seconds, first, 0)
+    let secondId = peer.registerRequest(50.seconds, second, 0)
+    var response = Response(payload: @[2.byte])
+    peer.resolveResponseFuture(0, addr response, secondId)
+    check:
+      second.completed
+      second.read().get().payload == @[2.byte]
+      not first.finished
+    response = Response(payload: @[1.byte])
+    peer.resolveResponseFuture(0, addr response, firstId)
+    waitFor sleepAsync(1.milliseconds)
+    check:
+      first.completed
+      first.read().get().payload == @[1.byte]
+      peer.perMsgId[0].outstandingRequest.len == 0
+
+  test "unknown IDs and wrong message types leave requests pending":
+    let peer = newPeer(2)
+    let first = newFuture[Opt[Response]]()
+    let second = newFuture[Opt[Response]]()
+    let firstId = peer.registerRequest(50.seconds, first, 0)
+    let secondId = peer.registerRequest(50.seconds, second, 1)
+    var response = Response(payload: @[1.byte])
+    peer.resolveResponseFuture(0, addr response, secondId)
+    peer.resolveResponseFuture(1, addr response, firstId)
+    peer.resolveResponseFuture(0, addr response, secondId + 1)
+    check:
+      not first.finished
+      not second.finished
+      peer.perMsgId[0].outstandingRequest.len == 1
+      peer.perMsgId[1].outstandingRequest.len == 1
+    peer.resolveResponseFuture(0, addr response, firstId)
+    peer.resolveResponseFuture(1, addr response, secondId)
+    waitFor sleepAsync(1.milliseconds)
+    check:
+      first.completed
+      second.completed
+      peer.perMsgId[0].outstandingRequest.len == 0
+      peer.perMsgId[1].outstandingRequest.len == 0

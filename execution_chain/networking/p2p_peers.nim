@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/[sequtils, tables],
   chronos,
   chronicles/formats as chronicles,
   results,
@@ -43,15 +43,11 @@ type
     messages*: seq[MessageInfoRef[Peer]] # per `msgId` table (see above)
     activeProtocols*: seq[ProtocolInfoRef[Peer, Network]]
 
-  OutstandingRequest* = object
-    id*: uint64 # a `reqId` that may be used for response
-    future*: FutureBase
-
   DisconnectPeer*[Peer] = proc(peer: Peer,
     reason: DisconnectionReason, notifyRemote = false) {.async: (raises: []).}
 
   PerMsgId* = object
-    outstandingRequest*: Deque[OutstandingRequest]
+    outstandingRequest*: Table[uint64, FutureBase]
     awaitedMessage*: FutureBase
 
   ## Network usually instantiated by EthereumNode

@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
+  std/[tables, typetraits],
   stew/shims/macros,
   stew/byteutils,
   chronos,
@@ -102,8 +102,7 @@ proc registerRequest(
   peer.lastReqId = Opt.some(result)
 
   let timeoutAt = Moment.fromNow(timeout)
-  let req = OutstandingRequest(id: result, future: responseFuture)
-  peer.perMsgId[responseMsgId].outstandingRequest.addLast req
+  peer.perMsgId[responseMsgId].outstandingRequest[result] = responseFuture
 
   doAssert(not peer.dispatcher.isNil)
   let requestResolver = peer.dispatcher.messages[responseMsgId].requestResolver
@@ -117,16 +116,7 @@ proc registerRequest(
     # Stop the timer from holding onto the response.
     clearTimer(timer)
 
-    # Remove any leftover request, keeping order for replies without IDs.
-    template requests(): auto = 
-      peer.perMsgId[responseMsgId].outstandingRequest
-      
-    for i in 0 ..< requests.len:
-      if requests[i].id == reqId:
-        for j in i ..< requests.len - 1:
-          requests[j] = requests[j + 1]
-        discard requests.popLast()
-        break
+    peer.perMsgId[responseMsgId].outstandingRequest.del(reqId)
 
 proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
   result = ""
@@ -165,53 +155,7 @@ proc failResolver[MsgType](reason: DisconnectionReason, future: FutureBase) =
     warn = false,
   )
 
-proc resolveResponseFuture(peer: Peer, msgId: uint64, msg: pointer) =
-  ## This function is a split off from the previously combined version with
-  ## the same name using optional request ID arguments. This here is the
-  ## version without a request ID (there is the other part below.).
-  ##
-  ## Optional arguments for macro helpers seem easier to handle with
-  ## polymorphic functions (than a `Opt[]` prototype argument.)
-  ##
-  let msgInfo = peer.dispatcher.messages[msgId]
-
-  logScope:
-    msg = msgInfo.name
-    msgContents = msgInfo.printer(msg)
-    receivedReqId = -1
-    remotePeer = peer.remote
-
-  template outstandingReqs(): auto =
-    peer.perMsgId[msgId].outstandingRequest
-
-  block: # no request ID
-    # XXX: This is a response from an ETH-like protocol that doesn't feature
-    # request IDs. Handling the response is quite tricky here because this may
-    # be a late response to an already timed out request or a valid response
-    # from a more recent one.
-    #
-    # We can increase the robustness by recording enough features of the
-    # request so we can recognize the matching response, but this is not very
-    # easy to do because our peers are allowed to send partial responses.
-    #
-    # A more generally robust approach is to maintain a set of the wanted
-    # data items and then to periodically look for items that have been
-    # requested long time ago, but are still missing. New requests can be
-    # issues for such items potentially from another random peer.
-    var expiredRequests = 0
-    for req in outstandingReqs:
-      if not req.future.finished:
-        break
-      inc expiredRequests
-    outstandingReqs.shrink(fromFirst = expiredRequests)
-    if outstandingReqs.len > 0:
-      let oldestReq = outstandingReqs.popFirst
-      msgInfo.requestResolver(msg, oldestReq.future)
-    else:
-      trace "late or dup RPLx reply ignored", msgId
-
 proc resolveResponseFuture(peer: Peer, msgId: uint64, msg: pointer, reqId: uint64) =
-  ## Variant of `resolveResponseFuture()` for request ID argument.
   let msgInfo = peer.dispatcher.messages[msgId]
   logScope:
     msg = msgInfo.name
@@ -219,52 +163,11 @@ proc resolveResponseFuture(peer: Peer, msgId: uint64, msg: pointer, reqId: uint6
     receivedReqId = reqId
     remotePeer = peer.remote
 
-  template outstandingReqs(): auto =
-    peer.perMsgId[msgId].outstandingRequest
-
-  block: # have request ID
-    # TODO: This is not completely sound because we are still using a global
-    # `reqId` sequence (the problem is that we might get a response ID that
-    # matches a request ID for a different type of request). To make the code
-    # correct, we can use a separate sequence per response type, but we have
-    # to first verify that the other Ethereum clients are supporting this
-    # correctly (because then, we'll be reusing the same reqIds for different
-    # types of requests). Alternatively, we can assign a separate interval in
-    # the `reqId` space for each type of response.
-    if peer.lastReqId.isNone or reqId > peer.lastReqId.value:
-      debug "RLPx response without matching request", msgId, reqId
-      return
-
-    var idx = 0
-    while idx < outstandingReqs.len:
-      template req(): auto =
-        outstandingReqs()[idx]
-
-      if req.future.finished:
-        # Here we'll remove the expired request by swapping
-        # it with the last one in the deque (if necessary):
-        if idx != outstandingReqs.len - 1:
-          req = outstandingReqs.popLast
-          continue
-        else:
-          outstandingReqs.shrink(fromLast = 1)
-          # This was the last item, so we don't have any
-          # more work to do:
-          return
-
-      if req.id == reqId:
-        msgInfo.requestResolver msg, req.future
-        # Here we'll remove the found request by swapping
-        # it with the last one in the deque (if necessary):
-        if idx != outstandingReqs.len - 1:
-          req = outstandingReqs.popLast
-        else:
-          outstandingReqs.shrink(fromLast = 1)
-        return
-
-      inc idx
-
-    trace "late or dup RPLx reply ignored"
+  var future: FutureBase
+  if peer.perMsgId[msgId].outstandingRequest.pop(reqId, future):
+    msgInfo.requestResolver(msg, future)
+  else:
+    trace "late or dup RPLx reply ignored", msgId, reqId
 
 proc linkSendFailureToReqFuture[S, R](sendFut: Future[S], resFut: Future[R]) =
   sendFut.addCallback do(arg: pointer):

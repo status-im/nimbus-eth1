@@ -25,7 +25,7 @@
 {.push raises: [].}
 
 import
-  std/[deques, os, sequtils, strutils, typetraits, tables],
+  std/[os, sequtils, strutils, typetraits, tables],
   stew/byteutils,
   chronicles,
   chronos,
@@ -331,10 +331,10 @@ proc disconnect*(
           x.awaitedMessage = nil
           peer.dispatcher.messages[msgId].failResolver(reason, tmp)
 
-        while x.outstandingRequest.len > 0:
-          let req = x.outstandingRequest.popFirst()
+        let pending = move(x.outstandingRequest)
+        for future in pending.values:
           # Same as when they timeout
-          peer.dispatcher.messages[msgId].requestResolver(nil, req.future)
+          peer.dispatcher.messages[msgId].requestResolver(nil, future)
 
       # In case of `CatchableError` in any of the handlers, this will be logged.
       # Other handlers will still execute.
@@ -380,9 +380,6 @@ proc initPeerState(
   # Similarly, we need a bit of book-keeping data to keep track
   # of the potentially concurrent calls to `nextMsg`.
   peer.perMsgId.newSeq(peer.dispatcher.messages.len)
-  for d in mitems(peer.perMsgId):
-    d.outstandingRequest = initDeque[OutstandingRequest]()
-
   peer.lastReqId = Opt.some(0u64)
   peer.initPeerStates peer.dispatcher.activeProtocols
 
