@@ -34,11 +34,10 @@ proc storeCachedHeaders(
       ctx.pool.cacheDB.putHeader(header, info).isOkOr:
         return
       count.inc
-  let
-    head {.used.} = ctx.hdrCache.head.number
-    consHead {.used.} = ctx.hdrCache.latestConsHeadNumber
+  ctx.pool.lastConsNum = ctx.hdrCache.head.number
   trace info & ": Registered headers", leastBn, topBn, count,
-    head, consHead, slack=(consHead - head), syncState=($ctx.syncState)
+    lastConsHead=ctx.pool.lastConsNum,
+    consHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState)
 
 proc stateNum(ctx: SnapCtxRef): BlockNumber =
   # Get block number from saved state (if any)
@@ -78,16 +77,28 @@ proc headerDownloadTrigger*(
     #       clean up.
     return ok()                                     # nothing to do
 
-  # Ignoring a beacon header fetch cycle unless there are enough headers
-  # available to fetch.
+  # A beacon header fetch cycle is not triggered unless there are enough
+  # expected headers available to fetch.
+  #
+  # When downloading headers, the CL head of the canonical chain is targeted,
+  # but the downloaded chain is only used up until the finalised head, which
+  # is not available as a target (because there is the has only which is
+  # resolved when downloading the chain.)
+  #
+  # So what is needed is an increase in the finalised head which is not
+  # directly available. But is is mostly not far away from the CL head. So
+  # an increase in the latter one is taken as a proxy for guessing whether
+  # there is a chance that the finalised head has increased, enough.
+  #
   let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
-  if consHeadNum < firstNum + nFinHeadCachedDeltaMin - 1 and
+  if consHeadNum < ctx.pool.lastConsNum + nConsHeadCachedDeltaMin - 1 and
      not ctx.pool.beaconTarget:                     # maybe manual target set?
     let now = Moment.now()
     if ctx.pool.lastNoHdrsLog + noHeadersLogWaitInterval < now:
       ctx.pool.lastNoHdrsLog = now
-      trace info & ": Not enough headers to download yet", firstNum,
-        consHeadNum, syncState=($ctx.syncState)
+      trace info & ": Not enough headers to download yet", firstHeader=firstNum,
+        lastConsHead=ctx.pool.lastConsNum, consHead=consHeadNum,
+        syncState=($ctx.syncState)
     return ok()
 
   # Define event handler to complete beacon syncer download

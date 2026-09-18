@@ -96,7 +96,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       discard                                       # currently placeholder only
 
     of SnapResume:
-      discard ctx.downloadInit(info)                # initialise download
+      discard ctx.downloadInit(info)                # init download if possible
 
     of SnapClear:
       # Clear cache DB if needed.
@@ -130,7 +130,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       bodyRc = daemonWaitBalsFetchInterval          # parallel peer action
 
     of SnapBalsFetchFinish:
-      bodyRc = daemonWaitBalsFetchFinishInterval    # wait for sync
+      discard
 
     of SnapStateForward:
       ctx.stateForward(info).isOkOr:
@@ -188,9 +188,12 @@ proc runPool*(
   ##
   let ctx = buddy.ctx
 
-  if ctx.pool.syncState == SnapDownloadFinish:
+  case ctx.pool.syncState:
+  of SnapDownloadFinish:
     ctx.downloadCommit(info).isOkOr:                # write back ranges to DB
       error info & ": Error storing progress", `error`=error
+  else:
+    discard
 
   ctx.statsStateLog info                            # print statistics
   true                                              # stop

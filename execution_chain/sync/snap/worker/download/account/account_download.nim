@@ -42,6 +42,9 @@ proc accountDownloadCommit*(
   ## cache DB.
   ##
   # Update missing accounts list
+  if not ctx.accUnproc.synced():
+    error info & ": Cannot commit unsynced accounts ranges"
+    return err(ENoDataAvailable)
   if ctx.accUnproc.borrowed.chunks != 0:
     error info & ": Cannot commit dirty unprocessed ranges"
     return err(EDirtyData)

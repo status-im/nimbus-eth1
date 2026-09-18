@@ -12,7 +12,7 @@
 
 import
   results,
-  ./[types, blake2b_f, blscurve],
+  ./[types, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
   chronicles,
@@ -27,12 +27,14 @@ import
   eth/common/[base, addresses]
 
 when enable_zkvm_accelerators:
-  import ../stateless/zkvm/zkvm_accelerators
+  import ../stateless/zkvm/[zkvm_accelerators, blake2b_f_zkvm]
 else:
-  import ./modexp, ./secp256r1verify
+  import ./[blake2b_f, modexp, secp256r1verify]
   from boringssl as bssl import nil
 
-when enable_mcl_lib:
+when enable_zkvm_accelerators:
+  import ../stateless/zkvm/bncurve_zkvm
+elif enable_mcl_lib:
   import ./bncurve_mcl
 else:
   import ./bncurve_nim

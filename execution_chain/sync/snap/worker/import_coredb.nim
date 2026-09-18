@@ -43,12 +43,12 @@ proc importCoreDb*(
     header = ?adb.getHeader(status.number, info)
 
     tx2 = CoreDb2Ref.init(ctx, clean=true)          # open, clear left overs
-    txStateRoot = ?tx2.fetchStateRoot(info)         # import data
+    txStats = ?tx2.importFlat(adb, info)            # import data
+    txStateRoot = ?tx2.fetchStateRoot(info)
     db2Dir = tx2.dbDir
   defer: tx2.destroy()
 
   if header.stateRoot != txStateRoot:
-    let txStats = ?tx2.importFlat(adb, info)
     error info & ": Oops, state roots differ", number=status.number,
       stateRoot=header.stateRoot.toStr, expected=txStateRoot.toStr, txStats
     return err()

@@ -12,7 +12,6 @@
 import
   std/tables,
   results,
-  secp256k1,
   stew/endians2,
   eth/common/[headers, blocks, hashes, keys, transaction_utils],
   eth/trie/ordered_trie,
@@ -22,7 +21,7 @@ import
   ../db/ledger,
   ../db/core_db/memory_only,
   ../evm/[types, state],
-  ../core/executor/process_block,
+  ../core/[pubkey_recovery, executor/process_block],
   ../block_access_list/bal_validation,
   ./[witness_types, witness_verification, stateless_types]
 
@@ -62,13 +61,19 @@ template recoverSenderFromPublicKey(
   ##
   ## Returns the sender address derived from the verified public key.
   block:
-    let recovered = tx.recoverKey().valueOr:
-      return err("Invalid transaction signature at index " & $index)
+    let
+      sig = tx.signature().valueOr:
+        return err("Invalid transaction signature at index " & $index)
+      sigHash = tx.rlpHashForSigning(tx.isEip155())
+      pubkey = recoverPubkeyRaw(sigHash, sig).valueOr:
+        return err("Invalid transaction signature at index " & $index)
 
-    if SkPublicKey(recovered).toRaw() != key:
+    # `key` is the full uncompressed SEC1 form, so it carries the 0x04 prefix
+    # that the recovered `x ‖ y` does not.
+    if key[0] != 0x04'u8 or pubkey != key.toOpenArray(1, 64):
       return err("Transaction public key mismatch at index " & $index)
 
-    recovered.to(Address)
+    keccak256(pubkey).to(Address)
 
 func recoverSendersFromPublicKeys(
     txs: openArray[Transaction], keys: openArray[ByteVector[PUBLIC_KEY_BYTES]]
@@ -247,6 +252,7 @@ func chainConfigForStateless(chainId: uint64): ChainConfig =
     transitions.blockNumberThresholds[f] = Opt.some(0.BlockNumber)
   transitions.mergeForkTransitionThreshold.number = Opt.some(0.BlockNumber)
   transitions.mergeForkTransitionThreshold.ttd = Opt.some(0.u256)
+  transitions.mergeNetsplitBlock = Opt.some(0.BlockNumber)
   for f in firstTimeBasedFork .. lastFork:
     transitions.timeThresholds[f] = Opt.some(0.EthTime)
 

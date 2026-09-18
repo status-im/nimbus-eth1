@@ -111,18 +111,6 @@ proc commit*(
     # Otherwise `maxKey` would be internally adjusted to `max(minKey,maxKey)`
     doAssert udb.unprocessed.merge(minKey, maxKey) == maxKey - minKey + 1
 
-proc overCommit*(
-    udb: UnprocItemKeys;
-    minKey: ItemKey;                                # processed intv. start
-    maxKey: ItemKey;                                # processed intv. last
-      ) =
-  ## Reduce unprocessed list by some range `[minKey,maxKey]`. This happens
-  ## typically when a bit more accont or storage items are send via `snap`
-  ## than requested.
-  ##
-  if minKey <= maxKey:
-    discard udb.unprocessed.reduce(minKey, maxKey)
-
 
 func avail*(udb: UnprocItemKeys): Opt[UInt256] =
   ## Returns the number of `ItemKey` entries that can be fetched (maybe split

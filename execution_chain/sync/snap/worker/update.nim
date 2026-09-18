@@ -66,8 +66,8 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
     ctx.allDownloaded(info).isErrOr:
        return SnapAssembleMpt
     return SnapBalsFetch
-  ctx.pool.contPrevSession = false                  # Oops, something went wrong
-  error info & ": Cnnot resume session, initialisation error"
+  info info & ": No previous session available"
+  ctx.pool.contPrevSession = false
   SnapIdle
 
 proc clearNext(ctx: SnapCtxRef; info: static[string]): SnapState =
