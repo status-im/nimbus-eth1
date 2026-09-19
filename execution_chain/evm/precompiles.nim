@@ -12,7 +12,7 @@
 
 import
   results,
-  ./[types, blscurve],
+  ./types,
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
   chronicles,
@@ -27,9 +27,9 @@ import
   eth/common/[base, addresses]
 
 when enable_zkvm_accelerators:
-  import ../stateless/zkvm/[zkvm_accelerators, blake2b_f_zkvm]
+  import ../stateless/zkvm/[zkvm_accelerators, blake2b_f_zkvm, blscurve_zkvm]
 else:
-  import ./[blake2b_f, modexp, secp256r1verify]
+  import ./[blake2b_f, modexp, secp256r1verify, blscurve_nim]
   import ssz_serialization/digest
   from ssz_serialization/types import Digest
 
@@ -415,30 +415,11 @@ func blake2bf(c: Computation): EvmResultVoid =
   ok()
 
 func blsG1Add(c: Computation): EvmResultVoid =
-  template input: untyped =
-    c.msg.data
-
-  if input.len != 256:
+  if c.msg.data.len != 256:
     return err(prcErr(PrcInvalidParam))
 
   ? c.gasMeter.consumeGas(Bls12381G1AddGas, reason="blsG1Add Precompile")
-
-  var
-    a {.noinit.}: BLS_G1
-    b {.noinit.}: BLS_G1
-
-  if not a.decodePoint(input.toOpenArray(0, 127)):
-    return err(prcErr(PrcInvalidPoint))
-
-  if not b.decodePoint(input.toOpenArray(128, 255)):
-    return err(prcErr(PrcInvalidPoint))
-
-  a.add b
-
-  c.output.setLen(128)
-  if not encodePoint(a, c.output):
-    return err(prcErr(PrcInvalidPoint))
-  ok()
+  blsG1AddImpl(c)
 
 const
   MSMG1DiscountTable = [
@@ -488,221 +469,61 @@ func calcBlsMultiExpGas(K: int, gasCost: GasInt,
   (K.GasInt * gasCost * discount) div 1000
 
 func blsG1MultiExp(c: Computation): EvmResultVoid =
-  template input: untyped =
-    c.msg.data
-
   const L = 160
-  if (input.len == 0) or ((input.len mod L) != 0):
+  if (c.msg.data.len == 0) or ((c.msg.data.len mod L) != 0):
     return err(prcErr(PrcInvalidParam))
 
   let
-    K = input.len div L
+    K = c.msg.data.len div L
     gas = calcBlsMultiExpGas(K, Bls12381G1MulGas, MSMG1DiscountTable, MSMG1MaxDiscount)
 
   ? c.gasMeter.consumeGas(gas, reason="blsG1MultiExp Precompile")
-
-  var
-    points = newSeq[BLS_G1P](K)
-    scalars = newSeq[BLS_SCALAR](K)
-    acc {.noinit.}: BLS_G1
-
-  # Decode point scalar pairs
-  for i in 0..<K:
-    let off = L * i
-
-    # Decode G1 point
-    if not points[i].decodePoint(input.toOpenArray(off, off+127)):
-      return err(prcErr(PrcInvalidPoint))
-
-    if not points[i].isInf and not points[i].subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    # Decode scalar value
-    if not scalars[i].fromBytes(input.toOpenArray(off+128, off+159)):
-      return err(prcErr(PrcInvalidParam))
-
-  if K == 1:
-    acc.fromAffine(points[0])
-    acc.mul(scalars[0])
-  else:
-    acc.multiExp(points, scalars)
-
-  c.output.setLen(128)
-  if not encodePoint(acc, c.output):
-    return err(prcErr(PrcInvalidPoint))
-  ok()
+  blsG1MultiExpImpl(c)
 
 func blsG2Add(c: Computation): EvmResultVoid =
-  template input: untyped =
-    c.msg.data
-
-  if input.len != 512:
+  if c.msg.data.len != 512:
     return err(prcErr(PrcInvalidParam))
 
   ? c.gasMeter.consumeGas(Bls12381G2AddGas, reason="blsG2Add Precompile")
-
-  var
-    a {.noinit.}: BLS_G2
-    b {.noinit.}: BLS_G2
-
-  if not a.decodePoint(input.toOpenArray(0, 255)):
-    return err(prcErr(PrcInvalidPoint))
-
-  if not b.decodePoint(input.toOpenArray(256, 511)):
-    return err(prcErr(PrcInvalidPoint))
-
-  a.add b
-
-  c.output.setLen(256)
-  if not encodePoint(a, c.output):
-    return err(prcErr(PrcInvalidPoint))
-  ok()
+  blsG2AddImpl(c)
 
 func blsG2MultiExp(c: Computation): EvmResultVoid =
-  template input: untyped =
-    c.msg.data
-
   const L = 288
-  if (input.len == 0) or ((input.len mod L) != 0):
+  if (c.msg.data.len == 0) or ((c.msg.data.len mod L) != 0):
     return err(prcErr(PrcInvalidParam))
 
   let
-    K = input.len div L
+    K = c.msg.data.len div L
     gas = calcBlsMultiExpGas(K, Bls12381G2MulGas, MSMG2DiscountTable, MSMG2MaxDiscount)
 
   ? c.gasMeter.consumeGas(gas, reason="blsG2MultiExp Precompile")
-
-  var
-    points = newSeq[BLS_G2P](K)
-    scalars = newSeq[BLS_SCALAR](K)
-    acc {.noinit.}: BLS_G2
-
-  # Decode point scalar pairs
-  for i in 0..<K:
-    let off = L * i
-
-    # Decode G1 point
-    if not points[i].decodePoint(input.toOpenArray(off, off+255)):
-      return err(prcErr(PrcInvalidPoint))
-
-    if not points[i].isInf and not points[i].subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    # Decode scalar value
-    if not scalars[i].fromBytes(input.toOpenArray(off+256, off+287)):
-      return err(prcErr(PrcInvalidParam))
-
-  # Pippenger only starts paying off above two pairs in G2
-  if K <= 2:
-    acc.fromAffine(points[0])
-    acc.mul(scalars[0])
-    for i in 1..<K:
-      var t {.noinit.}: BLS_G2
-      t.fromAffine(points[i])
-      t.mul(scalars[i])
-      acc.add(t)
-  else:
-    acc.multiExp(points, scalars)
-
-  c.output.setLen(256)
-  if not encodePoint(acc, c.output):
-    return err(prcErr(PrcInvalidPoint))
-  ok()
+  blsG2MultiExpImpl(c)
 
 func blsPairing(c: Computation): EvmResultVoid =
-  template input: untyped =
-    c.msg.data
-
   const L = 384
-  if (input.len == 0) or ((input.len mod L) != 0):
+  if (c.msg.data.len == 0) or ((c.msg.data.len mod L) != 0):
     return err(prcErr(PrcInvalidParam))
 
   let
-    K = input.len div L
+    K = c.msg.data.len div L
     gas = Bls12381PairingBaseGas + K.GasInt * Bls12381PairingPerPairGas
 
   ? c.gasMeter.consumeGas(gas, reason="blsG2Pairing Precompile")
-
-  var
-    g1 {.noinit.}: BLS_G1P
-    g2 {.noinit.}: BLS_G2P
-    g1Points = newSeqOfCap[BLS_G1P](K)
-    g2Points = newSeqOfCap[BLS_G2P](K)
-
-  # Decode pairs
-  for i in 0..<K:
-    let off = L * i
-
-    # Decode G1 point
-    if not g1.decodePoint(input.toOpenArray(off, off+127)):
-      return err(prcErr(PrcInvalidPoint))
-
-    # Decode G2 point
-    if not g2.decodePoint(input.toOpenArray(off+128, off+383)):
-      return err(prcErr(PrcInvalidPoint))
-
-    # 'point is on curve' check already done,
-    # Here we need to apply subgroup checks.
-    if not g1.subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    if not g2.subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    # A pair with a point at infinity pairs to the identity, leaving the
-    # product unchanged. It must be skipped: millerLoopN cannot take one.
-    if g1.isInf or g2.isInf:
-      continue
-
-    g1Points.add g1
-    g2Points.add g2
-
-  c.output.setLen(32)
-
-  # An empty product is the identity, so the check succeeds.
-  if g1Points.len == 0 or millerLoopN(g1Points, g2Points).check():
-    c.output[^1] = 1.byte
-  ok()
+  blsPairingImpl(c)
 
 func blsMapG1(c: Computation): EvmResultVoid =
-  template input: untyped =
-    c.msg.data
-
-  if input.len != 64:
+  if c.msg.data.len != 64:
     return err(prcErr(PrcInvalidParam))
 
   ? c.gasMeter.consumeGas(Bls12381MapG1Gas, reason="blsMapG1 Precompile")
-
-  var fe {.noinit.}: BLS_FP
-  if not fe.decodeFE(input):
-    return err(prcErr(PrcInvalidPoint))
-
-  let p = fe.mapFPToG1()
-
-  c.output.setLen(128)
-  if not encodePoint(p, c.output):
-    return err(prcErr(PrcInvalidPoint))
-  ok()
+  blsMapG1Impl(c)
 
 func blsMapG2(c: Computation): EvmResultVoid =
-  template input: untyped =
-    c.msg.data
-
-  if input.len != 128:
+  if c.msg.data.len != 128:
     return err(prcErr(PrcInvalidParam))
 
   ? c.gasMeter.consumeGas(Bls12381MapG2Gas, reason="blsMapG2 Precompile")
-
-  var fe {.noinit.}: BLS_FP2
-  if not fe.decodeFE(input):
-    return err(prcErr(PrcInvalidPoint))
-
-  let p = fe.mapFPToG2()
-
-  c.output.setLen(256)
-  if not encodePoint(p, c.output):
-    return err(prcErr(PrcInvalidPoint))
-  ok()
+  blsMapG2Impl(c)
 
 proc pointEvaluation(c: Computation): EvmResultVoid =
   # Verify p(z) = y given commitment that corresponds to the polynomial p(x) and a KZG proof.
