@@ -27,19 +27,24 @@ const
   VOID_HASH_KEY* = HashKey()
     ## Void equivalent for Merkle hash value
 
-  STATE_ROOT_VID* = VertexID(1)
+  FIRST_STATIC_VID* = VertexID(1)
+    ## First VertexID of the dense/static part of a trie, ie the level 0 slot.
+    ## The account trie stores its root there while a storage trie roots at its
+    ## own dynamic `stoID`, leaving the slot unused
+
+  STATE_ROOT_VID* = FIRST_STATIC_VID
     ## VertexID of state root entry in the MPT
 
   STATIC_VID_LEVELS* = 8
-    ## Number of MPT levels in the account trie that get a fixed VertexID based
+    ## Number of MPT levels in a trie that get a fixed VertexID based
     ## on the initial nibbles of the path. We'll consume a little bit more than
     ## `STATIC_VID_LEVELS*4` bits for the static part of the vid space:
     ##
-    ## STATE_ROOT_VID + 16^0 + 16^1 + ... + 16^STATIC_VID_LEVELS
+    ## FIRST_STATIC_VID + 16^0 + 16^1 + ... + 16^STATIC_VID_LEVELS
 
   FIRST_DYNAMIC_VID* = ## First VertexID of the sparse/dynamic part of the MPT
     block:
-      var v = uint64(STATE_ROOT_VID)
+      var v = uint64(FIRST_STATIC_VID)
       for i in 0..STATIC_VID_LEVELS:
         v += 1'u64 shl (i * 4)
       v

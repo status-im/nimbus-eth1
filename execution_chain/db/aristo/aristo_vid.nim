@@ -21,23 +21,24 @@ export aristo_desc
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc staticVid*(accPath: NibblesBuf, level: int): VertexID =
+proc staticVid*(path: NibblesBuf, level: int): VertexID =
   ## Compute a static vid based on the initial nibbles of the given path. The
   ## vid assignment is done in a breadth-first manner where numerically, each
-  ## level follows the previous one meaning that the root occupies VertexID(1),
-  ## its direct children 2-17 etc.
+  ## level follows the previous one meaning that level 0 occupies
+  ## FIRST_STATIC_VID, its direct children 2-17 etc. The vids are relative to
+  ## the trie root and therefore only unique within that trie.
   ##
   ## The level-based sorting ensures that children of each level are colocated
   ## on disk reducing the number of disk reads needed to load all children of a
   ## node which is useful when computing hash keys.
   if level == 0:
-    STATE_ROOT_VID
+    FIRST_STATIC_VID
   else:
-    var v = uint64(STATE_ROOT_VID)
+    var v = uint64(FIRST_STATIC_VID)
     for i in 0 ..< level:
       v += 1'u64 shl (i * 4)
 
-      v += uint64(accPath[i]) shl ((level - i - 1) * 4)
+      v += uint64(path[i]) shl ((level - i - 1) * 4)
 
     VertexID(v)
 
@@ -51,23 +52,14 @@ proc vidFetch*(db: AristoTxRef, n = 1): VertexID =
   db.vTop.inc(n)
   ret
 
-proc stoVidFetch*(db: AristoTxRef, path: NibblesBuf, n = 1): VertexID =
-  ## Static vid for a storage trie vertex, computed from the slot path prefix
-  ## relative to the storage root; vids are only unique within the trie
+proc staticVidFetch*(db: AristoTxRef, path: NibblesBuf, n = 1): VertexID =
+  ## Static vid for the vertex at the given path, relative to the trie root, or
+  ## a dynamic vid when the path is deeper than the static levels. Storage trie
+  ## vids are only unique within the trie.
   if path.len <= STATIC_VID_LEVELS:
     path.staticVid(path.len)
   else:
     db.vidFetch(n)
-
-proc accVidFetch*(db: AristoTxRef, path: NibblesBuf, n = 1): VertexID =
-  ## Fetch next vertex ID.
-  ##
-  let res =
-    if path.len <= STATIC_VID_LEVELS:
-      path.staticVid(path.len)
-    else:
-      db.vidFetch(n)
-  res
 
 # ------------------------------------------------------------------------------
 # End

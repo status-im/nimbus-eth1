@@ -69,10 +69,8 @@ proc mergePayloadImpl[LeafType, T](
     vtxs: ArrayBuf[NibblesBuf.high + 1, BranchRef]
 
   template childVids(): VertexID =
-    if root == STATE_ROOT_VID:
-      db.accVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
-    elif stoStatic:
-      db.stoVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
+    if root == STATE_ROOT_VID or stoStatic:
+      db.staticVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
     else:
       db.vidFetch(16)
 
