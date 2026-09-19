@@ -363,6 +363,24 @@ proc isSynced*(engine: RpcVerificationEngine): bool =
   # the signing slot for sync committees. So we allow some room
   engine.getLCOptimisticSlot() + 1 >= current
 
+proc isSyncCommitteeKnown*(engine: RpcVerificationEngine): bool =
+  if engine.getBeaconTime == nil or not engine.isLCStoreInitialized() or
+      not engine.isLCNextSyncCommitteeKnown():
+    return false
+
+  let current = engine.getBeaconTime().slotOrZero(engine.timeParams)
+  engine.getLCFinalizedSlot().sync_committee_period == current.sync_committee_period
+
+template requireSynced*(engine: RpcVerificationEngine) =
+  if not engine.isSyncCommitteeKnown():
+    return err(
+      (
+        UnavailableDataError,
+        "light client doesn't know the current and next sync committees, sync first",
+        UNTAGGED,
+      )
+    )
+
 proc processObject[T: SomeForkedLightClientObject](
     engine: RpcVerificationEngine, obj: T, endpoint: static string
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
