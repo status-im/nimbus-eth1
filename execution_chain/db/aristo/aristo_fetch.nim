@@ -76,31 +76,34 @@ proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   else:
     Opt.none(StoLeafRef)
 
-proc retrieveAccStatic(
+proc retrieveStatic[LeafType](
     db: AristoTxRef;
-    accPath: Hash32;
-      ): Result[(AccLeafRef, NibblesBuf, VertexID),AristoError] =
+    root: VertexID;
+    leafPath: Hash32;
+    startLevel: int;
+    countLookups: static bool;
+      ): Result[(LeafType, NibblesBuf, VertexID),AristoError] =
   # A static VertexID essentially splits the path into a prefix encoded in the
   # vid and the rest of the path stored as normal - here, instead of traversing
   # the trie from the root and selecting a path nibble by nibble we travers the
-  # trie starting at `staticLevel` and search towards the root until either we
+  # trie starting at `startLevel` and search towards the root until either we
   # hit the node we're looking for or at least a branch from which we can
-  # shorten the lookup.
-  let staticLevel = db.db.getStaticLevel()
-
-  var path = NibblesBuf.fromBytes(accPath.data)
+  # shorten the lookup. Level 0 is the trie root itself, which is `root` both
+  # for the account trie and for a storage trie keyed by its `stoID`.
+  var path = NibblesBuf.fromBytes(leafPath.data)
   var next: VertexID
 
-  for sl in countdown(staticLevel, 0):
+  for sl in countdown(startLevel, 0):
     template countHitOrLower() =
-      if sl == staticLevel:
-        discard db.db.lookupsHits.fetchAdd(1, moRelaxed)
-      else:
-        discard db.db.lookupsLower.fetchAdd(1, moRelaxed)
+      when countLookups:
+        if sl == startLevel:
+          discard db.db.lookupsHits.fetchAdd(1, moRelaxed)
+        else:
+          discard db.db.lookupsLower.fetchAdd(1, moRelaxed)
 
     let
-      svid = path.staticVid(sl)
-      vtx = db.getVtxRc((STATE_ROOT_VID, svid)).valueOr:
+      svid = if sl == 0: root else: path.staticVid(sl)
+      vtx = db.getVtxRc((root, svid)).valueOr:
         # Either the node doesn't exist or our guess used too many nibbles and
         # the trie is not yet this deep at the given path - either way, we'll
         # try a less deep guess which will result either in a branch,
@@ -109,7 +112,7 @@ proc retrieveAccStatic(
 
     case vtx[0].vType
     of Leaves:
-      let vtx = AccLeafRef(vtx[0])
+      let vtx = LeafType(vtx[0])
 
       countHitOrLower()
       return
@@ -132,73 +135,10 @@ proc retrieveAccStatic(
         countHitOrLower()
         return err FetchPathNotFound
 
-      let nibble = path[sl + vtx.pfx.len]
-      next = vtx.bVid(nibble)
-
-      if not next.isValid():
-        countHitOrLower()
-        return err FetchPathNotFound
-
-      path = path.slice(sl + vtx.pfx.len + 1)
-
-      break # Continue the search down the branch children, starting at `next`
-    of Branch: # Same as ExtBranch with vtx.pfx.len == 0!
-      let vtx = BranchRef(vtx[0])
-
-      let nibble = path[sl]
-      next = vtx.bVid(nibble)
-
-      if not next.isValid():
-        countHitOrLower()
-        return err FetchPathNotFound
-
-      path = path.slice(sl + 1)
-      break # Continue the search down the branch children, starting at `next`
-
-  # We end up here when we have to continue the search down a branch
-  ok (nil, path, next)
-
-proc retrieveStoStatic(
-    db: AristoTxRef;
-    stoID: VertexID;
-    stoPath: Hash32;
-    startLevel: int;
-      ): Result[(StoLeafRef, NibblesBuf, VertexID),AristoError] =
-  # Same search as `retrieveAccStatic` but in a storage trie, where the vids are
-  # static relative to the storage root and `startLevel` is the level to begin
-  # probing at - level 0 being the storage root itself
-  var path = NibblesBuf.fromBytes(stoPath.data)
-  var next: VertexID
-
-  for sl in countdown(startLevel, 0):
-    let
-      svid = if sl == 0: stoID else: path.staticVid(sl)
-      vtx = db.getVtxRc((stoID, svid)).valueOr:
-        continue
-
-    case vtx[0].vType
-    of Leaves:
-      let vtx = StoLeafRef(vtx[0])
-
-      return
-        if vtx.pfx != path.slice(sl): # Same prefix, different path
-          err FetchPathNotFound
-        else:
-          ok (vtx, path, next)
-    of BoundaryNode:
-      let vtx = BoundaryNodeRef(vtx[0])
-      if path.slice(sl).sharedPrefixLen(vtx.pfx) < vtx.pfx.len:
-        return err FetchPathNotFound
-      return err HikeBranchUnresolvedEdge
-    of ExtBranch:
-      let vtx = ExtBranchRef(vtx[0])
-
-      if vtx.pfx != path.slice(sl, sl + vtx.pfx.len): # Same prefix, different path
-        return err FetchPathNotFound
-
       next = vtx.bVid(path[sl + vtx.pfx.len])
 
       if not next.isValid():
+        countHitOrLower()
         return err FetchPathNotFound
 
       path = path.slice(sl + vtx.pfx.len + 1)
@@ -210,10 +150,10 @@ proc retrieveStoStatic(
       next = vtx.bVid(path[sl])
 
       if not next.isValid():
+        countHitOrLower()
         return err FetchPathNotFound
 
       path = path.slice(sl + 1)
-
       break # Continue the search down the branch children, starting at `next`
 
   # We end up here when we have to continue the search down a branch
@@ -228,7 +168,8 @@ proc retrieveAccLeaf(
       return err(FetchPathNotFound)
     return ok leafVtx[]
 
-  let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
+  let (staticVtx, path, next) = retrieveStatic[AccLeafRef](
+      db, STATE_ROOT_VID, accPath, db.db.getStaticLevel(), true).valueOr:
     if error == FetchPathNotFound:
       db.cacheAccLeaf(accPath, emptyCachedAccLeaf)
     return err(error)
@@ -409,7 +350,8 @@ proc fetchSlot*(
     next = VertexID(0)
 
   if db.db.stoStatic and startLevel.isSome:
-    let (staticVtx, rest, nxt) = db.retrieveStoStatic(stoID, stoPath, startLevel[]).valueOr:
+    let (staticVtx, rest, nxt) = retrieveStatic[StoLeafRef](
+        db, stoID, stoPath, startLevel[], false).valueOr:
       if error == FetchPathNotFound:
         db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
         return ok 0'u256
