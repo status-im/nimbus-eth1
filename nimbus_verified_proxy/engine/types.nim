@@ -232,6 +232,10 @@ type
       async: (raises: [CancelledError])
     .}
 
+    # Sync
+    sync*: proc(): Future[EngineResult[void]] {.async: (raises: [CancelledError]).}
+    syncInterval*: proc(): EngineResult[Duration] {.gcsafe, raises: [].}
+
   # Beacon API backend
   LightClientBootstrapProc* = proc(
     blockRoot: Eth2Digest

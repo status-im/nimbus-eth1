@@ -75,6 +75,26 @@ func TestVerifProxy(t *testing.T) {
 	require.NotNil(t, ctx)
 	defer ctx.Stop()
 
+	_, err = ctx.CallRpc("eth_blockNumber", "[]", callTimeout)
+	require.Error(t, err)
+
+	syncing, err := ctx.CallRpc("eth_syncing", "[]", callTimeout)
+	require.NoError(t, err)
+	require.NotEmpty(t, syncing)
+
+	interval, err := ctx.SyncInterval(callTimeout)
+	require.NoError(t, err)
+	require.Equal(t, 12*time.Second, interval)
+	require.NoError(t, ctx.Sync(callTimeout))
+
+	blockNumber, err := ctx.CallRpc("eth_blockNumber", "[]", callTimeout)
+	require.NoError(t, err)
+	require.NotEmpty(t, blockNumber)
+
+	syncing, err = ctx.CallRpc("eth_syncing", "[]", callTimeout)
+	require.NoError(t, err)
+	require.NotEmpty(t, syncing)
+
 	for _, method := range []string{"eth_gasPrice", "eth_maxPriorityFeePerGas"} {
 		result, err := ctx.CallRpc(method, "[]", callTimeout)
 		require.NoError(t, err, method)

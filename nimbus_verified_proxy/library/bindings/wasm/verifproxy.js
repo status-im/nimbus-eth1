@@ -143,6 +143,14 @@ export default class NimbusVerifiedProxy {
     });
   }
 
+  async sync() {
+    await this.call('eth_sync', '[]');
+  }
+
+  async syncIntervalMs() {
+    return Number(JSON.parse(await this.call('eth_syncInterval', '[]')));
+  }
+
   destroy() {
     if (this.#intervalId !== null) {
       clearInterval(this.#intervalId);

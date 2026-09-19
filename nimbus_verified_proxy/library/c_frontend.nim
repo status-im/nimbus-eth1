@@ -37,7 +37,10 @@ template callbackToC(
         if res.isErr():
           (RET_ERROR, $res.error.errType & ": " & res.error.errMsg)
         else:
-          (RET_SUCCESS, EthJson.encode(res.get()))
+          when typeof(res.get()) is void:
+            (RET_SUCCESS, "null")
+          else:
+            (RET_SUCCESS, EthJson.encode(res.get()))
 
     cb(ctx, status, alloc(response), userData)
 
@@ -69,6 +72,22 @@ proc eth_blockNumber(
 proc eth_syncing(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_syncing()
+
+proc eth_sync(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+  callbackToC(ctx, cb, userData):
+    ctx.frontend.sync()
+
+proc syncIntervalMs(
+    frontend: ExecutionApiFrontend
+): Future[EngineResult[uint64]] {.async: (raises: [CancelledError]).} =
+  let interval = ?frontend.syncInterval()
+  ok(uint64(interval.milliseconds))
+
+proc eth_syncInterval(
+    ctx: ptr Context, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  callbackToC(ctx, cb, userData):
+    ctx.frontend.syncIntervalMs()
 
 proc eth_getBalance(
     ctx: ptr Context,
@@ -444,6 +463,18 @@ proc op_blockNumber(
   requireOpFrontend(ctx, cb, userData)
   callbackToC(ctx, cb, userData):
     ctx.opFrontend.eth_blockNumber()
+
+proc op_sync(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.sync()
+
+proc op_syncInterval(
+    ctx: ptr Context, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opFrontend.syncIntervalMs()
 
 proc op_getBalance(
     ctx: ptr Context,
@@ -874,6 +905,12 @@ proc proxyCall(
   of "eth_syncing":
     requireParams(0)
     eth_syncing(ctx, cb, userData)
+  of "eth_sync":
+    requireParams(0)
+    eth_sync(ctx, cb, userData)
+  of "eth_syncInterval":
+    requireParams(0)
+    eth_syncInterval(ctx, cb, userData)
   of "eth_getBalance":
     requireParams(2)
     eth_getBalance(
@@ -1038,6 +1075,12 @@ proc proxyCall(
   of "op_blockNumber":
     requireParams(0)
     op_blockNumber(ctx, cb, userData)
+  of "op_sync":
+    requireParams(0)
+    op_sync(ctx, cb, userData)
+  of "op_syncInterval":
+    requireParams(0)
+    op_syncInterval(ctx, cb, userData)
   of "op_getBalance":
     requireParams(2)
     op_getBalance(

@@ -361,6 +361,7 @@
 
   const LOG = '[verifproxy:ui]';
   let proxy = null;
+  let syncTimer = null;
 
   const $ = id => document.getElementById(id);
 
@@ -399,6 +400,10 @@
   }
 
   function onProxyStopped() {
+    if (syncTimer !== null) {
+      clearInterval(syncTimer);
+      syncTimer = null;
+    }
     proxy = null;
     $('btn-start').disabled = false;
     $('btn-stop').disabled = true;
@@ -463,6 +468,10 @@
       onProxyStopped();
       return;
     }
+
+    const syncOnce = () => proxy.sync().catch(err => addLog('err', 'SYNC', String(err)));
+    syncOnce();
+    syncTimer = setInterval(syncOnce, await proxy.syncIntervalMs());
 
     setStatus('running', 'Running');
     addLog('ok', 'STARTED', 'Proxy is running.');

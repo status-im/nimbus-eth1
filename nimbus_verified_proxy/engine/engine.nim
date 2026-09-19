@@ -391,9 +391,19 @@ proc processObject[T: SomeForkedLightClientObject](
     warn "Received invalid LC value", endpoint = endpoint
     return err((VerificationError, "invalid LC value", UNTAGGED))
 
+func syncInterval*(engine: RpcVerificationEngine): Duration =
+  engine.timeParams.SLOT_DURATION
+
 proc syncOnce*(
     engine: RpcVerificationEngine
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
+  await engine.syncLock.acquire()
+  defer:
+    try:
+      engine.syncLock.release()
+    except AsyncLockError:
+      discard
+
   if engine.lcProcessor == nil:
     return err((UnavailableDataError, "beacon not initialized", UNTAGGED))
 
@@ -475,7 +485,7 @@ proc syncOnce*(
     debug "Fetching LC finality update", finalized, current
 
     let
-      (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconOptimistic))
+      (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconFinality))
       finRes = ?((await backend.getLightClientFinalityUpdate()).tagBackend(backendIdx))
     ?((await engine.processObject(finRes, "finality")).tagBackend(backendIdx))
 
