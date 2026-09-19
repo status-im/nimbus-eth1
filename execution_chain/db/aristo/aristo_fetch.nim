@@ -76,31 +76,34 @@ proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   else:
     Opt.none(StoLeafRef)
 
-proc retrieveAccStatic(
+proc retrieveStatic[LeafType](
     db: AristoTxRef;
-    accPath: Hash32;
-      ): Result[(AccLeafRef, NibblesBuf, VertexID),AristoError] =
+    root: VertexID;
+    leafPath: Hash32;
+    startLevel: int;
+    countLookups: static bool;
+      ): Result[(LeafType, NibblesBuf, VertexID),AristoError] =
   # A static VertexID essentially splits the path into a prefix encoded in the
   # vid and the rest of the path stored as normal - here, instead of traversing
   # the trie from the root and selecting a path nibble by nibble we travers the
-  # trie starting at `staticLevel` and search towards the root until either we
+  # trie starting at `startLevel` and search towards the root until either we
   # hit the node we're looking for or at least a branch from which we can
-  # shorten the lookup.
-  let staticLevel = db.db.getStaticLevel()
-
-  var path = NibblesBuf.fromBytes(accPath.data)
+  # shorten the lookup. Level 0 is the trie root itself, which is `root` both
+  # for the account trie and for a storage trie keyed by its `stoID`.
+  var path = NibblesBuf.fromBytes(leafPath.data)
   var next: VertexID
 
-  for sl in countdown(staticLevel, 0):
+  for sl in countdown(startLevel, 0):
     template countHitOrLower() =
-      if sl == staticLevel:
-        discard db.db.lookupsHits.fetchAdd(1, moRelaxed)
-      else:
-        discard db.db.lookupsLower.fetchAdd(1, moRelaxed)
+      when countLookups:
+        if sl == startLevel:
+          discard db.db.lookupsHits.fetchAdd(1, moRelaxed)
+        else:
+          discard db.db.lookupsLower.fetchAdd(1, moRelaxed)
 
     let
-      svid = path.staticVid(sl)
-      vtx = db.getVtxRc((STATE_ROOT_VID, svid)).valueOr:
+      svid = if sl == 0: root else: path.staticVid(sl)
+      vtx = db.getVtxRc((root, svid)).valueOr:
         # Either the node doesn't exist or our guess used too many nibbles and
         # the trie is not yet this deep at the given path - either way, we'll
         # try a less deep guess which will result either in a branch,
@@ -109,7 +112,7 @@ proc retrieveAccStatic(
 
     case vtx[0].vType
     of Leaves:
-      let vtx = AccLeafRef(vtx[0])
+      let vtx = LeafType(vtx[0])
 
       countHitOrLower()
       return
@@ -132,8 +135,7 @@ proc retrieveAccStatic(
         countHitOrLower()
         return err FetchPathNotFound
 
-      let nibble = path[sl + vtx.pfx.len]
-      next = vtx.bVid(nibble)
+      next = vtx.bVid(path[sl + vtx.pfx.len])
 
       if not next.isValid():
         countHitOrLower()
@@ -145,8 +147,7 @@ proc retrieveAccStatic(
     of Branch: # Same as ExtBranch with vtx.pfx.len == 0!
       let vtx = BranchRef(vtx[0])
 
-      let nibble = path[sl]
-      next = vtx.bVid(nibble)
+      next = vtx.bVid(path[sl])
 
       if not next.isValid():
         countHitOrLower()
@@ -167,13 +168,14 @@ proc retrieveAccLeaf(
       return err(FetchPathNotFound)
     return ok leafVtx[]
 
-  let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
+  let (staticVtx, path, next) = retrieveStatic[AccLeafRef](
+      db, STATE_ROOT_VID, accPath, db.db.getStaticLevel(), true).valueOr:
     if error == FetchPathNotFound:
       db.cacheAccLeaf(accPath, emptyCachedAccLeaf)
     return err(error)
 
   if staticVtx.isValid():
-    db.cacheAccLeaf(accPath, CachedAccLeaf.init(staticVtx.pfx, staticVtx.account, staticVtx.stoID))
+    db.cacheAccLeaf(accPath, CachedAccLeaf.init(staticVtx.pfx, staticVtx.account, staticVtx.stoID, staticVtx.stoHint))
     return ok staticVtx
 
   # Updated payloads are stored in the layers so if we didn't find them there,
@@ -191,7 +193,7 @@ proc retrieveAccLeaf(
   discard db.db.lookupsHigher.fetchAdd(1, moRelaxed)
 
   let accLeaf = AccLeafRef(leafVtx)
-  db.cacheAccLeaf(accPath, CachedAccLeaf.init(accLeaf.pfx, accLeaf.account, accLeaf.stoID))
+  db.cacheAccLeaf(accPath, CachedAccLeaf.init(accLeaf.pfx, accLeaf.account, accLeaf.stoID, accLeaf.stoHint))
 
   ok accLeaf
 
@@ -248,6 +250,20 @@ proc fetchStorageID*(
     stoID.vid
   else:
     default(VertexID)
+
+proc fetchStorageInfo*(
+    db: AristoTxRef;
+    accPath: Hash32;
+      ): Result[(VertexID, Opt[int]),AristoError] =
+  ## Storage root vid and the static level to start probing slot leaves at,
+  ## `none` when the trie was not built with static vids
+  let leafVtx = ?db.retrieveAccLeaf(accPath)
+  ok if leafVtx.stoID.isValid:
+    (leafVtx.stoID.vid,
+     if 0 < leafVtx.stoHint: Opt.some(int leafVtx.stoHint - 1)
+     else: Opt.none(int))
+  else:
+    (default(VertexID), Opt.none(int))
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -324,12 +340,33 @@ proc fetchSlot*(
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
 
-  let stoID = ?db.fetchStorageID(accPath)
+  let (stoID, startLevel) = ?db.fetchStorageInfo(accPath)
   if not stoID.isValid():
     db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
     return ok 0'u256
 
-  let leafRc = db.retrieveLeaf(stoID, NibblesBuf.fromBytes(stoPath.data))
+  var
+    path = NibblesBuf.fromBytes(stoPath.data)
+    next = VertexID(0)
+
+  if db.db.stoStatic and startLevel.isSome:
+    let (staticVtx, rest, nxt) = retrieveStatic[StoLeafRef](
+        db, stoID, stoPath, startLevel[], false).valueOr:
+      if error == FetchPathNotFound:
+        db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
+        return ok 0'u256
+      return err(error)
+
+    if staticVtx.isValid():
+      db.cacheStoLeaf(mixPath, CachedStoLeaf.init(staticVtx.pfx, staticVtx.stoData))
+      return ok staticVtx.toStoData()
+
+    path = rest
+    next = nxt
+
+  # Updated payloads are stored in the layers so if we didn't find them there,
+  # it must have been in the database
+  let leafRc = db.retrieveLeaf(stoID, path, next)
   if leafRc.isErr:
     if leafRc.error == FetchPathNotFound:
       db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)

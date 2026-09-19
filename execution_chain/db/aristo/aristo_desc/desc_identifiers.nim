@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,6 +17,7 @@
 import
   std/[algorithm, sequtils, sets, strutils, hashes],
   eth/common/[base, hashes],
+  eth/keccak/rapidhash,
   eth/rlp, eth/trie/nibbles,
   stew/byteutils,
   chronicles,
@@ -110,10 +111,11 @@ func `-`*(a: VertexID; b: uint64): VertexID = (a.uint64-b).VertexID
 func `-`*(a, b: VertexID): uint64 = (a.uint64 - b.uint64)
 
 func `==`*(a, b: RootedVertexID): bool {.inline.} =
-  a.vid == b.vid
+  a.vid == b.vid and a.root == b.root
 
 func hash*(rvid: RootedVertexID): Hash {.inline.} =
-  hash(rvid.vid)
+  static: doAssert sizeof(RootedVertexID) == 2 * sizeof(VertexID) # no padding
+  cast[Hash](rapidhashNano(cast[array[16, byte]](rvid)))
 
 func `$`*(rvid: RootedVertexID): string =
   $rvid.root & "/" & $rvid.vid

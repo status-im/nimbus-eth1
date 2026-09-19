@@ -41,7 +41,7 @@ const
     ## Cache of branches and leaves in the state MPTs (world and account)
   defaultRdbKeyCacheSize* = 1280 * 1024 * 1024
     ## Hashes of the above
-  defaultRdbBranchCacheSize* = 1024 * 1024 * 1024
+  defaultRdbBranchCacheSize* = 1252 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
   defaultMaxSnapshots* = 5
     ## The max number of snapshots to store in the aristo database.

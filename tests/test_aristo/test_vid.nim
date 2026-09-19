@@ -47,16 +47,16 @@ suite "Aristo VertexID":
     let txFrame = AristoTxRef()
 
     check:
-      txFrame.accVidFetch(buf) == STATE_ROOT_VID
+      txFrame.staticVidFetch(buf) == STATE_ROOT_VID
 
     buf = buf & NibblesBuf.nibble(byte 2)
 
     check:
-      txFrame.accVidFetch(buf) == STATE_ROOT_VID + 1 + 2
+      txFrame.staticVidFetch(buf) == STATE_ROOT_VID + 1 + 2
 
     while buf.len <= STATIC_VID_LEVELS:
       buf = buf & NibblesBuf.nibble(byte 2)
 
     check:
-      txFrame.accVidFetch(buf) == VertexID(FIRST_DYNAMIC_VID)
-      txFrame.accVidFetch(buf) == VertexID(FIRST_DYNAMIC_VID + 1)
+      txFrame.staticVidFetch(buf) == VertexID(FIRST_DYNAMIC_VID)
+      txFrame.staticVidFetch(buf) == VertexID(FIRST_DYNAMIC_VID + 1)

@@ -43,6 +43,7 @@ type
     DeblobLeafGotExtPrefix
     DeblobLeafSizeGarbled
     DeblobRVidLenUnsupported
+    DeblobStoHintUnsupported
     DeblobUnknown
     DeblobVtxTooShort
     DeblobWrongSize
