@@ -36,7 +36,22 @@ func main() {
 	}
 	defer ctx.Stop()
 
-	time.Sleep(2 * time.Second)
+	if err := ctx.Sync(); err != nil {
+		log.Fatalf("sync: %v", err)
+	}
+	interval, err := ctx.SyncInterval()
+	if err != nil {
+		log.Fatalf("syncInterval: %v", err)
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	go func() {
+		for range ticker.C {
+			if err := ctx.Sync(); err != nil {
+				log.Printf("sync: %v", err)
+			}
+		}
+	}()
 
 	// eth_* targets the L1 engine
 	params, _ := json.Marshal([]string{"0xde0B295669a9FD93d5F28D9Ec85E40f4cb697BAe", "latest"})

@@ -42,10 +42,27 @@ if err != nil {
 }
 defer ctx.Stop()
 
+if err := ctx.Sync(); err != nil {
+    log.Fatal(err)
+}
+interval, err := ctx.SyncInterval()
+if err != nil {
+    log.Fatal(err)
+}
+go func() {
+    for range time.Tick(interval) {
+        if err := ctx.Sync(); err != nil {
+            log.Printf("sync: %v", err)
+        }
+    }
+}()
+
 result, err := ctx.CallRpc("eth_blockNumber", "[]", 30*time.Second)
 ```
 
-The proxy syncs with the beacon chain in the background. The first few calls may take longer while the light client catches up.
+The proxy does not sync in the background and requests never trigger a sync. You decide
+when to advance the light client by calling `Sync`; `SyncInterval` returns the suggested
+period (the beacon slot duration). Requests made before the first successful `Sync` fail.
 
 ## Configuration
 
@@ -83,9 +100,17 @@ ctx, err := verifproxy.Start(config, execTransport, beaconTransport)
 ## API
 
 ```go
-// Start initialises the proxy and begins light-client sync.
+// Start initialises the proxy. It does not sync; call Sync afterwards.
 // Pass nil transports to use the default HTTP implementations.
 func Start(configJson string, exec ExecTransportFunc, beacon BeaconTransportFunc) (*Context, error)
+
+// Sync advances the light client once (eth_sync). Use CallRpc("op_sync", ...) for OP.
+// The timeout is optional; omitted (or <= 0) uses the default request timeout (5s).
+func (ctx *Context) Sync(timeout ...time.Duration) error
+
+// SyncInterval is the suggested period between Sync calls (eth_syncInterval).
+// The timeout is optional, as for Sync.
+func (ctx *Context) SyncInterval(timeout ...time.Duration) (time.Duration, error)
 
 // CallRpc sends a JSON-RPC call and waits for the verified result.
 func (ctx *Context) CallRpc(method, params string, timeout time.Duration) (string, error)

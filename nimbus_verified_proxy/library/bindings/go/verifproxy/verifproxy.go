@@ -57,6 +57,7 @@ import (
 	"errors"
 	"runtime"
 	"runtime/cgo"
+	"strconv"
 	"sync"
 	"time"
 	"unsafe"
@@ -240,6 +241,34 @@ func Start(configJson string, execTransport ExecTransportFunc, beaconTransport B
 
 	wg.Wait()
 	return goCtx, nil
+}
+
+func optionalTimeout(timeout []time.Duration) time.Duration {
+	if len(timeout) > 0 {
+		return timeout[0]
+	}
+	return 0
+}
+
+func (ctx *Context) Sync(timeout ...time.Duration) error {
+	_, err := ctx.CallRpc("eth_sync", "[]", optionalTimeout(timeout))
+	return err
+}
+
+func (ctx *Context) SyncInterval(timeout ...time.Duration) (time.Duration, error) {
+	result, err := ctx.CallRpc("eth_syncInterval", "[]", optionalTimeout(timeout))
+	if err != nil {
+		return 0, err
+	}
+	var hexMs string
+	if err := json.Unmarshal([]byte(result), &hexMs); err != nil {
+		return 0, err
+	}
+	ms, err := strconv.ParseUint(hexMs, 0, 64)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(ms) * time.Millisecond, nil
 }
 
 func (ctx *Context) CallRpc(method string, params string, timeout time.Duration) (string, error) {

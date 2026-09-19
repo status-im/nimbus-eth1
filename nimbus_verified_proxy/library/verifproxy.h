@@ -11,6 +11,7 @@
 #define __verifproxy__
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -164,6 +165,37 @@ void stopVerifProxy(Context *ctx);
 ETH_RESULT_USE_CHECK int processVerifProxyTasks(Context *ctx);
 
 /**
+ * Advance the light client (eth_sync) or the OP anchors (op_sync) once.
+ *
+ * The proxy does not sync on its own and requests never trigger a sync. Call eth_sync
+ * (and op_sync, if an OP network is configured) once after startVerifProxy() before
+ * making requests, then periodically every eth_syncInterval() / op_syncInterval()
+ * milliseconds. Overlapping
+ * calls are serialized internally. Also available through proxyCall as "eth_sync" and
+ * "op_sync".
+ *
+ * @param ctx       Context pointer.
+ * @param cb        Callback invoked with RET_SUCCESS and "null", or RET_ERROR and an
+ *                  error message.
+ * @param userData  pointer to user data
+ */
+void eth_sync(Context *ctx, CallBackProc cb, void *userData);
+void op_sync(Context *ctx, CallBackProc cb, void *userData);
+
+/**
+ * Suggested period between eth_sync() / op_sync() calls (the beacon slot duration of
+ * the configured network). Also available through proxyCall as "eth_syncInterval" and
+ * "op_syncInterval".
+ *
+ * @param ctx       Context pointer.
+ * @param cb        Callback invoked with the interval in milliseconds as a hex quantity
+ *                  (e.g. "0x2ee0" for 12000).
+ * @param userData  pointer to user data
+ */
+void eth_syncInterval(Context *ctx, CallBackProc cb, void *userData);
+void op_syncInterval(Context *ctx, CallBackProc cb, void *userData);
+
+/**
  * call any RPC method
  *
  * @param ctx       Context pointer.
@@ -187,6 +219,15 @@ void proxyCall(Context *ctx, char* name, char* params, CallBackProc cb, void *us
  */
 void eth_blockNumber(Context *ctx, CallBackProc cb, void *userData);
 void op_blockNumber(Context *ctx, CallBackProc cb, void *userData);
+
+/**
+ * Retrieve the light client sync status.
+ *
+ * @param ctx       Context pointer.
+ * @param cb        Callback invoked with false, or a sync status object while syncing.
+ * @param userData  pointer to user data
+ */
+void eth_syncing(Context *ctx, CallBackProc cb, void *userData);
 
 /**
  * Retrieve the chain id the proxy is configured for.
