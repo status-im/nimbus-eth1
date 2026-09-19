@@ -73,9 +73,6 @@ type
 
     quarantine*  : Quarantine
 
-    txRecords    : Table[Hash32, (Hash32, uint64)]
-      # A map of transsaction hashes to block hash and block number.
-
     baseTxFrame* : CoreDbTxRef
       # Frame that skips all in-memory state that ForkedChain holds - used to
       # lookup items straight from the database
@@ -133,10 +130,6 @@ type
 # ------------------------------------------------------------------------------
 # These functions are private to ForkedChainRef
 # ------------------------------------------------------------------------------
-
-func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
-  ## Avoid clash with `forked_chain.txRecords()`
-  c.txRecords
 
 func tryUpdatePendingFCU*(c: ForkedChainRef, finHash: Hash32, number: uint64): bool =
   c.pendingFCU = zeroHash32
