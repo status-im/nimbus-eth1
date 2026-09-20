@@ -13,7 +13,8 @@
 ZISK_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
 # The ISA the riscv-target standard specifies. Must match what
-# libziskos_staticlib.a was built with.
+# libziskos_staticlib.a was built with. `medany` also keeps jump tables out of
+# `.text`, which link.ld's execute-only segment needs.
 ZKVM_ARCH ?= -march=rv64im -mabi=lp64 -mcmodel=medany
 ZKVM_CPU := riscv64
 
