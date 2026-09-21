@@ -165,35 +165,33 @@ void stopVerifProxy(Context *ctx);
 ETH_RESULT_USE_CHECK int processVerifProxyTasks(Context *ctx);
 
 /**
- * Advance the light client (eth_sync) or the OP anchors (op_sync) once.
+ * Advance the light client (nvp_eth_sync) or the OP anchors (nvp_op_sync) once.
  *
- * The proxy does not sync on its own and requests never trigger a sync. Call eth_sync
- * (and op_sync, if an OP network is configured) once after startVerifProxy() before
- * making requests, then periodically every eth_syncInterval() / op_syncInterval()
- * milliseconds. Overlapping
- * calls are serialized internally. Also available through proxyCall as "eth_sync" and
- * "op_sync".
+ * The proxy does not sync on its own and requests never trigger a sync. Call
+ * nvp_eth_sync (and nvp_op_sync, if an OP network is configured) once after
+ * startVerifProxy() before making requests, then periodically every
+ * nvp_eth_syncInterval() / nvp_op_syncInterval() milliseconds. Overlapping calls are
+ * serialized internally. These are not reachable through proxyCall.
  *
  * @param ctx       Context pointer.
  * @param cb        Callback invoked with RET_SUCCESS and "null", or RET_ERROR and an
  *                  error message.
  * @param userData  pointer to user data
  */
-void eth_sync(Context *ctx, CallBackProc cb, void *userData);
-void op_sync(Context *ctx, CallBackProc cb, void *userData);
+void nvp_eth_sync(Context *ctx, CallBackProc cb, void *userData);
+void nvp_op_sync(Context *ctx, CallBackProc cb, void *userData);
 
 /**
- * Suggested period between eth_sync() / op_sync() calls (the beacon slot duration of
- * the configured network). Also available through proxyCall as "eth_syncInterval" and
- * "op_syncInterval".
+ * Suggested period between nvp_eth_sync() / nvp_op_sync() calls (the beacon slot
+ * duration of the configured network). Not reachable through proxyCall.
  *
  * @param ctx       Context pointer.
  * @param cb        Callback invoked with the interval in milliseconds as a hex quantity
  *                  (e.g. "0x2ee0" for 12000).
  * @param userData  pointer to user data
  */
-void eth_syncInterval(Context *ctx, CallBackProc cb, void *userData);
-void op_syncInterval(Context *ctx, CallBackProc cb, void *userData);
+void nvp_eth_syncInterval(Context *ctx, CallBackProc cb, void *userData);
+void nvp_op_syncInterval(Context *ctx, CallBackProc cb, void *userData);
 
 /**
  * call any RPC method

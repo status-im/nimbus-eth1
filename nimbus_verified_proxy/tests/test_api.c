@@ -348,21 +348,21 @@ static void check_sync(Context *ctx) {
     TEST("eth_syncing before sync: callback fired", syncing_before_s.called);
     TEST("eth_syncing before sync: RET_SUCCESS",    syncing_before_s.status == RET_SUCCESS);
 
-    eth_syncInterval(ctx, collect_error_cb, &interval_s);
-    op_syncInterval(ctx, collect_error_cb, &op_interval_s);
+    nvp_eth_syncInterval(ctx, collect_error_cb, &interval_s);
+    nvp_op_syncInterval(ctx, collect_error_cb, &op_interval_s);
     drain(ctx, 2000);
 
-    TEST("eth_syncInterval: callback fired",  interval_s.called);
-    TEST("eth_syncInterval: 12000ms on mainnet",
+    TEST("nvp_eth_syncInterval: callback fired",  interval_s.called);
+    TEST("nvp_eth_syncInterval: 12000ms on mainnet",
          interval_s.status == RET_SUCCESS && strcmp(interval_s.res, "\"0x2ee0\"") == 0);
-    TEST("op_syncInterval: error without an OP network",
+    TEST("nvp_op_syncInterval: error without an OP network",
          op_interval_s.called && op_interval_s.status == RET_ERROR);
 
-    eth_sync(ctx, collect_error_cb, &sync_s);
+    nvp_eth_sync(ctx, collect_error_cb, &sync_s);
     drain(ctx, 2000);
 
-    TEST("eth_sync: callback fired", sync_s.called);
-    TEST("eth_sync: RET_SUCCESS",    sync_s.status == RET_SUCCESS);
+    TEST("nvp_eth_sync: callback fired", sync_s.called);
+    TEST("nvp_eth_sync: RET_SUCCESS",    sync_s.status == RET_SUCCESS);
 
     eth_blockNumber(ctx, collect_error_cb, &after_s);
     drain(ctx, 2000);

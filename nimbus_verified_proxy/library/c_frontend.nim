@@ -13,6 +13,8 @@ import
   beacon_chain/nimbus_binary_common,
   web3/[eth_api_types, conversions],
   ../engine/types,
+  ../engine/engine,
+  ../op/op_anchor,
   ../nimbus_verified_proxy_conf,
   ./types,
   ./utils
@@ -73,21 +75,15 @@ proc eth_syncing(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.export
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_syncing()
 
-proc eth_sync(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+proc nvp_eth_sync(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
   callbackToC(ctx, cb, userData):
-    ctx.frontend.sync()
+    ctx.engine.syncOnce()
 
-proc syncIntervalMs(
-    frontend: ExecutionApiFrontend
-): Future[EngineResult[uint64]] {.async: (raises: [CancelledError]).} =
-  let interval = ?frontend.syncInterval()
-  ok(uint64(interval.milliseconds))
-
-proc eth_syncInterval(
+proc nvp_eth_syncInterval(
     ctx: ptr Context, cb: CallBackProc, userData: pointer
 ) {.exported.} =
-  callbackToC(ctx, cb, userData):
-    ctx.frontend.syncIntervalMs()
+  let intervalMs = uint64(ctx.engine.syncInterval().milliseconds)
+  cb(ctx, RET_SUCCESS, alloc(EthJson.encode(intervalMs)), userData)
 
 proc eth_getBalance(
     ctx: ptr Context,
@@ -464,17 +460,17 @@ proc op_blockNumber(
   callbackToC(ctx, cb, userData):
     ctx.opFrontend.eth_blockNumber()
 
-proc op_sync(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+proc nvp_op_sync(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
   requireOpFrontend(ctx, cb, userData)
   callbackToC(ctx, cb, userData):
-    ctx.opFrontend.sync()
+    ctx.opEngine.opSyncOnce(ctx.engine)
 
-proc op_syncInterval(
+proc nvp_op_syncInterval(
     ctx: ptr Context, cb: CallBackProc, userData: pointer
 ) {.exported.} =
   requireOpFrontend(ctx, cb, userData)
-  callbackToC(ctx, cb, userData):
-    ctx.opFrontend.syncIntervalMs()
+  let intervalMs = uint64(ctx.engine.syncInterval().milliseconds)
+  cb(ctx, RET_SUCCESS, alloc(EthJson.encode(intervalMs)), userData)
 
 proc op_getBalance(
     ctx: ptr Context,
@@ -905,12 +901,6 @@ proc proxyCall(
   of "eth_syncing":
     requireParams(0)
     eth_syncing(ctx, cb, userData)
-  of "eth_sync":
-    requireParams(0)
-    eth_sync(ctx, cb, userData)
-  of "eth_syncInterval":
-    requireParams(0)
-    eth_syncInterval(ctx, cb, userData)
   of "eth_getBalance":
     requireParams(2)
     eth_getBalance(
@@ -1075,12 +1065,6 @@ proc proxyCall(
   of "op_blockNumber":
     requireParams(0)
     op_blockNumber(ctx, cb, userData)
-  of "op_sync":
-    requireParams(0)
-    op_sync(ctx, cb, userData)
-  of "op_syncInterval":
-    requireParams(0)
-    op_syncInterval(ctx, cb, userData)
   of "op_getBalance":
     requireParams(2)
     op_getBalance(

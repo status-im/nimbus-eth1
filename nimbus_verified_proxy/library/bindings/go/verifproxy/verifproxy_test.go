@@ -50,7 +50,6 @@ func execTransport(_ string, method, _ string) (json.RawMessage, error) {
 		if err != nil {
 			return nil, err
 		}
-		// the library expects the JSON-RPC response envelope verbatim
 		return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":` + string(data) + `}`), nil
 	}
 	return nil, fmt.Errorf("exec: no mock for %s", method)
@@ -86,6 +85,10 @@ func TestVerifProxy(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 12*time.Second, interval)
 	require.NoError(t, ctx.Sync(callTimeout))
+
+	_, err = ctx.OpSyncInterval(callTimeout)
+	require.Error(t, err)
+	require.Error(t, ctx.OpSync(callTimeout))
 
 	blockNumber, err := ctx.CallRpc("eth_blockNumber", "[]", callTimeout)
 	require.NoError(t, err)

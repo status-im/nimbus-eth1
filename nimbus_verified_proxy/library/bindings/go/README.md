@@ -42,16 +42,16 @@ if err != nil {
 }
 defer ctx.Stop()
 
-if err := ctx.Sync(); err != nil {
+if err := ctx.Sync(30*time.Second); err != nil {
     log.Fatal(err)
 }
-interval, err := ctx.SyncInterval()
+interval, err := ctx.SyncInterval(30*time.Second)
 if err != nil {
     log.Fatal(err)
 }
 go func() {
     for range time.Tick(interval) {
-        if err := ctx.Sync(); err != nil {
+        if err := ctx.Sync(30*time.Second); err != nil {
             log.Printf("sync: %v", err)
         }
     }
@@ -104,13 +104,18 @@ ctx, err := verifproxy.Start(config, execTransport, beaconTransport)
 // Pass nil transports to use the default HTTP implementations.
 func Start(configJson string, exec ExecTransportFunc, beacon BeaconTransportFunc) (*Context, error)
 
-// Sync advances the light client once (eth_sync). Use CallRpc("op_sync", ...) for OP.
-// The timeout is optional; omitted (or <= 0) uses the default request timeout (5s).
-func (ctx *Context) Sync(timeout ...time.Duration) error
+// Sync advances the light client once (nvp_eth_sync).
+// A timeout <= 0 uses the default request timeout (5s).
+func (ctx *Context) Sync(timeout time.Duration) error
 
-// SyncInterval is the suggested period between Sync calls (eth_syncInterval).
-// The timeout is optional, as for Sync.
-func (ctx *Context) SyncInterval(timeout ...time.Duration) (time.Duration, error)
+// SyncInterval is the suggested period between Sync calls (nvp_eth_syncInterval).
+func (ctx *Context) SyncInterval(timeout time.Duration) (time.Duration, error)
+
+// OpSync advances the OP anchors once (nvp_op_sync). Errors if no OP network is configured.
+func (ctx *Context) OpSync(timeout time.Duration) error
+
+// OpSyncInterval is the suggested period between OpSync calls (nvp_op_syncInterval).
+func (ctx *Context) OpSyncInterval(timeout time.Duration) (time.Duration, error)
 
 // CallRpc sends a JSON-RPC call and waits for the verified result.
 func (ctx *Context) CallRpc(method, params string, timeout time.Duration) (string, error)

@@ -143,12 +143,36 @@ export default class NimbusVerifiedProxy {
     });
   }
 
-  async sync() {
-    await this.call('eth_sync', '[]');
+  sync() {
+    return new Promise((resolve, reject) => {
+      const id = this.#nextId++;
+      this.#callbacks.set(id, { resolve, reject });
+      this.#mod.ccall('wasmEthSync', null, ['number', 'number'], [this.#unifiedCb, id]);
+    });
   }
 
-  async syncIntervalMs() {
-    return Number(JSON.parse(await this.call('eth_syncInterval', '[]')));
+  syncIntervalMs() {
+    return new Promise((resolve, reject) => {
+      const id = this.#nextId++;
+      this.#callbacks.set(id, { resolve: res => resolve(Number(JSON.parse(res))), reject });
+      this.#mod.ccall('wasmEthSyncInterval', null, ['number', 'number'], [this.#unifiedCb, id]);
+    });
+  }
+
+  opSync() {
+    return new Promise((resolve, reject) => {
+      const id = this.#nextId++;
+      this.#callbacks.set(id, { resolve, reject });
+      this.#mod.ccall('wasmOpSync', null, ['number', 'number'], [this.#unifiedCb, id]);
+    });
+  }
+
+  opSyncIntervalMs() {
+    return new Promise((resolve, reject) => {
+      const id = this.#nextId++;
+      this.#callbacks.set(id, { resolve: res => resolve(Number(JSON.parse(res))), reject });
+      this.#mod.ccall('wasmOpSyncInterval', null, ['number', 'number'], [this.#unifiedCb, id]);
+    });
   }
 
   destroy() {

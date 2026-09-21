@@ -50,6 +50,22 @@ static inline Context *callStartVerifProxy(char *configJson, ExecutionTransportP
 static inline void callNvp(Context *ctx, char *method, char *params, CallBackProc cb, uintptr_t userData) {
     proxyCall(ctx, method, params, cb, (void *)userData);
 }
+
+static inline void callNvpEthSync(Context *ctx, CallBackProc cb, uintptr_t userData) {
+    nvp_eth_sync(ctx, cb, (void *)userData);
+}
+
+static inline void callNvpEthSyncInterval(Context *ctx, CallBackProc cb, uintptr_t userData) {
+    nvp_eth_syncInterval(ctx, cb, (void *)userData);
+}
+
+static inline void callNvpOpSync(Context *ctx, CallBackProc cb, uintptr_t userData) {
+    nvp_op_sync(ctx, cb, (void *)userData);
+}
+
+static inline void callNvpOpSyncInterval(Context *ctx, CallBackProc cb, uintptr_t userData) {
+    nvp_op_syncInterval(ctx, cb, (void *)userData);
+}
 */
 import "C"
 import (
@@ -81,7 +97,18 @@ type VerifyProxyResult struct {
 	response string
 }
 
+type callKind int
+
+const (
+	callRpc callKind = iota
+	callEthSync
+	callEthSyncInterval
+	callOpSync
+	callOpSyncInterval
+)
+
 type VerifyProxyCallArgs struct {
+	kind       callKind
 	method     string
 	params     string
 	resultChan chan VerifyProxyResult
@@ -222,12 +249,24 @@ func Start(configJson string, execTransport ExecTransportFunc, beaconTransport B
 		for {
 			select {
 			case callArgs := <-goCtx.executeTaskChan:
-				h := cgo.NewHandle(callArgs.resultChan)
-				cMethod := C.CString(callArgs.method)
-				cParams := C.CString(callArgs.params)
-				C.callNvp(ctxPtr, cMethod, cParams, (*[0]byte)(C.cGoCallback), C.uintptr_t(h))
-				C.free(unsafe.Pointer(cMethod))
-				C.free(unsafe.Pointer(cParams))
+				h := C.uintptr_t(cgo.NewHandle(callArgs.resultChan))
+				cb := (*[0]byte)(C.cGoCallback)
+				switch callArgs.kind {
+				case callEthSync:
+					C.callNvpEthSync(ctxPtr, cb, h)
+				case callEthSyncInterval:
+					C.callNvpEthSyncInterval(ctxPtr, cb, h)
+				case callOpSync:
+					C.callNvpOpSync(ctxPtr, cb, h)
+				case callOpSyncInterval:
+					C.callNvpOpSyncInterval(ctxPtr, cb, h)
+				default:
+					cMethod := C.CString(callArgs.method)
+					cParams := C.CString(callArgs.params)
+					C.callNvp(ctxPtr, cMethod, cParams, cb, h)
+					C.free(unsafe.Pointer(cMethod))
+					C.free(unsafe.Pointer(cParams))
+				}
 			case <-goCtx.stopChan:
 				unregisterCtx(ctxPtr)
 				C.stopVerifProxy(ctxPtr)
@@ -243,20 +282,25 @@ func Start(configJson string, execTransport ExecTransportFunc, beaconTransport B
 	return goCtx, nil
 }
 
-func optionalTimeout(timeout []time.Duration) time.Duration {
-	if len(timeout) > 0 {
-		return timeout[0]
-	}
-	return 0
-}
-
-func (ctx *Context) Sync(timeout ...time.Duration) error {
-	_, err := ctx.CallRpc("eth_sync", "[]", optionalTimeout(timeout))
+func (ctx *Context) Sync(timeout time.Duration) error {
+	_, err := ctx.call(VerifyProxyCallArgs{kind: callEthSync}, timeout)
 	return err
 }
 
-func (ctx *Context) SyncInterval(timeout ...time.Duration) (time.Duration, error) {
-	result, err := ctx.CallRpc("eth_syncInterval", "[]", optionalTimeout(timeout))
+func (ctx *Context) SyncInterval(timeout time.Duration) (time.Duration, error) {
+	return parseSyncInterval(ctx.call(VerifyProxyCallArgs{kind: callEthSyncInterval}, timeout))
+}
+
+func (ctx *Context) OpSync(timeout time.Duration) error {
+	_, err := ctx.call(VerifyProxyCallArgs{kind: callOpSync}, timeout)
+	return err
+}
+
+func (ctx *Context) OpSyncInterval(timeout time.Duration) (time.Duration, error) {
+	return parseSyncInterval(ctx.call(VerifyProxyCallArgs{kind: callOpSyncInterval}, timeout))
+}
+
+func parseSyncInterval(result string, err error) (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
@@ -272,6 +316,10 @@ func (ctx *Context) SyncInterval(timeout ...time.Duration) (time.Duration, error
 }
 
 func (ctx *Context) CallRpc(method string, params string, timeout time.Duration) (string, error) {
+	return ctx.call(VerifyProxyCallArgs{kind: callRpc, method: method, params: params}, timeout)
+}
+
+func (ctx *Context) call(args VerifyProxyCallArgs, timeout time.Duration) (string, error) {
 	if ctx == nil {
 		return "", errEmptyContext
 	}
@@ -280,7 +328,8 @@ func (ctx *Context) CallRpc(method string, params string, timeout time.Duration)
 	}
 
 	resultChan := make(chan VerifyProxyResult, 1)
-	ctx.executeTaskChan <- VerifyProxyCallArgs{method: method, params: params, resultChan: resultChan}
+	args.resultChan = resultChan
+	ctx.executeTaskChan <- args
 
 	select {
 	case result := <-resultChan:
