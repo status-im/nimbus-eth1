@@ -11,6 +11,7 @@
 {.used.}
 
 import
+  std/tables,
   unittest2,
   results,
   eth/common,
@@ -21,14 +22,14 @@ import
   ../execution_chain/db/kvt,
   ../execution_chain/db/kvt/[kvt_init/memory_only, kvt_tx_frame, kvt_utils]
 
-suite "Kvt TxFrame":
+suite "Kvt write set":
   setup:
     let db = KvtDbRef.init()
 
-  test "Frames should independently keep data":
+  test "Write sets are independent and do not cascade":
     let
-      tx0 = db.txFrameBegin(db.baseTxFrame())
-      tx1 = db.txFrameBegin(tx0)
+      tx0 = db.txFrameBegin()
+      tx1 = db.txFrameBegin()
 
     check:
       tx0.put([byte 0, 1, 2], [byte 0, 1, 2]).isOk()
@@ -37,23 +38,72 @@ suite "Kvt TxFrame":
     check:
       tx0.get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 2]
       tx1.get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 3]
+      # A write set only ever sees its own writes and the backend.
+      tx0.get([byte 0, 1, 9]).isErr()
 
     let batch = db.putBegFn().expect("working batch")
     db.persist(batch, tx1)
     check:
       db.putEndFn(batch).isOk()
 
-    block:
-      # using the same backend but new txRef and cache
-      let tx = db.baseTxFrame()
-      check:
-        tx.get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 3]
+    check:
+      # `tx1` was flushed and is empty again; its data is now on the backend.
+      tx1.get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 3]
+      db.baseTxFrame().get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 3]
+      # `tx0` was never persisted, and still shadows the backend with its own
+      # pending value.
+      tx0.get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 2]
+
+    tx0.dispose()
+    check db.baseTxFrame().get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 3]
+
+    db.close()
+
+  test "A discarded write set never reaches the backend":
+    let tx = db.txFrameBegin()
+    check tx.put([byte 0, 1, 2], [byte 0, 1, 2]).isOk()
+    tx.dispose()
+
+    check db.getBe([byte 0, 1, 2]).isErr()
+
+    db.close()
+
+  test "persist writes a stand-alone write set in its own batch":
+    let tx = db.txFrameBegin()
+    check tx.put([byte 0, 1, 2], [byte 0, 1, 7]).isOk()
+
+    tx.persist()
+
+    check:
+      len(tx.sTab) == 0
+      db.getBe([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 7]
+
+    db.close()
+
+  test "persist also flushes what was written to the base write set":
+    let
+      base = db.baseTxFrame()
+      tx = db.txFrameBegin()
+
+    check:
+      base.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
+      tx.put([byte 0, 1, 2], [byte 0, 1, 5]).isOk()
+
+    let batch = db.putBegFn().expect("working batch")
+    db.persist(batch, tx)
+    check db.putEndFn(batch).isOk()
+
+    check:
+      db.getBe([byte 0, 1, 1]).expect("entry") == @[byte 0, 1, 4]
+      db.getBe([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 5]
+      # The persisted write set has taken over as the base.
+      db.baseTxFrame() == tx
 
     db.close()
 
   test "Delete - delBe":
     let
-      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx0 = db.txFrameBegin()
 
     check:
       tx0.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
@@ -79,7 +129,7 @@ suite "Kvt TxFrame":
 
   test "Delete range - delRangeBe":
     let
-      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx0 = db.txFrameBegin()
 
     check:
       tx0.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
@@ -105,7 +155,7 @@ suite "Kvt TxFrame":
 
   test "MultiGet - multiGetBe":
     let
-      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx0 = db.txFrameBegin()
 
     check:
       tx0.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
@@ -153,7 +203,7 @@ suite "Kvt TxFrame":
 
   test "MultiGet - multiGet":
     let
-      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx0 = db.txFrameBegin()
 
     check:
       tx0.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
@@ -164,7 +214,7 @@ suite "Kvt TxFrame":
     check:
       db.putEndFn(batch).isOk()
 
-    let tx1 = db.txFrameBegin(db.baseTxFrame())
+    let tx1 = db.txFrameBegin()
     check tx1.put([byte 0, 1, 3], [byte 0, 1, 6]).isOk()
 
     block:

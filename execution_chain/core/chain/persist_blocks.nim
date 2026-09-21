@@ -214,8 +214,11 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     ?txFrame.persistHeaderAndSetHead(blockHash, header, com.startOfHistory)
 
   if PersistTransactions in p.flags:
-    txFrame.persistTransactions(
+    # This importer only ever walks the canonical chain, so the transaction
+    # index can be written along with the transactions themselves.
+    let txHashes = txFrame.persistTransactions(
       header.number, header.txRoot, blk.transactions)
+    txFrame.persistTransactionIndex(header.number, txHashes)
 
   if PersistReceipts in p.flags:
     txFrame.persistReceipts(header.receiptsRoot, vmState.receipts)

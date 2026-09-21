@@ -25,14 +25,14 @@ logScope:
 # Direct-backend deletion helpers (bypass transaction layer)
 # ------------------------------------------------------------------------------
 
-proc deleteTransactionsBe(kvt: KvtDbRef, txRoot: Hash32) =
+proc deleteTransactionsBe*(kvt: KvtDbRef, txRoot: Hash32) =
   if txRoot == EMPTY_ROOT_HASH:
     return
 
   kvt.delRangeBe(hashIndexKey(txRoot, 0), hashIndexKey(txRoot, uint16.high)).isOkOr:
     warn "pruner: deleteTransactionsBe", txRoot, error
 
-proc deleteReceiptsBe(kvt: KvtDbRef, receiptsRoot: Hash32) =
+proc deleteReceiptsBe*(kvt: KvtDbRef, receiptsRoot: Hash32) =
   if receiptsRoot == EMPTY_ROOT_HASH:
     return
 
@@ -41,13 +41,13 @@ proc deleteReceiptsBe(kvt: KvtDbRef, receiptsRoot: Hash32) =
   ).isOkOr:
     warn "pruner: deleteReceiptsBe", receiptsRoot, error
 
-proc deleteUnclesBe(kvt: KvtDbRef, ommersHash: Hash32) =
+proc deleteUnclesBe*(kvt: KvtDbRef, ommersHash: Hash32) =
   if ommersHash == EMPTY_UNCLE_HASH:
     return
   kvt.delBe(genericHashKey(ommersHash).toOpenArray).isOkOr:
     warn "pruner: deleteUnclesBe", ommersHash, error
 
-proc deleteWithdrawalsBe(kvt: KvtDbRef, withdrawalsRoot: Hash32) =
+proc deleteWithdrawalsBe*(kvt: KvtDbRef, withdrawalsRoot: Hash32) =
   if withdrawalsRoot == EMPTY_ROOT_HASH:
     return
   kvt.delBe(withdrawalsKey(withdrawalsRoot).toOpenArray).isOkOr:
@@ -59,6 +59,19 @@ proc deleteBlockBodyAndReceiptsBe*(kvt: KvtDbRef, header: Header) =
   if header.withdrawalsRoot.isSome:
     kvt.deleteWithdrawalsBe(header.withdrawalsRoot.get())
   kvt.deleteReceiptsBe(header.receiptsRoot)
+
+proc deleteBlockMetadataBe*(kvt: KvtDbRef, blockHash: Hash32) =
+  ## Remove the per-block entries that are keyed by block hash and so are
+  ## never shared with another block: the header, its score, its witness and
+  ## its block access list. Used when a branch loses and the data that was
+  ## optimistically written for it becomes unreachable.
+  for key in [
+      genericHashKey(blockHash),
+      blockHashToScoreKey(blockHash),
+      blockHashToWitnessKey(blockHash),
+      blockHashToBlockAccessListKey(blockHash)]:
+    kvt.delBe(key.toOpenArray).isOkOr:
+      warn "pruner: deleteBlockMetadataBe", blockHash, error
 
 proc deleteBlockAccessListsBe*(
     kvt: KvtDbRef, blockHashes: openArray[Hash32], tail: BlockNumber

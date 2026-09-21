@@ -17,6 +17,7 @@ import
   chronos,
   ../../common,
   ../../db/[core_db, fcu_db, payload_body_db],
+  ../../pruner/db_utils,
   ../../evm/types,
   ../../evm/state,
   ../validate,
@@ -90,13 +91,9 @@ func appendBlock(c: ForkedChainRef,
   c.heads.add newBlock
   newBlock
 
-func fcuSetHead(c: ForkedChainRef,
-                txFrame: CoreDbTxRef,
-                header: Header,
-                hash: Hash32,
-                number: uint64) =
-  txFrame.setHead(header, hash).expect("setHead OK")
-  txFrame.fcuHead(hash, number).expect("fcuHead OK")
+func fcuSetHead(c: ForkedChainRef, hash: Hash32, number: uint64) =
+  ## The canonical head pointer is in-memory state until the block it names is
+  ## persisted - `persistCanonicalKeys` writes it out, clamped to the base.
   c.fcuHead.number = number
   c.fcuHead.hash = hash
 
@@ -232,13 +229,110 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   b.parent = nil
   b.header.reset()   # frees extraData seq immediately
 
+func rootsInUse(c: ForkedChainRef): HashSet[Hash32] =
+  ## The content-addressed roots that blocks still in memory point at.
+  ##
+  ## Bodies and receipts are keyed by root, not by block hash, so they are
+  ## shared: a reorg that re-proposes the same transactions produces a
+  ## different block hash but the very same `txRoot`. A root may only be
+  ## deleted once nothing points at it any more.
+  for b in c.hashToBlock.values:
+    result.incl b.header.txRoot
+    result.incl b.header.receiptsRoot
+    result.incl b.header.ommersHash
+    if b.header.withdrawalsRoot.isSome:
+      result.incl b.header.withdrawalsRoot.get
+
+proc deleteBlocksFromDisk(c: ForkedChainRef, blocks: openArray[(Hash32, Header)]) =
+  ## Remove the data that was optimistically written for blocks that can no
+  ## longer become part of the chain.
+  ##
+  ## Must run *after* the blocks have left `hashToBlock`, so that the set of
+  ## roots still in use is accurate. Blocks below `base` are canonical and must
+  ## never be passed here.
+  if blocks.len == 0:
+    return
+
+  let
+    kvt = c.com.db.kvt
+    inUse = c.rootsInUse()
+
+  for (blkHash, header) in blocks:
+    kvt.deleteBlockMetadataBe(blkHash)
+
+    if header.txRoot notin inUse:
+      kvt.deleteTransactionsBe(header.txRoot)
+    if header.receiptsRoot notin inUse:
+      kvt.deleteReceiptsBe(header.receiptsRoot)
+    if header.ommersHash notin inUse:
+      kvt.deleteUnclesBe(header.ommersHash)
+    if header.withdrawalsRoot.isSome and header.withdrawalsRoot.get notin inUse:
+      kvt.deleteWithdrawalsBe(header.withdrawalsRoot.get)
+
+proc removeBranchFromCache(c: ForkedChainRef,
+                           head: BlockRef,
+                           keep = initHashSet[Hash32](0),
+                           stopAtFinalized = false) =
+  ## Drop `head` and its ancestors from memory and delete what was written to
+  ## disk for them. Walking stops at the first block that a previous branch
+  ## already removed, that is in `keep`, or - when `stopAtFinalized` is set -
+  ## that carries the finalized marker.
+  var removed: seq[(Hash32, Header)]
+
+  for it in ancestors(head):
+    if it.txFrame.isNil or it.hash in keep or
+       (stopAtFinalized and not it.notFinalized):
+      break
+    # The header is captured before `removeBlockFromCache` resets it.
+    removed.add (it.hash, it.header)
+    c.removeBlockFromCache(it)
+
+  c.deleteBlocksFromDisk(removed)
+
+proc persistCanonicalKeys(c: ForkedChainRef, base: BlockRef) =
+  ## Write the chain metadata that has a single slot per block number - and so
+  ## could not be written while the block might still lose - for every block
+  ## that is about to be persisted.
+  ##
+  ## Runs before the `persist` call so that these keys ride the same atomic
+  ## write batch as the state they describe.
+  let txFrame = base.txFrame
+
+  # The blocks between the old base (exclusive) and the new one, plus the new
+  # base itself.
+  var blocks = newSeqOfCap[BlockRef](base.number - c.base.number)
+  for it in ancestors(base):
+    if it.number <= c.base.number:
+      break
+    blocks.add it
+
+  for i in countdown(blocks.len-1, 0):
+    let b = blocks[i]
+    txFrame.addBlockNumberToHashLookup(b.number, b.hash)
+    # `c.txRecords` cannot serve as the source here: it is keyed by transaction
+    # hash alone, so a transaction that appears on two branches only has one
+    # record. The transactions themselves went to disk when the block
+    # validated, so read them back instead.
+    txFrame.persistTransactionIndex(
+      b.number, txFrame.transactionHashes(b.header.txRoot))
+
+  # The canonical pointers are clamped to the base. Everything above it may
+  # still be reorged away and, more importantly, its state has not been written
+  # yet - a restart that cannot load the FC state blob must not be pointed at a
+  # block the database does not have.
+  template clamped(v: FcuHashAndNumber): FcuHashAndNumber =
+    if v.hash != zeroHash32 and v.number <= base.number: v
+    else: FcuHashAndNumber(hash: base.hash, number: base.number)
+
+  txFrame.setHead(base.header, base.hash).expect("setHead OK")
+  txFrame.fcuHead(clamped(c.fcuHead)).expect("fcuHead OK")
+  txFrame.fcuSafe(clamped(c.fcuSafe)).expect("fcuSafe OK")
+  txFrame.fcuFinalized(clamped(c.latestFinalized)).expect("fcuFinalized OK")
+
 func updateHead(c: ForkedChainRef, head: BlockRef) =
   ## Update head if the new head is different from current head.
 
-  c.fcuSetHead(head.txFrame,
-    head.header,
-    head.hash,
-    head.number)
+  c.fcuSetHead(head.hash, head.number)
 
 proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
   # Pruning
@@ -253,8 +347,9 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
   # 'B', 'D', and A5 onward will stay
   # 'C' will be removed
 
-  let txFrame = finalized.txFrame
-  txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
+  # Nothing is written to the database here: the finalized pointer is
+  # in-memory state until the block it names has been persisted, and
+  # `persistCanonicalKeys` writes it out then, clamped to the base.
 
   # There is no point running this expensive algorithm
   # if the chain have no branches, just move it forward.
@@ -281,11 +376,9 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     # Any branches not reachable from finalized
     # should be removed.
     if not reachable(head, finalized):
-      for it in loopNotFinalized(head):
-        if it.txFrame.isNil:
-          # Has been deleted by previous branch
-          break
-        c.removeBlockFromCache(it)
+      # The blocks of this branch were written to disk optimistically when they
+      # validated; now that finality has ruled them out, take them back off.
+      c.removeBranchFromCache(head, stopAtFinalized = true)
 
       if head == c.latest:
         updateLatest = true
@@ -350,11 +443,17 @@ Either the consensus client gave invalid information about finalized blocks or
 something else needs attention! Shutting down to preserve the database - restart
 with --debug-eager-state-root."""
 
+  c.persistCanonicalKeys(base)
+
   base.txFrame.checkpoint(base.number, skipSnapshot = true)
   c.com.db.persist(base.txFrame)
 
   # Update baseTxFrame when we about to yield to the event loop
   # and prevent other modules accessing expired baseTxFrame.
+  # At and below the base every branch agrees with the database, so the
+  # branch-local resolver is no longer wanted - and its parent is about to be
+  # dropped from the DAG.
+  base.txFrame.blockHashFn = nil
   c.baseTxFrame = base.txFrame
 
   # Cleanup in-memory blocks starting from base backward
@@ -514,6 +613,11 @@ proc validateBlock(
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
 
+  # The block being validated may well be on a branch that never becomes
+  # canonical, so number -> hash lookups have to be answered from the DAG
+  # rather than from the canonical-only mapping in the database.
+  txFrame.blockHashFn = branchBlockHashFn(parent)
+
   # TODO shortLog-equivalent for eth types
   debug "Validating block",
     blkHash, blk = (
@@ -542,12 +646,25 @@ proc validateBlock(
     txFrame.dispose()
     return err(error)
 
+  # The block validated, so everything `processBlock` wrote to the key-value
+  # side of the frame - header, body, receipts, access list, witness - is
+  # known-good and goes to disk right away. It is keyed by content, so a block
+  # on a losing branch is harmless there until `updateFinalized` deletes it,
+  # and keeping it out of memory is what makes long stretches of non-finality
+  # affordable.
+  txFrame.flushKvt()
+
   # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
   # expensive operation, specially when creating a new branch (ie when blk
   # is being applied to a block that is currently not a head).
   txFrame.checkpoint(blk.header.number, skipSnapshot = false)
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame)
+
+  # Re-point the resolver at the block itself now that it has a `BlockRef`, so
+  # that the frame answers for its own number too - the same thing a frame that
+  # had written `blockNumberToHash` would report.
+  txFrame.blockHashFn = branchBlockHashFn(newBlock)
 
   for i, txHash in txHashes:
     c.txRecords[txHash] = (blkHash, uint64(i))
@@ -822,7 +939,6 @@ proc forkChoice*(c: ForkedChainRef,
     if safe.isOk:
       c.fcuSafe.number = safe.number
       c.fcuSafe.hash = safeHash
-      ?safe.txFrame.fcuSafe(c.fcuSafe)
 
   if headHash == c.latest.hash:
     if finalizedHash == zeroHash32:
@@ -893,12 +1009,9 @@ proc setHead*(c: ForkedChainRef, headHash: Hash32): Result[void, string] =
 
   for branchHead in c.heads:
     # Walk each branch tip first so that children are disposed before parents.
-    for it in ancestors(branchHead):
-      if it.hash in keep or it.txFrame.isNil:
-        # Reached the new head's lineage, or a segment already removed while
-        # walking a previous branch.
-        break
-      c.removeBlockFromCache(it)
+    # Stops at the new head's lineage, or at a segment already removed while
+    # walking a previous branch.
+    c.removeBranchFromCache(branchHead, keep)
 
   c.heads = @[head]
   c.latest = head
@@ -907,7 +1020,6 @@ proc setHead*(c: ForkedChainRef, headHash: Hash32): Result[void, string] =
   if c.fcuSafe.number > head.number:
     # The old safe block was discarded, clamp it to the new head.
     c.fcuSafe = FcuHashAndNumber(hash: head.hash, number: head.number)
-    ?head.txFrame.fcuSafe(c.fcuSafe)
 
   ok()
 
@@ -1050,7 +1162,7 @@ func memoryTxHashesForBlock*(c: ForkedChainRef, blockHash: Hash32): Opt[seq[Hash
   Opt.some(cachedTxHashes.mapIt(it[0]))
 
 proc latestBlock*(c: ForkedChainRef): Result[Block, string] =
-  c.latest.txFrame.getEthBlock(c.latest.hash)
+  c.baseTxFrame.getEthBlock(c.latest.hash)
 
 proc getBadBlocks*(c: ForkedChainRef): seq[(Block, Opt[BlockAccessListRef])] =
   var blks: seq[(Block, Opt[BlockAccessListRef])]
@@ -1084,14 +1196,14 @@ func safeHeader*(c: ForkedChainRef): Header =
   c.base.header
 
 proc finalizedBlock*(c: ForkedChainRef): Result[Block, string] =
-  c.hashToBlock.withValue(c.latestFinalized.hash, loc):
-    return loc[].txFrame.getEthBlock(loc[].hash)
+  if c.hashToBlock.hasKey(c.latestFinalized.hash):
+    return c.baseTxFrame.getEthBlock(c.latestFinalized.hash)
 
   c.baseTxFrame.getEthBlock(c.base.hash)
 
 proc safeBlock*(c: ForkedChainRef): Result[Block, string] =
-  c.hashToBlock.withValue(c.fcuSafe.hash, loc):
-    return loc[].txFrame.getEthBlock(loc[].hash)
+  if c.hashToBlock.hasKey(c.fcuSafe.hash):
+    return c.baseTxFrame.getEthBlock(c.fcuSafe.hash)
 
   c.baseTxFrame.getEthBlock(c.base.hash)
 
@@ -1115,16 +1227,12 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
 # TODO: Doesn't fetch data from portal
 # Aristo returns empty txs for both non-existent blocks and existing blocks with no txs [ Solve ? ]
 proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
-  c.hashToBlock.withValue(blockHash, loc):
-    return loc[].txFrame.getBlockBody(loc[].header)
   c.baseTxFrame.getBlockBody(blockHash)
 
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # used by getPayloadBodiesByHash
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
   # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
-  c.hashToBlock.withValue(blockHash, loc):
-    return loc[].txFrame.getEthBlock(loc[].hash)
   var header = ?c.baseTxFrame.getBlockHeader(blockHash)
   var blockBody = c.baseTxFrame.getBlockBody(header).valueOr:
     # Serve portal data if block not found in db
@@ -1137,10 +1245,6 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   ok(EthBlock.init(move(header), move(blockBody)))
 
 proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV1, string] =
-  c.hashToBlock.withValue(blockHash, loc):
-    let blk = ?loc[].txFrame.getEthBlock(loc[].hash)
-    return ok(toPayloadBodyV1(blk))
-
   var header = ?c.baseTxFrame.getBlockHeader(blockHash)
   var blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
 
@@ -1154,10 +1258,6 @@ proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Executio
   move(blk)
 
 proc payloadBodyV2ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV2, string] =
-  c.hashToBlock.withValue(blockHash, loc):
-    let blk = ?loc[].txFrame.getEthBlock(loc[].hash)
-    return ok(toPayloadBodyV2(blk, ?loc[].txFrame.getBlockAccessList(loc[].hash)))
-
   var header = ?c.baseTxFrame.getBlockHeader(blockHash)
   var blk = c.baseTxFrame.getExecutionPayloadBodyV2(header)
 
@@ -1191,7 +1291,7 @@ proc payloadBodyV1ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
 
   for it in ancestors(c.latest):
     if number >= it.number:
-      let blk = ?it.txFrame.getEthBlock(it.hash)
+      let blk = ?c.baseTxFrame.getEthBlock(it.hash)
       return ok(toPayloadBodyV1(blk))
 
   err("Block not found, number = " & $number)
@@ -1217,8 +1317,8 @@ proc payloadBodyV2ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
 
   for it in ancestors(c.latest):
     if number >= it.number:
-      let blk = ?it.txFrame.getEthBlock(it.hash)
-      return ok(toPayloadBodyV2(blk, ?it.txFrame.getBlockAccessList(it.hash)))
+      let blk = ?c.baseTxFrame.getEthBlock(it.hash)
+      return ok(toPayloadBodyV2(blk, ?c.baseTxFrame.getBlockAccessList(it.hash)))
 
   err("Block not found, number = " & $number)
 
@@ -1240,7 +1340,7 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
 
   for it in ancestors(c.latest):
     if number >= it.number:
-      return it.txFrame.getEthBlock(it.hash)
+      return c.baseTxFrame.getEthBlock(it.hash)
 
   err("Block not found, number = " & $number)
 
@@ -1250,32 +1350,18 @@ proc blockHeader*(c: ForkedChainRef, blk: BlockHashOrNumber): Result[Header, str
   c.headerByNumber(blk.number)
 
 proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[StoredReceipt], string] =
-  if blockHash != c.base.hash:
-    c.hashToBlock.withValue(blockHash, loc):
-      let header = ?loc[].txFrame.getBlockHeader(loc[].hash)
-      return loc[].txFrame.getReceipts(header.receiptsRoot)
-
   let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
     return err("Block header not found")
 
   c.baseTxFrame.getReceipts(header.receiptsRoot)
 
 proc receiptByBlockHashAndIndex*(c: ForkedChainRef, blockHash: Hash32, index: uint64): Result[StoredReceipt, string] =
-  if blockHash != c.base.hash:
-    c.hashToBlock.withValue(blockHash, loc):
-      let header = ?loc[].txFrame.getBlockHeader(loc[].hash)
-      return loc[].txFrame.getReceiptByIndex(header.receiptsRoot, index.uint16)
-
   let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
     return err("Block header not found")
 
   c.baseTxFrame.getReceiptByIndex(header.receiptsRoot, index.uint16)
 
 proc txByBlockHashAndIndex*(c: ForkedChainRef, blockHash: Hash32, index: uint64): Result[Transaction, string] =
-  if blockHash != c.base.hash:
-    c.hashToBlock.withValue(blockHash, loc):
-      return loc[].txFrame.getTransactionByIndex(loc[].header.txRoot, index.uint16)
-
   let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
     return err("Block header not found")
 
@@ -1294,7 +1380,7 @@ proc payloadBodyV1InMemory*(c: ForkedChainRef,
 
   for i in countdown(blocks.len-1, 0):
     let y = blocks[i]
-    let blk = y.txFrame.getEthBlock(y.hash).valueOr: continue
+    let blk = c.baseTxFrame.getEthBlock(y.hash).valueOr: continue
     list.add Opt.some(toPayloadBodyV1(blk))
 
 proc payloadBodyV2InMemory*(c: ForkedChainRef,
@@ -1310,8 +1396,9 @@ proc payloadBodyV2InMemory*(c: ForkedChainRef,
 
   for i in countdown(blocks.len-1, 0):
     let y = blocks[i]
-    let blk = y.txFrame.getEthBlock(y.hash).valueOr: continue
-    list.add Opt.some(toPayloadBodyV2(blk, y.txFrame.getBlockAccessList(y.hash).expect("ok")))
+    let blk = c.baseTxFrame.getEthBlock(y.hash).valueOr: continue
+    list.add Opt.some(
+      toPayloadBodyV2(blk, c.baseTxFrame.getBlockAccessList(y.hash).expect("ok")))
 
 func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, headHash: Hash32): bool =
   if blockHash == headHash:
@@ -1370,7 +1457,7 @@ iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Ha
   for it in ancestors(head):
     if toHash == it.hash:
       break
-    let body = it.txFrame.getBlockBody(it.header).valueOr(BlockBody())
+    let body = c.baseTxFrame.getBlockBody(it.header).valueOr(BlockBody())
     for tx in body.transactions:
       yield computeRlpHash(tx)
 

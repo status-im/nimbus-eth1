@@ -75,9 +75,14 @@ type
   GetBackendFn* = proc(): TypedBackendRef {.gcsafe, raises: [].}
     ## Get a reference to typed backend.
 
-  KvtTxRef* = ref object ## Transaction descriptor
+  KvtTxRef* = ref object
+    ## Pending write set.
+    ##
+    ## Unlike its Aristo counterpart this is not a layer in a stack: it has no
+    ## parent and reads never cascade. A write set collects the changes that
+    ## belong together and is either flushed to the backend atomically or
+    ## dropped wholesale on `dispose`.
     db*: KvtDbRef ## Database descriptor
-    parent*: KvtTxRef ## Previous transaction
     sTab*: Table[seq[byte], seq[byte]] ## Structural data table
 
   KvtDbRef* = ref object of RootRef ## Backend interface.
@@ -132,33 +137,12 @@ func getOrVoid*(tab: Table[seq[byte], seq[byte]], w: seq[byte]): seq[byte] =
 func isValid*(key: seq[byte]): bool =
   key != EmptyBlob
 
-func isValid*(tx: KvtTxRef): bool =
-  tx != KvtTxRef(nil)
-
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
 # ------------------------------------------------------------------------------
 
 # Don't put in a hash!
 func hash*(db: KvtDbRef): Hash {.error.}
-
-iterator stack*(tx: KvtTxRef): KvtTxRef =
-  # Stack going from base to tx
-  var frames: seq[KvtTxRef]
-  var tx = tx
-  while tx != nil:
-    frames.add tx
-    tx = tx.parent
-
-  while frames.len > 0:
-    yield frames.pop()
-
-iterator rstack*(tx: KvtTxRef): KvtTxRef =
-  var tx = tx
-  # Stack in reverse order
-  while tx != nil:
-    yield tx
-    tx = tx.parent
 
 # ------------------------------------------------------------------------------
 # End

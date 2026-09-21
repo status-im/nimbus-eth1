@@ -141,6 +141,7 @@ proc loadBranchTxFrames(parent: BlockRef;
     let b = blocks[i]
     let frame = srcBase.loadTxFrameAsChild(p.txFrame, b.hash).valueOr:
       return err($error)
+    frame.blockHashFn = branchBlockHashFn(p)
     b.txFrame = frame
     # The blob has been materialised into memory; drop the on-disk copy so
     # it doesn't accumulate across restart/prune cycles.  The delete sits in
@@ -310,20 +311,11 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
       fc.reset(prevBase)
       return err("corrupted FC serialization: deserialized node should have txFrame")
 
-  fc.hashToBlock.withValue(fc.fcuHead.hash, val) do:
-    let txFrame = val[].txFrame
-    ?txFrame.setHead(val[].header, fc.fcuHead.hash)
-    ?txFrame.fcuHead(fc.fcuHead.hash, fc.fcuHead.number)
-
-  fc.hashToBlock.withValue(fc.fcuSafe.hash, val) do:
-    let txFrame = val[].txFrame
-    ?txFrame.fcuSafe(fc.fcuSafe.hash, fc.fcuSafe.number)
-
+  # The head/safe/finalized pointers are in-memory state; they are written to
+  # the database, clamped to the base, when the base moves.
   fc.hashToBlock.withValue(fc.latestFinalized.hash, val) do:
     # Restore finalized marker
     for it in loopNotFinalized(val[]):
       it.finalize()
-    let txFrame = val[].txFrame
-    ?txFrame.fcuFinalized(fc.latestFinalized.hash, fc.latestFinalized.number)
 
   ok()

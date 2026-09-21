@@ -149,6 +149,14 @@ proc getBlockHash*(
     wrapRlpException info:
       return ok(rlp.decode(pending.unsafeGet(), Hash32))
 
+  # Blocks that have not been persisted yet are not in the database under their
+  # number - the mapping there is canonical-only - so ask the frame's branch
+  # first. Below the base block every branch agrees with the database.
+  if db.blockHashFn != nil:
+    let branchHash = db.blockHashFn(n)
+    if branchHash.isSome():
+      return ok(branchHash.unsafeGet())
+
   when compileOption("threads"):
     let
       kvt = db.kTx.db
@@ -243,8 +251,10 @@ proc getAncestorsHashes*(
 
 proc addBlockNumberToHashLookup*(
     db: CoreDbTxRef; blockNumber: BlockNumber, blockHash: Hash32) =
-  # TODO: Once we remove the kvt frame layers, this function should
-  # write to the kvt block hashes cache.
+  ## Record the canonical block at `blockNumber`. This mapping has a single
+  ## slot per number, so it must only ever be written for blocks known to be
+  ## canonical - see `persistHeaderAndSetHead` and `ForkedChain.updateBase`.
+  ## The backend block hash cache is kept in sync when the write is flushed.
   let blockNumberKey = blockNumberToHashKey(blockNumber)
   var encodedHash = rlp.encode(blockHash)
   db.putMove(blockNumberKey.toOpenArray, encodedHash).isOkOr:
@@ -265,8 +275,6 @@ proc persistTransactions*(
     var encodedTx = rlp.encode(tx)
     let
       txHash = keccak256(encodedTx)
-      blockKey = transactionHashToBlockKey(txHash)
-      txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
       key = hashIndexKey(txRoot, idx.uint16)
 
     txHashes.add txHash
@@ -274,11 +282,36 @@ proc persistTransactions*(
     db.putMove(key, encodedTx).isOkOr:
       raiseAssert info & ": " & $$error
 
+  move(txHashes)
+
+proc persistTransactionIndex*(
+    db: CoreDbTxRef;
+    blockNumber: BlockNumber;
+    txHashes: openArray[Hash32];
+      ) =
+  ## Record where each transaction can be found. The entry is keyed by
+  ## transaction hash but points at a block *number*, so it only makes sense
+  ## for blocks known to be canonical - the same rule as
+  ## `addBlockNumberToHashLookup`.
+  const
+    info = "persistTransactionIndex()"
+
+  for idx, txHash in txHashes:
+    let
+      blockKey = transactionHashToBlockKey(txHash)
+      txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
+
     var encodedTxKey = rlp.encode(txKey)
     db.putMove(blockKey.toOpenArray, encodedTxKey).isOkOr:
       raiseAssert info & ": " & $$error
 
-  move(txHashes)
+proc transactionHashes*(db: CoreDbTxRef; txRoot: Hash32): seq[Hash32] =
+  ## Recover the hashes of a block's transactions, in order, by reading the
+  ## transactions back from the database. For callers that no longer have them
+  ## at hand - notably `ForkedChain`, which writes the body when the block
+  ## validates but only learns that the block is canonical much later.
+  for encodedTx in db.getBlockTransactionData(txRoot):
+    result.add keccak256(encodedTx)
 
 proc getTransactionByIndex*(
     db: CoreDbTxRef;
@@ -632,7 +665,9 @@ proc persistHeader*(
   # each block to simplify totalDifficulty reporting
   # TODO get rid of this and store a single value
   ?db.persistScore(blockHash, score)
-  db.addBlockNumberToHashLookup(header.number, blockHash)
+  # NOTE the canonical number -> hash mapping is deliberately *not* written
+  # here: this function is also used for blocks on branches that may yet lose.
+  # Canonical callers use `persistHeaderAndSetHead` instead.
   ok()
 
 proc persistHeaderAndSetHead*(
@@ -642,6 +677,7 @@ proc persistHeaderAndSetHead*(
     startOfHistory = GENESIS_PARENT_HASH;
       ): Result[void, string] =
   ?db.persistHeader(blockHash, header, startOfHistory)
+  db.addBlockNumberToHashLookup(header.number, blockHash)
 
   if header.parentHash != startOfHistory:
     let

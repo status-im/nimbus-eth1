@@ -92,6 +92,9 @@ suite "Block access list pruner tests":
 
       let blkHash = header.computeBlockHash
       txFrame.persistHeader(blkHash, header).expect("persistHeader")
+      # The pruner walks the chain by number, so the canonical mapping has to
+      # be written too - `persistHeader` only writes hash-keyed data.
+      txFrame.addBlockNumberToHashLookup(header.number, blkHash)
       hashes.add blkHash
 
       if hasBal:

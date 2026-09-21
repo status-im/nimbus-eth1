@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  results,
   eth/common/headers,
   ../../../db/core_db
 
@@ -62,3 +63,25 @@ iterator ancestors*(init: BlockRef): BlockRef =
 iterator loopNotFinalized*(init: BlockRef): BlockRef =
   loopItImpl(notFinalized, init)
 
+func branchBlockHashFn*(parent: BlockRef): BlockHashFn =
+  ## Resolve a block number against the branch that ends at `parent`.
+  ##
+  ## Blocks that have not been persisted yet are not in the database under
+  ## their number - that mapping is canonical-only - so `BLOCKHASH` and
+  ## friends would otherwise see the canonical chain while executing on a
+  ## competing branch. Numbers below the base block are not on this branch
+  ## either, but there all branches agree with the database, so `none` is the
+  ## right answer there too.
+  result = proc(n: BlockNumber): Opt[Hash32] {.gcsafe, raises: [].} =
+    # A nil `txFrame` marks a block that has left the DAG, either persisted or
+    # pruned; in both cases the database has the answer (or there is none).
+    if parent.isNil or parent.txFrame.isNil or n > parent.number:
+      return Opt.none(Hash32)
+    for it in ancestors(parent):
+      if it.txFrame.isNil:
+        break
+      if it.number == n:
+        return Opt.some(it.hash)
+      if it.number < n:
+        break
+    Opt.none(Hash32)

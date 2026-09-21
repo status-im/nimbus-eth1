@@ -153,6 +153,14 @@ proc persist*(db: CoreDbRef, txFrame: CoreDbTxRef) =
     discard kvtBatch.expect("should always be able to create batch")
     discard mptBatch.expect("should always be able to create batch")
 
+proc flushKvt*(tx: CoreDbTxRef) =
+  ## Write this frame's pending `KVT` data to disk right away, leaving the
+  ## write set empty. Used for data that is known-good the moment it is
+  ## produced - notably a block's header and body once it has validated - so
+  ## that it need not be held in memory until the state it belongs to is
+  ## persisted.
+  tx.kTx.persist()
+
 proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
   ## This function returns the block number stored with the latest `persist()`
   ## directive.
@@ -494,7 +502,7 @@ proc txFrameBegin*(db: CoreDbRef): CoreDbTxRef =
   ## Constructor
   ##
   let
-    kTx = db.kvt.txFrameBegin(nil)
+    kTx = db.kvt.txFrameBegin()
     aTx = db.mpt.txFrameBegin(nil, false)
 
   CoreDbTxRef(kTx: kTx, aTx: aTx)
@@ -505,16 +513,27 @@ proc txFrameBegin*(
   ): CoreDbTxRef =
   ## Constructor
   ##
+  ## The `KVT` write set starts out empty and unlinked from the parent: KVT
+  ## data is written to disk as soon as it is known to be good, so there is
+  ## nothing to cascade. The branch-local block hash resolver *is* inherited so
+  ## that frames derived for simulation (`eth_call`, block building, witness
+  ## generation) keep executing against the branch they were taken from.
   let
-    kTx = parent.kTx.db.txFrameBegin(parent.kTx)
+    kTx = parent.kTx.db.txFrameBegin()
     aTx = parent.aTx.db.txFrameBegin(parent.aTx, moveParentHashKeys)
 
-  CoreDbTxRef(kTx: kTx, aTx: aTx)
+  CoreDbTxRef(kTx: kTx, aTx: aTx, blockHashFn: parent.blockHashFn)
 
 proc parent*(tx: CoreDbTxRef): CoreDbTxRef =
-  assert not tx.kTx.parent.isNil()
+  ## A read-only view of the state this frame was taken from, used to read
+  ## while `tx` itself is being written (the parallel prefetchers rely on
+  ## that). Its `KVT` write set is empty and writing to it would be silently
+  ## discarded, so treat the result as read-only.
   assert not tx.aTx.parent.isNil()
-  CoreDbTxRef(kTx: tx.kTx.parent, aTx: tx.aTx.parent)
+  CoreDbTxRef(
+    kTx: tx.kTx.db.txFrameBegin(),
+    aTx: tx.aTx.parent,
+    blockHashFn: tx.blockHashFn)
 
 proc checkpoint*(tx: CoreDbTxRef, blockNumber: BlockNumber, skipSnapshot = false) =
   tx.aTx.checkpoint(blockNumber, skipSnapshot)

@@ -11,10 +11,9 @@
 {.push raises: [].}
 
 import
-  std/[sets, tables],
+  std/tables,
   results,
-  ./kvt_desc,
-  ../../utils/mergeutils
+  ./kvt_desc
 
 # ------------------------------------------------------------------------------
 # Public functions: get function
@@ -26,27 +25,25 @@ func layersLen*(db: KvtTxRef; key: openArray[byte]|seq[byte]): Opt[int] =
   when key isnot seq[byte]:
     let key = @key
 
-  for w in db.rstack:
-    w.sTab.withValue(key, item):
-      return Opt.some(item[].len())
+  db.sTab.withValue(key, item):
+    return Opt.some(item[].len())
 
   Opt.none(int)
 
 func layersHasKey*(db: KvtTxRef; key: openArray[byte]|seq[byte]): bool =
-  ## Return `true` if the argument key is cached.
+  ## Return `true` if the argument key has a pending write.
   ##
   db.layersLen(key).isSome()
 
 func layersGet*(db: KvtTxRef; key: openArray[byte]|seq[byte]): Opt[seq[byte]] =
-  ## Find an item on the cache layers. An `ok()` result might contain an
-  ## empty value if it is stored on the cache  that way.
+  ## Find an item in the pending write set. An `ok()` result might contain an
+  ## empty value if it is stored that way (ie a pending delete).
   ##
   when key isnot seq[byte]:
     let key = @key
 
-  for w in db.rstack:
-    w.sTab.withValue(key, item):
-      return Opt.some(item[])
+  db.sTab.withValue(key, item):
+    return Opt.some(item[])
 
   Opt.none(seq[byte])
 
@@ -55,22 +52,15 @@ func layersGet*(db: KvtTxRef; key: openArray[byte]|seq[byte]): Opt[seq[byte]] =
 # ------------------------------------------------------------------------------
 
 func layersPutMove*(db: KvtTxRef; key: openArray[byte]; data: var seq[byte]) =
-  ## Store a (potentally empty) value on the top layer, taking over the
+  ## Store a (potentally empty) value in the write set, taking over the
   ## contents of `data` which is left empty
   swap(db.sTab.mgetOrPut(@key, EmptyBlob), data)
   data.setLen(0)
 
 func layersPut*(db: KvtTxRef; key: openArray[byte]; data: openArray[byte]) =
-  ## Store a (potentally empty) value on the top layer
+  ## Store a (potentally empty) value in the write set
   var data = @data
   db.layersPutMove(key, data)
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-proc mergeAndReset*(trg, src: KvtTxRef) =
-  mergeAndReset(trg.sTab, src.sTab)
 
 # ------------------------------------------------------------------------------
 # End

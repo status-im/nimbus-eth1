@@ -848,6 +848,9 @@ proc runLedgerBasicOperationsTests() =
         header = Header(number: 1)
         blockHash = header.computeBlockHash()
       db.persistHeader(blockHash, header).expect("success")
+      # `persistHeader` only writes hash-keyed data; the number -> hash lookup
+      # is canonical-chain metadata and is written separately.
+      db.addBlockNumberToHashLookup(header.number, blockHash)
 
       let ledger = LedgerRef.init(db, false)
       check:
@@ -860,9 +863,10 @@ proc runLedgerBasicOperationsTests() =
         header1 = Header(number: 1)
         header2 = Header(number: 2)
         header3 = Header(number: 3)
-      db.persistHeader(header1.computeBlockHash(), header1).expect("success")
-      db.persistHeader(header2.computeBlockHash(), header2).expect("success")
-      db.persistHeader(header3.computeBlockHash(), header3).expect("success")
+      for h in [header1, header2, header3]:
+        let blockHash = h.computeBlockHash()
+        db.persistHeader(blockHash, h).expect("success")
+        db.addBlockNumberToHashLookup(h.number, blockHash)
 
       let ledger = LedgerRef.init(db, false)
       check ledger.getBlockHashesCache().len() == 0
@@ -872,7 +876,8 @@ proc runLedgerBasicOperationsTests() =
 
       check:
         ledger.getBlockHashesCache().len() > 0
-        ledger.getBlockHashesCache().get(header1.number).isSome()
+        ledger.getBlockHashesCache().get(header1.number) ==
+          Opt.some(header1.computeBlockHash())
 
       ledger.clearBlockHashesCache()
       check ledger.getBlockHashesCache().len() == 0

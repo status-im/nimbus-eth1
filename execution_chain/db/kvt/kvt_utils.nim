@@ -73,7 +73,7 @@ proc putMove*(
     data: var seq[byte];              # Value of database record to store
       ): Result[void,KvtError] =
   ## For the argument `key` associated the argument `data` as value (which
-  ## will be marked in the top layer cache.) The contents of `data` are taken
+  ## will be marked in the pending write set.) The contents of `data` are taken
   ## over, leaving it empty.
   if key.len == 0:
     return err(KeyInvalid)
@@ -88,7 +88,7 @@ proc put*(
     key: openArray[byte];             # Key of database record to store
     data: openArray[byte];            # Value of database record to store
       ): Result[void,KvtError] =
-  ## Variant of `putMove()` copying `data` into the top layer cache.
+  ## Variant of `putMove()` copying `data` into the pending write set.
   var data = @data
   db.putMove(key, data)
 
@@ -98,7 +98,7 @@ proc del*(
     key: openArray[byte];             # Key of database record to delete
       ): Result[void,KvtError] =
   ## For the argument `key` delete the associated value (which will be marked
-  ## in the top layer cache.)
+  ## in the pending write set.)
   if key.len == 0:
     return err(KeyInvalid)
 
@@ -112,15 +112,13 @@ proc get*(
     key: openArray[byte];             # Key of database record
       ): Result[seq[byte],KvtError] =
   ## For the argument `key` return the associated value preferably from the
-  ## top layer, or the database otherwise.
+  ## pending write set, or the database otherwise.
   ##
   if key.len == 0:
     return err(KeyInvalid)
 
-  let key = @key
-  for w in db.rstack:
-    w.sTab.withValue(key, item):
-      return ok(item[])
+  db.sTab.withValue(@key, item):
+    return ok(item[])
 
   db.db.getBe key
 
@@ -129,7 +127,7 @@ proc len*(
     key: openArray[byte];             # Key of database record
       ): Result[int,KvtError] =
   ## For the argument `key` return the length of the associated value,
-  ## preferably from the top layer, or the database otherwise.
+  ## preferably from the pending write set, or the database otherwise.
   ##
   if key.len == 0:
     return err(KeyInvalid)
@@ -149,7 +147,7 @@ proc multiGet*(
     remainingKeys: seq[seq[byte]] # keys to fetch from the db backend
     keyIndexes: seq[int] # record the indexes from the original keys list
 
-  # First fetch each key from the in memory layers
+  # First fetch each key from the pending write set
   for i, k in keys:
     var value = db.layersGet(k)
     if value.isSome():

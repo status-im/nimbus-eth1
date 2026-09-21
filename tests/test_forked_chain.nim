@@ -118,21 +118,25 @@ template checkHeadHash(chain: ForkedChainRef, hashParam: Hash32) =
   let
     headHash = hashParam
     txFrame = chain.txFrame(headHash)
-    res = txFrame.getCanonicalHeaderHash()
 
+  # The canonical head pointer is in-memory state for as long as the block it
+  # names is in memory; the database only learns about it, clamped to the base,
+  # when the base moves.
+  check chain.fcuHead.hash == headHash
+
+  # The header itself reaches the database as soon as the block validates,
+  # whatever branch it is on.
+  check txFrame.getBlockHeader(headHash).isOk
+
+  # On disk the canonical head tracks the base - everything above it may still
+  # be reorged away.
+  let res = chain.baseTxFrame.getCanonicalHeaderHash()
   check res.isOk
   if res.isErr:
     debugEcho "Canonical head hash should exists: ", res.error
   else:
-    let canonicalHeadHash = res.get
-    check headHash == canonicalHeadHash
-
-  # also check if the header actually exists
-  check txFrame.getCanonicalHead().isOk
-  let rc = txFrame.fcuHead()
-  check rc.isOk
-  if rc.isErr:
-    debugEcho "FCU HEAD: ", rc.error
+    check res.get == chain.base.hash
+  check chain.baseTxFrame.getCanonicalHead().isOk
 
 func blockHash(x: Block): Hash32 =
   x.header.computeBlockHash
@@ -513,11 +517,12 @@ suite "ForkedChainRef tests":
     # head - baseDistance must been persisted
     checkPersisted(chain, blk3)
 
-    # It is FC module who is responsible for saving
-    # finalized hash on a correct txFrame.
-    let txFrame = chain.txFrame(blk6.blockHash)
-    let savedFinalized = txFrame.fcuFinalized().expect("OK")
-    check blk6.blockHash == savedFinalized.hash
+    # The finalized pointer that reaches the database is the base: the base
+    # always sits on the finalized lineage and is the last block whose state
+    # was actually written, so it is the furthest the database may point.
+    let savedFinalized = chain.baseTxFrame.fcuFinalized().expect("OK")
+    check chain.base.hash == savedFinalized.hash
+    check not chain.base.notFinalized
 
     # make sure aristo not wipe out baggage
     check chain.wdWritten(blk3) == 3
@@ -1364,6 +1369,90 @@ suite "ForkedChainRef tests":
     check vmState.ledger.txFrame == txFrame3
 
     vmState.dispose()
+
+  test "block data reaches the database as soon as the block validates":
+    const info = "eager block write"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+
+    # The base is still the genesis block - no state has been persisted - yet
+    # the blocks themselves are already readable straight from the database.
+    check chain.base.hash == genesisHash
+    check chain.baseTxFrame.getBlockHeader(blk2.blockHash).isOk
+    check chain.baseTxFrame.getEthBlock(blk2.blockHash).isOk
+    check chain.baseTxFrame.getWithdrawals(
+      blk2.header.withdrawalsRoot.get).expect("withdrawals").len == 2
+
+    # Nothing of it is left pending in the block's own frame.
+    check chain.txFrame(blk2.blockHash).kTx.sTab.len == 0
+    check chain.validate info
+
+  test "a side branch does not disturb the canonical number -> hash mapping":
+    const info = "canonical number to hash"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
+    for blk in [blk1, blk2, blk3, blk4]:
+      checkImportBlock(chain, blk)
+    # B4 is a sibling of blk4: same number, different hash.
+    checkImportBlock(chain, B4)
+    checkImportBlock(chain, B5)
+    check chain.heads.len == 2
+
+    # Height 4 is still contested, so the database says nothing about it - the
+    # mapping there is canonical-only and neither branch has been persisted.
+    check chain.baseTxFrame.getBlockHash(4).isErr
+
+    # Each branch answers for its own lineage, which is what `BLOCKHASH` sees
+    # while executing on that branch.
+    check chain.txFrame(blk4.blockHash).getBlockHash(4).expect("hash") ==
+      blk4.blockHash
+    check chain.txFrame(B5.blockHash).getBlockHash(4).expect("hash") ==
+      B4.blockHash
+    # Below the fork point the two agree, and so does the database.
+    check chain.txFrame(B5.blockHash).getBlockHash(3).expect("hash") ==
+      blk3.blockHash
+
+    # Finality resolves the contest; now the database learns the mapping.
+    checkForkChoice(chain, blk4, blk4)
+    check chain.base.hash == blk4.blockHash
+    check chain.baseTxFrame.getBlockHash(4).expect("hash") == blk4.blockHash
+    check chain.validate info
+
+  test "pruning a losing branch deletes its data but keeps shared roots":
+    const info = "prune losing branch"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7]:
+      checkImportBlock(chain, blk)
+    for blk in [B4, B5, B6, B7]:
+      checkImportBlock(chain, blk)
+    check chain.heads.len == 2
+
+    # Blocks of the same height carry the same withdrawals here, so the two
+    # branches share a withdrawals root - content-addressed data is not owned
+    # by any one block.
+    check B4.header.withdrawalsRoot == blk4.header.withdrawalsRoot
+
+    # Both branches were written optimistically.
+    check chain.baseTxFrame.getBlockHeader(B4.blockHash).isOk
+    check chain.baseTxFrame.getBlockHeader(B7.blockHash).isOk
+
+    # Finalizing on the canonical branch rules the B branch out for good.
+    checkForkChoice(chain, blk7, blk5)
+    check chain.heads.len == 1
+
+    check chain.baseTxFrame.getBlockHeader(B4.blockHash).isErr
+    check chain.baseTxFrame.getBlockHeader(B7.blockHash).isErr
+    check chain.baseTxFrame.getScore(B7.blockHash).isNone
+
+    # The canonical branch is untouched, including the withdrawals it shared
+    # with the branch that was just deleted.
+    check chain.baseTxFrame.getBlockHeader(blk4.blockHash).isOk
+    check chain.baseTxFrame.getWithdrawals(
+      blk4.header.withdrawalsRoot.get).expect("withdrawals").len == 4
+    check chain.validate info
 
 procSuite "ForkedChain mainnet replay":
   # A short mainnet replay test to check that the first few hundred blocks can

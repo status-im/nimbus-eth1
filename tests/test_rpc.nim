@@ -89,7 +89,9 @@ proc persistFixtureBlock(chainDB: CoreDbTxRef) =
   # Manually inserting header to avoid any parent checks
   discard chainDB.put(genericHashKey(header.computeBlockHash).toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header.number, header.computeBlockHash)
-  chainDB.persistTransactions(header.number, header.txRoot, getBlockBody4514995().transactions)
+  let txHashes = chainDB.persistTransactions(
+    header.number, header.txRoot, getBlockBody4514995().transactions)
+  chainDB.persistTransactionIndex(header.number, txHashes)
   chainDB.persistReceipts(header.receiptsRoot, getReceipts4514995())
 
 proc setupConfig(): ExecutionClientConf =

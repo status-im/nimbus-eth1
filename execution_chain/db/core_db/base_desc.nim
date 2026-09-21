@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  eth/common/[base, hashes],
   results,
   ../[aristo, kvt]
 
@@ -52,10 +53,19 @@ type
     mpt*: AristoDbRef           ## `Aristo` database
     kvt*: KvtDbRef              ## `KVT` key-value table
 
+  BlockHashFn* =
+    proc(n: BlockNumber): Opt[Hash32] {.gcsafe, raises: [].}
+    ## Resolves a block number to the block hash on *this* frame's branch.
+    ## `ForkedChain` installs one on every block frame so that `BLOCKHASH` and
+    ## friends see the branch being executed rather than the canonical chain;
+    ## `Opt.none` means "not on this branch", ie fall back to the database,
+    ## which is canonical below the base block.
+
   CoreDbTxRef* = ref object
     ## Transaction descriptor
     aTx*: AristoTxRef           ## `Aristo` transaction (if any)
-    kTx*: KvtTxRef              ## `KVT` transaction (if any)
+    kTx*: KvtTxRef              ## Pending `KVT` write set
+    blockHashFn*: BlockHashFn   ## Branch-local number -> hash, may be nil
 
   CoreDbError* = object
     ## Generic error object
