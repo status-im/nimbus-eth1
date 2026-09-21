@@ -193,12 +193,10 @@ proc assembleMptNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   if ctx.pool.resetReq:                             # Oops, something failed
     return SnapClear
   if ctx.pool.newCoreDb.stateRoot != zeroHash32:
-    return SnapStop                                 # FIXME, must change
+    return SnapStop
   # Reaching here would be quite unusual as this state is handled
   # by the deamon in the foreground.
   SnapAssembleMpt
-
-# TBD ..
 
 func stopNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   SnapStop
@@ -215,9 +213,9 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   # ::
   #               .------------> idle ------------.
   #               |                |              |
-  #               |                v              |
-  #               +------------ resume            |
-  #               |                |              |
+  #                \               v              |
+  #                 +---------- resume            |
+  #                /               |              |
   #               |                v              v
   #               |    .--+--> balsFetch -----> clear <---.
   #               |    |  |        |              |       |
@@ -235,12 +233,9 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   #               |                |                      |
   #               |                v                      |
   #               `----------> assembleMpt ---------------'
-  #                               |
-  #                               v
-  #                             [...]
-  #                               |
-  #                               v
-  #                             stop
+  #                                |
+  #                                v
+  #                              stop
   #
   let newState =
     case ctx.pool.syncState:
@@ -264,9 +259,6 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
       ctx.stateForwardNext info
     of SnapAssembleMpt:
       ctx.assembleMptNext info
-
-    # [..]
-
     of SnapStop:
       ctx.stopNext info
 

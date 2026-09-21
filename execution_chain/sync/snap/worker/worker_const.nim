@@ -25,8 +25,7 @@ type
     SnapBalsFetchFinish            ## Wait for sync before proceeding
     SnapStateForward               ## Apply BALs and advance state
     SnapAssembleMpt                ## Assemble Aristo database
-    # ..                           ## TBD ..
-    SnapStop                       ## TBD ..
+    SnapStop                       ## End of snap sync
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
