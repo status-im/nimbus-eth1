@@ -210,7 +210,7 @@ proc latestValidHash*(txFrame: CoreDbTxRef,
 proc invalidFCU*(validationError: string,
                  chain: ForkedChainRef,
                  header: Header): ForkchoiceUpdatedResponse =
-  let parent = chain.headerByHash(header.parentHash).valueOr:
+  let parent = chain.activeHeaderByHash(header.parentHash).valueOr:
     return invalidFCU(validationError)
 
   let blockHash =

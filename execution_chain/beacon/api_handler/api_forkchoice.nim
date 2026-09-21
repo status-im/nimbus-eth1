@@ -102,7 +102,11 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # Check whether we have the block yet in our database or not. If not, we'll
   # need to either trigger a sync, or to reject this forkchoice update for a
   # reason.
-  let header = chain.headerByHash(headHash).valueOr:
+  # `activeHeaderByHash`, not `headerByHash`: a block whose header merely sits
+  # in the database - left over from a previous run, or on a branch that lost -
+  # is not something fork choice can move the head to. Treating it as known
+  # skips the syncer hand-off below and wedges the node.
+  let header = chain.activeHeaderByHash(headHash).valueOr:
     # If this block was previously invalidated, keep rejecting it here too
     let res = ben.checkInvalidAncestor(headHash, headHash)
     if res.isSome:

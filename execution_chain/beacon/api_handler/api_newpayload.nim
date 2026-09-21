@@ -292,7 +292,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # our live chain. As such, payload execution will not permit reorgs and thus
   # will not trigger a sync cycle. That is fine though, if we get a fork choice
   # update after legit payload executions.
-  let parent = chain.headerByHash(header.parentHash).valueOr:
+  let parent = chain.activeHeaderByHash(header.parentHash).valueOr:
     return ben.delayPayloadImport(blockHash, blk, blockAccessList)
 
   # We have an existing parent, do some sanity checks to avoid the beacon client

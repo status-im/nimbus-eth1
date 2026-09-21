@@ -160,7 +160,7 @@ proc generateExecutionBundle*(
       # Build on the forkchoiceUpdated headBlockHash: `chain.latest` tracks the
       # most recently imported block, which may be a sibling of the requested
       # head when multiple valid payloads exist at the same height.
-      headBlock = ben.chain.headerByHash(headHash).valueOr:
+      headBlock = ben.chain.activeHeaderByHash(headHash).valueOr:
         return err("payload build parent not found: " & headHash.short)
 
     xp.prevRandao   = attrs.prevRandao

@@ -1454,6 +1454,45 @@ suite "ForkedChainRef tests":
       blk4.header.withdrawalsRoot.get).expect("withdrawals").len == 4
     check chain.validate info
 
+  test "a block left on disk by a previous run is not mistaken for ours":
+    const info = "stale on-disk block"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    for blk in [blk1, blk2, blk3]:
+      checkImportBlock(chain, blk)
+    check chain.validate info & " (1)"
+
+    # Restart without the DAG. The FC state blob is only written on a clean
+    # shutdown and `deserialize` can legitimately fail, but the block data is
+    # on disk regardless - it went there the moment each block validated.
+    let restarted = ForkedChainRef.init(com)
+    check restarted.base.hash == genesisHash
+    check restarted.hashToBlock.len == 1
+
+    # The header is readable, which is what keeps `eth_getBlockByHash` working
+    # for it...
+    check restarted.headerByHash(blk3.blockHash).isOk
+
+    # ...but the chain has nowhere to put it, so fork choice cannot use it.
+    check (waitFor restarted.forkChoice(
+      blk3.blockHash, blk3.blockHash)).isErr
+
+    # Hence the two lookups must disagree here: callers asking "can we act on
+    # this block" have to use `activeHeaderByHash`, or they skip the syncer
+    # hand-off and wedge.
+    check restarted.activeHeaderByHash(blk3.blockHash).isErr
+
+    # A persisted canonical ancestor is still ours, though.
+    check restarted.activeHeaderByHash(genesisHash).isOk
+
+    # Re-importing rebuilds the DAG, and then the block is ours again.
+    checkImportBlock(restarted, blk1)
+    checkImportBlock(restarted, blk2)
+    checkImportBlock(restarted, blk3)
+    check restarted.activeHeaderByHash(blk3.blockHash).isOk
+    check (waitFor restarted.forkChoice(blk3.blockHash, blk3.blockHash)).isOk
+    check restarted.validate info & " (2)"
+
 procSuite "ForkedChain mainnet replay":
   # A short mainnet replay test to check that the first few hundred blocks can
   # be imported using a typical importBlock / fcu sequence - this does not

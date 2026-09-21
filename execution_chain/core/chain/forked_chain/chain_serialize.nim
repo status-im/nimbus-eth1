@@ -46,10 +46,11 @@ type
 # ------------------------------------------------------------------------------
 
 func append(w: var RlpWriter, b: BlockRef) =
-  # Only the header is persisted in the block-index entry.  The full block
-  # body lives in the per-block txFrame blob (written separately under
-  # txFrameKey(b.hash)) and is no longer needed at deserialize time since
-  # we restore the txFrame directly instead of re-executing the block.
+  # Only the header is persisted in the block-index entry. The body went to
+  # the database under its own content-addressed keys when the block
+  # validated, so it is already there, and it is not needed at deserialize
+  # time anyway - the txFrame is restored directly rather than by re-executing
+  # the block.
   w.startList(3)
   w.append(b.header)
   w.append(b.hash)
@@ -206,9 +207,11 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
   for b in fc.hashToBlock.values:
     var encodedBlock = rlp.encode(b)
     ?txFrame.putMove(blockIndexKey(b.index), encodedBlock)
-    # Persist the per-block txFrame delta (Aristo + KVT) so deserialize can
-    # restore the in-memory frame without re-executing the block.  The base
-    # block shares its frame with the on-disk base and needs no blob.
+    # Persist the per-block state delta so deserialize can restore the
+    # in-memory frame without re-executing the block. Only Aristo is stored:
+    # the key-value side of the frame is empty, having been flushed to disk
+    # when the block validated. The base block shares its frame with the
+    # on-disk base and needs no blob.
     if b != fc.base:
       ?txFrame.storeTxFrame(b.txFrame, b.hash)
 

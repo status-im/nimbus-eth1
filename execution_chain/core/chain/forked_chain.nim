@@ -1213,6 +1213,27 @@ proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string]
 
   c.baseTxFrame.getBlockHeader(blockHash)
 
+proc activeHeaderByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string] =
+  ## Like `headerByHash`, but only for blocks this chain can actually act on:
+  ## those in the in-memory DAG, plus persisted canonical ancestors.
+  ##
+  ## Blocks reach the database as soon as they validate, so a plain header
+  ## lookup also finds blocks on branches that have since been abandoned, and
+  ## blocks left over from a previous run whose DAG was not restored. Callers
+  ## deciding "do we have this block" in the sense of "can we move the head to
+  ## it / build on it" must use this: for anything else the answer is to ask
+  ## the syncer, not to proceed.
+  c.hashToBlock.withValue(blockHash, loc):
+    return ok(loc[].header)
+
+  let header = ?c.baseTxFrame.getBlockHeader(blockHash)
+  if header.number <= c.base.number and
+     c.baseTxFrame.getBlockHash(header.number).valueOr(default(Hash32)) == blockHash:
+    # A canonical block at or below the base - persisted, and still ours.
+    return ok(header)
+
+  err("Block not on the active chain: " & blockHash.short)
+
 proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint64), string] =
   if c.txRecords.hasKey(txHash):
     let (blockHash, txid) = c.txRecords(txHash)

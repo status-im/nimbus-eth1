@@ -296,7 +296,7 @@ proc resolveFinHash(hc: HeaderChainRef, f: Hash32) =
 
   let number = (
     hc.chain.quarantine.getHeader(f).map(toNumber) or hc.kvt.getNumber(f) or
-    hc.chain.headerByHash(f).map(toNumber)
+    hc.chain.activeHeaderByHash(f).map(toNumber)
   ).valueOr:
     hc.chain.pendingFCU = f
     return

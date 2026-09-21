@@ -189,7 +189,9 @@ proc assembleBlock*(
   # The build parent is always explicit: the engine API requires the payload
   # to sit on the forkchoiceUpdated headBlockHash, which need not be
   # `chain.latest` when sibling payloads exist at the same height.
-  let parentHeader = ?xp.chain.headerByHash(parentHash)
+  # Must be a block the chain is tracking: `chain.txFrame` silently falls back
+  # to the base frame for an unknown hash, which would build on the wrong state.
+  let parentHeader = ?xp.chain.activeHeaderByHash(parentHash)
   xp.updateVmState(parentHeader, parentHash)
 
   let com = xp.vmState.com
