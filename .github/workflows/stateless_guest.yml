@@ -20,6 +20,9 @@ on:
   push:
     branches:
       - master
+    # Guest releases; GitHub skips the path filters for tag pushes.
+    tags:
+      - 'stateless-guest-v*'
     paths-ignore:
       - 'doc/**'
       - 'portal/**'
@@ -144,3 +147,117 @@ jobs:
             ZKVM_GCC="$GCC" \
             ZISK_LIB="$HOME/.local/zisk/libziskos_staticlib.a" \
             stateless_guest_zkvm
+
+      # Named the way the eth-act benchmark harness resolves guests
+      - name: Stage the guest ELF
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p artifacts
+          cp build/stateless_guest_zisk.elf \
+             "artifacts/stateless-validator-nimbus-zisk-${ZISK_REF}.elf"
+          {
+            echo '```'
+            sha256sum artifacts/*.elf
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the guest ELF
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: stateless-validator-nimbus-zisk-${{ env.ZISK_REF }}
+          path: artifacts/
+          retention-days: 5
+          if-no-files-found: error
+
+  release:
+    name: Draft the guest pre-release
+    needs: stateless_guest
+    if: startsWith(github.ref, 'refs/tags/stateless-guest-v')
+
+    runs-on: ubuntu-22.04
+
+    permissions:
+      contents: write
+
+    env:
+      ZISK_REF: v1.1.0-alpha
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      # The proving key unpacks to 14 GB and the setup writes ~4 GB beside it.
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          df -h / | tail -1
+
+      - name: Download the guest ELF
+        uses: actions/download-artifact@v8
+        with:
+          name: stateless-validator-nimbus-zisk-${{ env.ZISK_REF }}
+          path: artifacts
+
+      # Merkle root of the compiled ROM trace, it needs the prover program-setup.
+      - name: Generate the verification key
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            build-essential xz-utils jq libomp-dev libgmp-dev \
+            nlohmann-json3-dev protobuf-compiler uuid-dev libsecp256k1-dev \
+            libsodium-dev nasm libopenmpi-dev openmpi-bin openmpi-common \
+            libclang-dev clang gcc-riscv64-unknown-elf
+
+          export ZISK_VERSION="${ZISK_REF#v}" SETUP_KEY=proving-no-consttree USE_GPU=false
+          curl -sSf "https://raw.githubusercontent.com/0xPolygonHermez/zisk/${ZISK_REF}/ziskup/ziskup" | bash
+          export PATH="$HOME/.zisk/bin:$PATH"
+
+          # Written next to ~4 GB of assembly output, which is discarded.
+          OUT="$(mktemp -d)"
+          cargo-zisk-dev program-setup \
+            --elf "artifacts/stateless-validator-nimbus-zisk-${ZISK_REF}.elf" \
+            --output-dir "$OUT"
+
+          VK="artifacts/stateless-validator-nimbus-zisk-${ZISK_REF}.vk"
+          cp "$OUT"/*.verkey.bin "$VK"
+          rm -rf "$OUT"
+
+          # A truncated key would otherwise publish silently.
+          [ "$(stat -c%s "$VK")" -eq 32 ] || {
+            echo "expected a 32 byte VK, got $(stat -c%s "$VK")" >&2; exit 1; }
+          printf 'VK: 0x%s\n' "$(od -An -v -tx1 "$VK" | tr -d ' \n')"
+
+      - name: Write the release notes
+        run: |
+          # sha256 is what ere-guests pins, adding also sha512 for consistency
+          {
+            echo "Stateless validator guest for ZisK ${ZISK_REF}, built from ${GITHUB_SHA}."
+            echo
+            echo '### SHA256 checksums'
+            echo
+            echo '```'
+            (cd artifacts && sha256sum ./*)
+            echo '```'
+            echo
+            echo '### SHA512 checksums'
+            echo
+            echo '```'
+            (cd artifacts && sha512sum ./*)
+            echo '```'
+          } > notes.md
+          cat notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create the pre-release draft
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          draft: true
+          prerelease: true
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: notes.md
+          files: artifacts/*
