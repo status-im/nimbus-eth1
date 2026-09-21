@@ -32,9 +32,9 @@ type
 
   CoreDb2Ref* = ref object
     ## Secondary core DB
-    tx2*: CoreDbTxRef
     dbDir*: Path
-    db2: CoreDbRef
+    db2*: CoreDbRef
+    tx2*: CoreDbTxRef
 
 # ------------------------------------------------------------------------------
 # Public constuctor/destructor
