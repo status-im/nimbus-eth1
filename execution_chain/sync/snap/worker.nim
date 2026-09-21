@@ -149,15 +149,13 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
 
       debug info & ": CoreDb/Aristo available",
         dbPath=ctx.pool.newCoreDb.newDbPath
-      break body
-
-    # of TBD ..
 
     of SnapStop:
+      ctx.accountDownloadMetricsReset()             # cosmetics
+
       warn info & ": Stop snap sync not implemented yet, lingering",
         syncState=($ctx.syncState)
       bodyRc = chronos.seconds(30)
-
     # End block: `body`
 
   bodyRc
