@@ -205,6 +205,8 @@ type
     seenData*: bool                  ## Set `true` if data were fetched, already
     minInitBuddies*: int             ## Min # peers needed for acivating syncer
     initTarget*: Opt[InitTarget]     ## Optionally set up first target
+    initTargetGeneration*: uint64   ## Reject replies to superseded requests
+    initTargetFetching*: bool       ## A peer is fetching the current target
     lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastSyncUpdLog*: chronos.Moment  ## Control update messages

@@ -21,9 +21,6 @@ import
 logScope:
   topics = "beacon sync"
 
-const
-  ZeroTarget: InitTarget = (zeroHash32, false, Opt.none(Hash32))
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -41,12 +38,19 @@ proc headersTargetRequest*(
   ## When `finHash` is set, it will be used as the finalised hash passed
   ## to the header chain cache on activation, overriding the default of
   ## `chain.baseHash`.
-  ctx.pool.initTarget = Opt.some((h, isFinal, finHash))
+  let target = Opt.some((h, isFinal, finHash))
+  if ctx.pool.initTarget == target:
+    return # Repeated FCUs must not invalidate an in-flight fetch.
+  inc ctx.pool.initTargetGeneration
+  ctx.pool.initTargetFetching = false
+  ctx.pool.initTarget = target
   trace info & ": Request syncer target", targetHash=h.short, isFinal,
     finHash=(if finHash.isSome: finHash.unsafeGet.short else: "n/a")
 
 proc headersTargetReset*(ctx: BeaconCtxRef) =
   ## Reset *manual* syncer target.
+  inc ctx.pool.initTargetGeneration
+  ctx.pool.initTargetFetching = false
   ctx.pool.initTarget = Opt.none(InitTarget)
 
 
@@ -75,7 +79,7 @@ template headersTargetActivate*(
       peer {.inject,used.} = $buddy.peer                   # logging only
       trg = ctx.pool.initTarget.unsafeGet
 
-    if trg.hash == zeroHash32:                             # already in process?
+    if trg.hash == zeroHash32 or ctx.pool.initTargetFetching:
       break body                                           # .. yes, it is
 
     # Require minimum of sync peers
@@ -90,21 +94,24 @@ template headersTargetActivate*(
     if buddy.peerID in ctx.pool.failedPeers:
       break body                                           # return
 
-    # Grab header, so no other peer will interfere. Rather then clearing
-    # the `Opt[InitTarget]` it is reset to some zero value. This pervents
-    # the syncer to start another session initiated by the CL while waiting
-    # for header to be resoved via eth/xx.
-    ctx.pool.initTarget = Opt.some(ZeroTarget)
+    # Keep the target identity while fetching so repeated FCUs can coalesce.
+    # A supplied header or a newer request may supersede this fetch while
+    # waiting for the peer; its result must then be ignored.
+    let generation = ctx.pool.initTargetGeneration
+    ctx.pool.initTargetFetching = true
 
     # Fetch header or return
     const iv = BnRange.new(0u,0u) # dummy interval
-    let hdrs = buddy.fetchHeadersReversed(iv, trg.hash).valueOr:
+    let fetched = buddy.fetchHeadersReversed(iv, trg.hash)
+    if generation != ctx.pool.initTargetGeneration:
+      break body
+    ctx.pool.initTargetFetching = false
+    let hdrs = fetched.valueOr:
       if buddy.ctrl.running:
         trace info & ": Peer failed on syncer target", peer,
           targetHash=trg.hash.short, isFinal=trg.isFinal,
           failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
           nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
-        ctx.pool.initTarget = Opt.some(trg)                # restore target
 
       else:
         # Collect problematic peers for detecting cul-de-sac syncing
@@ -117,14 +124,13 @@ template headersTargetActivate*(
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
             nErrors=buddy.nErrors.fetch.hdr
           ctx.pool.failedPeers.clear()
-          # not restoring target
+          ctx.headersTargetReset()
 
         else:
           trace info & ": Peer repeatedly failed", peer,
             targetHash=trg.hash.short, isFinal=trg.isFinal,
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
             nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
-          ctx.pool.initTarget = Opt.some(trg)              # restore target
 
       break body                                           # return
       # End `fetchHeadersReversed(..).valueOr`
@@ -133,7 +139,7 @@ template headersTargetActivate*(
     ctx.pool.failedPeers.clear()
 
     # Mark the target consumed, one way or the other.
-    ctx.pool.initTarget = Opt.none(InitTarget)
+    ctx.headersTargetReset()
 
     # Verify that the target header is usable
     let hdr = hdrs[0]

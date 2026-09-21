@@ -15,6 +15,7 @@ import
   pkg/[chronicles, chronos, metrics],
   pkg/eth/common,
   ./blocks/blocks_unproc,
+  ./headers/headers_target,
   ./update/[update_eta, update_metrics],
   ./[headers, worker_desc]
 
@@ -340,8 +341,7 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
     return
 
   if ctx.hibernate and                              # only in idle mode
-     ctx.pool.minInitBuddies <= ctx.nSyncPeers() and
-     ctx.pool.initTarget.isNone():                  # otherwise manual setup
+     ctx.pool.minInitBuddies <= ctx.nSyncPeers():
 
     # Initialise header chain
     let (b, t) =
@@ -359,6 +359,9 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
 
     # Exclude the case of a single header chain which would be `T` only
     if b+1 < t:
+      # The target header is already supplied. Supersede any pending fetch,
+      # including one currently awaiting a peer response.
+      ctx.headersTargetReset()
       ctx.pool.minInitBuddies = 0                   # reset
       ctx.pool.syncState = BeaconState.headers      # state transition
       ctx.subState.stateSince = Moment.now()

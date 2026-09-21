@@ -112,11 +112,10 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     if res.isSome:
       return simpleFCU(res.value)
 
-    # If the head hash is unknown (was not given to us in a newPayload
-    # request), ask the syncer to fetch the head header from a connected
-    # peer over the `eth` wire protocol. Once the header arrives, the
-    # syncer's normal header-chain sync activates toward it.
-    let header = chain.quarantine.getHeader(headHash).valueOr:
+    # Use a quarantined or stored header to start sync. If neither exists,
+    # ask the syncer to fetch it from a connected peer over `eth`.
+    let header = (chain.quarantine.getHeader(headHash) or
+                  chain.headerByHash(headHash)).valueOr:
       info "Forkchoice requested sync to unknown head",
         hash = headHash.short,
         finHash = update.finalizedBlockHash.short,
@@ -126,7 +125,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       com.headerTargetRequest(headHash, update.finalizedBlockHash)
       return simpleFCU(PayloadExecutionStatus.syncing)
 
-    # Header advertised via a past newPayload request. Start syncing to it.
+    # A quarantined or stored header can seed sync even without its state.
     info "Forkchoice requested sync to new head",
       number = header.number,
       hash   = headHash.short,
