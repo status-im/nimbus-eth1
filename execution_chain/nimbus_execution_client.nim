@@ -274,6 +274,76 @@ proc setupPruning(
     nimbus.balPruner = BalPrunerRef.init(com)
     nimbus.balPruner.start()
 
+proc internalRestart(
+    config: ExecutionClientConf;
+    com: CommonRef;
+    params: NetworkParams;
+    nimbus: NimbusNode;
+      ) =
+  ## Update database and restart some services after snap sync.
+  let newDbPath = nimbus.snapSyncRef.sharedState().newDbPath
+
+  # Shut down currently unwanted modules. No async poller must be running.
+  QuitFailure.onException("Exception while reconfiguring"):
+    # Done with snap sync
+    waitFor nimbus.snapSyncRef.stop()
+    nimbus.snapSyncRef = SnapSyncRef(nil)
+
+    if nimbus.snapWire.isNil.not and not config.snapSyncEnabled:
+      waitFor nimbus.snapWire.stop()
+
+    # Pruning needs to be stopped and restarted on the new upcoming fork.
+    if nimbus.backgroundPruner.isNil.not:
+      waitFor nimbus.backgroundPruner.stop()
+      nimbus.backgroundPruner = BackgroundPrunerRef(nil)
+    if nimbus.balPruner.isNil.not:
+      waitFor nimbus.balPruner.stop()
+      nimbus.balPruner = BalPrunerRef(nil)
+
+  # Update database
+  com.db.close()
+  let
+    params = config.computeNetworkParams()
+    dataDir = config.dataDir(params)
+  dataDir.ecdbDirSwap(newDbPath).isOkOr:
+    fatal "Cannot update database", dataDir, newDbPath, error
+    QuitFailure.onException("Exception while shutting down"):
+      waitFor nimbus.closeWait()
+    quit(QuitFailure)
+
+  # Reassign updated DB. This is managed transparently by the `CoreDb`
+  # wrapper, the sole exception being an unmanaged KVT table for the
+  # header cache. This is handled below (see `beaconSyncRef.refresh()`.)
+  when compileOption("threads"):
+    let
+      taskpool = setupTaskpool(config.numThreads)
+      dbOpts = config.getCoreDbOpts(params, taskpool.numThreads)
+    AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
+    com.taskpool = taskpool
+    com.db.mpt.taskpool = taskpool
+  else:
+    dbOpts = config.getCoreDbOpts(params, 0)
+    AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
+
+  # Force `com` and other modules to ajustment. History and forks have leapt
+  # forward. So modules must adjust accordingly.
+  com.refresh()
+  nimbus.fc.refresh()
+  QuitFailure.onException("Cannot initialise RPC client history"):
+    nimbus.fc.portal = HistoryExpiryRef.init(config, com)
+  nimbus.txPool.refresh()
+
+  # Reinitialise pruning as it depends og the current fork.
+  nimbus.setupPruning(config, com)
+
+  # Refresh beacon syncer which depends on the header cache. The latter one
+  # uses a sert of a hard KVT reference not managed by the `CoreDb`. So it
+  # must be re-assignd internally.
+  nimbus.beaconSyncRef.refresh()
+
+  # Continue beacon syncing.
+  doAssert nimbus.beaconSyncRef.start(standBy=false)
+
 # -----------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
@@ -413,14 +483,38 @@ proc runExeClient*(
 
   asyncSpawn runStopCheckLoop()
 
-  while true:
-    if (let reason = ProcessState.stopping(); reason.isSome()):
-      notice "Shutting down", reason = reason[]
-      break
-    if stopper != nil and stopper.finished():
-      break
+  block stopFrame:
+    # Check whether snap sync is enabled. This will cause an internal restart
+    # (unless aborted.)
+    if not nimbus.snapSyncRef.isNil:
+      let sharedState = nimbus.snapSyncRef.sharedState()
+      doAssert not sharedState.isNil
+      while true:
+        if (let reason = ProcessState.stopping(); reason.isSome()):
+          notice "Shutting down", reason = reason[]
+          break stopFrame                           # full shutdown
+        if stopper != nil and stopper.finished():
+          break stopFrame                           # full shutdown
+        if sharedState.snapSyncStop:
+          break                                     # internal reconfig/restart
+        chronos.poll()
 
-    chronos.poll()
+      # Internal reconfigure and restart. Network resources are kept running
+      # as far as possible. The async runner is currently suspended. Some
+      # modules need to be restarted after re-configuring the network.
+      config.internalRestart(com, params, nimbus)
+      notice "System has been reconfigured running updated database"
+      # End `if not nimbus.snapReboot.isNil:`
+
+    # Real processing starts here
+    while true:
+      if (let reason = ProcessState.stopping(); reason.isSome()):
+        notice "Shutting down", reason = reason[]
+        break stopFrame
+      if stopper != nil and stopper.finished():
+        break stopFrame
+
+      chronos.poll()
 
   # Stop loop
   QuitFailure.onException("Exception while shutting down"):
