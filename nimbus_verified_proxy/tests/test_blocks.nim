@@ -122,6 +122,47 @@ suite "test verified blocks":
     check:
       verifiedBlkReachable.isOk()
 
+  test "check block walk starts from the anchor block":
+    ts.clear()
+    engine.headerStore.clear()
+
+    let
+      finalizedBlockNum = 22431080
+      latestBlockNum = 22431088
+
+    for i in finalizedBlockNum .. latestBlockNum:
+      let
+        filename = "nimbus_verified_proxy/tests/data/" & $i & ".json"
+        blk = getBlockFromJson(filename)
+
+      ts.loadBlock(blk)
+      if i == finalizedBlockNum:
+        check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+      if i == latestBlockNum:
+        check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
+
+    for i in finalizedBlockNum + 1 ..< latestBlockNum:
+      let
+        tag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(i))
+        verifiedBlk = waitFor frontend.eth_getBlockByNumber(tag, true)
+
+      check:
+        verifiedBlk.isErr()
+        verifiedBlk.error.errType == UnavailableDataError
+
+    engine.anchor = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "safe")
+
+    for i in finalizedBlockNum + 1 ..< latestBlockNum:
+      let
+        tag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(i))
+        verifiedBlk = waitFor frontend.eth_getBlockByNumber(tag, true)
+
+      check:
+        verifiedBlk.isOk()
+
+    # reset anchor
+    engine.anchor = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "finalized")
+
   test "check block related API methods":
     ts.clear()
     engine.headerStore.clear()

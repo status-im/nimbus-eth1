@@ -217,6 +217,17 @@ proc walkBlocks*(
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   debug "Starting block walk to verify requested block", blockHash = targetHash
 
+  if targetNum >= sourceNum:
+    return err(
+      (
+        FrontendError, "the block walk target is not older than the walk source",
+        UNTAGGED,
+      )
+    )
+
+  if sourceHash == targetHash:
+    return ok()
+
   let numBlocks = sourceNum - targetNum
   if numBlocks > engine.maxBlockWalk:
     return err(
@@ -314,42 +325,39 @@ proc verifyHeader(
     return ok()
   # walk blocks backwards(time) from source to target
   else:
-    let
-      earliest = engine.headerStore.earliest.valueOr:
-        # untagged(-1) because this doesn't link to any backend
-        return err(
-          (
-            UnavailableDataError, "earliest block is not available yet. Still syncing?",
-            UNTAGGED,
+    let anchor =
+      if engine.anchor.kind == bidAlias and engine.anchor.alias.toLowerAscii() == "safe":
+        engine.headerStore.latest.valueOr:
+          return err(
+            (
+              UnavailableDataError, "safe block is not available yet. Still syncing?",
+              UNTAGGED,
+            )
           )
-        )
-      anchor =
-        if engine.anchor.kind == bidAlias and
-            engine.anchor.alias.toLowerAscii() == "safe":
-          engine.headerStore.latest.valueOr:
-            return err(
-              (
-                UnavailableDataError, "safe block is not available yet. Still syncing?",
-                UNTAGGED,
-              )
+      else:
+        engine.headerStore.finalized.valueOr:
+          return err(
+            (
+              UnavailableDataError,
+              "finalized block is not available yet. Still syncing?", UNTAGGED,
             )
-        else:
-          engine.headerStore.finalized.valueOr:
-            return err(
-              (
-                UnavailableDataError,
-                "finalized block is not available yet. Still syncing?", UNTAGGED,
-              )
-            )
+          )
 
     let eipVerified =
       ?(await engine.verifyEIP2935Membership(anchor, header.number, hash))
 
     if not eipVerified:
-      ?(
-        await engine.walkBlocks(
-          earliest.number, header.number, earliest.parentHash, hash
+      if header.number >= anchor.number:
+        return err(
+          (
+            UnavailableDataError,
+            "the requested block is newer than the " & $engine.anchor & " block",
+            UNTAGGED,
+          )
         )
+
+      ?(
+        await engine.walkBlocks(anchor.number, header.number, anchor.parentHash, hash)
       )
 
   ok()
