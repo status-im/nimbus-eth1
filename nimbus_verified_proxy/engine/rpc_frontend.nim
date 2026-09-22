@@ -369,6 +369,9 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
       (await backend.eth_getTransactionByHash(txHash)).tagBackend(backendIdx)
     )
 
+    if tx.isNil():
+      return ok(tx)
+
     if tx.hash != txHash:
       return err(
         (
@@ -409,6 +412,10 @@ proc getExecutionApiFrontend*(engine: RpcVerificationEngine): ExecutionApiFronte
     let rx = engine.penaltyOr(
       (await backend.eth_getTransactionReceipt(txHash)).tagBackend(backendIdx)
     )
+
+    if rx.isNil():
+      return ok(rx)
+
     let rxs = engine.penaltyOr(await engine.getReceipts(rx.blockHash))
 
     for r in rxs:

@@ -29,6 +29,7 @@ static int g_passed = 0;
 typedef struct {
     bool called;
     int  status;
+    char res[64];
 } CbState;
 
 static void collect_error_cb(Context *ctx, int status, char *res, void *userData) {
@@ -36,6 +37,7 @@ static void collect_error_cb(Context *ctx, int status, char *res, void *userData
     CbState *s  = (CbState *)userData;
     s->called   = true;
     s->status   = status;
+    snprintf(s->res, sizeof s->res, "%s", res ? res : "");
 
     if (status != RET_SUCCESS)
         fprintf(stdout, "  [cb] status=%d  res=%s\n", status, res ? res : "(null)");
@@ -265,6 +267,12 @@ static void execution_transport(
         return;
     }
 
+    if (strcmp(name, "eth_getTransactionReceipt") == 0 ||
+        strcmp(name, "eth_getTransactionByHash")  == 0) {
+        cb(RET_SUCCESS, "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":null}", userData);
+        return;
+    }
+
     const char *file = NULL;
     if (strcmp(name, "eth_getBlockByNumber") == 0 ||
         strcmp(name, "eth_getBlockByHash")   == 0)
@@ -336,12 +344,19 @@ static void check_event_loop(Context *ctx) {
     CbState latest_s  = {0};
     CbState chainid_s = {0};
     CbState fee_s     = {0};
+    CbState rx_s      = {0};
+    CbState tx_s      = {0};
+
+    const char *UNKNOWN_TX_HASH =
+        "0x1111111111111111111111111111111111111111111111111111111111111111";
 
     eth_gasPrice(ctx, collect_error_cb, &gas_s);
     eth_maxPriorityFeePerGas(ctx, collect_error_cb, &prio_s);
     eth_getBlockByNumber(ctx, "latest", false, collect_error_cb, &latest_s);
     eth_chainId(ctx, collect_error_cb, &chainid_s);
     proxyCall(ctx, "eth_feeHistory", "[\"0x2\", \"latest\", []]", collect_error_cb, &fee_s);
+    eth_getTransactionReceipt(ctx, (char *)UNKNOWN_TX_HASH, collect_error_cb, &rx_s);
+    eth_getTransactionByHash(ctx, (char *)UNKNOWN_TX_HASH, collect_error_cb, &tx_s);
 
     drain(ctx, 2000);
 
@@ -358,6 +373,10 @@ static void check_event_loop(Context *ctx) {
     TEST("proxyCall eth_feeHistory hex blockCount: forwarded as 0x2, not 0x0",
          strstr(g_fee_history_params, "\"0x2\"") != NULL &&
          strstr(g_fee_history_params, "\"0x0\"") == NULL);
+    TEST("eth_getTransactionReceipt unknown tx: RET_SUCCESS with null",
+         rx_s.called && rx_s.status == RET_SUCCESS && strcmp(rx_s.res, "null") == 0);
+    TEST("eth_getTransactionByHash unknown tx: RET_SUCCESS with null",
+         tx_s.called && tx_s.status == RET_SUCCESS && strcmp(tx_s.res, "null") == 0);
 }
 
 int main(void) {
