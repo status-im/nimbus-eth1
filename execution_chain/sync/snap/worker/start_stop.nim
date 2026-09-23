@@ -52,10 +52,7 @@ proc resetServices*(ctx: SnapCtxRef; info: static[string]) =
   ctx.pool.pivotNum = 0
   ctx.pool.forwardNum = 0
   ctx.pool.resetReq = false
-  if ctx.pool.newCoreDb.isNil:
-    ctx.pool.newCoreDb = SnapCoreDb2Ref()
-  else:
-    ctx.pool.newCoreDb[].reset
+  ctx.pool.newCoreDb[].reset
 
 # ------------------------------------------------------------------------------
 # Public functions

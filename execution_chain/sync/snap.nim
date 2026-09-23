@@ -109,6 +109,7 @@ proc config*(
   desc.addSnapSyncProtocol(snap1)
 
   desc.ctx.pool.baseDir = dataDir
+  desc.ctx.pool.newCoreDb = SnapCoreDb2Ref()        # shared state
 
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
@@ -119,6 +120,11 @@ proc configResume*(desc: SnapSyncRef; resume = true) =
   ## in no-resume mode.
   doAssert not desc.ctx.isNil
   desc.ctx.pool.contPrevSession = true
+
+proc sharedState*(desc: SnapSyncRef): SnapCoreDb2Ref =
+  ## Return snap state object so its can be monotored when the snap
+  ## download has finished.
+  desc.ctx.pool.newCoreDb
 
 proc start*(desc: SnapSyncRef; bcSyncRef: BeaconSyncRef): bool =
   ## Starting beacon sync in stand-by mode and then snap sync.

@@ -53,7 +53,6 @@ proc importCoreDb*(
     return err()
 
   ctx.pool.newCoreDb.newDbPath = string db2Dir
-  ctx.pool.newCoreDb.stateRoot = header.stateRoot
   ok()
 
 # ------------------------------------------------------------------------------
