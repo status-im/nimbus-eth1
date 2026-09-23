@@ -76,17 +76,9 @@ const
 
   # ---------
 
-  daemonWaitResumeFailInterval* = chronos.seconds(5)
-    ## Need some extra time when initialised too early.
-
   daemonWaitClearFailInterval* = chronos.seconds(10)
     ## Something failed in `SnapClear` state, e.g. starting header
     ## download (just avoiding some extra polling.)
-
-  daemonWaitReadyInterval* = chronos.seconds(5)
-    ## Some polling interval time waiting until the system gets into download
-    ## state when the the FCU modue hash provides a finalised header and there
-    ## are eth/xx download peers available.
 
   daemonWaitReadyFailInterval* = chronos.seconds(10)
     ## Something failed in `SnapReady` state, e.g. starting header
@@ -95,9 +87,6 @@ const
   daemonWaitDownloadInterval* = chronos.seconds(2)
     ## Poll waiting for peers downloading snap data. The polling cycle also
     ## triggers some metrics updates.
-
-  daemonWaitDownloadFinishInterval* = chronos.seconds(1)
-    ## Poll waiting for all peers to have stopped
 
   daemonWaitBalsFetchInterval* = chronos.seconds(5)
     ## Poll waiting for some peer to download BALs

@@ -115,6 +115,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       # in quasi-parallel mode to the snap sync daemon & peers.
       ctx.headerDownloadTrigger(info).isOkOr:
         bodyRc = daemonWaitReadyFailInterval        # take a nap
+        break body
 
       ctx.downloadInit(info).isOkOr:                # get ready
         bodyRc = daemonWaitReadyFailInterval        # take a nap
@@ -126,7 +127,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       bodyRc = daemonWaitDownloadInterval           # parallel peer action
 
     of SnapDownloadFinish:
-      bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
+      discard
 
     of SnapBalsFetch:
       discard ctx.headerDownloadTrigger(info)       # see `SnapDownload`
@@ -148,10 +149,6 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapAssembleMpt:
       ctx.importCoreDb(info).isOkOr:
         ctx.pool.resetReq = true                    # not much else possible
-        break body
-
-      debug info & ": CoreDb/Aristo available",
-        dbPath=ctx.pool.newCoreDb.newDbPath
 
     of SnapStop:
       ctx.accountDownloadMetricsReset()             # cosmetics
