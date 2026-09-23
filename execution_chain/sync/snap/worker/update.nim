@@ -182,8 +182,15 @@ proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   if ctx.poolMode:                                  # wait for peers to sync
     return SnapDownloadFinish
   metrics.set(nec_snap_download_window, 0)          # download window done
-  ctx.allDownloaded(info).isErrOr:                  # download is complete?
+
+  # Make sure that a BAL is available for the current pivot.
+  if ctx.pool.forwardNum == 0:
+    return SnapBalsFetch
+
+  # Check whether the download is complete
+  ctx.allDownloaded(info).isErrOr:
     return SnapAssembleMpt
+
   SnapBalsFetch
 
 # -------------------------
@@ -192,7 +199,7 @@ proc assembleMptNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.resetReq:                             # Oops, something failed
     return SnapClear
-  if ctx.pool.newCoreDb.stateRoot != zeroHash32:
+  if 0 < ctx.pool.newCoreDb.newDbPath.len:
     return SnapStop
   # Reaching here would be quite unusual as this state is handled
   # by the deamon in the foreground.

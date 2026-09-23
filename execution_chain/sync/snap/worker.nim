@@ -11,9 +11,10 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, chronos, minilru, results, stew/byteutils],
-  ./worker/[download, helpers, cache_db, import_coredb, state_forward,
-            start_stop, update, worker_desc]
+  pkg/[chronicles, chronos, minilru, results],
+  pkg/[beacon_chain/process_state, stew/byteutils],
+  ./worker/[download, helpers, cache_db, import_coredb,
+            state_forward, start_stop, update, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -23,6 +24,8 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc suspend(buddy: SnapPeerRef) =
+  ## Keep a peer on hold but do not ask for data until the `pivot` has
+  ## advanced to a newer block number.
   buddy.only.stateExhausted = buddy.ctx.pool.pivotNum
 
 func isSuspended(buddy: SnapPeerRef): bool =
@@ -112,6 +115,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       # in quasi-parallel mode to the snap sync daemon & peers.
       ctx.headerDownloadTrigger(info).isOkOr:
         bodyRc = daemonWaitReadyFailInterval        # take a nap
+        break body
 
       ctx.downloadInit(info).isOkOr:                # get ready
         bodyRc = daemonWaitReadyFailInterval        # take a nap
@@ -123,7 +127,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       bodyRc = daemonWaitDownloadInterval           # parallel peer action
 
     of SnapDownloadFinish:
-      bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
+      discard
 
     of SnapBalsFetch:
       discard ctx.headerDownloadTrigger(info)       # see `SnapDownload`
@@ -145,17 +149,21 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapAssembleMpt:
       ctx.importCoreDb(info).isOkOr:
         ctx.pool.resetReq = true                    # not much else possible
-        break body
-
-      debug info & ": CoreDb/Aristo available",
-        dbPath=ctx.pool.newCoreDb.newDbPath
 
     of SnapStop:
       ctx.accountDownloadMetricsReset()             # cosmetics
 
-      warn info & ": Stop snap sync not implemented yet, lingering",
-        syncState=($ctx.syncState)
-      bodyRc = chronos.seconds(30)
+      # Done, terminate
+      if 0 < ctx.pool.newCoreDb.newDbPath.len:
+        notice info & ": Snap sync will terminate successfully",
+          dbPath=ctx.pool.newCoreDb.newDbPath
+        ctx.daemon = false
+        ctx.pool.newCoreDb.snapSyncStop = true
+        break body
+
+      # This should have been handled by the FSA update
+      raiseAssert info & ": Snap sync is not ready yet to terminate"
+
     # End block: `body`
 
   bodyRc
