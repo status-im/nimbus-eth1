@@ -356,6 +356,9 @@ proc getExecutionApiFrontend*(
       (await backend.eth_getTransactionByHash(txHash)).tagBackend(backendIdx)
     )
 
+    if tx.isNil():
+      return ok(tx)
+
     if tx.hash != txHash:
       return err(
         (
@@ -397,6 +400,10 @@ proc getExecutionApiFrontend*(
     let rx = opEngine.penaltyOr(
       (await backend.eth_getTransactionReceipt(txHash)).tagBackend(backendIdx)
     )
+
+    if rx.isNil():
+      return ok(rx)
+
     let rxs = opEngine.penaltyOr(await opEngine.getReceipts(rx.blockHash))
 
     for r in rxs:

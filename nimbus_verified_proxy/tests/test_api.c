@@ -267,6 +267,15 @@ static void execution_transport(
         return;
     }
 
+    if (strcmp(name, "eth_getTransactionReceipt") == 0 ||
+        strcmp(name, "eth_getTransactionByHash")  == 0) {
+        if (strstr(execCtxParams(userData), "0x2222") != NULL)
+            cb(RET_SUCCESS, "{\"jsonrpc\":\"2.0\",\"id\":1}", userData);
+        else
+            cb(RET_SUCCESS, "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":null}", userData);
+        return;
+    }
+
     const char *file = NULL;
     if (strcmp(name, "eth_getBlockByNumber") == 0 ||
         strcmp(name, "eth_getBlockByHash")   == 0)
@@ -389,12 +398,25 @@ static void check_event_loop(Context *ctx) {
     CbState latest_s  = {0};
     CbState chainid_s = {0};
     CbState fee_s     = {0};
+    CbState rx_s      = {0};
+    CbState tx_s      = {0};
+    CbState rx_nores_s = {0};
+    CbState tx_nores_s = {0};
+
+    const char *UNKNOWN_TX_HASH =
+        "0x1111111111111111111111111111111111111111111111111111111111111111";
+    const char *NO_RESULT_TX_HASH =
+        "0x2222222222222222222222222222222222222222222222222222222222222222";
 
     eth_gasPrice(ctx, collect_error_cb, &gas_s);
     eth_maxPriorityFeePerGas(ctx, collect_error_cb, &prio_s);
     eth_getBlockByNumber(ctx, "latest", false, collect_error_cb, &latest_s);
     eth_chainId(ctx, collect_error_cb, &chainid_s);
     proxyCall(ctx, "eth_feeHistory", "[\"0x2\", \"latest\", []]", collect_error_cb, &fee_s);
+    eth_getTransactionReceipt(ctx, (char *)UNKNOWN_TX_HASH, collect_error_cb, &rx_s);
+    eth_getTransactionByHash(ctx, (char *)UNKNOWN_TX_HASH, collect_error_cb, &tx_s);
+    eth_getTransactionReceipt(ctx, (char *)NO_RESULT_TX_HASH, collect_error_cb, &rx_nores_s);
+    eth_getTransactionByHash(ctx, (char *)NO_RESULT_TX_HASH, collect_error_cb, &tx_nores_s);
 
     drain(ctx, 2000);
 
@@ -411,6 +433,14 @@ static void check_event_loop(Context *ctx) {
     TEST("proxyCall eth_feeHistory hex blockCount: forwarded as 0x2, not 0x0",
          strstr(g_fee_history_params, "\"0x2\"") != NULL &&
          strstr(g_fee_history_params, "\"0x0\"") == NULL);
+    TEST("eth_getTransactionReceipt unknown tx: RET_SUCCESS with null",
+         rx_s.called && rx_s.status == RET_SUCCESS && strcmp(rx_s.res, "null") == 0);
+    TEST("eth_getTransactionByHash unknown tx: RET_SUCCESS with null",
+         tx_s.called && tx_s.status == RET_SUCCESS && strcmp(tx_s.res, "null") == 0);
+    TEST("eth_getTransactionReceipt envelope without result: error returned",
+         rx_nores_s.called && rx_nores_s.status == RET_ERROR);
+    TEST("eth_getTransactionByHash envelope without result: error returned",
+         tx_nores_s.called && tx_nores_s.status == RET_ERROR);
 }
 
 int main(void) {
