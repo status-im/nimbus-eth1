@@ -37,7 +37,7 @@ static void collect_error_cb(Context *ctx, int status, char *res, void *userData
     CbState *s  = (CbState *)userData;
     s->called   = true;
     s->status   = status;
-    snprintf(s->res, sizeof s->res, "%s", res ? res : "");
+    snprintf(s->res, sizeof(s->res), "%s", res ? res : "");
 
     if (status != RET_SUCCESS)
         fprintf(stdout, "  [cb] status=%d  res=%s\n", status, res ? res : "(null)");
@@ -335,6 +335,57 @@ static void drain(Context *ctx, int max_iters) {
     }
 }
 
+static void check_sync(Context *ctx) {
+    printf("\n Sync\n");
+    CbState before_s         = {0};
+    CbState syncing_before_s = {0};
+    CbState sync_s           = {0};
+    CbState after_s          = {0};
+    CbState syncing_after_s  = {0};
+    CbState interval_s       = {0};
+    CbState op_interval_s    = {0};
+
+    eth_blockNumber(ctx, collect_error_cb, &before_s);
+    drain(ctx, 2000);
+
+    TEST("eth_blockNumber before sync: callback fired", before_s.called);
+    TEST("eth_blockNumber before sync: error returned", before_s.status == RET_ERROR);
+
+    eth_syncing(ctx, collect_error_cb, &syncing_before_s);
+    drain(ctx, 2000);
+
+    TEST("eth_syncing before sync: callback fired", syncing_before_s.called);
+    TEST("eth_syncing before sync: RET_SUCCESS",    syncing_before_s.status == RET_SUCCESS);
+
+    nvp_eth_syncInterval(ctx, collect_error_cb, &interval_s);
+    nvp_op_syncInterval(ctx, collect_error_cb, &op_interval_s);
+    drain(ctx, 2000);
+
+    TEST("nvp_eth_syncInterval: callback fired",  interval_s.called);
+    TEST("nvp_eth_syncInterval: 12000ms on mainnet",
+         interval_s.status == RET_SUCCESS && strcmp(interval_s.res, "\"0x2ee0\"") == 0);
+    TEST("nvp_op_syncInterval: error without an OP network",
+         op_interval_s.called && op_interval_s.status == RET_ERROR);
+
+    nvp_eth_sync(ctx, collect_error_cb, &sync_s);
+    drain(ctx, 2000);
+
+    TEST("nvp_eth_sync: callback fired", sync_s.called);
+    TEST("nvp_eth_sync: RET_SUCCESS",    sync_s.status == RET_SUCCESS);
+
+    eth_blockNumber(ctx, collect_error_cb, &after_s);
+    drain(ctx, 2000);
+
+    TEST("eth_blockNumber after sync: callback fired", after_s.called);
+    TEST("eth_blockNumber after sync: RET_SUCCESS",    after_s.status == RET_SUCCESS);
+
+    eth_syncing(ctx, collect_error_cb, &syncing_after_s);
+    drain(ctx, 2000);
+
+    TEST("eth_syncing after sync: callback fired", syncing_after_s.called);
+    TEST("eth_syncing after sync: RET_SUCCESS",    syncing_after_s.status == RET_SUCCESS);
+}
+
 // we run two functions by mocking the transport to verify the event loop machinery
 // NOTE: this is very rudimentary because we run the processVerifProxyTasks for a
 // limited number of iterations and it is difficult to calculate the exact number of
@@ -410,6 +461,7 @@ int main(void) {
 
     check_deser_errors(ctx);
     check_proxyCall_errors(ctx);
+    check_sync(ctx);
     check_event_loop(ctx);
 
     stopVerifProxy(ctx);
