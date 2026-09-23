@@ -134,7 +134,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
 
   nimbus.ethNode = newEthereumNode(
     keypair, extIp, extTcpPort, extUdpPort, params.networkId, config.agentString,
-    minPeers = config.maxPeers,
+    maxPeers = config.maxPeers,
     bootstrapNodes = bootstrapNodes,
     bindUdpPort = config.udpPort, bindTcpPort = config.tcpPort,
     bindIp = config.listenAddress,

@@ -70,8 +70,10 @@ proc closeWait*(nimbus: NimbusNode) {.async.} =
   var waitedFutures: seq[Future[void]]
   if nimbus.httpServer.isNil.not:
     waitedFutures.add nimbus.httpServer.stop()
+    waitedFutures.add nimbus.httpServer.closeWait()
   if nimbus.engineApiServer.isNil.not:
     waitedFutures.add nimbus.engineApiServer.stop()
+    waitedFutures.add nimbus.engineApiServer.closeWait()
   if nimbus.ethNode.isNil.not:
     waitedFutures.add nimbus.ethNode.closeWait()
   if nimbus.peerManager.isNil.not:
@@ -97,7 +99,10 @@ proc closeWait*(nimbus: NimbusNode) {.async.} =
   waitedFutures.add nimbus.fc.stopProcessingQueue()
 
   let
-    timeout = chronos.seconds(5)
+    # The 30s for shutdown is quite rich but would not do any harm. Previously,
+    # 5s was too short for closing down all modules. The time 5s was set when
+    # there were much less to close or stop.
+    timeout = chronos.seconds(30)
     completed = await withTimeout(allFutures(waitedFutures), timeout)
   if not completed:
     trace "Nimbus.stop(): timeout reached", timeout,

@@ -7,8 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-# PeerPoolRef attempts to keep connections to at least min_peers
-# on the given network.
+# PeerPoolRef dials out until `dialTarget` peers are connected and caps the
+# total number of connections, incoming and outgoing, at `maxPeers`.
 
 {.push raises: [].}
 
@@ -36,7 +36,13 @@ type
   # Usually Network generic param is instantiated with EthereumNode
   PeerPoolRef*[Network] = ref object
     network: Network
-    minPeers: int
+    maxPeers*: int
+      ## Hard limit on the number of connected peers, incoming and outgoing
+      ## alike - see `isFull`
+    dialTarget*: int
+      ## Number of peers up to which we actively dial out. This is deliberately
+      ## lower than `maxPeers` so that the dialer cannot fill every slot and
+      ## leave the node unreachable for incoming connections.
     connQueue: AsyncQueue[Node]
     seenTable: Table[NodeId, SeenNode]
     running: bool
@@ -56,9 +62,16 @@ type
     protocols*: seq[ProtocolInfoRef[PeerRef[Network], Network]]
 
 const
+  defaultMaxPeers* = 25
+    ## Fallback when `--max-peers` is not given. Exported so that `conf.nim`
+    ## and the `newPeerPool` / `newEthereumNode` defaults cannot drift apart.
+
   connectLoopSleep = chronos.milliseconds(2000)
   updateLoopSleep = chronos.seconds(15)
   maxConcurrentConnectionRequests = 40
+
+  inboundSlotDivisor = 3
+    ## One in this many peer slots is kept free for incoming connections.
 
   SeenTableTimeDeadPeer = chronos.minutes(10)
     ## Period of time for dead / unreachable peers.
@@ -103,6 +116,11 @@ proc addSeen(
   do:
     p.seenTable[nodeId] = item
 
+func isFull*(p: PeerPoolRef): bool =
+  ## `true` when the pool holds `maxPeers` peers and no further connection,
+  ## incoming or outgoing, may be established.
+  p.connectedNodes.len >= p.maxPeers
+
 proc connect[Network](p: PeerPoolRef[Network], remote: Node): Future[PeerRef[Network]] {.async: (raises: [CancelledError]).} =
   ## Connect to the given remote and return a Peer instance when successful.
   ## Returns nil if the remote is unreachable, times out or is useless.
@@ -115,6 +133,10 @@ proc connect[Network](p: PeerPoolRef[Network], remote: Node): Future[PeerRef[Net
     return nil
 
   if p.isSeen(remote.id):
+    return nil
+
+  if p.isFull:
+    trace "Peer limit reached, not dialing", remote, maxPeers = p.maxPeers
     return nil
 
   trace "Connecting to node", remote
@@ -156,9 +178,9 @@ proc createConnectionWorker(p: PeerPoolRef, workerId: int): Future[void] {.async
     await connectToNode(p, n)
 
 proc lookupPeers(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
-  ## Lookup more peers if the node is not yet connected to at least self.minPeers.
+  ## Lookup more peers if the node is not yet connected to `dialTarget` peers.
   ## Adds the found nodes to the connection queue.
-  if p.connectedNodes.len < p.minPeers:
+  if p.connectedNodes.len < p.dialTarget:
     # Add nodes to connQueue from discovery protocol,
     # to be later processed by connection worker
     await p.discovery.lookupRandomNode(p.connQueue)
@@ -180,9 +202,17 @@ proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
   # initial cycle
   p.updateForkId()
   await p.discovery.start()
+
+  # The flag `p.running` has a double meaning. It is used to control the
+  # below `while` loop as well as an indication, that the listener is up
+  # and running. So this means that the `p.running` flag must be set
+  # before the `lookupPeers()`. Placing it later, there is a race condition
+  # when discovery is shut down early and `closeWait()` will not release
+  # the listener which remains blocked.
+  p.running = true
+
   await p.lookupPeers()
 
-  p.running = true
   while p.running:
     debug "Amount of peers", amount = p.connectedNodes.len()
 
@@ -209,12 +239,14 @@ proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
 func newPeerPool*[Network](
     network: Network,
     discovery: Eth1Discovery,
-    minPeers = 10,
+    maxPeers = defaultMaxPeers,
     forkId = ForkIdProc(nil),
     ): PeerPoolRef[Network] =
   new result
   result.network = network
-  result.minPeers = minPeers
+  result.maxPeers = max(1, maxPeers)
+  result.dialTarget =
+    max(1, result.maxPeers - result.maxPeers div inboundSlotDivisor)
   result.discovery = discovery
   result.connQueue = newAsyncQueue[Node](maxConcurrentConnectionRequests)
   result.connectedNodes = initTable[Node, PeerRef[Network]]()

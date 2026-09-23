@@ -12,7 +12,7 @@
 
 import
   std/paths,
-  pkg/[chronicles, metrics],
+  pkg/[chronicles, metrics, stew/interval_set],
   ./[cache_db, worker_const, worker_desc]
 
 logScope:
@@ -27,12 +27,14 @@ declareGauge nec_snap_download_window, "" &
 
 proc allDownloaded(ctx: SnapCtxRef; info: static[string]): Opt[void] =
   let adb = ctx.pool.cacheDB
+
   if ctx.accUnproc.synced():                        # accounting cache active?
-    if 0 < ctx.accUnproc.chunks():
-      return err()
-  else:
-    if ?adb.hasAccMissingIntvRange(info):
-      return err()
+    if 0 < ctx.accUnproc.chunks():                  # are there data?
+      return err()                                  # .. yes
+  elif not ?adb.hasAccMissingIntv(info):            # currently not downloading
+    return err()                                    # record not allocated, yet
+  elif 0 < (?adb.getAccMissingIntv(info)).ranges.chunks:
+    return err()                                    # there are data
 
   # So, either the accounting cache is complete, od the cache DB.
   if not ?adb.hasStoMissingIntv(info) and           # storage left (or error)?
@@ -72,8 +74,8 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
 
 proc clearNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  let haveData = ctx.pool.cacheDB.hasAccMissingIntvRange(info).valueOr:
-    return SnapStop                                 # DB problem, failure
+  let haveData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr:
+    return SnapIdle                                 # DB problem, restart
   if haveData:
     return SnapClear
   SnapReady
@@ -190,13 +192,11 @@ proc assembleMptNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.resetReq:                             # Oops, something failed
     return SnapClear
-  if 0 < ctx.pool.coreDb2Path.string.len:
-    return SnapStop                                 # FIXME, must change
+  if ctx.pool.newCoreDb.stateRoot != zeroHash32:
+    return SnapStop
   # Reaching here would be quite unusual as this state is handled
   # by the deamon in the foreground.
   SnapAssembleMpt
-
-# TBD ..
 
 func stopNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   SnapStop
@@ -211,34 +211,31 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   #
   # State machine
   # ::
-  #               .-----------> idle ------------.
-  #               |               |              |
-  #               |               v              |
-  #               +----------- resume            |
-  #               |               |              |
-  #               |               v              v
-  #               |    .----> balsFetch -----> clear <---.
-  #               |    |          |              |       |
-  #               |    |          v              V       |
-  #               |    |    balsFetchFinish    ready     |
-  #               |    |          |              |       |
-  #               |    |          v              |       |
-  #               |    +---- stateForward        |       |
-  #               |    |          |              |       |
-  #               |    |          v              |       |
-  #               |    |       download <--------'       |
-  #               |    |          |                      |
-  #               |    |          v                      |
-  #               |    `--- downloadFinish               |
-  #               |               |                      |
-  #               |               v                      |
-  #               `---------> assembleMpt ---------------'
-  #                               |
-  #                               v
-  #                             [...]
-  #                               |
-  #                               v
-  #                             stop
+  #               .------------> idle ------------.
+  #               |                |              |
+  #                \               v              |
+  #                 +---------- resume            |
+  #                /               |              |
+  #               |                v              v
+  #               |    .--+--> balsFetch -----> clear <---.
+  #               |    |  |        |              |       |
+  #               |    |  |        v              V       |
+  #               |    |  |  balsFetchFinish    ready     |
+  #               |    |  |        |              |       |
+  #               |    |  |        v              |       |
+  #               |    |  `-- stateForward        |       |
+  #               |    |           |              |       |
+  #               |    |           v              |       |
+  #               |    |        download <--------'       |
+  #               |    |           |                      |
+  #               |    |           v                      |
+  #               |    `---- downloadFinish               |
+  #               |                |                      |
+  #               |                v                      |
+  #               `----------> assembleMpt ---------------'
+  #                                |
+  #                                v
+  #                              stop
   #
   let newState =
     case ctx.pool.syncState:
@@ -262,9 +259,6 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
       ctx.stateForwardNext info
     of SnapAssembleMpt:
       ctx.assembleMptNext info
-
-    # [..]
-
     of SnapStop:
       ctx.stopNext info
 

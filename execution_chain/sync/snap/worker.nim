@@ -143,21 +143,19 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         forwardNum=ctx.pool.forwardNum
 
     of SnapAssembleMpt:
-      let dbPath = ctx.importCoreDb(info).valueOr:
+      ctx.importCoreDb(info).isOkOr:
         ctx.pool.resetReq = true                    # not much else possible
         break body
 
-      ctx.pool.coreDb2Path = dbPath
-      debug info & ": CoreDb/Aristo available", dbPath
-      break body
-
-    # of TBD ..
+      debug info & ": CoreDb/Aristo available",
+        dbPath=ctx.pool.newCoreDb.newDbPath
 
     of SnapStop:
+      ctx.accountDownloadMetricsReset()             # cosmetics
+
       warn info & ": Stop snap sync not implemented yet, lingering",
         syncState=($ctx.syncState)
       bodyRc = chronos.seconds(30)
-
     # End block: `body`
 
   bodyRc
