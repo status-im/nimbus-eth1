@@ -340,6 +340,24 @@ proc new*(
     balParallelExecution,
     parallelSenderRecovery)
 
+proc refresh*(com: CommonRef) =
+  ## Readjust to updated database, e.g. after moving forward history from
+  ## Genesis to the current chain state.
+  doAssert not com.db.isNil
+  com.init(
+    com.db,
+    com.networkId,
+    com.config,
+    genesis = Genesis(nil),
+    initializeDb = true,
+    statelessProvider = com.statelessProvider,
+    statelessWitnessValidation = com.statelessWitnessValidation,
+    optimisticStatePrefetch = com.optimisticStatePrefetch,
+    balStatePrefetch = com.balStatePrefetch,
+    balStatePrefetchWorkers = com.balStatePrefetchWorkers,
+    balParallelExecution = com.balParallelExecution,
+    parallelSenderRecovery = com.parallelSenderRecovery)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -613,6 +631,7 @@ func baseFeeUpdateFraction*(com: CommonRef, fork: HardFork): uint64 =
 
 # ------------------------------------------------------------------------------
 # Setters
+# ------------------------------------------------------------------------------
 
 func `startOfHistory=`*(com: CommonRef, val: Hash32) =
   ## Setter

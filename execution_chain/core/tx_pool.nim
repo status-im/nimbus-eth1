@@ -88,6 +88,16 @@ proc new*(T: type TxPoolRef;
   new result
   result.init(chain, flags)
 
+proc refresh*(xp: TxPoolRef) =
+  # Refresh pool so it can adjust after a jump to the latest head. Any
+  # previosly pooled data will be lost.
+  let
+    chain = xp.chain
+    flags = xp.flags
+  xp.dispose()
+  xp[].reset
+  xp.init(chain, flags)
+
 # ------------------------------------------------------------------------------
 # TxPoolRef public getters
 # ------------------------------------------------------------------------------

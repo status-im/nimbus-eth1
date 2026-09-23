@@ -17,7 +17,7 @@ import
   ../networking/p2p,
   ./beacon/worker/headers/headers_target,
   ./beacon/[beacon_desc, worker],
-  ./beacon/worker/[classify, update],
+  ./beacon/worker/[classify, start_stop, update],
   ./[sync_sched, wire_protocol]
 
 export
@@ -143,6 +143,10 @@ proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
   except ValueError:
     discard
   # false
+
+proc refresh*(desc: BeaconSyncRef) =
+  ## Reassign database subleties after a soft reboot.
+  doAssert desc.ctx.updateServices("Refresh")
 
 proc configTicker*(desc: BeaconSyncRef, enable: bool) =
   doAssert not desc.ctx.isNil
