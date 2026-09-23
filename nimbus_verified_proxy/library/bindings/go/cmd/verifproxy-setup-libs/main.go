@@ -5,16 +5,6 @@
 //   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 // at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-// setup-libs downloads the precompiled libverifproxy for the current
-// platform and writes it into the verifproxy package's lib/ directory.
-//
-// Usage (from a dependent project):
-//
-//	go tool setup-libs
-//
-// Usage (during development, via go generate from verifproxy/):
-//
-//	go generate
 package main
 
 import (
@@ -77,10 +67,6 @@ func main() {
 	}
 }
 
-// resolveLibDir returns the lib/ directory inside the verifproxy package.
-// When run via go generate (CWD is verifproxy/), returns ./lib.
-// When run via go tool from a dependent project, locates the module in the
-// module cache via go list.
 func resolveLibDir() (string, error) {
 	if _, err := os.Stat("verifproxy.go"); err == nil {
 		return "lib", nil
@@ -103,8 +89,6 @@ func resolveLibDir() (string, error) {
 	return filepath.Join(info.Dir, "verifproxy", "lib"), nil
 }
 
-// ensureWritable creates destDir, making the parent writable first if needed
-// (module cache directories are typically 0555).
 func ensureWritable(destDir string) error {
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		if !os.IsPermission(err) {

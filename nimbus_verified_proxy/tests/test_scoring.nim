@@ -31,6 +31,7 @@ let scoringEngineConf = RpcVerificationEngineConf(
   codeCacheLen: 1,
   storageCacheLen: 1,
   parallelBlockDownloads: 2,
+  syncHeaderStore: false,
   freezeAtSlot: TEST_LC_SLOT,
 )
 
@@ -52,6 +53,7 @@ suite "backend scoring":
       raise newException(TestProxyError, error.errMsg)
     engine.registerBackend(backend, fullExecutionCapabilities)
     engine.setupTestBeacon(ts)
+    check (waitFor engine.syncOnce()).isOk()
     let frontend1 = engine.getExecutionApiFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
@@ -87,6 +89,7 @@ suite "backend scoring":
       raise newException(TestProxyError, error.errMsg)
     engine.registerBackend(backend, fullExecutionCapabilities)
     engine.setupTestBeacon(ts)
+    check (waitFor engine.syncOnce()).isOk()
     let frontend2 = engine.getExecutionApiFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
