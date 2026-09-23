@@ -47,7 +47,8 @@ proc mergePayloadImpl[LeafType, T](
     path: Hash32, # Leaf item to add to the database
     leaf: Opt[LeafType],
     payload: T, # Payload value
-): Result[(LeafType, VertexRef, LeafType), AristoError] =
+    stoStatic = true, # Storage trie children get static vids
+): Result[(LeafType, VertexRef, LeafType, int), AristoError] =
   ## Merge the argument `(root,path)` key-value-pair into the top level vertex
   ## table of the database `db`. The `path` argument is used to address the
   ## leaf vertex with the payload. It is stored or updated on the database
@@ -63,9 +64,15 @@ proc mergePayloadImpl[LeafType, T](
 
       # We're at the root vertex and there is no data - this must be a fresh
       # VertexID!
-      return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil)
+      return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil, 0)
     vids: ArrayBuf[NibblesBuf.high + 1, VertexID]
     vtxs: ArrayBuf[NibblesBuf.high + 1, BranchRef]
+
+  template childVids(): VertexID =
+    if root == STATE_ROOT_VID or stoStatic:
+      db.staticVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
+    else:
+      db.vidFetch(16)
 
   template resetKeys() =
     # Reset cached hashes of touched verticies
@@ -93,16 +100,12 @@ proc mergePayloadImpl[LeafType, T](
               return err(MergeNoAction)
             let leafVtx = db.layersUpdate((root, cur), StoLeafRef(vtx))
             leafVtx.stoData = payload
-          (leafVtx, nil, nil)
+          (leafVtx, nil, nil, -1)
         else:
           # Turn leaf into a branch (or extension) then insert the two leaves
           # into the branch
           let
-            startVid =
-              if root == STATE_ROOT_VID:
-                db.accVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
-              else:
-                db.vidFetch(16)
+            startVid = childVids()
             branch =
               if n > 0:
                 ExtBranchRef.init(psuffix.slice(0, n), startVid, 0)
@@ -115,6 +118,7 @@ proc mergePayloadImpl[LeafType, T](
             when payload is AristoAccount:
               let accVtx = db.layersPutLeaf((root, local), pfx, AccLeafRef(vtx).account)
               accVtx.stoID = AccLeafRef(vtx).stoID
+              accVtx.stoHint = AccLeafRef(vtx).stoHint
               accVtx
             else:
               db.layersPutLeaf((root, local), pfx, StoLeafRef(vtx).stoData)
@@ -128,7 +132,7 @@ proc mergePayloadImpl[LeafType, T](
 
           # We need to return vtx here because its pfx member hasn't yet been
           # sliced off and is therefore shared with the hike
-          (leafVtx, vtx, other)
+          (leafVtx, vtx, other, pos + n + 1)
 
       resetKeys()
       return ok(res)
@@ -160,16 +164,12 @@ proc mergePayloadImpl[LeafType, T](
             leafVtx = db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
 
           resetKeys()
-          return ok((leafVtx, nil, nil))
+          return ok((leafVtx, nil, nil, pos + n + 1))
       else:
         # Partial path match - we need to split the existing branch at
         # the point of divergence, inserting a new branch
         let
-          startVid =
-            if root == STATE_ROOT_VID:
-              db.accVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
-            else:
-              db.vidFetch(16)
+          startVid = childVids()
           branch =
             if n > 0:
               ExtBranchRef.init(psuffix.slice(0, n), startVid, 0)
@@ -196,7 +196,7 @@ proc mergePayloadImpl[LeafType, T](
         db.layersPutVtx((root, cur), branch)
 
         resetKeys()
-        return ok((leafVtx, nil, nil))
+        return ok((leafVtx, nil, nil, pos + n + 1))
 
     of BoundaryNode:
       let evtx = BoundaryNodeRef(vtx)
@@ -209,11 +209,7 @@ proc mergePayloadImpl[LeafType, T](
         # creating a new branch. This is similar as for leaves except that
         # the existing BoundaryNode is moved down one level.
         let
-          startVid =
-            if root == STATE_ROOT_VID:
-              db.accVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
-            else:
-              db.vidFetch(16)
+          startVid = childVids()
           branch =
             if n > 0:
               ExtBranchRef.init(psuffix.slice(0, n), startVid, 0)
@@ -241,7 +237,7 @@ proc mergePayloadImpl[LeafType, T](
 
         db.layersPutVtx((root, cur), branch)
         resetKeys()
-        return ok((leafVtx, nil, nil))
+        return ok((leafVtx, nil, nil, pos + n + 1))
 
   err(MergeHikeFailed)
 
@@ -302,9 +298,10 @@ proc mergeSlot*(
       elif stoID.vid.isValid: (true, stoID.vid)   # Re-use previous vid
       else: (true, db.vidFetch())                 # Create new vid
     mixPath = mixUp(accPath, stoPath)
+    stoStatic = not stoID.isValid or 0 < accVtx.stoHint
     # Call merge
     updated = db.mergePayloadImpl(
-      useID.vid, stoPath, db.cachedStoLeaf(mixPath), stoData
+      useID.vid, stoPath, db.cachedStoLeaf(mixPath), stoData, stoStatic
     ).valueOr:
       if error == MergeNoAction:
         assert stoID.isValid         # debugging only
@@ -325,10 +322,28 @@ proc mergeSlot*(
       Hash32(getBytes(NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated[1].pfx)))
     db.layersPutStoLeaf(mixUp(accPath, otherPath), updated[2])
 
-  if not stoID.isValid:
-    # Make sure that there is an account that refers to that storage trie
+  # A hint below the leaves costs a negative lookup per level, one above lands
+  # on a branch that the walk resolves from, so bias it shallow: follow a
+  # shallower placement at once, a deeper one only when it clears hint by two.
+  let hint =
+    if not stoStatic:
+      0'u8
+    elif 0 <= updated[3]:
+      let placed = uint8(min(updated[3], STATIC_VID_LEVELS) + 1)
+      if placed < accVtx.stoHint or accVtx.stoHint == 0:
+        placed
+      elif placed > accVtx.stoHint + 1:
+        placed - 1
+      else:
+        accVtx.stoHint
+    else:
+      accVtx.stoHint
+  if not stoID.isValid or accVtx.stoHint != hint:
+    # Make sure that there is an account that refers to that storage trie and
+    # remembers where to start probing for its leaves
     let leaf = db.layersUpdate((STATE_ROOT_VID, accHike.legs[^1].wp.vid), accVtx) # Dup on modify
     leaf.stoID = useID
+    leaf.stoHint = hint
     db.layersPutAccLeaf(accPath, leaf)
 
   ok()
