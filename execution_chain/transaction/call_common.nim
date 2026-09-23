@@ -106,7 +106,7 @@ proc setupEVM(params: CallParams, keepStack: bool): Computation =
     tx = params.tx
     evmGas = if tx.gasLimit < params.intrinsic.execution: 0.GasInt
              else: tx.gasLimit - params.intrinsic.execution
-    executionGasBudget = TX_GAS_LIMIT - params.intrinsic.execution
+    executionGasBudget = TX_MAX_GAS_LIMIT - params.intrinsic.execution
 
   var
     executionGas = evmGas

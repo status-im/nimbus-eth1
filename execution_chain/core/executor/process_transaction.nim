@@ -93,7 +93,7 @@ template check2dGasInclusion*(
   let
     executionGasAvailable = vmState.blockCtx.gasLimit - vmState.blockExecutionGasUsed
     stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
-    want = min(TX_GAS_LIMIT.GasInt, txGasLimit)
+    want = min(TX_MAX_GAS_LIMIT.GasInt, txGasLimit)
 
   if want > executionGasAvailable:
     fail("execution gas used exceeds limit, want: " & $want & ", available: " & $executionGasAvailable)
