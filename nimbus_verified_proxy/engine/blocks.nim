@@ -347,18 +347,7 @@ proc verifyHeader(
       ?(await engine.verifyEIP2935Membership(anchor, header.number, hash))
 
     if not eipVerified:
-      if header.number >= anchor.number:
-        return err(
-          (
-            UnavailableDataError,
-            "the requested block is newer than the " & $engine.anchor & " block",
-            UNTAGGED,
-          )
-        )
-
-      ?(
-        await engine.walkBlocks(anchor.number, header.number, anchor.parentHash, hash)
-      )
+      ?(await engine.walkBlocks(anchor.number, header.number, anchor.parentHash, hash))
 
   ok()
 

@@ -148,7 +148,7 @@ suite "test verified blocks":
 
       check:
         verifiedBlk.isErr()
-        verifiedBlk.error.errType == UnavailableDataError
+        verifiedBlk.error.errType == FrontendError
 
     engine.anchor = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "safe")
 
