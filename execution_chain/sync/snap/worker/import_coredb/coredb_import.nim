@@ -49,14 +49,12 @@ proc mergeCanonicalHead(
   let
     cHdr = ?db.getHeader(cNum, info)
     cHash = ?db.getBlockHash(cNum, info)
+    cBal = ?db.getBal(cNum, info)
     startOfHist = cHdr.parentHash
   tx2.persistHeaderAndSetHead(cHash, cHdr, startOfHist).isOkOr:
     error info & ": Error setting canonical head", header=cNum, `error`=error
     return err()
-
-  # If present, store BAL
-  db.getBal(cNum, info).isErrOr:
-    tx2.persistBlockAccessList(cHash, value)
+  tx2.persistBlockAccessList(cHash, cBal)
 
   ok(move cNum)
 
