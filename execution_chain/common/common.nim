@@ -166,7 +166,7 @@ proc initializeDb(com: CommonRef) =
   if canonicalHeadHashKey().toOpenArray notin txFrame:
     let genesisHash = com.genesisHeader.computeBlockHash
     info "Writing genesis to DB",
-      blockHash = genesisHash ,
+      blockHash = genesisHash,
       stateRoot = com.genesisHeader.stateRoot,
       difficulty = com.genesisHeader.difficulty,
       gasLimit = com.genesisHeader.gasLimit,
@@ -200,10 +200,18 @@ proc initializeDb(com: CommonRef) =
       debug "Reverting to base", err = error
       FcuHashAndNumber(hash: baseHash, number: base.number)
 
+  # Check for truncated history
+  var sohNum = BlockNumber(0)
+  txFrame.getFirstBlockHeader().isErrOr:
+    doAssert 0 < value.number
+    com.startOfHistory = value.parentHash
+    sohNum = value.number - 1
+
   info "Database initialized",
     base = (baseHash, base.number),
     finalized = (finalized.hash, finalized.number),
-    head = (head.hash, head.number)
+    head = (head.hash, head.number),
+    startOfHistory = sohNum
 
 proc init(com         : CommonRef,
           db          : CoreDbRef,
@@ -218,7 +226,6 @@ proc init(com         : CommonRef,
           balStatePrefetchWorkers: int,
           balParallelExecution: bool,
           parallelSenderRecovery: bool) =
-
 
   config.daoCheck()
 
@@ -632,10 +639,6 @@ func baseFeeUpdateFraction*(com: CommonRef, fork: HardFork): uint64 =
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
-
-func `startOfHistory=`*(com: CommonRef, val: Hash32) =
-  ## Setter
-  com.startOfHistory = val
 
 func setTTD*(com: CommonRef, ttd: Opt[DifficultyInt]) =
   ## useful for testing
