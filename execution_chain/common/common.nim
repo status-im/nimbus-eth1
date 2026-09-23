@@ -166,7 +166,7 @@ proc initializeDb(com: CommonRef) =
   if canonicalHeadHashKey().toOpenArray notin txFrame:
     let genesisHash = com.genesisHeader.computeBlockHash
     info "Writing genesis to DB",
-      blockHash = genesisHash ,
+      blockHash = genesisHash,
       stateRoot = com.genesisHeader.stateRoot,
       difficulty = com.genesisHeader.difficulty,
       gasLimit = com.genesisHeader.gasLimit,
@@ -183,6 +183,7 @@ proc initializeDb(com: CommonRef) =
 
     txFrame.checkpoint(com.genesisHeader.number)
     com.db.persist(txFrame)
+
 
   # The database must at least contain the base and head pointers - the base
   # is implicitly considered finalized
@@ -219,7 +220,6 @@ proc init(com         : CommonRef,
           balParallelExecution: bool,
           parallelSenderRecovery: bool) =
 
-
   config.daoCheck()
 
   com.db = db
@@ -231,6 +231,7 @@ proc init(com         : CommonRef,
 
   # com.forkIdCalculator and com.genesisHash are set
   # by setForkId
+  let txFrame = db.baseTxFrame()
   if genesis.isNil.not:
     let
       forkDeterminer = ForkDeterminationInfo(
@@ -239,7 +240,6 @@ proc init(com         : CommonRef,
         time: Opt.some(genesis.timestamp)
       )
       fork = toHardFork(com.forkTransitionTable, forkDeterminer)
-      txFrame = db.baseTxFrame()
 
     # Must not overwrite the global state on the single state DB
 
@@ -253,6 +253,11 @@ proc init(com         : CommonRef,
 
   if initializeDb:
     com.initializeDb()
+
+  # Check for truncated history
+  txFrame.getFirstBlockHeader().isErrOr:
+    doAssert 0 < value.number
+    com.startOfHistory = value.parentHash
 
   com.statelessProvider = statelessProvider
   com.statelessWitnessValidation = statelessWitnessValidation
@@ -632,10 +637,6 @@ func baseFeeUpdateFraction*(com: CommonRef, fork: HardFork): uint64 =
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
-
-func `startOfHistory=`*(com: CommonRef, val: Hash32) =
-  ## Setter
-  com.startOfHistory = val
 
 func setTTD*(com: CommonRef, ttd: Opt[DifficultyInt]) =
   ## useful for testing
