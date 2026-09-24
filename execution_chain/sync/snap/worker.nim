@@ -108,7 +108,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         bodyRc = daemonWaitClearFailInterval        # take a nap
         break body
 
-      ctx.resetServices info                        # reset system
+      doAssert ctx.resetServices(info).isOk         # reset system
 
     of SnapReady:
       # Start headers download on the beacon sync server to run
