@@ -223,7 +223,7 @@ procSuite "Beacon Network":
           # TODO: If we were to encode the historical summaries in the db code
           # it would fail due to slot based fork digest until we allow for
           # custom networks.
-          forkDigest = atConsensusFork(forkDigests, consensusFork)
+          forkDigest = atEpoch(forkDigests, cfg.ELECTRA_FORK_EPOCH, cfg)
 
           content = encodeSsz(historicalSummariesWithProof, forkDigest)
 
