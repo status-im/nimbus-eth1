@@ -80,7 +80,8 @@ suite "Beacon Chain Historical Summaries With Proof - Test Vectors":
       verifyProof(summariesWithProof, Digest.fromHex(testCase.beacon_state_root))
 
     # Encode content and content key
-    let forkDigest = atEpoch(forkDigests[], summariesWithProof.epoch, metadata.cfg)
+    let consensusFork = consensusForkAtEpoch(metadata.cfg, summariesWithProof.epoch)
+    let forkDigest = atConsensusFork(forkDigests[], consensusFork)
     check:
       encodeSsz(summariesWithProof, forkDigest) == contentValueEncoded
       encode(contentKey.value()).asSeq() == contentKeyEncoded
