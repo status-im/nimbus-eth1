@@ -6063,6 +6063,22 @@ var _wasmCall = Module["_wasmCall"] = (a0, a1, a2, a3) => (_wasmCall = Module["_
 
 var _proxyCall = Module["_proxyCall"] = (a0, a1, a2, a3, a4) => (_proxyCall = Module["_proxyCall"] = wasmExports["proxyCall"])(a0, a1, a2, a3, a4);
 
+var _wasmEthSync = Module["_wasmEthSync"] = (a0, a1) => (_wasmEthSync = Module["_wasmEthSync"] = wasmExports["wasmEthSync"])(a0, a1);
+
+var _nvp_eth_sync = Module["_nvp_eth_sync"] = (a0, a1, a2) => (_nvp_eth_sync = Module["_nvp_eth_sync"] = wasmExports["nvp_eth_sync"])(a0, a1, a2);
+
+var _wasmEthSyncInterval = Module["_wasmEthSyncInterval"] = (a0, a1) => (_wasmEthSyncInterval = Module["_wasmEthSyncInterval"] = wasmExports["wasmEthSyncInterval"])(a0, a1);
+
+var _nvp_eth_syncInterval = Module["_nvp_eth_syncInterval"] = (a0, a1, a2) => (_nvp_eth_syncInterval = Module["_nvp_eth_syncInterval"] = wasmExports["nvp_eth_syncInterval"])(a0, a1, a2);
+
+var _wasmOpSync = Module["_wasmOpSync"] = (a0, a1) => (_wasmOpSync = Module["_wasmOpSync"] = wasmExports["wasmOpSync"])(a0, a1);
+
+var _nvp_op_sync = Module["_nvp_op_sync"] = (a0, a1, a2) => (_nvp_op_sync = Module["_nvp_op_sync"] = wasmExports["nvp_op_sync"])(a0, a1, a2);
+
+var _wasmOpSyncInterval = Module["_wasmOpSyncInterval"] = (a0, a1) => (_wasmOpSyncInterval = Module["_wasmOpSyncInterval"] = wasmExports["wasmOpSyncInterval"])(a0, a1);
+
+var _nvp_op_syncInterval = Module["_nvp_op_syncInterval"] = (a0, a1, a2) => (_nvp_op_syncInterval = Module["_nvp_op_syncInterval"] = wasmExports["nvp_op_syncInterval"])(a0, a1, a2);
+
 var _wasmProcessTasks = Module["_wasmProcessTasks"] = () => (_wasmProcessTasks = Module["_wasmProcessTasks"] = wasmExports["wasmProcessTasks"])();
 
 var _processVerifProxyTasks = Module["_processVerifProxyTasks"] = a0 => (_processVerifProxyTasks = Module["_processVerifProxyTasks"] = wasmExports["processVerifProxyTasks"])(a0);
