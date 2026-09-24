@@ -68,6 +68,9 @@ const
   noHeadersLogWaitInterval* = chronos.seconds(120)
     ## Reduce logging noise
 
+  triggeredHeadersLogWaitInterval* = chronos.seconds(120)
+    ## Reduce logging noise
+
   maxHeadersLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 

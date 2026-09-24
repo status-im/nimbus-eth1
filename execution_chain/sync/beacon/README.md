@@ -96,6 +96,9 @@ symbol on the left. Single letter symbol have the following meaning:
          symbol is potentally used in code comments of the implementation,
          only.)
 
+* *F* -- cached value of the resolved finalised hash of the last
+         *consensus head* request.
+
 ### Sync Processing
 
 The syncer starts at an idle state
@@ -269,6 +272,7 @@ be available if *nimbus* is compiled with the additional make flags
 | nec_sync_last_block_imported | block height | **I**, *0 when idle* |
 | nec_sync_head                | block height | **H**, *0 when idle* |
 | nec_sync_consensus_head      | block height | **T**, *increasing*  |
+| nec_sync_consensus_finalised | block height | **F**, *increasing*  |
 | nec_sync_distance_to_sync    | block diff   | max(0, **T**-**L**)  |
 | nec_sync_eta_secs            | time seconds | estimated ETA        |
 |                              |              |                      |

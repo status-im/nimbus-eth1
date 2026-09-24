@@ -93,9 +93,7 @@ proc headerDownloadTrigger*(
   let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
   if consHeadNum < ctx.pool.lastConsNum + nConsHeadCachedDeltaMin - 1 and
      not ctx.pool.beaconTarget:                     # maybe manual target set?
-    let now = Moment.now()
-    if ctx.pool.lastNoHdrsLog + noHeadersLogWaitInterval < now:
-      ctx.pool.lastNoHdrsLog = now
+    ctx.pool.lastNoHdrsLog.logCtrl(noHeadersLogWaitInterval):
       trace info & ": Not enough headers to download yet", firstHeader=firstNum,
         lastConsHead=ctx.pool.lastConsNum, consHead=consHeadNum,
         syncState=($ctx.syncState)
@@ -138,10 +136,15 @@ proc headerDownloadTrigger*(
     return err(error)
 
   ctx.pool.headersSynced = false                    # mark ongoing header update
-  trace info & ": Triggered headers downloading", firstNum,
-    syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
-    nEthPeers=ctx.nEthPeers()
+  ctx.pool.lastTrggHdrsLog.logCtrl(triggeredHeadersLogWaitInterval):
+    trace info & ": Triggered headers downloading", firstNum,
+      syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
+      nEthPeers=ctx.nEthPeers()
   ok()
+
+proc headerDownloadCancel*(ctx: SnapCtxRef) =
+  ## Terminate any ongoing download
+  discard ctx.pool.beaconSync.singleReset()
 
 # ------------------------------------------------------------------------------
 # End

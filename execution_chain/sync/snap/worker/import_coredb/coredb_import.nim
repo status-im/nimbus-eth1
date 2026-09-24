@@ -31,6 +31,20 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc mergeGenesis(
+    tx2: CoreDbTxRef;
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[void] =
+  # Import Genesis
+  let
+    gHdr = ?db.getHeader(BlockNumber(0), info)
+    gHash = gHdr.computeBlockHash
+  tx2.persistHeader(gHash, gHdr).isOkOr:
+    error info & ": Error importing Genesis", `error`=error
+    return err()
+  ok()
+
 proc mergeCanonicalHead(
     tx2: CoreDbTxRef;
     db: CacheDbRef;
@@ -132,6 +146,9 @@ proc importFlatImpl(
     db: CacheDbRef;
     info: static[string];
       ): Opt[AristoImportStats] =
+  # Import Genesis
+  ?tx2.mergeGenesis(db, info)
+
   # Import canonical head
   let cNum = ?tx2.mergeCanonicalHead(db, info)
 
