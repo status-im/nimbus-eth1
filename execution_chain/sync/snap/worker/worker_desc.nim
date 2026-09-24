@@ -136,6 +136,7 @@ type
     lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastNoHdrsLog*: chronos.Moment   ## Control update messages
+    lastTrggHdrsLog*: chronos.Moment ## Control update messages
     lastMaxHdrsLog*: chronos.Moment  ## Control update messages
     lockedBalsLog*: chronos.Moment   ## Control messages about missing peers
 
@@ -200,6 +201,13 @@ proc nEthPeers*(ctx: SnapCtxRef): int =
   ctx.pool.beaconSync.ctx.nSyncPeers()
 
 # ---------
+
+template logCtrl*(lastLog: var Moment, logWait: Duration, code: untyped) =
+  block:
+    let now = Moment.now()
+    if lastLog + logWait < now:
+      code
+      lastLog = now
 
 func fromBytes*(_: type Hash32, path: openArray[byte]): Hash32 =
   doAssert path.len == 32
