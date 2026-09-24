@@ -19,7 +19,7 @@ import
   ./api_utils
 
 from ../../db/payload_body_db import toPayloadBodyV1, toPayloadBodyV2
-from beacon_chain/spec/engine_types import MAX_BODIES_REQUEST
+from ../engine_ssz_types import MAX_BODIES_REQUEST
 
 proc getPayloadBodiesByHash*(
     ben: BeaconEngineRef, hashes: seq[Hash32], withBlockAccessList: bool

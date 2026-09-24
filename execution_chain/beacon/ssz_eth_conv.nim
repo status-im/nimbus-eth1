@@ -18,11 +18,9 @@ import
   ./payload_conv,
   ../core/pooled_txs
 
-from beacon_chain/spec/engine_types as engine_ssz_types import
-  BlobsBundleV1, BlobsBundleV2, ExecutionRequests, MAX_BYTES_PER_EXECUTION_REQUEST,
-  ExecutionPayloadBodyParis, ExecutionPayloadBodyShanghai, ExecutionPayloadBodyAmsterdam,
-  ExecutionPayloadParis, ExecutionPayloadShanghai, ExecutionPayloadCancun,
-  ExecutionPayloadAmsterdam
+from ./engine_ssz_types import
+  BlobsBundleV1, BlobsBundleV2, ExecutionRequestsList, MAX_BYTES_PER_EXECUTION_REQUEST,
+  ExecutionPayloadBodyParis, ExecutionPayloadBodyShanghai, ExecutionPayloadBodyAmsterdam
 
 func toHash32*(d: Eth2Digest): Hash32 =
   d.data.to(Hash32)
@@ -86,32 +84,32 @@ func ethBlock*(p: ForkyExecutionPayload,
                  requestsHash: Opt[Hash32]): Block {.raises: [RlpError].} =
   let
     withdrawalsRoot =
-      when p is ExecutionPayloadParis:
+      when p is bellatrix.ExecutionPayload:
         Opt.none(Hash32)
       else:
         Opt.some(wdRoot(asSeq(p.withdrawals)))
     blobGasUsed =
-      when p is ExecutionPayloadCancun or p is ExecutionPayloadAmsterdam:
+      when p is deneb.ExecutionPayload or p is gloas.ExecutionPayload:
         Opt.some(p.blob_gas_used)
       else:
         Opt.none(uint64)
     excessBlobGas =
-      when p is ExecutionPayloadCancun or p is ExecutionPayloadAmsterdam:
+      when p is deneb.ExecutionPayload or p is gloas.ExecutionPayload:
         Opt.some(p.excess_blob_gas)
       else:
         Opt.none(uint64)
     blockAccessListHash =
-      when p is ExecutionPayloadAmsterdam:
+      when p is gloas.ExecutionPayload:
         balHash(Opt.some(asSeq(p.block_access_list)))
       else:
         Opt.none(Hash32)
     slotNumber =
-      when p is ExecutionPayloadAmsterdam:
+      when p is gloas.ExecutionPayload:
         Opt.some(uint64(p.slot_number))
       else:
         Opt.none(uint64)
     withdrawals =
-      when p is ExecutionPayloadParis:
+      when p is bellatrix.ExecutionPayload:
         Opt.none(seq[blocks.Withdrawal])
       else:
         Opt.some(ethWithdrawals(asSeq(p.withdrawals)))
@@ -148,7 +146,7 @@ func ethBlock*(p: ForkyExecutionPayload,
   )
 
 func ethBlockAccessList*(p: ForkyExecutionPayload): Opt[BlockAccessListRef] {.raises: [RlpError].} =
-  when p is ExecutionPayloadAmsterdam:
+  when p is gloas.ExecutionPayload:
     Opt.some(ethBlockAccessList(asSeq(p.block_access_list)))
   else:
     Opt.none(BlockAccessListRef)
@@ -171,24 +169,23 @@ func sszPayload*[T: ForkyExecutionPayload](blk: Block,
     base_fee_per_gas: header.baseFeePerGas.get(0.u256),
     block_hash: toDigest(header.computeRlpHash))
 
-  when T is ExecutionPayloadAmsterdam:
+  when T is gloas.ExecutionPayload:
     res.transactions = sszTxsAmsterdam(blk.transactions)
   else:
     res.transactions = typeof(default(T).transactions).init(sszTxs(blk.transactions))
 
-  when T isnot ExecutionPayloadParis:
+  when T isnot bellatrix.ExecutionPayload:
     let withdrawals = blk.withdrawals.get(newSeq[blocks.Withdrawal]())
-    when T is ExecutionPayloadAmsterdam:
+    when T is gloas.ExecutionPayload:
       res.withdrawals = sszWithdrawals(withdrawals)
     else:
       res.withdrawals = typeof(default(T).withdrawals).init(sszWithdrawals(withdrawals))
 
-  # ExecutionPayloadPrague*/Osaka* are aliases of ExecutionPayloadCancun
-  when T is ExecutionPayloadCancun or T is ExecutionPayloadAmsterdam:
+  when T is deneb.ExecutionPayload or T is gloas.ExecutionPayload:
     res.blob_gas_used = header.blobGasUsed.get(0'u64)
     res.excess_blob_gas = header.excessBlobGas.get(0'u64)
 
-  when T is ExecutionPayloadAmsterdam:
+  when T is gloas.ExecutionPayload:
     let balBytes = if bal.isSome(): bal.get()[].encode() else: newSeq[byte]()
     res.block_access_list = typeof(default(T).block_access_list).init(balBytes)
     res.slot_number = gloas.Slot(header.slotNumber.get(0'u64))
@@ -232,9 +229,9 @@ func sszBlobsBundleV2*(b: pooled_txs.BlobsBundle): engine_ssz_types.BlobsBundleV
     blobs: typeof(default(T).blobs).init(
       b.blobs.mapIt(deneb.Blob(distinctBase(it)))))
 
-func sszExecutionRequests*(reqs: seq[seq[byte]]): engine_ssz_types.ExecutionRequests =
-  engine_ssz_types.ExecutionRequests.init(
+func sszExecutionRequests*(reqs: seq[seq[byte]]): engine_ssz_types.ExecutionRequestsList =
+  engine_ssz_types.ExecutionRequestsList.init(
     reqs.mapIt(ByteList[Limit MAX_BYTES_PER_EXECUTION_REQUEST].init(it)))
 
-func ethExecutionRequests*(reqs: engine_ssz_types.ExecutionRequests): seq[seq[byte]] =
+func ethExecutionRequests*(reqs: engine_ssz_types.ExecutionRequestsList): seq[seq[byte]] =
   asSeq(reqs).mapIt(asSeq(it))

@@ -25,7 +25,9 @@ import
   ../execution_chain/core/tx_pool,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/beacon/beacon_engine,
-  beacon_chain/spec/engine_types,
+  ../execution_chain/beacon/engine_ssz_types,
+  beacon_chain/spec/datatypes/bellatrix,
+  beacon_chain/spec/datatypes/capella,
   ../execution_chain/rpc/rpc_server,
   ../execution_chain/rpc/engine_rest_api
 
@@ -81,7 +83,7 @@ suite "Engine SSZ API REST transport: business logic":
 
   var payloadId: Bytes8
   var payloadIdHex: string
-  var builtPayload: ExecutionPayloadParis
+  var builtPayload: bellatrix.ExecutionPayload
 
   suiteTeardown:
     waitFor session.closeWait()
@@ -189,7 +191,7 @@ suite "Engine SSZ API REST transport: business logic":
     let status = SSZ.decode(resp[1], ForkchoiceUpdateResponse)
     check status.payload_status.status == uint8(PayloadStatusCode.VALID)
     check status.payload_id.isSome
-    payloadId = Bytes8(distinctBase(status.payload_id.get))
+    payloadId = Bytes8(status.payload_id.get)
     payloadIdHex = "0x" & byteutils.toHex(distinctBase(payloadId))
 
   test "GET /payloads/{id} with no Eth-Execution-Version header should return 400 unsupported-fork":
@@ -288,7 +290,7 @@ suite "Engine SSZ API REST transport: business logic":
 
   test "POST /payloads with a well-formed envelope for an inactive fork should return 422 invalid-body":
     let body = SSZ.encode(ExecutionPayloadEnvelopeShanghai(
-      payload: ExecutionPayloadShanghai()))
+      payload: capella.ExecutionPayload()))
     let resp = waitFor HttpClientRequestRef.post(session, base & "/engine/v1/payloads",
       headers = @[
         ("Eth-Execution-Version", "shanghai"),
@@ -320,7 +322,7 @@ suite "Engine SSZ API REST transport: business logic":
     check resp[0] == 200
     let status = SSZ.decode(resp[1], PayloadStatus)
     check status.status == uint8(PayloadStatusCode.INVALID)
-    check status.status != uint8(PayloadStatusCode.INVALID_BLOCK_HASH)
+    check status.status != PAYLOAD_STATUS_INVALID_BLOCK_HASH
 
   test "POST /forkchoice with an inconsistent forkchoice state should return 409 invalid-forkchoice":
     # The block imported above is known to the chain but is not (yet) the

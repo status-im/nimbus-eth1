@@ -13,13 +13,13 @@ import
   std/[sequtils, typetraits],
   eth/common/eth_types as common,
   beacon_chain/spec/datatypes/bellatrix,
+  beacon_chain/spec/datatypes/capella,
   beacon_chain/spec/datatypes/deneb,
   beacon_chain/spec/datatypes/gloas,
   web3/execution_types as web3et,
   web3/engine_api_types as web3eat,
-  ../beacon/ssz_eth_conv
-
-import beacon_chain/spec/engine_types as engine_ssz_types
+  ../beacon/ssz_eth_conv,
+  ../beacon/engine_ssz_types
 
 export ssz_eth_conv.toHash32, ssz_eth_conv.toDigest
 
@@ -29,8 +29,7 @@ func toSszStatus(status: PayloadExecutionStatus): uint8 =
   case status
   of PayloadExecutionStatus.valid: uint8(PayloadStatusCode.VALID)
   of PayloadExecutionStatus.invalid: uint8(PayloadStatusCode.INVALID)
-  of PayloadExecutionStatus.invalid_block_hash:
-    uint8(PayloadStatusCode.INVALID_BLOCK_HASH)
+  of PayloadExecutionStatus.invalid_block_hash: PAYLOAD_STATUS_INVALID_BLOCK_HASH
   of PayloadExecutionStatus.syncing: uint8(PayloadStatusCode.SYNCING)
   of PayloadExecutionStatus.accepted: uint8(PayloadStatusCode.ACCEPTED)
 
@@ -45,13 +44,13 @@ func toSsz*(status: PayloadStatusV1): engine_ssz_types.PayloadStatus =
       else: optNone(StringSsz))
 
 func toWeb3Status(status: uint8): PayloadExecutionStatus =
-  case PayloadStatusCode(status)
-  of PayloadStatusCode.VALID: PayloadExecutionStatus.valid
-  of PayloadStatusCode.INVALID: PayloadExecutionStatus.invalid
-  of PayloadStatusCode.SYNCING: PayloadExecutionStatus.syncing
-  of PayloadStatusCode.ACCEPTED: PayloadExecutionStatus.accepted
-  of PayloadStatusCode.INVALID_BLOCK_HASH:
-    PayloadExecutionStatus.invalid_block_hash
+  case status
+  of uint8(PayloadStatusCode.VALID): PayloadExecutionStatus.valid
+  of uint8(PayloadStatusCode.INVALID): PayloadExecutionStatus.invalid
+  of uint8(PayloadStatusCode.SYNCING): PayloadExecutionStatus.syncing
+  of uint8(PayloadStatusCode.ACCEPTED): PayloadExecutionStatus.accepted
+  of PAYLOAD_STATUS_INVALID_BLOCK_HASH: PayloadExecutionStatus.invalid_block_hash
+  else: PayloadExecutionStatus.invalid
 
 func toWeb3*(status: engine_ssz_types.PayloadStatus): PayloadStatusV1 =
   PayloadStatusV1(
@@ -63,8 +62,8 @@ func toWeb3*(status: engine_ssz_types.PayloadStatus): PayloadStatusV1 =
       if status.validation_error.isSome: Opt.some(status.validation_error.get.toString)
       else: Opt.none(string))
 
-func toSsz*(w: WithdrawalV1): engine_ssz_types.Withdrawal =
-  engine_ssz_types.Withdrawal(
+func toSsz*(w: WithdrawalV1): capella.Withdrawal =
+  capella.Withdrawal(
     index: uint64(w.index),
     validator_index: uint64(w.validatorIndex),
     address: w.address,
@@ -120,7 +119,7 @@ func toWeb3*(resp: ForkchoiceUpdateResponse): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
     payloadStatus: toWeb3(resp.payload_status),
     payloadId:
-      if resp.payload_id.isSome: Opt.some(Bytes8(distinctBase(resp.payload_id.get)))
+      if resp.payload_id.isSome: Opt.some(Bytes8(resp.payload_id.get))
       else: Opt.none(Bytes8))
 
 func toWeb3*(b: engine_ssz_types.BlobAndProofV1): web3eat.BlobAndProofV1 =
@@ -138,8 +137,8 @@ func toWeb3*(b: engine_ssz_types.BlobAndProofV2): web3eat.BlobAndProofV2 =
 
 func toWeb3*(b: engine_ssz_types.BlobCellsAndProofs): web3eat.BlobCellsAndProofsV1 =
   var
-    blobCells: seq[seq[byte]]
-    proofs: seq[web3eat.KzgProof]
+    blobCells: seq[Opt[seq[byte]]]
+    proofs: seq[Opt[web3eat.KzgProof]]
   let
     sszBlobCells = asSeq(b.blob_cells)
     sszProofs = asSeq(b.proofs)
@@ -147,6 +146,6 @@ func toWeb3*(b: engine_ssz_types.BlobCellsAndProofs): web3eat.BlobCellsAndProofs
   doAssert(sszProofs.len == engine_ssz_types.CELLS_PER_EXT_BLOB)
   for i in 0 ..< engine_ssz_types.CELLS_PER_EXT_BLOB:
     if sszBlobCells[i].isSome:
-      blobCells.add(@(sszBlobCells[i].get))
-      proofs.add(web3eat.KzgProof(sszProofs[i].get.bytes))
+      blobCells.add(Opt.some(@(sszBlobCells[i].get)))
+      proofs.add(Opt.some(web3eat.KzgProof(sszProofs[i].get.bytes)))
   web3eat.BlobCellsAndProofsV1(blob_cells: blobCells, proofs: proofs)

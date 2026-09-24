@@ -34,7 +34,7 @@ import
   ./rpc_server,
   ./engine_ssz_conv
 
-import beacon_chain/spec/engine_types as engine_ssz_types
+import ../beacon/engine_ssz_types
 import beacon_chain/spec/datatypes/gloas except PayloadStatus
 
 export presto, jwt_auth
@@ -199,17 +199,9 @@ proc handleNewPayload(ben: BeaconEngineRef, request: HttpRequestRef,
       let beaconRoot = Opt.some(toHash32(body.parent_beacon_block_root))
       status = await ben.newPayload(fork, body.payload, Opt.none(BlockAccessListRef),
         beaconRoot, Opt.none(seq[seq[byte]]))
-    of EngineFork.Prague:
+    of EngineFork.Prague, EngineFork.Osaka:
       let body =
         try: SSZ.decode(data, ExecutionPayloadEnvelopePrague)
-        except CatchableError: return sszDecodeErrorResponse()
-      let beaconRoot = Opt.some(toHash32(body.parent_beacon_block_root))
-      let executionRequests = Opt.some(ethExecutionRequests(body.execution_requests))
-      status = await ben.newPayload(fork, body.payload, Opt.none(BlockAccessListRef),
-        beaconRoot, executionRequests)
-    of EngineFork.Osaka:
-      let body =
-        try: SSZ.decode(data, ExecutionPayloadEnvelopeOsaka)
         except CatchableError: return sszDecodeErrorResponse()
       let beaconRoot = Opt.some(toHash32(body.parent_beacon_block_root))
       let executionRequests = Opt.some(ethExecutionRequests(body.execution_requests))
@@ -247,35 +239,35 @@ proc handleGetPayload(ben: BeaconEngineRef, request: HttpRequestRef,
       of EngineFork.Paris:
         let bundle = ben.getPayload(fork, id)
         SSZ.encode(BuiltPayloadParis(
-          payload: sszPayload[ExecutionPayloadParis](bundle.blk), block_value: bundle.blockValue))
+          payload: sszPayload[bellatrix.ExecutionPayload](bundle.blk), block_value: bundle.blockValue))
       of EngineFork.Shanghai:
         let bundle = ben.getPayload(fork, id)
         SSZ.encode(BuiltPayloadShanghai(
-          payload: sszPayload[ExecutionPayloadShanghai](bundle.blk), block_value: bundle.blockValue))
+          payload: sszPayload[capella.ExecutionPayload](bundle.blk), block_value: bundle.blockValue))
       of EngineFork.Cancun:
         let bundle = ben.getPayload(fork, id)
         SSZ.encode(BuiltPayloadCancun(
-          payload: sszPayload[ExecutionPayloadCancun](bundle.blk), block_value: bundle.blockValue,
+          payload: sszPayload[deneb.ExecutionPayload](bundle.blk), block_value: bundle.blockValue,
           blobs_bundle: sszBlobsBundleV1(bundle.blobsBundle),
           should_override_builder: false))
       of EngineFork.Prague:
         let bundle = ben.getPayload(fork, id)
         SSZ.encode(BuiltPayloadPrague(
-          payload: sszPayload[ExecutionPayloadPrague](bundle.blk), block_value: bundle.blockValue,
+          payload: sszPayload[deneb.ExecutionPayload](bundle.blk), block_value: bundle.blockValue,
           blobs_bundle: sszBlobsBundleV1(bundle.blobsBundle),
           execution_requests: sszExecutionRequests(bundle.executionRequests.get),
           should_override_builder: false))
       of EngineFork.Osaka:
         let bundle = ben.getPayload(fork, id)
         SSZ.encode(BuiltPayloadOsaka(
-          payload: sszPayload[ExecutionPayloadOsaka](bundle.blk), block_value: bundle.blockValue,
+          payload: sszPayload[deneb.ExecutionPayload](bundle.blk), block_value: bundle.blockValue,
           blobs_bundle: sszBlobsBundleV2(bundle.blobsBundle),
           execution_requests: sszExecutionRequests(bundle.executionRequests.get),
           should_override_builder: false))
       of EngineFork.Amsterdam:
         let bundle = ben.getPayload(fork, id)
         SSZ.encode(BuiltPayloadAmsterdam(
-          payload: sszPayload[ExecutionPayloadAmsterdam](bundle.blk, bundle.blockAccessList),
+          payload: sszPayload[gloas.ExecutionPayload](bundle.blk, bundle.blockAccessList),
           block_value: bundle.blockValue,
           blobs_bundle: sszBlobsBundleV2(bundle.blobsBundle),
           execution_requests: sszExecutionRequests(bundle.executionRequests.get),

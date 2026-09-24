@@ -35,7 +35,7 @@ import
   ./tx_tabs,
   ./tx_item
 
-import beacon_chain/spec/engine_types as engine_ssz_types
+import ../../beacon/engine_ssz_types
 
 from eth/common/eth_types_rlp import rlpHash
 from std/sequtils import mapIt
@@ -518,14 +518,14 @@ func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[engine_ssz_types.B
     let np = val.item.pooledTx.blobsBundle
     if np.wrapperVersion == WrapperVersionEIP4844:
       return Opt.some(engine_ssz_types.BlobAndProofV1(
-        blob: engine_ssz_types.Blob(distinctBase(np.blobs[val.blobIndex])),
-        proof: engine_ssz_types.KzgProof(bytes: distinctBase(np.proofs[val.blobIndex]))))
+        blob: deneb.Blob(distinctBase(np.blobs[val.blobIndex])),
+        proof: deneb.KzgProof(bytes: distinctBase(np.proofs[val.blobIndex]))))
 
   Opt.none(engine_ssz_types.BlobAndProofV1)
 
 func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[engine_ssz_types.BlobAndProofV2] =
   type ProofsList =
-    engine_ssz_types.List[engine_ssz_types.KzgProof, engine_ssz_types.Limit engine_ssz_types.CELLS_PER_EXT_BLOB]
+    engine_ssz_types.List[deneb.KzgProof, engine_ssz_types.Limit engine_ssz_types.CELLS_PER_EXT_BLOB]
 
   func getProofs(list: openArray[pooled_txs.KzgProof], index: int): ProofsList =
     let
@@ -535,13 +535,13 @@ func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[engine_ssz_types.B
 
     ProofsList.init(
       list[startIndex ..< endIndex].mapIt(
-        engine_ssz_types.KzgProof(bytes: distinctBase(it))))
+        deneb.KzgProof(bytes: distinctBase(it))))
 
   xp.blobTab.withValue(v, val):
     let np = val.item.pooledTx.blobsBundle
     if np.wrapperVersion == WrapperVersionEIP7594:
       return Opt.some(engine_ssz_types.BlobAndProofV2(
-        blob: engine_ssz_types.Blob(distinctBase(np.blobs[val.blobIndex])),
+        blob: deneb.Blob(distinctBase(np.blobs[val.blobIndex])),
         proofs: getProofs(np.proofs, val.blobIndex)))
 
   Opt.none(engine_ssz_types.BlobAndProofV2)
@@ -561,7 +561,7 @@ proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash,
     doAssert(list.len >= endIndex)
 
     var
-      blobCells = newSeq[engine_ssz_types.Optional[array[BYTES_PER_CELL, byte]]](
+      blobCells = newSeq[engine_ssz_types.Optional[array[BYTES_PER_CELL.int, byte]]](
         engine_ssz_types.CELLS_PER_EXT_BLOB)
       proofs = newSeq[engine_ssz_types.Optional[deneb.KzgProof]](
         engine_ssz_types.CELLS_PER_EXT_BLOB)
@@ -570,7 +570,7 @@ proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash,
         blobCells[i] = optSome(cells[i].bytes)
         proofs[i] = optSome(deneb.KzgProof(bytes: distinctBase(list[startIndex + i])))
       else:
-        blobCells[i] = optNone(array[BYTES_PER_CELL, byte])
+        blobCells[i] = optNone(array[BYTES_PER_CELL.int, byte])
         proofs[i] = optNone(deneb.KzgProof)
 
     engine_ssz_types.BlobCellsAndProofs(

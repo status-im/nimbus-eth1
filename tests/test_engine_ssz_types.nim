@@ -13,25 +13,28 @@
 import
   unittest2,
   ssz_serialization/bitseqs,
-  beacon_chain/spec/engine_types as engine_ssz_types
+  beacon_chain/spec/datatypes/[bellatrix, capella, deneb],
+  ../execution_chain/beacon/engine_ssz_types
+
+import beacon_chain/spec/datatypes/gloas except PayloadStatus
 
 func digestOf(b: byte): Digest =
   var d: Digest
   d.data[0] = b
   d
 
-func kzgProofOf(b: byte): KzgProof =
-  var p: KzgProof
+func kzgProofOf(b: byte): deneb.KzgProof =
+  var p: deneb.KzgProof
   p.bytes[0] = b
   p
 
-func blobOf(b: byte): Blob =
-  var blob: Blob
+func blobOf(b: byte): deneb.Blob =
+  var blob: deneb.Blob
   blob[0] = b
   blob
 
-func withdrawalOf(index: uint64): Withdrawal =
-  var w: Withdrawal
+func withdrawalOf(index: uint64): capella.Withdrawal =
+  var w: capella.Withdrawal
   w.index = index
   w
 
@@ -102,65 +105,65 @@ suite "Engine SSZ API container types":
     let decoded = roundTrip(ForkchoiceState, fcs)
     check decoded == fcs
 
-  test "ExecutionRequests round trip":
-    let reqs = ExecutionRequests.init(@[
+  test "ExecutionRequestsList round trip":
+    let reqs = ExecutionRequestsList.init(@[
       ByteList[Limit MAX_BYTES_PER_EXECUTION_REQUEST].init(@[1'u8, 2, 3]),
       ByteList[Limit MAX_BYTES_PER_EXECUTION_REQUEST].init(@[4'u8, 5])])
-    let decoded = roundTrip(ExecutionRequests, reqs)
+    let decoded = roundTrip(ExecutionRequestsList, reqs)
     check decoded == reqs
 
-  test "ExecutionPayloadParis (bellatrix shape) round trip":
-    var payload: ExecutionPayloadParis
+  test "bellatrix.ExecutionPayload (bellatrix shape) round trip":
+    var payload: bellatrix.ExecutionPayload
     payload.block_number = 123'u64
     payload.gas_limit = 30_000_000'u64
 
-    let decoded = roundTrip(ExecutionPayloadParis, payload)
+    let decoded = roundTrip(bellatrix.ExecutionPayload, payload)
     check decoded.block_number == 123'u64
     check decoded.gas_limit == 30_000_000'u64
     check asSeq(decoded.transactions).len == 0
 
-  test "ExecutionPayloadShanghai (capella shape) round trip, incl. withdrawals":
-    var payload: ExecutionPayloadShanghai
+  test "capella.ExecutionPayload (capella shape) round trip, incl. withdrawals":
+    var payload: capella.ExecutionPayload
     payload.block_number = 234'u64
     payload.withdrawals = typeof(payload.withdrawals).init(@[withdrawalOf(5'u64)])
 
-    let decoded = roundTrip(ExecutionPayloadShanghai, payload)
+    let decoded = roundTrip(capella.ExecutionPayload, payload)
     check decoded.block_number == 234'u64
     check asSeq(decoded.withdrawals).len == 1
     check asSeq(decoded.withdrawals)[0].index == 5'u64
 
-  test "ExecutionPayloadCancun (deneb shape) round trip, incl. blob gas fields":
-    var payload: ExecutionPayloadCancun
+  test "deneb.ExecutionPayload (deneb shape) round trip, incl. blob gas fields":
+    var payload: deneb.ExecutionPayload
     payload.block_number = 345'u64
     payload.blob_gas_used = 100'u64
     payload.excess_blob_gas = 200'u64
 
-    let decoded = roundTrip(ExecutionPayloadCancun, payload)
+    let decoded = roundTrip(deneb.ExecutionPayload, payload)
     check decoded.block_number == 345'u64
     check decoded.blob_gas_used == 100'u64
     check decoded.excess_blob_gas == 200'u64
 
-  test "ExecutionPayloadAmsterdam (gloas shape) round trip, incl. slot_number":
-    var payload: ExecutionPayloadAmsterdam
+  test "gloas.ExecutionPayload (gloas shape) round trip, incl. slot_number":
+    var payload: gloas.ExecutionPayload
     payload.block_number = 456'u64
     payload.slot_number = Slot(789'u64)
 
-    let decoded = roundTrip(ExecutionPayloadAmsterdam, payload)
+    let decoded = roundTrip(gloas.ExecutionPayload, payload)
     check decoded.block_number == 456'u64
     check decoded.slot_number == Slot(789'u64)
 
   test "BlobsBundleV1 round trip":
     let bundle = BlobsBundleV1(
-      proofs: List[KzgProof, Limit engine_ssz_types.MAX_BLOB_COMMITMENTS_PER_BLOCK].init(@[kzgProofOf(1)]),
-      blobs: List[Blob, Limit engine_ssz_types.MAX_BLOB_COMMITMENTS_PER_BLOCK].init(@[blobOf(2)]))
+      proofs: List[deneb.KzgProof, Limit engine_ssz_types.MAX_BLOB_COMMITMENTS_PER_BLOCK].init(@[kzgProofOf(1)]),
+      blobs: List[deneb.Blob, Limit engine_ssz_types.MAX_BLOB_COMMITMENTS_PER_BLOCK].init(@[blobOf(2)]))
     let decoded = roundTrip(BlobsBundleV1, bundle)
     check decoded == bundle
 
   test "BlobsBundleV2 round trip, incl. cell-proofs-sized proofs list":
     let bundle = BlobsBundleV2(
-      proofs: List[KzgProof, Limit (engine_ssz_types.MAX_BLOB_COMMITMENTS_PER_BLOCK * engine_ssz_types.CELLS_PER_EXT_BLOB)].init(
+      proofs: typeof(default(BlobsBundleV2).proofs).init(
         @[kzgProofOf(1), kzgProofOf(2)]),
-      blobs: List[Blob, Limit engine_ssz_types.MAX_BLOB_COMMITMENTS_PER_BLOCK].init(@[blobOf(3)]))
+      blobs: List[deneb.Blob, Limit engine_ssz_types.MAX_BLOB_COMMITMENTS_PER_BLOCK].init(@[blobOf(3)]))
     let decoded = roundTrip(BlobsBundleV2, bundle)
     check decoded == bundle
 
@@ -172,7 +175,7 @@ suite "Engine SSZ API container types":
   test "PayloadAttributesShanghai round trip, incl. withdrawals":
     let attrs = PayloadAttributesShanghai(
       timestamp: 200'u64,
-      withdrawals: List[Withdrawal, Limit engine_ssz_types.MAX_WITHDRAWALS_PER_PAYLOAD].init(@[withdrawalOf(1'u64)]))
+      withdrawals: List[capella.Withdrawal, Limit engine_ssz_types.MAX_WITHDRAWALS_PER_PAYLOAD].init(@[withdrawalOf(1'u64)]))
     let decoded = roundTrip(PayloadAttributesShanghai, attrs)
     check decoded == attrs
 
@@ -214,17 +217,11 @@ suite "Engine SSZ API container types":
   test "ExecutionPayloadEnvelopePrague round trip, incl. execution_requests":
     var env: ExecutionPayloadEnvelopePrague
     env.payload.block_number = 4'u64
-    env.execution_requests = ExecutionRequests.init(
+    env.execution_requests = ExecutionRequestsList.init(
       @[ByteList[Limit MAX_BYTES_PER_EXECUTION_REQUEST].init(@[9'u8])])
     let decoded = roundTrip(ExecutionPayloadEnvelopePrague, env)
     check decoded.payload.block_number == 4'u64
     check asSeq(decoded.execution_requests).len == 1
-
-  test "ExecutionPayloadEnvelopeOsaka round trip":
-    var env: ExecutionPayloadEnvelopeOsaka
-    env.payload.block_number = 5'u64
-    let decoded = roundTrip(ExecutionPayloadEnvelopeOsaka, env)
-    check decoded.payload.block_number == 5'u64
 
   test "ExecutionPayloadEnvelopeAmsterdam round trip":
     var env: ExecutionPayloadEnvelopeAmsterdam
@@ -275,12 +272,12 @@ suite "Engine SSZ API container types":
   test "ForkchoiceUpdateResponse: payload_id present/absent":
     let withId = ForkchoiceUpdateResponse(
       payload_status: PayloadStatus(status: uint8(PayloadStatusCode.VALID)),
-      payload_id: optSome(default(ByteVector[8])))
+      payload_id: optSome(default(array[8, byte])))
     check roundTrip(ForkchoiceUpdateResponse, withId).payload_id.isSome
 
     let withoutId = ForkchoiceUpdateResponse(
       payload_status: PayloadStatus(status: uint8(PayloadStatusCode.SYNCING)),
-      payload_id: optNone(ByteVector[8]))
+      payload_id: optNone(array[8, byte]))
     check not roundTrip(ForkchoiceUpdateResponse, withoutId).payload_id.isSome
 
   test "BuiltPayloadParis round trip":
@@ -302,7 +299,7 @@ suite "Engine SSZ API container types":
   test "BuiltPayloadCancun round trip, incl. blobs_bundle and should_override_builder":
     var built: BuiltPayloadCancun
     built.payload.block_number = 3'u64
-    built.blobs_bundle.blobs = List[Blob, Limit engine_ssz_types.MAX_BLOB_COMMITMENTS_PER_BLOCK].init(@[blobOf(1)])
+    built.blobs_bundle.blobs = List[deneb.Blob, Limit engine_ssz_types.MAX_BLOB_COMMITMENTS_PER_BLOCK].init(@[blobOf(1)])
     built.should_override_builder = true
     let decoded = roundTrip(BuiltPayloadCancun, built)
     check decoded.payload.block_number == 3'u64
@@ -312,7 +309,7 @@ suite "Engine SSZ API container types":
   test "BuiltPayloadPrague round trip, incl. execution_requests before should_override_builder":
     var built: BuiltPayloadPrague
     built.payload.block_number = 4'u64
-    built.execution_requests = ExecutionRequests.init(
+    built.execution_requests = ExecutionRequestsList.init(
       @[ByteList[Limit MAX_BYTES_PER_EXECUTION_REQUEST].init(@[1'u8])])
     built.should_override_builder = false
     let decoded = roundTrip(BuiltPayloadPrague, built)
@@ -322,7 +319,7 @@ suite "Engine SSZ API container types":
   test "BuiltPayloadOsaka round trip, incl. BlobsBundleV2":
     var built: BuiltPayloadOsaka
     built.payload.block_number = 5'u64
-    built.blobs_bundle.blobs = List[Blob, Limit engine_ssz_types.MAX_BLOB_COMMITMENTS_PER_BLOCK].init(@[blobOf(2)])
+    built.blobs_bundle.blobs = List[deneb.Blob, Limit engine_ssz_types.MAX_BLOB_COMMITMENTS_PER_BLOCK].init(@[blobOf(2)])
     let decoded = roundTrip(BuiltPayloadOsaka, built)
     check decoded.payload.block_number == 5'u64
     check asSeq(decoded.blobs_bundle.blobs).len == 1
@@ -346,7 +343,7 @@ suite "Engine SSZ API container types":
 
   test "ExecutionPayloadBodyShanghai round trip, incl. withdrawals":
     let body = ExecutionPayloadBodyShanghai(
-      withdrawals: List[Withdrawal, Limit engine_ssz_types.MAX_WITHDRAWALS_PER_PAYLOAD].init(@[withdrawalOf(3'u64)]))
+      withdrawals: List[capella.Withdrawal, Limit engine_ssz_types.MAX_WITHDRAWALS_PER_PAYLOAD].init(@[withdrawalOf(3'u64)]))
     let decoded = roundTrip(ExecutionPayloadBodyShanghai, body)
     check decoded == body
 
@@ -378,7 +375,7 @@ suite "Engine SSZ API container types":
   test "BodyEntryShanghai / BodiesResponseShanghai round trip":
     let resp = BodiesResponseShanghai(entries: List[BodyEntryShanghai, Limit MAX_BODIES_REQUEST].init(
       @[BodyEntryShanghai(available: true, body: ExecutionPayloadBodyShanghai(
-        withdrawals: List[Withdrawal, Limit engine_ssz_types.MAX_WITHDRAWALS_PER_PAYLOAD].init(@[withdrawalOf(4'u64)])))]))
+        withdrawals: List[capella.Withdrawal, Limit engine_ssz_types.MAX_WITHDRAWALS_PER_PAYLOAD].init(@[withdrawalOf(4'u64)])))]))
     let decoded = roundTrip(BodiesResponseShanghai, resp)
     check decoded.entries.asSeq.len == 1
     check asSeq(decoded.entries.asSeq[0].body.withdrawals).len == 1
@@ -408,16 +405,16 @@ suite "Engine SSZ API container types":
   test "BlobAndProofV2 round trip, incl. variable-length cell-proofs list":
     let bp = BlobAndProofV2(
       blob: blobOf(3),
-      proofs: List[KzgProof, Limit engine_ssz_types.CELLS_PER_EXT_BLOB].init(@[kzgProofOf(4), kzgProofOf(5)]))
+      proofs: List[deneb.KzgProof, Limit engine_ssz_types.CELLS_PER_EXT_BLOB].init(@[kzgProofOf(4), kzgProofOf(5)]))
     let decoded = roundTrip(BlobAndProofV2, bp)
     check decoded == bp
     check asSeq(decoded.proofs).len == 2
 
   test "BlobCellsAndProofs round trip, incl. per-cell nullability":
     let bcp = BlobCellsAndProofs(
-      blob_cells: List[Optional[array[BYTES_PER_CELL, byte]], Limit engine_ssz_types.CELLS_PER_EXT_BLOB].init(
-        @[optNone(array[BYTES_PER_CELL, byte])]),
-      proofs: List[Optional[KzgProof], Limit engine_ssz_types.CELLS_PER_EXT_BLOB].init(
+      blob_cells: List[Optional[array[BYTES_PER_CELL.int, byte]], Limit engine_ssz_types.CELLS_PER_EXT_BLOB].init(
+        @[optNone(array[BYTES_PER_CELL.int, byte])]),
+      proofs: List[Optional[deneb.KzgProof], Limit engine_ssz_types.CELLS_PER_EXT_BLOB].init(
         @[optSome(kzgProofOf(6))]))
     let decoded = roundTrip(BlobCellsAndProofs, bcp)
     check decoded.blob_cells.asSeq.len == 1

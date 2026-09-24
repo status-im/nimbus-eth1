@@ -23,7 +23,8 @@ import
   ./api_utils,
   ./api_witness
 
-from beacon_chain/spec/engine_types import EngineFork, PayloadStatus
+from ../engine_ssz_types import
+  EngineFork, PayloadStatus, PayloadStatusCode, PAYLOAD_STATUS_INVALID_BLOCK_HASH
 from ../../rpc/engine_ssz_conv import toSsz, toWeb3
 from beacon_chain/spec/forks import ForkyExecutionPayload
 from ../ssz_eth_conv import ethBlock, toHash32
@@ -372,7 +373,8 @@ proc newPayload*(ben: BeaconEngineRef,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(seq[seq[byte]])):
+                 executionRequests = Opt.none(seq[seq[byte]]),
+                 withWitness = false):
                    Future[PayloadStatusV1] {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
   let apiFork = apiVersionFork(apiVersion)
 
@@ -405,11 +407,16 @@ proc newPayload*(ben: BeaconEngineRef,
       except RlpError as e:
         warn "Failed to decode payload",
           error = e.msg
-        raise invalidParams("newPayload" & $apiVersion &
-          ": Failed to decode BAL in payload: " & e.msg)
+        return toWeb3(invalidStatus("newPayload" & $apiVersion &
+          ": Failed to decode BAL in payload: " & e.msg))
 
-  toWeb3(await processNewPayload(ben, apiFork, blk, blockAccessList,
+  var res = toWeb3(await processNewPayload(ben, apiFork, blk, blockAccessList,
     payload.blockHash, versionedHashes, executionRequests))
+
+  if withWitness and res.status == PayloadExecutionStatus.valid:
+    res.witness = ben.collectWitness(blk)
+
+  res
 
 proc newPayload*(ben: BeaconEngineRef,
                     fork: EngineFork,
@@ -427,7 +434,7 @@ proc newPayload*(ben: BeaconEngineRef,
     blockHash, Opt.none(seq[Hash32]), executionRequests)
 
   # REMOVE WHEN DROPPING JSON-RPC
-  if res.status == uint8(PayloadStatusCode.INVALID_BLOCK_HASH):
+  if res.status == PAYLOAD_STATUS_INVALID_BLOCK_HASH:
     res.status = uint8(PayloadStatusCode.INVALID)
 
   res

@@ -23,9 +23,9 @@ import
   ../../core/chain,
   ../web3_eth_conv
 
-from beacon_chain/spec/engine_types import
+from ../engine_ssz_types import
   EngineFork, PayloadStatus, ForkchoiceUpdateResponse, PayloadStatusCode,
-  StringSsz, toStringSsz, optSome, optNone, ByteVector, Digest,
+  StringSsz, toStringSsz, optSome, optNone, Digest,
   ForkedPayloadAttributes, withForkedAttributes, asSeq
 from ../ssz_eth_conv import toDigest, toHash32, ethWithdrawal
 
@@ -113,8 +113,8 @@ proc validFCU*(id: Opt[Bytes8],
       latest_valid_hash: optSome(validHash.toDigest())
     ),
     payload_id:
-      if id.isSome: optSome(ByteVector[8](distinctBase(id.get)))
-      else: optNone(ByteVector[8])
+      if id.isSome: optSome(array[8, byte](distinctBase(id.get)))
+      else: optNone(array[8, byte])
   )
 
 proc invalidStatus*(validHash: Opt[common.Hash32], msg: string): PayloadStatus =
@@ -153,13 +153,6 @@ proc validStatus*(validHash: common.Hash32): PayloadStatus =
   PayloadStatus(
     status: uint8(PayloadStatusCode.VALID),
     latest_valid_hash: optSome(validHash.toDigest())
-  )
-
-func validStatus*(validHash: common.Hash32, witness: Opt[seq[byte]]): PayloadStatusV1 =
-  PayloadStatusV1(
-    status: PayloadExecutionStatus.valid,
-    latestValidHash: toValidHash(validHash),
-    witness: witness,
   )
 
 func invalidParams*(msg: string): ref RpcResponseError =

@@ -19,7 +19,7 @@ import
   ./api_utils
 
 import ssz_serialization/bitseqs
-import beacon_chain/spec/engine_types as engine_ssz_types
+import ../engine_ssz_types
 from ../../rpc/engine_ssz_conv import toWeb3, toSsz
 
 proc processGetBlobsV1(ben: BeaconEngineRef,

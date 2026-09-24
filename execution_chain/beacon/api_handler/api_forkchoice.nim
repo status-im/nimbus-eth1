@@ -24,7 +24,7 @@ import
   ../web3_eth_conv,
   ./api_utils
 
-import beacon_chain/spec/engine_types as engine_ssz_types
+import ../engine_ssz_types
 from ../../rpc/engine_ssz_conv import toWeb3, toForkedPayloadAttributes, toSsz
 
 logScope:

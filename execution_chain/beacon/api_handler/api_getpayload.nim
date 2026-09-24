@@ -18,7 +18,7 @@ import
   ./api_utils,
   chronicles
 
-from beacon_chain/spec/engine_types import EngineFork
+from ../engine_ssz_types import EngineFork
 
 # REMOVE WHEN DROPPING JSON-RPC
 func versionToFork(version: Version): EngineFork =

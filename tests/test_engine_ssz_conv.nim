@@ -17,7 +17,7 @@ import
   web3/engine_api_types,
   ../execution_chain/core/pooled_txs,
   ../execution_chain/beacon/ssz_eth_conv,
-  beacon_chain/spec/engine_types as engine_ssz_types,
+  ../execution_chain/beacon/engine_ssz_types,
   ../execution_chain/rpc/engine_ssz_conv
 
 func digestOf(b: byte): Digest =
@@ -54,12 +54,12 @@ suite "Engine SSZ API to web3 conversions":
       status: PayloadExecutionStatus.invalid_block_hash,
       validationError: Opt.some("blockhash mismatch"))
     let sszStatus = toSsz(status)
-    check sszStatus.status == uint8(PayloadStatusCode.INVALID_BLOCK_HASH)
+    check sszStatus.status == PAYLOAD_STATUS_INVALID_BLOCK_HASH
     check sszStatus.status != uint8(PayloadStatusCode.INVALID)
 
   test "PayloadStatus INVALID_BLOCK_HASH round trips back through toWeb3":
     let sszStatus = engine_ssz_types.PayloadStatus(
-      status: uint8(PayloadStatusCode.INVALID_BLOCK_HASH))
+      status: PAYLOAD_STATUS_INVALID_BLOCK_HASH)
     let web3Status = toWeb3(sszStatus)
     check web3Status.status == PayloadExecutionStatus.invalid_block_hash
 
