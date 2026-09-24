@@ -63,10 +63,10 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
 
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  if ctx.accUnproc.synced():
+  if ctx.accUnproc.synced() and 0 < ctx.pool.pivotNum:
     info info & ": Resuming previous session"
     ctx.allDownloaded(info).isErrOr:
-       return SnapAssembleMpt
+      return SnapAssembleMpt
     return SnapBalsFetch
   info info & ": No previous session available"
   ctx.pool.contPrevSession = false
@@ -88,6 +88,8 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   if not ctx.pool.headersSynced:
     return SnapReady
   if not ctx.accUnproc.synced():
+    return SnapReady
+  if ctx.pool.pivotNum == 0:
     return SnapReady
   SnapDownload
 
