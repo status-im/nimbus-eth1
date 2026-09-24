@@ -77,6 +77,9 @@ const
   lockedBalsLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 
+  beaconSyncIdleLogWaitInterval* = chronos.seconds(10)
+    ## Reduce logging noise
+
   # ---------
 
   daemonWaitClearFailInterval* = chronos.seconds(10)
@@ -92,6 +95,9 @@ const
     ## triggers some metrics updates.
 
   daemonWaitBalsFetchInterval* = chronos.seconds(5)
+    ## Poll waiting for some peer to download BALs
+
+  daemonWaitHeaderStopInterval* = chronos.seconds(5)
     ## Poll waiting for some peer to download BALs
 
   # ---------

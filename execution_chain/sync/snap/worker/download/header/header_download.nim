@@ -145,6 +145,7 @@ proc headerDownloadTrigger*(
 proc headerDownloadCancel*(ctx: SnapCtxRef) =
   ## Terminate any ongoing download
   discard ctx.pool.beaconSync.singleReset()
+  ctx.pool.headersSynced = true
 
 # ------------------------------------------------------------------------------
 # End

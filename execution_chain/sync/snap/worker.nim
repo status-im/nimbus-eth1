@@ -155,11 +155,20 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
 
       # Done, terminate
       if 0 < ctx.pool.newCoreDb.newDbPath.len:
-        notice info & ": Snap sync will terminate successfully",
-          dbPath=ctx.pool.newCoreDb.newDbPath
-        ctx.daemon = false
-        ctx.pool.newCoreDb.snapSyncStop = true
-        ctx.headerDownloadCancel()
+        if not ctx.pool.newCoreDb.waitSync:
+          notice info & ": Snap sync successful, will terminate",
+            dbPath=ctx.pool.newCoreDb.newDbPath
+          ctx.pool.newCoreDb.waitSync = true
+          ctx.headerDownloadCancel()
+        elif ctx.beaconState == BeaconState.idle:
+          ctx.daemon = false                        # all done, stop
+          ctx.pool.newCoreDb.waitSync = false
+          ctx.pool.newCoreDb.snapSyncStop = true
+        else:
+          ctx.pool.lastBcSyncLog.logCtrl(beaconSyncIdleLogWaitInterval):
+            debug info & ": Waiting for beacon sync to terminate",
+              beaconState=ctx.beaconState
+          bodyRc = daemonWaitHeaderStopInterval     # wait for beacon sync
         break body
 
       # This should have been handled by the FSA update
