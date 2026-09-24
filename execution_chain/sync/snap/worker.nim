@@ -159,6 +159,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
           dbPath=ctx.pool.newCoreDb.newDbPath
         ctx.daemon = false
         ctx.pool.newCoreDb.snapSyncStop = true
+        ctx.headerDownloadCancel()
         break body
 
       # This should have been handled by the FSA update

@@ -143,6 +143,10 @@ proc headerDownloadTrigger*(
     nEthPeers=ctx.nEthPeers()
   ok()
 
+proc headerDownloadCancel*(ctx: SnapCtxRef) =
+  ## Terminate any ongoing download
+  discard ctx.pool.beaconSync.singleReset()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
