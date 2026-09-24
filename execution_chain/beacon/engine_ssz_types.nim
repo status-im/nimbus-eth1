@@ -17,8 +17,9 @@ import
   beacon_chain/spec/datatypes/[bellatrix, capella, deneb, gloas]
 
 from beacon_chain/spec/datatypes/fulu import BYTES_PER_CELL
+from ../stateless/stateless_types import PUBLIC_KEY_BYTES
 
-export engine_types, presets, BYTES_PER_CELL
+export engine_types, presets, BYTES_PER_CELL, PUBLIC_KEY_BYTES
 
 func optSome*[T](x: T): Optional[T] =
   Optional[T].init(@[x])
@@ -58,7 +59,31 @@ const
   MAX_BAL_BYTES* = MAX_BYTES_PER_TX
   MAX_REQUEST_BODY_SIZE* = 64 * 1024 * 1024
 
+  # POST /engine/v1/payloads/witness
+  # https://github.com/ethereum/execution-apis/pull/885
+  MAX_WITNESS_ITEMS* = 1 shl 20
+  MAX_WITNESS_ITEM_BYTES* = 1 shl 20
+
 type
+  WitnessItem* = ByteList[Limit MAX_WITNESS_ITEM_BYTES]
+  WitnessItems* = List[WitnessItem, Limit MAX_WITNESS_ITEMS]
+
+  ExecutionWitness* = object
+    ## TODO: Current spec PR keeps this fork invariant with transport
+    ## local bounds, so a witness accepted here can still be unusable by
+    ## the stateless guest. Propose fork scoping it and adopting those.
+    state*: WitnessItems ## RLP encoded account and storage trie nodes
+    codes*: WitnessItems ## Contract bytecode read from the pre state
+    headers*: WitnessItems
+      ## RLP encoded ancestor headers, oldest to newest, ending at the parent
+
+  PublicKeys* = List[ByteVector[PUBLIC_KEY_BYTES], Limit MAX_TXS_PER_PAYLOAD]
+
+  PayloadStatusWithWitness* = object
+    payload_status*: engine_types.PayloadStatus
+    witness*: Optional[ExecutionWitness]
+    public_keys*: PublicKeys
+
   PayloadAttributesParis* = object
     timestamp*: uint64
     prev_randao*: Eth2Digest

@@ -11,16 +11,22 @@
 
 import
   std/[sequtils, typetraits],
+  results,
   eth/common/eth_types_rlp,
   eth/trie/ordered_trie,
   beacon_chain/spec/forks,
   ./web3_eth_conv,
   ./payload_conv,
-  ../core/pooled_txs
+  ../core/pooled_txs,
+  ../stateless/witness_types
+
+from ../stateless/stateless_host import recover_transaction_public_key
 
 from ./engine_ssz_types import
   BlobsBundleV1, BlobsBundleV2, ExecutionRequestsList, MAX_BYTES_PER_EXECUTION_REQUEST,
-  ExecutionPayloadBodyParis, ExecutionPayloadBodyShanghai, ExecutionPayloadBodyAmsterdam
+  ExecutionPayloadBodyParis, ExecutionPayloadBodyShanghai, ExecutionPayloadBodyAmsterdam,
+  ExecutionWitness, WitnessItem, WitnessItems, PublicKeys,
+  MAX_WITNESS_ITEMS, MAX_WITNESS_ITEM_BYTES
 
 func toHash32*(d: Eth2Digest): Hash32 =
   d.data.to(Hash32)
@@ -235,3 +241,32 @@ func sszExecutionRequests*(reqs: seq[seq[byte]]): engine_ssz_types.ExecutionRequ
 
 func ethExecutionRequests*(reqs: engine_ssz_types.ExecutionRequestsList): seq[seq[byte]] =
   asSeq(reqs).mapIt(asSeq(it))
+
+# https://github.com/ethereum/execution-apis/pull/885
+
+func sszWitnessItems(items: openArray[seq[byte]]):
+    Result[engine_ssz_types.WitnessItems, string] =
+  var list: engine_ssz_types.WitnessItems
+  for item in items:
+    if item.len > MAX_WITNESS_ITEM_BYTES:
+      return err("witness item exceeds MAX_WITNESS_ITEM_BYTES")
+    if not list.add(engine_ssz_types.WitnessItem.init(item)):
+      return err("witness field exceeds MAX_WITNESS_ITEMS")
+  ok(list)
+
+func sszExecutionWitness*(w: ExecutionWitnessWithKeys):
+    Result[engine_ssz_types.ExecutionWitness, string] =
+  ok(engine_ssz_types.ExecutionWitness(
+    state: ?sszWitnessItems(w.state),
+    codes: ?sszWitnessItems(w.codes),
+    headers: ?sszWitnessItems(w.headers)))
+
+func sszPublicKeys*(txs: openArray[transactions.Transaction]):
+    Result[engine_ssz_types.PublicKeys, string] =
+  var list: engine_ssz_types.PublicKeys
+  for i, tx in txs:
+    let key = recover_transaction_public_key(tx).valueOr:
+      return err("failed to recover the sender public key of transaction " & $i)
+    if not list.add(key):
+      return err("public keys exceed MAX_TXS_PER_PAYLOAD")
+  ok(list)

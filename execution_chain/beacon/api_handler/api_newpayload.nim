@@ -24,10 +24,12 @@ import
   ./api_witness
 
 from ../engine_ssz_types import
-  EngineFork, PayloadStatus, PayloadStatusCode, PAYLOAD_STATUS_INVALID_BLOCK_HASH
+  EngineFork, PayloadStatus, PayloadStatusCode, PAYLOAD_STATUS_INVALID_BLOCK_HASH,
+  PayloadStatusWithWitness, optSome
 from ../../rpc/engine_ssz_conv import toSsz, toWeb3
 from beacon_chain/spec/forks import ForkyExecutionPayload
-from ../ssz_eth_conv import ethBlock, toHash32
+from ../ssz_eth_conv import
+  ethBlock, toHash32, sszExecutionWitness, sszPublicKeys
 
 logScope:
   topics = "beacon engine"
@@ -414,7 +416,7 @@ proc newPayload*(ben: BeaconEngineRef,
     payload.blockHash, versionedHashes, executionRequests))
 
   if withWitness and res.status == PayloadExecutionStatus.valid:
-    res.witness = ben.collectWitness(blk)
+    res.witness = ben.collectExtWitness(blk)
 
   res
 
@@ -438,3 +440,41 @@ proc newPayload*(ben: BeaconEngineRef,
     res.status = uint8(PayloadStatusCode.INVALID)
 
   res
+
+proc newPayloadWithWitness*(
+    ben: BeaconEngineRef,
+    fork: EngineFork,
+    payload: ForkyExecutionPayload,
+    blockAccessList: Opt[BlockAccessListRef],
+    beaconRoot: Opt[Hash32],
+    executionRequests: Opt[seq[seq[byte]]],
+): Future[Result[PayloadStatusWithWitness, string]] {.
+    async: (raises: [CancelledError, RpcResponseError, RlpError])
+.} =
+  let
+    requestsHash = calcRequestsHash(executionRequests)
+    blk = ethBlock(payload, beaconRoot, requestsHash)
+    blockHash = toHash32(payload.block_hash)
+    status = await processNewPayload(
+      ben,
+      fork,
+      blk,
+      blockAccessList,
+      blockHash,
+      Opt.none(seq[Hash32]),
+      executionRequests,
+    )
+
+  if status.status != uint8(PayloadStatusCode.VALID):
+    return ok(PayloadStatusWithWitness(payload_status: status))
+
+  let witness = ben.collectWitness(blk).valueOr:
+    return err("execution witness not available")
+
+  ok(
+    PayloadStatusWithWitness(
+      payload_status: status,
+      witness: optSome(?sszExecutionWitness(witness)),
+      public_keys: ?sszPublicKeys(blk.transactions),
+    )
+  )

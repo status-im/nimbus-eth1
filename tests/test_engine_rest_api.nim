@@ -11,9 +11,11 @@
 {.push raises: [].}
 
 import
-  std/[times, typetraits, json],
+  std/[times, typetraits, json, sequtils],
   chronos,
   chronos/apps/http/httpclient,
+  eth/common/keys,
+  eth/rlp,
   nimcrypto/hmac,
   nimcrypto/sha2,
   stew/base64,
@@ -21,6 +23,8 @@ import
   unittest2,
   ../execution_chain/conf,
   ../execution_chain/common,
+  ../execution_chain/constants,
+  ../execution_chain/transaction,
   ../execution_chain/core/chain,
   ../execution_chain/core/tx_pool,
   ../execution_chain/db/core_db/memory_only,
@@ -29,7 +33,10 @@ import
   beacon_chain/spec/datatypes/bellatrix,
   beacon_chain/spec/datatypes/capella,
   ../execution_chain/rpc/rpc_server,
-  ../execution_chain/rpc/engine_rest_api
+  ../execution_chain/rpc/engine_rest_api,
+  ./shared_data/eip8282data
+
+import beacon_chain/spec/datatypes/gloas except PayloadStatus
 
 func digestOf(h: Hash32): Digest =
   Digest(data: h.data)
@@ -57,6 +64,41 @@ proc setupBeaconEngine(): BeaconEngineRef =
     newCoreDbRef DefaultDbMemory,
     config.computeNetworkParams())
   let chain = ForkedChainRef.init(com, enableQueue = true)
+  BeaconEngineRef.new(TxPoolRef.new(chain))
+
+let
+  # Deterministic test signer, funded below so that the Amsterdam payload used
+  # by the witness tests carries a transaction to recover a public key from.
+  witnessSenderKey = PrivateKey.fromHex(
+    "0x4646464646464646464646464646464646464646464646464646464646464646").expect(
+    "valid private key")
+  witnessSenderPubKey = witnessSenderKey.toPublicKey()
+  witnessSender = witnessSenderPubKey.to(Address)
+
+proc setupAmsterdamEngine(): BeaconEngineRef =
+  let
+    config = makeConfig(@[
+      "--network:tests/customgenesis/engine_api_genesis.json",
+      "--listen-address: 127.0.0.1",
+    ])
+    params = config.computeNetworkParams()
+
+  for forkTime in [addr params.config.shanghaiTime, addr params.config.cancunTime,
+      addr params.config.pragueTime, addr params.config.osakaTime,
+      addr params.config.bpo1Time, addr params.config.bpo2Time,
+      addr params.config.amsterdamTime]:
+    forkTime[] = Opt.some(0.EthTime)
+
+  params.genesis.alloc[BUILDER_DEPOSIT_CONTRACT_ADDRESS] =
+    GenesisAccount(code: builderDepositRequestCode)
+  params.genesis.alloc[BUILDER_EXIT_CONTRACT_ADDRESS] =
+    GenesisAccount(code: builderExitRequestCode)
+  params.genesis.alloc[witnessSender] =
+    GenesisAccount(balance: 1_000_000_000_000_000_000.u256)
+
+  let
+    com = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
+    chain = ForkedChainRef.init(com, enableQueue = true)
   BeaconEngineRef.new(TxPoolRef.new(chain))
 
 proc fetchFull(request: HttpClientRequestRef):
@@ -582,3 +624,149 @@ suite "Engine SSZ API REST transport: production mounting":
     check resp[0] == 200
     let parsed = parseJson(cast[string](resp[1]))
     check parsed[0]["code"].getStr == "NB"
+
+# https://github.com/ethereum/execution-apis/pull/885
+suite "Engine SSZ API REST transport: payload witness":
+  let ben = setupAmsterdamEngine()
+  let restServer = initEngineRestServer(
+    ben, initTAddress("127.0.0.1:0")).valueOr:
+    raiseAssert "failed to start REST server: " & error
+  restServer.start()
+  let
+    base = "http://" & $restServer.localAddress()
+    session = HttpSessionRef.new()
+    genesisHeader = ben.com.genesisHeader
+    genesisDigest = digestOf(genesisHeader.computeBlockHash)
+    beaconRoot = fakeDigest(0x42)
+
+  var built: BuiltPayloadAmsterdam
+
+  suiteTeardown:
+    waitFor session.closeWait()
+    waitFor restServer.closeWait()
+    waitFor ben.chain.stopProcessingQueue()
+
+  proc submitWitness(payload: gloas.ExecutionPayload,
+      fork = "amsterdam"): tuple[status: int, data: seq[byte]]
+        {.raises: [CancelledError, HttpError, SerializationError, IOError].} =
+    let body = SSZ.encode(ExecutionPayloadEnvelopeAmsterdam(
+      payload: payload,
+      parent_beacon_block_root: beaconRoot,
+      execution_requests: built.execution_requests))
+    waitFor HttpClientRequestRef.post(session, base & "/engine/v1/payloads/witness",
+      headers = @[
+        ("Eth-Execution-Version", fork),
+        ("Content-Type", "application/octet-stream")],
+      body = body).get().fetch()
+
+  test "GET /capabilities should advertise payloads/witness as fork scoped":
+    let resp = fetchFull(HttpClientRequestRef.get(
+      session, base & "/engine/v1/capabilities").get())
+    let endpoints = parseJson(cast[string](resp.data))["fork_scoped_endpoints"]
+    check:
+      resp.status == 200
+      "payloads/witness" in endpoints.getElems.mapIt(it.getStr)
+
+  test "build an Amsterdam payload carrying one transaction":
+    let tx = signTransaction(transactions.Transaction(
+      txType:   TxLegacy,
+      chainId:  ben.com.chainId,
+      nonce:    0,
+      gasPrice: 30_000_000_000.GasInt,
+      gasLimit: 70_000.GasInt,
+      to:       Opt.some(default(Address)),
+      value:    1.u256), witnessSenderKey, eip155 = true)
+    ben.txPool.addTx(tx).isOkOr:
+      raiseAssert "failed to pool the test transaction: " & $error
+
+    let body = SSZ.encode(ForkchoiceUpdateAmsterdam(
+      forkchoice_state: ForkchoiceState(
+        head_block_hash: genesisDigest,
+        safe_block_hash: genesisDigest,
+        finalized_block_hash: genesisDigest),
+      payload_attributes: optSome(PayloadAttributesAmsterdam(
+        timestamp: uint64(genesisHeader.timestamp) + 1,
+        parent_beacon_block_root: beaconRoot,
+        slot_number: 1,
+        target_gas_limit: genesisHeader.gasLimit.uint64))))
+    let fcu = waitFor HttpClientRequestRef.post(session, base & "/engine/v1/forkchoice",
+      headers = @[
+        ("Eth-Execution-Version", "amsterdam"),
+        ("Content-Type", "application/octet-stream")],
+      body = body).get().fetch()
+    let fcuStatus = SSZ.decode(fcu[1], ForkchoiceUpdateResponse)
+    check:
+      fcu[0] == 200
+      fcuStatus.payload_status.status == uint8(PayloadStatusCode.VALID)
+    require fcuStatus.payload_id.isSome
+
+    let payloadIdHex = "0x" & byteutils.toHex(distinctBase(fcuStatus.payload_id.get))
+    let resp = waitFor HttpClientRequestRef.get(session,
+      base & "/engine/v1/payloads/" & payloadIdHex,
+      headers = @[("Eth-Execution-Version", "amsterdam")]).get().fetch()
+    built = SSZ.decode(resp[1], BuiltPayloadAmsterdam)
+    check:
+      resp[0] == 200
+      built.payload.transactions.len == 1
+
+  test "POST /payloads/witness before Amsterdam should return 400 unsupported-fork":
+    let resp = submitWitness(built.payload, fork = "prague")
+    check:
+      resp[0] == 400
+      "unsupported-fork" in cast[string](resp[1])
+
+  test "POST /payloads/witness with garbage SSZ body should return 400 ssz-decode-error":
+    let resp = waitFor HttpClientRequestRef.post(session,
+      base & "/engine/v1/payloads/witness",
+      headers = @[
+        ("Eth-Execution-Version", "amsterdam"),
+        ("Content-Type", "application/octet-stream")],
+      body = @[byte 1, 2, 3]).get().fetch()
+    check:
+      resp[0] == 400
+      "ssz-decode-error" in cast[string](resp[1])
+
+  test "POST /payloads/witness should return 200 VALID with the witness and one public key per transaction":
+    let resp = submitWitness(built.payload)
+    let status = SSZ.decode(resp[1], PayloadStatusWithWitness)
+    check:
+      resp[0] == 200
+      status.payload_status.status == uint8(PayloadStatusCode.VALID)
+    require status.witness.isSome
+
+    let witness = status.witness.get
+    require:
+      # The parent header supplies the pre-state root, so it is always present.
+      witness.headers.len >= 1
+      # One sender key per transaction, in transaction order.
+      status.public_keys.len == built.payload.transactions.len
+
+    let parent = rlp.decode(asSeq(asSeq(witness.headers)[^1]), Header)
+    check:
+      # State reads of the sender, the fee recipient and the transaction target
+      # must be proven.
+      witness.state.len > 0
+      parent.computeBlockHash.data == built.payload.parent_hash.data
+      @(asSeq(status.public_keys)[0]) == @(SkPublicKey(witnessSenderPubKey).toRaw())
+
+  test "POST /payloads/witness for an already known payload should still return the witness":
+    let resp = submitWitness(built.payload)
+    let status = SSZ.decode(resp[1], PayloadStatusWithWitness)
+    check:
+      resp[0] == 200
+      status.payload_status.status == uint8(PayloadStatusCode.VALID)
+    require status.witness.isSome
+    check:
+      status.witness.get.headers.len >= 1
+      status.public_keys.len == built.payload.transactions.len
+
+  test "POST /payloads/witness for an invalid payload should omit witness and public keys":
+    var corrupted = built.payload
+    corrupted.block_hash = fakeDigest(0xbb)
+    let resp = submitWitness(corrupted)
+    let status = SSZ.decode(resp[1], PayloadStatusWithWitness)
+    check:
+      resp[0] == 200
+      status.payload_status.status == uint8(PayloadStatusCode.INVALID)
+      not status.witness.isSome
+      status.public_keys.len == 0
