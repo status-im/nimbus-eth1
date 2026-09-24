@@ -40,7 +40,7 @@ func wdRoot(x: Opt[seq[WithdrawalV1]]): Opt[Hash32] =
 func txRoot(list: openArray[Web3Tx]): Hash32 =
   orderedTrieRoot(list)
 
-func balHash(bal: Opt[seq[byte]]): Opt[Hash32] =
+func balHash*(bal: Opt[seq[byte]]): Opt[Hash32] =
   if bal.isNone():
     Opt.none(Hash32)
   else:

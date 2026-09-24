@@ -7,19 +7,25 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[].}
+
 import
-  std/[tables],
+  std/[tables, sequtils],
   eth/common/[hashes, headers],
   chronicles,
   minilru,
   web3/execution_types,
   ./web3_eth_conv,
-  ./payload_conv,
   ./api_handler/api_utils,
   ../core/tx_pool,
   ../core/pooled_txs,
   ../core/chain/forked_chain,
   ../core/chain/forked_chain/block_quarantine
+
+from beacon_chain/spec/engine_types import
+  PayloadStatus, PayloadStatusCode, EngineFork, ForkedPayloadAttributes,
+  withForkedAttributes, asSeq
+from ./ssz_eth_conv import toHash32, ethWithdrawal
 
 export
   forked_chain,
@@ -28,7 +34,8 @@ export
 
 type
   ExecutionBundle* = object
-    payload*: ExecutionPayload
+    blk*: EthBlock
+    blockAccessList*: Opt[BlockAccessListRef]
     blockValue*: UInt256
     blobsBundle*: BlobsBundle
     executionRequests*: Opt[seq[seq[byte]]]
@@ -62,8 +69,6 @@ type
     # Ephemeral cache to track invalid tipsets and their bad ancestor
     invalidTipsets   : Table[Hash32, Header]
 
-{.push gcsafe, raises:[].}
-
 const
   # invalidBlockHitEviction is the number of times an invalid block can be
   # referenced in forkchoice update or new payload before it is attempted
@@ -82,15 +87,6 @@ const
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-func setWithdrawals(xp: TxPoolRef, attrs: PayloadAttributes) =
-  case attrs.version
-  of Version.V1:
-    xp.withdrawals = @[]
-  of Version.V2 .. Version.V4:
-    xp.withdrawals = ethWithdrawals attrs.withdrawals.get
-  of Version.V5, Version.V6:
-    raiseAssert "unreachable: PayloadAttributes has no V5/V6 variant"
 
 template wrapException(body: untyped): auto =
   try:
@@ -151,7 +147,7 @@ func getPayloadBundle*(ben: BeaconEngineRef, id: Bytes8): Opt[ExecutionBundle] =
 proc generateExecutionBundle*(
   ben: BeaconEngineRef,
   headHash: Hash32,
-  attrs: PayloadAttributes
+  attrs: ForkedPayloadAttributes
 ): Result[ExecutionBundle, string] =
 
   wrapException:
@@ -163,18 +159,26 @@ proc generateExecutionBundle*(
       headBlock = ben.chain.headerByHash(headHash).valueOr:
         return err("payload build parent not found: " & headHash.short)
 
-    xp.prevRandao   = attrs.prevRandao
-    xp.timestamp    = ethTime attrs.timestamp
-    xp.feeRecipient = attrs.suggestedFeeRecipient
-    xp.targetGasLimit = u64 attrs.targetGasLimit
+    withForkedAttributes(attrs):
+      xp.prevRandao   = Bytes32(toHash32(attrs.prev_randao))
+      xp.timestamp    = EthTime(attrs.timestamp)
+      xp.feeRecipient = attrs.suggested_fee_recipient
 
-    if attrs.parentBeaconBlockRoot.isSome:
-      xp.parentBeaconBlockRoot = attrs.parentBeaconBlockRoot.get
+      when fork == EngineFork.Amsterdam:
+        xp.targetGasLimit = Opt.some(attrs.target_gas_limit)
+      else:
+        xp.targetGasLimit = Opt.none(uint64)
 
-    if attrs.slotNumber.isSome:
-      xp.slotNumber = distinctBase attrs.slotNumber.get
+      when fork >= EngineFork.Cancun:
+        xp.parentBeaconBlockRoot = toHash32(attrs.parent_beacon_block_root)
 
-    xp.setWithdrawals(attrs)
+      when fork == EngineFork.Amsterdam:
+        xp.slotNumber = attrs.slot_number
+
+      when fork >= EngineFork.Shanghai:
+        xp.withdrawals = asSeq(attrs.withdrawals).mapIt(ethWithdrawal(it))
+      else:
+        xp.withdrawals = @[]
 
     if xp.timestamp <= headBlock.timestamp:
       return err "timestamp must be strictly later than parent"
@@ -189,7 +193,8 @@ proc generateExecutionBundle*(
       return err "extraData length should not exceed 32 bytes"
 
     ok ExecutionBundle(
-      payload: executionPayload(bundle.blk, bundle.blockAccessList),
+      blk: bundle.blk,
+      blockAccessList: bundle.blockAccessList,
       blobsBundle: bundle.blobsBundle,
       blockValue: bundle.blockValue,
       executionRequests: bundle.executionRequests)
@@ -201,7 +206,7 @@ func setInvalidAncestor*(ben: BeaconEngineRef, header: Header, blockHash: Hash32
 # checkInvalidAncestor checks whether the specified chain end links to a known
 # bad ancestor. If yes, it constructs the payload failure response to return.
 proc checkInvalidAncestor*(ben: BeaconEngineRef,
-                           check, head: Hash32): Opt[PayloadStatusV1] =
+                           check, head: Hash32): Opt[PayloadStatus] =
   proc latestValidHash(chain: ForkedChainRef, invalid: auto): Hash32 =
     let parent = chain.headerByHash(invalid.parentHash).valueOr:
       return invalid.parentHash
@@ -230,7 +235,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
       for x in deleted:
         ben.invalidTipsets.del(x)
 
-      return Opt.none(PayloadStatusV1)
+      return Opt.none(PayloadStatus)
 
     # Not too many failures yet, mark the head of the invalid chain as invalid
     if check != head:
@@ -253,7 +258,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
     let lastValid = latestValidHash(ben.chain, invalid)
     return Opt.some invalidStatus(lastValid, "links to previously rejected block")
   do:
-    return Opt.none(PayloadStatusV1)
+    return Opt.none(PayloadStatus)
 
 # delayPayloadImport stashes the given block away for import at a later time,
 # either via a forkchoice update or a sync extension. This method is meant to
@@ -264,14 +269,14 @@ proc delayPayloadImport*(
   blockHash: Hash32,
   blk: Block,
   blockAccessList: Opt[BlockAccessListRef]
-): PayloadStatusV1 =
+): PayloadStatus =
   # Sanity check that this block's parent is not on a previously invalidated
   # chain. If it is, mark the block as invalid too.
   ben.checkInvalidAncestor(blk.header.parentHash, blockHash).valueOr:
     # Stash the block away for a potential forced forkchoice update to it
     # at a later time.
     ben.chain.quarantine.addOrphan(blockHash, blk, blockAccessList)
-    return PayloadStatusV1(status: PayloadExecutionStatus.syncing)
+    return PayloadStatus(status: uint8(PayloadStatusCode.SYNCING))
 
 func latestFork*(ben: BeaconEngineRef): HardFork =
   let timestamp = max(ben.txPool.timestamp, ben.chain.latestHeader.timestamp)
