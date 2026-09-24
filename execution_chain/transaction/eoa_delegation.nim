@@ -52,16 +52,17 @@ proc validateAuthorization(auth: Authorization, vmState: BaseVMState): Opt[addre
 
   Opt.some(authority)
 
-proc setDelegation*(call: CallParams): int64 =
+proc setDelegation*(params: CallParams): int64 =
   var
     executionRefund = 0'i64
 
   let
-    vmState = call.vmState
+    vmState = params.vmState
     ledger = vmState.ledger
+    tx = params.tx
 
   # EIP-7702
-  for auth in call.authorizationList:
+  for auth in tx.authorizationList:
     let authority = auth.validateAuthorization(vmState).valueOr:
       continue
 
@@ -83,22 +84,23 @@ proc setDelegation*(call: CallParams): int64 =
 
   executionRefund
 
-proc setDelegation*(call: CallParams, c: Computation): EvmResultVoid =
+proc setDelegation*(params: CallParams, c: Computation): EvmResultVoid =
   var
     writtenAccounts: HashSet[addresses.Address]
     delegationSetFor: HashSet[addresses.Address]
 
-  writtenAccounts.incl call.sender
-
-  if call.value.isZero.not:
-    writtenAccounts.incl call.to
+  writtenAccounts.incl params.sender
 
   let
-    vmState = call.vmState
+    vmState = params.vmState
     ledger = vmState.ledger
+    tx = params.tx
+
+  if tx.value.isZero.not:
+    writtenAccounts.incl tx[].destination
 
   # Authorities a delegation was set for earlier in this transaction.
-  for auth in call.authorizationList:
+  for auth in tx.authorizationList:
     let authority = auth.validateAuthorization(vmState).valueOr:
       continue
 

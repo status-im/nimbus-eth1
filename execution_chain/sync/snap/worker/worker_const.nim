@@ -24,8 +24,8 @@ type
     SnapBalsFetch                  ## Bring state forward using BALs
     SnapBalsFetchFinish            ## Wait for sync before proceeding
     SnapStateForward               ## Apply BALs and advance state
-    # ..                           ## TBD ..
-    SnapStop                       ## TBD ..
+    SnapAssembleMpt                ## Assemble Aristo database
+    SnapStop                       ## End of snap sync
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
@@ -40,7 +40,6 @@ type
     # the symbol set `EUnusedForFetch`.)
     ENoDataAvailable               ## Out of scope, unsuuported state
     ELockError                     ## Locked by some other peer
-    ETrieError                     ## Trie/mpt database error
     EDirtyData                     ## Some data must be cleaned up. first
     EValidationError               ## Sub-MPT validation failed
     ECacheError                    ## Database cache error
@@ -66,7 +65,7 @@ const
   noPeersLogWaitInterval* = chronos.seconds(50)
     ## Reduce logging noise
 
-  noHeadersLogWaitInterval* = chronos.seconds(50)
+  noHeadersLogWaitInterval* = chronos.seconds(120)
     ## Reduce logging noise
 
   maxHeadersLogWaitInterval* = chronos.seconds(30)
@@ -75,28 +74,24 @@ const
   lockedBalsLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 
+  # ---------
 
-  daemonWaitResumeInterval* = chronos.seconds(5)
-    ## ..
+  daemonWaitClearFailInterval* = chronos.seconds(10)
+    ## Something failed in `SnapClear` state, e.g. starting header
+    ## download (just avoiding some extra polling.)
 
-  daemonWaitClearInterval* = chronos.seconds(10)
-    ## ..
+  daemonWaitReadyFailInterval* = chronos.seconds(10)
+    ## Something failed in `SnapReady` state, e.g. starting header
+    ## download (just avoiding some extra polling.)
 
-  daemonWaitReadyInterval* = chronos.seconds(47)
-    ## Some polling interval time waiting until the system gets into download
-    ## state when the the FCU modue hash provides a finalised header and there
-    ## are eth/xx download peers available.
+  daemonWaitDownloadInterval* = chronos.seconds(2)
+    ## Poll waiting for peers downloading snap data. The polling cycle also
+    ## triggers some metrics updates.
 
-  daemonWaitDownloadInterval* = chronos.seconds(10)
-    ## Some waiting time at the end of the daemon task which always lingers
-    ## in the background. This one is for `SnapDownload` state.
+  daemonWaitBalsFetchInterval* = chronos.seconds(5)
+    ## Poll waiting for some peer to download BALs
 
-  daemonWaitDownloadFinishInterval* = chronos.seconds(5)
-    ## Poll waiting for all downloading peers to have stopped
-
-  daemonWaitElseInterval* = chronos.seconds(10)
-    ## Ditto for other states.
-
+  # ---------
 
   peerWaitDownloadInterval* = chronos.seconds(5)
     ## Some waiting time at the end of the daemon task which always lingers
@@ -128,16 +123,24 @@ const
     ## these intervals are sparsely filled and there will be returned not
     ## more than ~1k accounts.
 
-  consHeadSupportWindowSize* = 144
-    ## This might be a bit more than the supported download states window,
-    ## which is 128. If the FCU update header is more than that distance
-    ## apart form the pivot state block number, a BAL download and forward
-    ## cycle will be triggerd.
+  nFinHeadSupportWindowSize* = 128
+    ## If the FCU update finalised header is more than that distance apart
+    ## form the pivot state block number, a BAL download and forward cycle
+    ## will be triggerd.
 
-  nConsHeadCachedDeltaMax* = 128
-    ## If the block number difference between FCU update header and cached
-    ## header is larger than this contant, a beacon header fetch cycle is
-    ## triggered to fill up the cache.
+  nFinHeadSupportWindowTopMargin* = 45
+    ## Top (or right end) acceptance margin for the download window. The
+    ## state of the patrtial MPT representation is forwarded until it falls
+    ## in the range
+    ## ::
+    ##    finalised-head - nFinHeadSupportWindowTopMargin .. finalised-head
+    ##
+    ## (providing a hysteresis.)
+
+  nConsHeadCachedDeltaMin* = 20
+    ## If the block number difference between FCU update finalised header and
+    ## cached header is larger than this contant, a beacon header fetch cycle
+    ## is triggered to fill up the cache.
 
   # -----------
 
@@ -230,6 +233,7 @@ const
     ## Default maximum number of BALs for a single auto downloading session.
 
 static:
-  doAssert 0 < nConsHeadCachedDeltaMax
+  doAssert 0 < nConsHeadCachedDeltaMin
+  doAssert 0 < nFinHeadSupportWindowTopMargin
 
 # End

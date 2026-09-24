@@ -66,6 +66,13 @@ proc verifyOutputRoot(
 proc opSyncOnce*(
     opEngine: RpcVerificationEngine, l1Engine: RpcVerificationEngine
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
+  await opEngine.syncLock.acquire()
+  defer:
+    try:
+      opEngine.syncLock.release()
+    except AsyncLockError:
+      discard
+
   let
     l1LatestHeader = ?(await l1Engine.getHeader(blockId("latest")))
     l1FinalizedHeader = ?(await l1Engine.getHeader(blockId("finalized")))

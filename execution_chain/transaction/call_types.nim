@@ -25,29 +25,23 @@ export types
 type
   # Standard call parameters.
   CallParams* = object
-    vmState*:      BaseVMState          # Chain, database, state, block, fork.
-    gasPrice*:     GasInt               # Gas price for this call.
-    gasLimit*:     GasInt               # Maximum gas available for this call.
-    sender*:       addresses.Address    # Sender account.
-    to*:           addresses.Address    # Recipient (ignored when `isCreate`).
-    isCreate*:     bool                 # True if this is a contract creation.
-    value*:        UInt256              # Value sent from sender to recipient.
-    input*:        seq[byte]            # Input data.
-    accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
-    versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
-    authorizationList*: seq[Authorization] # EIP-7702 (Prague) authorization list
-    intrinsic*:    IntrinsicGas
+    vmState*:   BaseVMState             # Chain, database, state, block, fork.
+    gasPrice*:  GasInt                  # Gas price for this tx.
+    sender*:    addresses.Address       # Sender account.
+    isCreate*:  bool                    # True if this is a contract creation.
+    tx*:        ptr Transaction
+    intrinsic*: IntrinsicGas
 
   # Standard call result.
   CallResult* = object of RootObj
     error*:           string            # Something if the call failed.
-    gasUsed*:         GasInt            # Gas used by the call.
+    gasUsed*:         GasInt            # Gas used by the tx.
     contractAddress*: addresses.Address # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
 
   DebugCallResult* = object of CallResult
-    stack*:           seq[UInt256]      # EVM stack on return (for test only).
-    memory*:          EvmMemory         # EVM memory on return (for test only).
+    stack*:      seq[UInt256]           # EVM stack on return (for test only).
+    memory*:     EvmMemory              # EVM memory on return (for test only).
     logEntries*: seq[Log]
 
   LogResult* = object
@@ -67,17 +61,8 @@ type
     execution*: GasInt
     floorDataGas*: GasInt
 
-template isCreate(tx: Transaction): bool =
-  tx.contractCreation
-
-template input(tx: Transaction): auto =
-  tx.payload
-
 func isError*(cr: CallResult): bool =
   cr.error.len > 0
-
-func selfTransfer(call: CallParams, sender: Address): bool =
-  call.to == sender
 
 func selfTransfer(tx: Transaction, sender: Address): bool =
   tx.to.isSome and tx.to.value == sender
@@ -87,7 +72,7 @@ const
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 = 16
   TX_VALUE_COST = 6000
 
-func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit: GasInt, sender: Address): IntrinsicGas =
+func intrinsicGas*(tx: Transaction, hardFork: HardFork, gasLimit: GasInt, sender: Address): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
@@ -103,17 +88,17 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
     recipientExecutionGas = 0
 
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
-  if call.isCreate:
+  if tx.contractCreation:
     if hardFork >= Amsterdam:
       recipientExecutionGas += gasFees[fork][GasTXCreate]
     else:
       executionGas += gasFees[fork][GasTXCreate]
     if hardFork >= Shanghai:
-      executionGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
-  elif not call.selfTransfer(sender):
+      executionGas += (gasFees[fork][GasInitcodeWord] * tx.payload.len.wordCount)
+  elif not tx.selfTransfer(sender):
     if hardFork >= Amsterdam:
       recipientExecutionGas += COLD_ACCOUNT_ACCESS_8038
-      if call.value.isZero.not:
+      if tx.value.isZero.not:
         recipientExecutionGas += TX_VALUE_COST
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
@@ -122,7 +107,7 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
     gasNonZero = gasFees[fork][GasTXDataNonZero]
     byteZeroToken = if hardFork >= Amsterdam: 4 else: 1
 
-  for b in call.input:
+  for b in tx.payload:
     if b == 0:
       executionGas += gasZero
       tokens += byteZeroToken
@@ -133,13 +118,13 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
   # EIP-2930 (Berlin) intrinsic gas for transaction access list.
   if hardFork >= Berlin:
     if hardFork >= Amsterdam:
-      for account in call.accessList:
+      for account in tx.accessList:
         executionGas += ACCESS_LIST_ADDRESS_COST_8038
         executionGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST_8038
         # Total byte count of addresses(20 bytes each) and storage keys (32 bytes each) in the access list.
         accessListBytes += 20 + account.storageKeys.len * 32
     else:
-      for account in call.accessList:
+      for account in tx.accessList:
         executionGas += ACCESS_LIST_ADDRESS_COST_2930
         executionGas += account.storageKeys.len * ACCESS_LIST_STORAGE_KEY_COST_2930
         # Total byte count of addresses(20 bytes each) and storage keys (32 bytes each) in the access list.
@@ -149,14 +134,14 @@ func intrinsicGas*(call: CallParams | Transaction, hardFork: HardFork, gasLimit:
     if hardFork >= Amsterdam:
       executionGas += recipientExecutionGas
       floorDataGas += recipientExecutionGas
-      executionGas += EXECUTION_PER_AUTH_BASE_COST * call.authorizationList.len
+      executionGas += EXECUTION_PER_AUTH_BASE_COST * tx.authorizationList.len
       # EIP-7981: Increase Access List Cost
       let floorTokensInAccessList = accessListBytes * 4
       tokens += floorTokensInAccessList
       executionGas += TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 * floorTokensInAccessList
       floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7976
     else:
-      executionGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
+      executionGas += tx.authorizationList.len * PER_EMPTY_ACCOUNT_COST
       floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN_EIP7623
 
   IntrinsicGas(

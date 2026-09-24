@@ -25,6 +25,9 @@ import
 # ------------------------------------------------------------------------------
 
 proc writeGenesisAlloc*(alloc: GenesisAlloc, db: CoreDbTxRef): Hash32 =
+  if alloc.len == 0:
+    return EMPTY_ROOT_HASH
+
   let ledger = LedgerRef.init(db)
 
   for address, account in alloc:

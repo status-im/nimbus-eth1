@@ -20,9 +20,6 @@ import
 logScope:
   topics = "vp_frontend"
 
-# for eth_feeHistory
-EthJson.automaticSerialization(int, true)
-
 type JsonRpcServer* = ref object
   case kind*: ClientKind #we reuse clientKind for servers also
   of Http:
@@ -254,7 +251,7 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: ExecutionApiFrontend
       unpackEngineResult(await frontend.eth_maxPriorityFeePerGas())
 
     proc eth_feeHistory(
-        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[int]
+        blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[float64]
     ): FeeHistoryResult {.async: (raises: [ValueError, CancelledError]).} =
       unpackEngineResult(
         await frontend.eth_feeHistory(blockCount, newestBlock, rewardPercentiles)

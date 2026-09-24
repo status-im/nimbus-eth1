@@ -105,27 +105,27 @@ proc putVtx*(
 
     if vtx.vType == Branch:
       let vtx = BranchRef(vtx)
-      rdb.rdVtxLru.del(rvid.vid)
+      rdb.rdVtxLru.del(rvid)
       if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
-        rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
+        rdb.rdBranchLru.put(rvid, (vtx.startVid, vtx.used))
       else:
-        discard rdb.rdBranchLru.update(rvid.vid, (vtx.startVid, vtx.used))
+        discard rdb.rdBranchLru.update(rvid, (vtx.startVid, vtx.used))
     else:
-      rdb.rdBranchLru.del(rvid.vid)
+      rdb.rdBranchLru.del(rvid)
       
       if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-        rdb.rdVtxLru.put(rvid.vid, vtxBuf)
+        rdb.rdVtxLru.put(rvid, vtxBuf)
       else:
-        discard rdb.rdVtxLru.update(rvid.vid, vtxBuf)
+        discard rdb.rdVtxLru.update(rvid, vtxBuf)
 
 
     if key.isValid:
       if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
-        rdb.rdKeyLru.put(rvid.vid, key)
+        rdb.rdKeyLru.put(rvid, key)
       else:
-        discard rdb.rdKeyLru.update(rvid.vid, key)
+        discard rdb.rdKeyLru.update(rvid, key)
     else:
-      rdb.rdKeyLru.del rvid.vid
+      rdb.rdKeyLru.del rvid
   else:
     dsc.delete(rvid.blobify().data(), rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will clear the `rdVtxLru` cache
@@ -135,9 +135,9 @@ proc putVtx*(
       return err((rvid.vid,errSym,error))
 
     # Update cache, vertex will most probably never be visited anymore
-    rdb.rdBranchLru.del rvid.vid
-    rdb.rdVtxLru.del rvid.vid
-    rdb.rdKeyLru.del rvid.vid
+    rdb.rdBranchLru.del rvid
+    rdb.rdVtxLru.del rvid
+    rdb.rdKeyLru.del rvid
 
   ok()
 

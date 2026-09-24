@@ -207,7 +207,8 @@ proc init*(
       tracer: TracerRef = nil,
       storeSlotHash = false,
       enableBalTracker = false,
-      stateless = false) =
+      stateless = false,
+      collectWitness = com.statelessProvider) =
 
   ## Variant of `new()` constructor above for in-place initalisation. The
   ## `parent` argument is used to sync the accounts cache and the `header`
@@ -216,9 +217,11 @@ proc init*(
   ##
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
+  ## `collectWitness` defaults to the global `--stateless-provider` setting but
+  ## can be forced on to build a witness for a single block on demand.
   let
     ledger = LedgerRef.init(
-      txFrame, storeSlotHash, com.statelessProvider, stateless)
+      txFrame, storeSlotHash, collectWitness, stateless)
     tracker =
       if enableBalTracker:
         BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)

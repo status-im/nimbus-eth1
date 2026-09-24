@@ -11,13 +11,14 @@
 {.push raises:[].}
 
 import
+  std/paths,
   pkg/[chronos, eth/common, minilru, results],
   ../../../core/chain,
   ../../sync_desc,
   ../../wire_protocol/types as wire_types,
   ./[extra_types, worker_const]
 
-from ./mpt/mpt_cache/cache_desc
+from ./cache_db/db_desc
   import CacheDbRef
 
 # Running beacon syncer in tandem
@@ -39,6 +40,12 @@ type
 
   EthBalHashSet* = LruCache[Hash,Hash32]
     ## Eth peer list of failed block access lists
+
+  SnapCoreDb2Ref* = ref object
+    ## Shared descriptor that contains some specs of the assembled database
+    ## as the running/finished state of the snap sync process.
+    newDbPath*: string                              # Persistent path
+    snapSyncStop*: bool                             # Can be monitored
 
   # -------------------
 
@@ -77,12 +84,8 @@ type
   StorageRangesData* = tuple
     ## Derived from `StorageRangesPacket`
     slots: seq[seq[StorageItem]]                    # Slots without proof
-    slot: seq[StorageItem]                          # Incomplete slot with proof
+    partial: seq[StorageItem]                       # Incomplete slot with proof
     proof: seq[ProofNode]                           # Prof for `slot`
-
-  Ticker* =
-    proc(ctx: SnapCtxRef) {.gcsafe, raises: [].}
-      ## Some function that is invoked regularly
 
   # -------------------
 
@@ -108,10 +111,11 @@ type
     peerType*: string                ## Self declared peer type
     failedReq*: PeerFirstFetchReq    ## Don't send the same failed request twice
     lastMsgLog*: Moment              ## Helps reducing logging noise
-    stateExhausted*: BlockNumber     ## Wait until state is forwarded
+    stateExhausted*: BlockNumber     ## Wait until pivot is forwarded
 
   SnapCtxData* = object
     ## Globally shared data extension
+    newCoreDb*: SnapCoreDb2Ref       ## Will become new database (or copy of)
     syncState*: SnapState            ## Last known layout state
     contPrevSession*: bool           ## Request resuming previous session
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
@@ -120,10 +124,12 @@ type
     baseDir*: string                 ## Path for assembly database
     cacheDB*: CacheDbRef             ## Downloas and assembly cache database
     headersSynced*: bool             ## beacon sync headers
-    pivotNum*: BlockNumber           ## Current appl;icable state block number
+    pivotNum*: BlockNumber           ## Last applicable state block number
     forwardNum*: BlockNumber         ## Max possible BALs forward
+    lastConsNum*: BlockNumber        ## Wait a bit until next header download
     balsLocked*: SnapPeerRef         ## Only one peer can download BALs
     failedEthBalId*: EthBalHashSet   ## Ditto for eth peers
+    resetReq*: bool                  ## Restart system (problem with cache data)
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
@@ -132,7 +138,6 @@ type
     lastNoHdrsLog*: chronos.Moment   ## Control update messages
     lastMaxHdrsLog*: chronos.Moment  ## Control update messages
     lockedBalsLog*: chronos.Moment   ## Control messages about missing peers
-    ticker*: Ticker                  ## Ticker function to run in background
 
 # ------------------------------------------------------------------------------
 # Public helpers

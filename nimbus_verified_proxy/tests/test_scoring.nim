@@ -31,6 +31,7 @@ let scoringEngineConf = RpcVerificationEngineConf(
   codeCacheLen: 1,
   storageCacheLen: 1,
   parallelBlockDownloads: 2,
+  syncHeaderStore: false,
   freezeAtSlot: TEST_LC_SLOT,
 )
 
@@ -44,7 +45,7 @@ suite "backend scoring":
     let ts = TestApiState.init(1.u256)
     var backend = initTestExecutionBackend(ts)
     backend.eth_getProof = proc(
-        address: Address, slots: seq[UInt256], blkNum: BlockTag
+        address: Address, slots: seq[Bytes32], blkNum: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
       return err((BackendFetchError, "simulated transport failure", UNTAGGED))
 
@@ -52,6 +53,7 @@ suite "backend scoring":
       raise newException(TestProxyError, error.errMsg)
     engine.registerBackend(backend, fullExecutionCapabilities)
     engine.setupTestBeacon(ts)
+    check (waitFor engine.syncOnce()).isOk()
     let frontend1 = engine.getExecutionApiFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
@@ -67,7 +69,7 @@ suite "backend scoring":
     let ts = TestApiState.init(1.u256)
     var backend = initTestExecutionBackend(ts)
     backend.eth_getProof = proc(
-        address: Address, slots: seq[UInt256], blkNum: BlockTag
+        address: Address, slots: seq[Bytes32], blkNum: BlockTag
     ): Future[EngineResult[ProofResponse]] {.async: (raises: [CancelledError]).} =
       # Return a bogus accountProof node so verifyMptProof returns InvalidProof.
       # The node's hash won't match the block's stateRoot, triggering VerificationError.
@@ -87,6 +89,7 @@ suite "backend scoring":
       raise newException(TestProxyError, error.errMsg)
     engine.registerBackend(backend, fullExecutionCapabilities)
     engine.setupTestBeacon(ts)
+    check (waitFor engine.syncOnce()).isOk()
     let frontend2 = engine.getExecutionApiFrontend()
 
     check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()

@@ -65,7 +65,6 @@ type
     gasUsed: GasInt
     blockExecutionGasUsed: GasInt
     blockStateGasUsed: GasInt
-    intrinsic: IntrinsicGas
     blobGasUsed: uint64
     status: bool
     logs: SharedBytes
@@ -408,8 +407,6 @@ proc processTxTask(
   e[].gasUsed = logResult.gasUsed
   e[].blockExecutionGasUsed = vmState.blockExecutionGasUsed
   e[].blockStateGasUsed = vmState.blockStateGasUsed
-  e[].intrinsic =
-    e[].tx[].intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
   e[].logs = packLogs(logResult.logEntries)

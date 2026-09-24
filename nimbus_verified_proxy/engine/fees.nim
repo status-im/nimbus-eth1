@@ -37,7 +37,7 @@ func median(prices: var openArray[GasInt]): GasInt =
 proc suggestGasPrice*(
     engine: RpcVerificationEngine
 ): Future[EngineResult[GasInt]] {.async: (raises: [CancelledError]).} =
-  const minGasPrice = 30_000_000_000.GasInt
+  const minGasPrice = 1.GasInt
   let
     blk = ?(await engine.getBlock(blockId("latest"), true))
     txs = ?blk.transactions.toTransactions()

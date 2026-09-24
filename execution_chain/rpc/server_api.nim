@@ -376,7 +376,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
         res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
-          raise newException(ValueError, "rpcCallEvm error: " & $error.code)
+          raise newException(ValueError, "rpcCallEvm error: " & error)
       res.output
 
     proc eth_getTransactionReceipt(data: Hash32): ReceiptObject =
@@ -420,17 +420,19 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         txFrame = api.chain.txFrame(headerHash)
         # TODO: change 0 to configureable gas cap
         gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
-          let data = EthJson.encode(error[1].output.to0xHex()).JsonString
+          let data = EthJson.encode(error.output.to0xHex()).JsonString
           raise (ref RpcResponseError)(
             code: 3,
-            msg: $error[1].error,
+            msg: error.error,
             data: data,
           )
       Quantity(gasUsed)
 
-    proc eth_gasPrice(): Quantity =
+    proc eth_gasPrice(): Quantity {.raises: [ValueError].} =
       ## Returns an integer of the current gas price in wei.
-      w3Qty(calculateMedianGasPrice(api.chain).uint64)
+      let gasPrice = calculateMedianGasPrice(api.chain).valueOr:
+        raise newException(ValueError, error)
+      w3Qty(gasPrice.uint64)
 
     proc eth_accounts(): seq[Address] =
       ## Returns a list of addresses owned by client.
@@ -511,7 +513,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         txFrame = api.frameFromTag(blockId("latest")).valueOr:
           raise newException(ValueError, "Latest Block not found")
         accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
-        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
+        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId).valueOr:
+          raise newException(ValueError, error)
         eip155 = api.com.isEIP155(api.chain.latestNumber)
         signedTx = signTransaction(tx, acc.privateKey, eip155)
       return rlp.encode(signedTx)
@@ -534,7 +537,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
           raise newException(ValueError, "Latest Block not found")
         accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
 
-        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId)
+        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId).valueOr:
+          raise newException(ValueError, error)
         eip155 = api.com.isEIP155(api.chain.latestNumber)
         signedTx = signTransaction(tx, acc.privateKey, eip155)
         blobsBundle =
@@ -802,8 +806,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       api.oracle.feeHistory(blockCount.uint64, newestBlock, rewardPercentiles.get(@[])).valueOr:
         raise newException(ValueError, error)
 
-    proc eth_maxPriorityFeePerGas(): Quantity =
-      w3Qty(calculateMedianMaxPriorityFeePerGas(api.chain).uint64)
+    proc eth_maxPriorityFeePerGas(): Quantity {.raises: [ValueError].} =
+      let maxPriorityFee = calculateMedianMaxPriorityFeePerGas(api.chain).valueOr:
+        raise newException(ValueError, error)
+      w3Qty(maxPriorityFee.uint64)
 
     proc eth_getStorageValues(request: StorageValuesRequest, blockTag: BlockTag): StorageValuesResponse {.raises: [ValueError].} =
       let

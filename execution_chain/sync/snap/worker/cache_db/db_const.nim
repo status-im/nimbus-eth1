@@ -1,0 +1,43 @@
+# Nimbus
+# Copyright (c) 2026 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at
+#     https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at
+#     https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
+
+{.push raises: [].}
+
+import
+  ../../../wire_protocol/snap/snap_types
+
+const
+  EmptyProof* = seq[ProofNode].default
+
+  extraTraceMessages* = true
+    ## Enable additional logging noise
+
+type
+  MptAsmCol* = enum
+    cInvalid = 0                                    # not a valid column marker
+
+    gHeaderBal = 10                                 # group, not used as column
+    cHeader                                         # header chain by block num
+    cBal                                            # block access lists
+
+    gMissingTables = 20                             # group, not used as column
+    cMissingIntv                                    # missing accounts/slots
+    cMissingBlob                                    # missing contract codes
+
+    gLockTables = 30                                # group, not used as column
+    cLockStoMpt                                     # lock storage sub-MPT
+    cLockCode                                       # lock contract code
+
+    gFlatTables = 40                                # group, not used as column
+    cFlatAccount                                    # flat accounts table
+    cFlatSlot                                       # flat storage slots table
+    cFlatCode                                       # contract codes table
+
+# End

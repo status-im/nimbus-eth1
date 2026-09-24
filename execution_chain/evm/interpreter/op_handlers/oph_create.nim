@@ -64,7 +64,7 @@ proc postExecutionCreate(c: Computation, child: Computation, newAccountCharged: 
       c.returnData = move(child.output)
 
 proc execSubCreate(c: Computation; childMsg: Message;
-                   code: CodeBytesRef): EvmResultVoid =
+                   codeHash: Hash32; code: CodeBytesRef): EvmResultVoid =
   ## Create new VM -- helper for `Create`-like operations
 
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
@@ -101,6 +101,11 @@ proc execSubCreate(c: Computation; childMsg: Message;
   c.gasMeter.stateGasLeft = 0.GasInt
 
   c.chainTo(child):
+    if child.isSuccess:
+      # Code validation/deposit has finished, but an enclosing call or the
+      # transaction itself can still revert. Preserve the executed jump filter
+      # in the caller's savepoint until all of those frames commit.
+      c.vmState.ledger.cacheCodeOnCommit(codeHash, code)
     postExecutionCreate(c, child, newAccountCharged)
     ok()
 
@@ -173,7 +178,9 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
       return ok()
 
   var
-    code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
+    codeHash = keccak256(cpt.memory.read(memPos, memLen))
+    code = cpt.vmState.ledger.peekCode(codeHash).valueOr:
+      CodeBytesRef.init(cpt.memory.read(memPos, memLen))
     childMsg = Message(
       kind:              CallKind.Create,
       depth:             cpt.msg.depth + 1,
@@ -183,7 +190,7 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
                            cpt.vmState,
                            cpt.msg.contractAddress),
       )
-  cpt.execSubCreate(childMsg, code)
+  cpt.execSubCreate(childMsg, codeHash, code)
 
 # ---------------------
 
@@ -252,7 +259,9 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       return ok()
 
   var
-    code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
+    codeHash = keccak256(cpt.memory.read(memPos, memLen))
+    code = cpt.vmState.ledger.peekCode(codeHash).valueOr:
+      CodeBytesRef.init(cpt.memory.read(memPos, memLen))
     childMsg = Message(
       kind:              CallKind.Create2,
       depth:             cpt.msg.depth + 1,
@@ -261,9 +270,9 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
       contractAddress:   generateSafeAddress(
                            cpt.msg.contractAddress,
                            salt,
-                           code.bytes),
+                           codeHash),
       )
-  cpt.execSubCreate(childMsg, code)
+  cpt.execSubCreate(childMsg, codeHash, code)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

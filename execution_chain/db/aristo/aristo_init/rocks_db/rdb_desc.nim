@@ -55,13 +55,13 @@ type
     # is less memory and time efficient (the latter one due to internal LRU
     # handling of the longer key.)
     #
-    rdKeyLru*: ConcurrentLruCache[VertexID,HashKey] ## Read cache
+    rdKeyLru*: ConcurrentLruCache[RootedVertexID,HashKey] ## Read cache
     rdKeySize*: int
 
-    rdVtxLru*: ConcurrentLruCache[VertexID,VertexBuf] ## Read cache
+    rdVtxLru*: ConcurrentLruCache[RootedVertexID,VertexBuf] ## Read cache
     rdVtxSize*: int
 
-    rdBranchLru*: ConcurrentLruCache[VertexID, (VertexID, uint16)]
+    rdBranchLru*: ConcurrentLruCache[RootedVertexID, (VertexID, uint16)]
     rdBranchSize*: int
 
     rdbPrintStats*: bool               ## Print statistics on closure

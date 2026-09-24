@@ -10,7 +10,6 @@
 
 import
   eth/common/eth_types_rlp,
-  stew/assign2,
   ../evm/[types, state],
   ../transaction,
   ./call_common,
@@ -20,30 +19,22 @@ import
 export
   call_common
 
-proc callParamsForTx(tx: Transaction, sender: Address,
-                     vmState: BaseVMState, baseFee: GasInt,
-                     intrinsic: IntrinsicGas): CallParams =
+proc callParams*(tx: Transaction,
+                 sender: Address,
+                 vmState: BaseVMState,
+                 intrinsic: IntrinsicGas): CallParams =
   # Is there a nice idiom for this kind of thing? Should I
   # just be writing this as a bunch of assignment statements?
-  result = CallParams(
-    vmState:      vmState,
-    gasPrice:     tx.effectiveGasPrice(baseFee),
-    gasLimit:     tx.gasLimit,
-    sender:       sender,
-    to:           tx.destination,
-    isCreate:     tx.contractCreation,
-    value:        tx.value,
-    input:        tx.payload,
-    intrinsic:    intrinsic
+  let
+    baseFee = vmState.blockCtx.baseFeePerGas
+  CallParams(
+    vmState:   vmState,
+    gasPrice:  tx.effectiveGasPrice(baseFee),
+    sender:    sender,
+    isCreate:  tx.contractCreation,
+    tx:        tx.addr,
+    intrinsic: intrinsic
   )
-  if tx.txType > TxLegacy:
-    assign(result.accessList, tx.accessList)
-
-  if tx.txType == TxEip4844:
-    assign(result.versionedHashes, tx.versionedHashes)
-
-  if tx.txType == TxEip7702:
-    assign(result.authorizationList, tx.authorizationList)
 
 proc txCallEvm*(tx: Transaction,
                 sender: Address,
@@ -51,8 +42,7 @@ proc txCallEvm*(tx: Transaction,
                 intrinsic: IntrinsicGas,
                 discardResult: static bool = false): auto =
   let
-    baseFee = vmState.blockCtx.baseFeePerGas
-    call = callParamsForTx(tx, sender, vmState, baseFee, intrinsic)
+    call = callParams(tx, sender, vmState, intrinsic)
   when discardResult:
     discard runComputation(call, VoidResult)
   else:
@@ -62,6 +52,5 @@ proc testCallEvm*(tx: Transaction,
                   sender: Address,
                   vmState: BaseVMState): DebugCallResult =
   let
-    baseFee = vmState.blockCtx.baseFeePerGas
-    call = callParamsForTx(tx, sender, vmState, baseFee, IntrinsicGas())
+    call = callParams(tx, sender, vmState, IntrinsicGas())
   runComputation(call, DebugCallResult)

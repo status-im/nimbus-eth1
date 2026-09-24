@@ -53,7 +53,7 @@ func txType(n: Txo): TxType =
     return TxEip7702
   if n.blobVersionedHashes.isSome:
     return TxEip4844
-  if n.gasPrice.isNone:
+  if n.maxPriorityFeePerGas.isSome or n.maxFeePerGas.isSome:
     return TxEip1559
   if n.accessLists.isSome:
     return TxEip2930
@@ -103,6 +103,9 @@ func parseTx*(n: Txo, index: Index): Result[Transaction, string] =
   defaultZero(tx.maxFeePerBlobGas, n.maxFeePerBlobGas)
   defaultZero(tx.versionedHashes, n.blobVersionedHashes)
   defaultZero(tx.authorizationList, n.authorizationList)
+
+  if n.chainId.isNone and tx.txType > TxLegacy:
+    tx.chainId = 1.u256
 
   try:
     if n.to != "":

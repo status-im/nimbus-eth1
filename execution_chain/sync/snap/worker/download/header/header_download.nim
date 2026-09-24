@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos],
   ../../../../beacon,
-  ../../[mpt, worker_desc]
+  ../../[cache_db, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -22,16 +22,22 @@ import
 proc storeCachedHeaders(
     ctx: SnapCtxRef;
     leastBn: BlockNumber;
+    topBn: BlockNumber;
     info: static[string];
       ) =
   var count = 0
   for header in ctx.hdrCache.incrFrom():
+    # Range is leastBn .. topBn
     if leastBn <= header.number:
+      if topBn < header.number:
+        break
       ctx.pool.cacheDB.putHeader(header, info).isOkOr:
         return
       count.inc
-  trace info & ": Registered headers",
-    count, head=ctx.hdrCache.head.number, syncState=($ctx.syncState)
+  ctx.pool.lastConsNum = ctx.hdrCache.head.number
+  trace info & ": Registered headers", leastBn, topBn, count,
+    lastConsHead=ctx.pool.lastConsNum,
+    consHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState)
 
 proc stateNum(ctx: SnapCtxRef): BlockNumber =
   # Get block number from saved state (if any)
@@ -71,22 +77,44 @@ proc headerDownloadTrigger*(
     #       clean up.
     return ok()                                     # nothing to do
 
-  # Ignoring a beacon header fetch cycle unless there are enough headers
-  # available to fetch.
+  # A beacon header fetch cycle is not triggered unless there are enough
+  # expected headers available to fetch.
+  #
+  # When downloading headers, the CL head of the canonical chain is targeted,
+  # but the downloaded chain is only used up until the finalised head, which
+  # is not available as a target (because there is the has only which is
+  # resolved when downloading the chain.)
+  #
+  # So what is needed is an increase in the finalised head which is not
+  # directly available. But is is mostly not far away from the CL head. So
+  # an increase in the latter one is taken as a proxy for guessing whether
+  # there is a chance that the finalised head has increased, enough.
+  #
   let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
-  if consHeadNum < firstNum + nConsHeadCachedDeltaMax - 1 and
+  if consHeadNum < ctx.pool.lastConsNum + nConsHeadCachedDeltaMin - 1 and
      not ctx.pool.beaconTarget:                     # maybe manual target set?
     let now = Moment.now()
     if ctx.pool.lastNoHdrsLog + noHeadersLogWaitInterval < now:
       ctx.pool.lastNoHdrsLog = now
-      trace info & ": Not enough headers to download yet", firstNum,
-        consHeadNum, syncState=($ctx.syncState)
+      trace info & ": Not enough headers to download yet", firstHeader=firstNum,
+        lastConsHead=ctx.pool.lastConsNum, consHead=consHeadNum,
+        syncState=($ctx.syncState)
     return ok()
 
   # Define event handler to complete beacon syncer download
-  proc storeTopHeaderCB(ok: bool) =
-    if ok:
-      ctx.storeCachedHeaders(firstNum, info)
+  proc storeTopHeaderCB(state: BeaconNotifierState) =
+    case state:
+    of ok:
+      let finNum = ctx.hdrCache.finNum.get(otherwise = 0)
+      if firstNum <= finNum:
+        ctx.storeCachedHeaders(firstNum, finNum, info)
+      else:
+        trace info & ": No finalised header for now"
+    of reset:
+      error info & ": Header chain wrong branch => reset"
+      ctx.pool.resetReq = true
+    of failed:
+      discard
     bcSync.singleReset().isOkOr:
       error info & ": Unable to reset header download", `error`=error
     ctx.pool.headersSynced = true                   # mark header update done

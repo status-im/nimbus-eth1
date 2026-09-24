@@ -11,8 +11,10 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, chronos, minilru, results, stew/byteutils],
-  ./worker/[download, helpers, mpt, session, start_stop, update, worker_desc]
+  pkg/[chronicles, chronos, minilru, results],
+  pkg/[beacon_chain/process_state, stew/byteutils],
+  ./worker/[download, helpers, cache_db, import_coredb,
+            state_forward, start_stop, update, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -22,6 +24,8 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc suspend(buddy: SnapPeerRef) =
+  ## Keep a peer on hold but do not ask for data until the `pivot` has
+  ## advanced to a newer block number.
   buddy.only.stateExhausted = buddy.ctx.pool.pivotNum
 
 func isSuspended(buddy: SnapPeerRef): bool =
@@ -92,33 +96,29 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
   block body:
     case ctx.updateSnapState(info):                 # set next state
     of SnapIdle:
-      discard
+      discard                                       # currently placeholder only
 
     of SnapResume:
-      ctx.downloadInit(info).isOkOr:                # get cache DB ready
-        bodyRc = daemonWaitResumeInterval           # not yet? take a nap
+      discard ctx.downloadInit(info)                # init download if possible
 
     of SnapClear:
       # Clear cache DB if needed.
-      let hasData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr: false
-      if hasData and not ctx.pool.cacheDB.clear(info):
-        bodyRc = daemonWaitClearInterval            # disk full?, failure
+      let hasDataOrErr = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr: true
+      if hasDataOrErr and not ctx.pool.cacheDB.clear(info):
+        bodyRc = daemonWaitClearFailInterval        # take a nap
         break body
 
+      ctx.resetServices info                        # reset system
+
+    of SnapReady:
       # Start headers download on the beacon sync server to run
       # in quasi-parallel mode to the snap sync daemon & peers.
       ctx.headerDownloadTrigger(info).isOkOr:
-        bodyRc = daemonWaitClearInterval            # take a nap
+        bodyRc = daemonWaitReadyFailInterval        # take a nap
+        break body
 
-    of SnapReady:
-      # Re-trigger headers fetch. This is effective only if the last attempt
-      # was unsuccessful (maybe due to missing FC updates.)
-      ctx.headerDownloadTrigger(info).isOkOr:
-        bodyRc = daemonWaitClearInterval            # take a nap
-
-      if ctx.pool.headersSynced:
-        ctx.downloadInit(info).isOkOr:              # get ready
-          bodyRc = daemonWaitReadyInterval          # take a nap
+      ctx.downloadInit(info).isOkOr:                # get ready
+        bodyRc = daemonWaitReadyFailInterval        # take a nap
 
     of SnapDownload:
       # Download headers. The request will be silently ignored if the
@@ -127,16 +127,17 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       bodyRc = daemonWaitDownloadInterval           # parallel peer action
 
     of SnapDownloadFinish:
-      bodyRc = daemonWaitDownloadFinishInterval     # wait for sync
+      discard
 
     of SnapBalsFetch:
-      bodyRc = daemonWaitElseInterval               # parallel peer action
+      discard ctx.headerDownloadTrigger(info)       # see `SnapDownload`
+      bodyRc = daemonWaitBalsFetchInterval          # parallel peer action
 
     of SnapBalsFetchFinish:
-      bodyRc = daemonWaitElseInterval               # wait for sync
+      discard
 
     of SnapStateForward:
-      ctx.sessionForward(info).isOkOr:
+      ctx.stateForward(info).isOkOr:
         break body
 
       # Prepare for next download cyle
@@ -145,12 +146,23 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       debug info & ": Forwarded state", pivotNum=ctx.pool.pivotNum,
         forwardNum=ctx.pool.forwardNum
 
-    # of TBD ..
+    of SnapAssembleMpt:
+      ctx.importCoreDb(info).isOkOr:
+        ctx.pool.resetReq = true                    # not much else possible
 
     of SnapStop:
-      warn info & ": Stop snap sync not implemented yet, lingering",
-        syncState=($ctx.syncState)
-      bodyRc = chronos.seconds(30)
+      ctx.accountDownloadMetricsReset()             # cosmetics
+
+      # Done, terminate
+      if 0 < ctx.pool.newCoreDb.newDbPath.len:
+        notice info & ": Snap sync will terminate successfully",
+          dbPath=ctx.pool.newCoreDb.newDbPath
+        ctx.daemon = false
+        ctx.pool.newCoreDb.snapSyncStop = true
+        break body
+
+      # This should have been handled by the FSA update
+      raiseAssert info & ": Snap sync is not ready yet to terminate"
 
     # End block: `body`
 
@@ -182,9 +194,12 @@ proc runPool*(
   ##
   let ctx = buddy.ctx
 
-  if ctx.pool.syncState == SnapDownloadFinish:
+  case ctx.pool.syncState:
+  of SnapDownloadFinish:
     ctx.downloadCommit(info).isOkOr:                # write back ranges to DB
       error info & ": Error storing progress", `error`=error
+  else:
+    discard
 
   ctx.statsStateLog info                            # print statistics
   true                                              # stop

@@ -75,6 +75,9 @@ type
   AccLeafRef* = ref object of LeafRef
     account*: AristoAccount
     stoID*: StorageID              ## Storage vertex ID (if any)
+    stoHint*: uint8
+      ## One more than the static level to start probing slot leaves at,
+      ## 0 when the storage trie was not built with static vids
 
   StoLeafRef* = ref object of LeafRef
     stoData*: UInt256
@@ -90,6 +93,7 @@ type
       pfx*: NibblesBuf
       account*: AristoAccount
       stoID*: StorageID
+      stoHint*: uint8
 
   CachedStoLeaf* = object
     pfx*: NibblesBuf
@@ -128,9 +132,10 @@ const
 # ------------------------------------------------------------------------------
 
 template init*(
-    _: type AccLeafRef, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID
+    _: type AccLeafRef, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID,
+    stoHintp: uint8 = 0
 ): AccLeafRef =
-  AccLeafRef(vType: AccLeaf, pfx: pfxp, account: accountp, stoID: stoIDp)
+  AccLeafRef(vType: AccLeaf, pfx: pfxp, account: accountp, stoID: stoIDp, stoHint: stoHintp)
 
 template init*(_: type StoLeafRef, pfxp: NibblesBuf, stoDatap: UInt256): StoLeafRef =
   StoLeafRef(vType: StoLeaf, pfx: pfxp, stoData: stoDatap)
@@ -147,8 +152,9 @@ template init*(_: type BoundaryNodeRef, pfxp: NibblesBuf, childKeyp: HashKey): B
   BoundaryNodeRef(vType: BoundaryNode, pfx: pfxp, childKey: childKeyp)
 
 template init*(
-    T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID): T =
-  T(empty: false, pfx: pfxp, account: accountp, stoID: stoIDp)
+    T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID,
+    stoHintp: uint8 = 0): T =
+  T(empty: false, pfx: pfxp, account: accountp, stoID: stoIDp, stoHint: stoHintp)
 
 template init*(
     T: type CachedStoLeaf, pfxp: NibblesBuf, stoDatap: UInt256): T =
@@ -168,7 +174,7 @@ func toLeaf*(c: CachedAccLeaf): AccLeafRef =
   if c.isEmpty(): 
     AccLeafRef(nil) 
   else: 
-    AccLeafRef.init(c.pfx, c.account, c.stoID)
+    AccLeafRef.init(c.pfx, c.account, c.stoID, c.stoHint)
 
 func toLeaf*(c: CachedStoLeaf): StoLeafRef =
   if c.isEmpty(): 
@@ -304,7 +310,7 @@ func dup*(vtx: VertexRef): VertexRef =
     case vtx.vType
     of AccLeaf:
       let vtx = AccLeafRef(vtx)
-      AccLeafRef.init(vtx.pfx, vtx.account, vtx.stoID)
+      AccLeafRef.init(vtx.pfx, vtx.account, vtx.stoID, vtx.stoHint)
     of StoLeaf:
       let vtx = StoLeafRef(vtx)
       StoLeafRef.init(vtx.pfx, vtx.stoData)

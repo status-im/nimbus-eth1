@@ -38,10 +38,10 @@ type
     slotNumber*       : uint64
 
   TxContext* = object
-    origin*         : Address
-    gasPrice*       : GasInt
-    versionedHashes*: seq[VersionedHash]
-    blobBaseFee*    : UInt256
+    origin*     : Address
+    gasPrice*   : GasInt
+    blobBaseFee*: UInt256
+    tx*         : ptr Transaction
 
   BaseVMState* = ref object of RootObj
     com*              : CommonRef

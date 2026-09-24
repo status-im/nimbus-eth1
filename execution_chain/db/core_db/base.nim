@@ -164,7 +164,7 @@ proc get*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## This function always returns a non-empty `seq[byte]` or an error code.
   let rc = kvt.kvt.get(key)
   if rc.isOk:
-    ok(rc.value)
+    ok(move(rc.value))
   elif rc.error == GetNotFound:
     err(rc.error.toError("", KvtNotFound))
   else:
@@ -176,7 +176,7 @@ proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ##
   let rc = kvt.kvt.get(key)
   if rc.isOk:
-    ok(rc.value)
+    ok(move(rc.value))
   elif rc.error == GetNotFound:
     CoreDbRc[seq[byte]].ok(EmptyBlob)
   else:

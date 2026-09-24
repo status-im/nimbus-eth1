@@ -14,6 +14,7 @@
 {.push raises: [].}
 
 import
+  std/tables,
   results,
   ./[kvt_desc]
 

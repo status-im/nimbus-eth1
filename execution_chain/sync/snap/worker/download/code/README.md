@@ -43,7 +43,13 @@ by downloading *snap* data, the following actions take place.
     table
 * Remove the lock record
 
-Further handling
-----------------
+Consequences
+------------
 
-TBD
+After a state root change due to BAL forwarding, updating a missing contract
+code would require an update of the corresponding account record in order to
+fetch the current code via *codeHash*, which is stored in the account record.
+
+For that reason, all missing contract code addresses and the corresponding
+account records will be deleted. The account will then be declared missing
+before BAL forwarding takes place.

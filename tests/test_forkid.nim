@@ -61,22 +61,24 @@ const
   ]
 
   SepoliaNetIDs = [
-    (number: 0'u64,       time: 0'u64, id: (hash: 0xfe3366e7'u32, next: 1450409'u64)),             # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin and first London block
-    (number: 1450408'u64, time: 0'u64, id: (hash: 0xfe3366e7'u32, next: 1450409'u64)),             # Last London block
-    (number: 1450409'u64, time: 0'u64, id: (hash: 0x4a85c09c'u32, next: 1677557088'u64)),          # First MergeNetsplit block
-    (number: 1450410'u64, time: 1677557087'u64, id: (hash: 0x4a85c09c'u32, next: 1677557088'u64)), # Last MergeNetsplit block
-    (number: 1450410'u64, time: 1677557088'u64, id: (hash: 0xce82fa52'u32, next: 1706655072'u64)), # First Shanghai time
-    (number: 1450410'u64, time: 1706655071'u64, id: (hash: 0xce82fa52'u32, next: 1706655072'u64)), # Last Shanghai time
-    (number: 1450410'u64, time: 1706655072'u64, id: (hash: 0xa6260961'u32, next: 1741159776'u64)), # First Cancun time
-    (number: 1450410'u64, time: 1741159775'u64, id: (hash: 0xa6260961'u32, next: 1741159776'u64)), # Last Cancun time
-    (number: 1450410'u64, time: 1741159776'u64, id: (hash: 0x1cd80755'u32, next: 1760427360'u64)), # First Prague time
-    (number: 1450410'u64, time: 1760427359'u64, id: (hash: 0x1cd80755'u32, next: 1760427360'u64)), # Last Prague time
-    (number: 1450410'u64, time: 1760427360'u64, id: (hash: 0x55369A33'u32, next: 1761017184'u64)), # First Osaka time
-    (number: 1450410'u64, time: 1761017183'u64, id: (hash: 0x55369A33'u32, next: 1761017184'u64)), # Last Osaka time
-    (number: 1450410'u64, time: 1761017184'u64, id: (hash: 0xA47328A8'u32, next: 1761607008'u64)), # First BPO1 time
-    (number: 1450410'u64, time: 1761607007'u64, id: (hash: 0xA47328A8'u32, next: 1761607008'u64)), # Last BPO1 time
-    (number: 1450410'u64, time: 1761607008'u64, id: (hash: 0x4463073B'u32, next: 0'u64)),          # First BPO2 time
-    (number: 1450410'u64, time: 1761607009'u64, id: (hash: 0x4463073B'u32, next: 0'u64)),          # Future BPO2 time
+    (number: 0'u64,       time: 0'u64, id: (hash: 0xfe3366e7'u32, next: 1735371'u64)),             # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin and first London block
+    (number: 1735370'u64, time: 0'u64, id: (hash: 0xfe3366e7'u32, next: 1735371'u64)),             # Last London block
+    (number: 1735371'u64, time: 0'u64, id: (hash: 0xb96cbd13'u32, next: 1677557088'u64)),          # First MergeNetsplit block
+    (number: 1735372'u64, time: 1677557087'u64, id: (hash: 0xb96cbd13'u32, next: 1677557088'u64)), # Last MergeNetsplit block
+    (number: 1735372'u64, time: 1677557088'u64, id: (hash: 0xf7f9bc08'u32, next: 1706655072'u64)), # First Shanghai time
+    (number: 1735372'u64, time: 1706655071'u64, id: (hash: 0xf7f9bc08'u32, next: 1706655072'u64)), # Last Shanghai time
+    (number: 1735372'u64, time: 1706655072'u64, id: (hash: 0x88cf81d9'u32, next: 1741159776'u64)), # First Cancun time
+    (number: 1735372'u64, time: 1741159775'u64, id: (hash: 0x88cf81d9'u32, next: 1741159776'u64)), # Last Cancun time
+    (number: 1735372'u64, time: 1741159776'u64, id: (hash: 0xed88b5fd'u32, next: 1760427360'u64)), # First Prague time
+    (number: 1735372'u64, time: 1760427359'u64, id: (hash: 0xed88b5fd'u32, next: 1760427360'u64)), # Last Prague time
+    (number: 1735372'u64, time: 1760427360'u64, id: (hash: 0xe2ae4999'u32, next: 1761017184'u64)), # First Osaka time
+    (number: 1735372'u64, time: 1761017183'u64, id: (hash: 0xe2ae4999'u32, next: 1761017184'u64)), # Last Osaka time
+    (number: 1735372'u64, time: 1761017184'u64, id: (hash: 0x56078a1e'u32, next: 1761607008'u64)), # First BPO1 time
+    (number: 1735372'u64, time: 1761607007'u64, id: (hash: 0x56078a1e'u32, next: 1761607008'u64)), # Last BPO1 time
+    (number: 1735372'u64, time: 1761607008'u64, id: (hash: 0x268956b6'u32, next: 1791294816'u64)), # First BPO2 time
+    (number: 1735372'u64, time: 1791294815'u64, id: (hash: 0x268956b6'u32, next: 1791294816'u64)), # Last BPO2 time
+    (number: 1735372'u64, time: 1791294816'u64, id: (hash: 0x6c1d9423'u32, next: 0'u64)),          # First Amsterdam time
+    (number: 1735372'u64, time: 1791294817'u64, id: (hash: 0x6c1d9423'u32, next: 0'u64)),          # Future Amsterdam time
   ]
 
   HoodiNetIDs = [
@@ -115,10 +117,11 @@ template runComputeForkIdTest(network: untyped, name: string) =
         check computedIdTimeOnly == expectedId
 
 const
-  ValidationTests = [
+  # from
+  # https://github.com/ethereum/go-ethereum/blob/57218e569889014108919429e1d74d2944fc4d96/core/forkid/forkid_test.go#L143
 
-    # from
-    # https://github.com/ethereum/go-ethereum/blob/0413af40f60290cf689b4ecca4e51fef0ec11119/core/forkid/forkid_test.go#L304
+  # Run against a MainNet config without any timestamp based forks
+  LegacyValidationTests = [
 
     #------------------
     # Block based tests
@@ -184,14 +187,14 @@ const
     # at some future block 88888888, for itself, but past block for local. Local is incompatible.
     #
     # This case detects non-upgraded nodes with majority hash power (typical Ropsten mess).
-    # Note: disable this test as it needs to be tested with a configuration without Shanghai and later forks
-    # It would turn true now because time is set to 0, and thus Paris is not considered passed yet.
-    # In practise time would not get to 0.
-    # (config: MainNet, head: 88888888'u64, time: 0'u64, id: (hash: 0xf0afd0e3'u32, next: 88888888'u64), compatible: false),
+    (config: MainNet, head: 88888888'u64, time: 0'u64, id: (hash: 0xf0afd0e3'u32, next: 88888888'u64), compatible: false),
 
     # Local is mainnet Byzantium. Remote is also in Byzantium, but announces Gopherium (non existing
     # fork) at block 7279999, before Petersburg. Local is incompatible.
     (config: MainNet, head: 7279999'u64, time: 0'u64, id: (hash: 0xa00bc324'u32, next: 7279999'u64), compatible: false),
+  ]
+
+  ValidationTests = [
 
     #------------------------------------
     # Block to timestamp transition tests
@@ -257,7 +260,7 @@ const
     #----------------------
 
     # Local is mainnet Shanghai, remote announces the same. No future fork is announced.
-    (config: MainNet, head: 1681338455'u64, time: 1681338455'u64, id: (hash: 0xdce96c2d'u32, next: 0'u64), compatible: true),
+    (config: MainNet, head: 20000000'u64, time: 1681338455'u64, id: (hash: 0xdce96c2d'u32, next: 0'u64), compatible: true),
 
     # Local is mainnet Shanghai, remote announces the same. Remote also announces a next fork
     # at time 0xffffffff, but that is uncertain.
@@ -312,11 +315,11 @@ const
     # Local is mainnet Shanghai, remote is random Shanghai.
     (config: MainNet, head: 20000000'u64, time: 1681338455'u64, id: (hash: 0x12345678'u32, next: 0'u64), compatible: false),
 
-    # Local is mainnet Prague, far in the future. Remote announces Gopherium (non existing fork)
+    # Local is mainnet BPO2, far in the future. Remote announces Gopherium (non existing fork)
     # at some future timestamp 8888888888, for itself, but past block for local. Local is incompatible.
     #
     # This case detects non-upgraded nodes with majority hash power (typical Ropsten mess).
-    (config: MainNet, head: 88888888'u64, time: 8888888888'u64, id: (hash: 0xc376cf8b'u32, next: 8888888888'u64), compatible: false),
+    (config: MainNet, head: 88888888'u64, time: 8888888888'u64, id: (hash: 0x07c9462e'u32, next: 8888888888'u64), compatible: false),
 
     # Local is mainnet Shanghai. Remote is also in Shanghai, but announces Gopherium (non existing
     # fork) at timestamp 1668000000, before Cancun. Local is incompatible.
@@ -324,17 +327,24 @@ const
 
   ]
 
-proc runCompatibleForkIdTest() =
-  test "Compatible ForkId validation test":
-    for testcase in ValidationTests:
-      var
-        params = networkParams(testcase.config)
-        com = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
+template runCompatibleForkIdTest(tests: untyped, legacy: bool) =
+  for testcase in tests:
+    var params = networkParams(testcase.config)
+    if legacy:
+      # Needs to be updated when a new timestamp based fork is set on MainNet
+      params.config.shanghaiTime = Opt.none(EthTime)
+      params.config.cancunTime = Opt.none(EthTime)
+      params.config.pragueTime = Opt.none(EthTime)
+      params.config.osakaTime = Opt.none(EthTime)
+      params.config.bpo1Time = Opt.none(EthTime)
+      params.config.bpo2Time = Opt.none(EthTime)
 
-      let fid = ForkId(hash: testcase.id.hash.to(Bytes4), next: testcase.id.next)
-      let compatible = com.compatibleForkId(fid, BlockNumber(testcase.head), EthTime(testcase.time))
+    let
+      com = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
+      fid = ForkId(hash: testcase.id.hash.to(Bytes4), next: testcase.id.next)
+      compatible = com.compatibleForkId(fid, BlockNumber(testcase.head), EthTime(testcase.time))
 
-      check compatible == testcase.compatible
+    check compatible == testcase.compatible
 
 func config(shanghai, cancun: uint64): ChainConfig =
   ChainConfig(
@@ -388,6 +398,9 @@ suite "ForkId tests":
   runComputeForkIdTest(MainNet, "MainNet")
   runComputeForkIdTest(SepoliaNet, "SepoliaNet")
   runComputeForkIdTest(HoodiNet, "HoodiNet")
-  runCompatibleForkIdTest()
+  test "Compatible ForkId validation test - legacy config":
+    runCompatibleForkIdTest(LegacyValidationTests, legacy = true)
+  test "Compatible ForkId validation test":
+    runCompatibleForkIdTest(ValidationTests, legacy = false)
   test "Genesis Time ForkId tests":
     runGenesisTimeIdTests()

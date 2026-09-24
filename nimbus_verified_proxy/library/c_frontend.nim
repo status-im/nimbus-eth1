@@ -13,6 +13,8 @@ import
   beacon_chain/nimbus_binary_common,
   web3/[eth_api_types, conversions],
   ../engine/types,
+  ../engine/engine,
+  ../op/op_anchor,
   ../nimbus_verified_proxy_conf,
   ./types,
   ./utils
@@ -29,15 +31,18 @@ template callbackToC(
     dec ctx.pendingCalls
     let (status, response) =
       if fut.cancelled():
-        (RET_CANCELLED, Json.encode(fut.error().msg))
+        (RET_CANCELLED, EthJson.encode(fut.error().msg))
       elif fut.failed():
-        (RET_ERROR, Json.encode(fut.error().msg))
+        (RET_ERROR, EthJson.encode(fut.error().msg))
       else:
         let res = fut.value()
         if res.isErr():
           (RET_ERROR, $res.error.errType & ": " & res.error.errMsg)
         else:
-          (RET_SUCCESS, Json.encode(res.get()))
+          when typeof(res.get()) is void:
+            (RET_SUCCESS, "null")
+          else:
+            (RET_SUCCESS, EthJson.encode(res.get()))
 
     cb(ctx, status, alloc(response), userData)
 
@@ -69,6 +74,16 @@ proc eth_blockNumber(
 proc eth_syncing(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_syncing()
+
+proc nvp_eth_sync(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+  callbackToC(ctx, cb, userData):
+    ctx.engine.syncOnce()
+
+proc nvp_eth_syncInterval(
+    ctx: ptr Context, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let intervalMs = uint64(ctx.engine.syncInterval().milliseconds)
+  cb(ctx, RET_SUCCESS, alloc(EthJson.encode(intervalMs)), userData)
 
 proc eth_getBalance(
     ctx: ptr Context,
@@ -410,7 +425,7 @@ proc eth_feeHistory(
     newestBlockTyped = unpackArg($newestBlock, BlockTag).valueOr:
       cb(ctx, RET_DESER_ERROR, alloc(error), userData)
       return
-    rewardPercentilesTyped = unpackArg($rewardPercentiles, seq[int]).valueOr:
+    rewardPercentilesTyped = unpackArg($rewardPercentiles, seq[float64]).valueOr:
       cb(ctx, RET_DESER_ERROR, alloc(error), userData)
       return
 
@@ -444,6 +459,18 @@ proc op_blockNumber(
   requireOpFrontend(ctx, cb, userData)
   callbackToC(ctx, cb, userData):
     ctx.opFrontend.eth_blockNumber()
+
+proc nvp_op_sync(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opEngine.opSyncOnce(ctx.engine)
+
+proc nvp_op_syncInterval(
+    ctx: ptr Context, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  let intervalMs = uint64(ctx.engine.syncInterval().milliseconds)
+  cb(ctx, RET_SUCCESS, alloc(EthJson.encode(intervalMs)), userData)
 
 proc op_getBalance(
     ctx: ptr Context,
@@ -813,7 +840,7 @@ proc op_feeHistory(
     newestBlockTyped = unpackArg($newestBlock, BlockTag).valueOr:
       cb(ctx, RET_DESER_ERROR, alloc(error), userData)
       return
-    rewardPercentilesTyped = unpackArg($rewardPercentiles, seq[int]).valueOr:
+    rewardPercentilesTyped = unpackArg($rewardPercentiles, seq[float64]).valueOr:
       cb(ctx, RET_DESER_ERROR, alloc(error), userData)
       return
 
@@ -837,6 +864,12 @@ proc op_sendRawTransaction(
   requireOpFrontend(ctx, cb, userData)
   callbackToC(ctx, cb, userData):
     ctx.opFrontend.eth_sendRawTransaction(txBytes)
+
+func getQuantity(node: JsonNode): Result[culonglong, string] {.raises: [].} =
+  if node.kind != JString:
+    return err("quantity parameter must be a 0x-prefixed hex string")
+  let decoded = ?unpackArg($node, Quantity)
+  ok(culonglong(uint64(decoded)))
 
 proc proxyCall(
     ctx: ptr Context,
@@ -933,21 +966,19 @@ proc proxyCall(
     )
   of "eth_getTransactionByBlockNumberAndIndex":
     requireParams(2)
+    let index = getQuantity(parsedParams[1]).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
     eth_getTransactionByBlockNumberAndIndex(
-      ctx,
-      parsedParams[0].getStr().cstring,
-      parsedParams[1].getBiggestInt().culonglong,
-      cb,
-      userData,
+      ctx, parsedParams[0].getStr().cstring, index, cb, userData
     )
   of "eth_getTransactionByBlockHashAndIndex":
     requireParams(2)
+    let index = getQuantity(parsedParams[1]).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
     eth_getTransactionByBlockHashAndIndex(
-      ctx,
-      parsedParams[0].getStr().cstring,
-      parsedParams[1].getBiggestInt().culonglong,
-      cb,
-      userData,
+      ctx, parsedParams[0].getStr().cstring, index, cb, userData
     )
   of "eth_call":
     requireParams(3)
@@ -1014,9 +1045,12 @@ proc proxyCall(
     eth_maxPriorityFeePerGas(ctx, cb, userData)
   of "eth_feeHistory":
     requireParams(3)
+    let blockCount = getQuantity(parsedParams[0]).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
     eth_feeHistory(
       ctx,
-      parsedParams[0].getBiggestInt().culonglong,
+      blockCount,
       parsedParams[1].getStr().cstring,
       ($parsedParams[2]).cstring,
       cb,
@@ -1096,21 +1130,19 @@ proc proxyCall(
     )
   of "op_getTransactionByBlockNumberAndIndex":
     requireParams(2)
+    let index = getQuantity(parsedParams[1]).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
     op_getTransactionByBlockNumberAndIndex(
-      ctx,
-      parsedParams[0].getStr().cstring,
-      parsedParams[1].getBiggestInt().culonglong,
-      cb,
-      userData,
+      ctx, parsedParams[0].getStr().cstring, index, cb, userData
     )
   of "op_getTransactionByBlockHashAndIndex":
     requireParams(2)
+    let index = getQuantity(parsedParams[1]).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
     op_getTransactionByBlockHashAndIndex(
-      ctx,
-      parsedParams[0].getStr().cstring,
-      parsedParams[1].getBiggestInt().culonglong,
-      cb,
-      userData,
+      ctx, parsedParams[0].getStr().cstring, index, cb, userData
     )
   of "op_call":
     requireParams(3)
@@ -1177,9 +1209,12 @@ proc proxyCall(
     op_maxPriorityFeePerGas(ctx, cb, userData)
   of "op_feeHistory":
     requireParams(3)
+    let blockCount = getQuantity(parsedParams[0]).valueOr:
+      cb(ctx, RET_DESER_ERROR, alloc(error), userData)
+      return
     op_feeHistory(
       ctx,
-      parsedParams[0].getBiggestInt().culonglong,
+      blockCount,
       parsedParams[1].getStr().cstring,
       ($parsedParams[2]).cstring,
       cb,

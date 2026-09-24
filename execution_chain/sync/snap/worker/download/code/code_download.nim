@@ -13,7 +13,7 @@
 import
   std/[sequtils, typetraits],
   pkg/[chronicles, chronos],
-  ../../[helpers, mpt, worker_desc],
+  ../../[helpers, cache_db, worker_desc],
   ../download_helpers,
   ./code_fetch
 
@@ -239,10 +239,19 @@ proc codeDownloadCommit*(
   ## In particular, for missing contract codes and lock records, its
   ## correspnding accounts are deleted.
   ##
+  if not ctx.accUnproc.synced():
+    error info & ": Cannot commit unsynced accounts ranges"
+    return err(ENoDataAvailable)
+
   let adb = ctx.pool.cacheDB
 
-  # Collect stale code locks (if any)
+  # Collect paths for missing contract codes.
   var accPaths: seq[Hash32]
+  for key in adb.walkMissingBlob:
+    accPaths.add key
+
+  # Collect stale code locks (if any)
+  let nMissCode = accPaths.len
   for key in adb.walkCodeLock:
     accPaths.add key
 
@@ -251,7 +260,7 @@ proc codeDownloadCommit*(
       return err(ECacheError)
 
   chronicles.info info & ": Cleared missing contract codes",
-    nCodeLock=accPaths.len
+    nMissCode, nCodeLock=(accPaths.len-nMissCode)
   ok()
 
 template codeDownload*(

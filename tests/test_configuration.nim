@@ -278,6 +278,40 @@ proc configurationMain*() =
         config.engineApiServerEnabled == false
         config.shareServerWithEngineApi == false
 
+    test "debug-parallel not set":
+      let config = makeConfig(@[])
+      check:
+        config.parallelStateRootComputation == false
+        config.parallelSenderRecovery == true
+        config.optimisticStatePrefetch == false
+        config.balStatePrefetch == false
+        config.balParallelExecution == false
+
+    test "debug-parallel enables all parallel features":
+      let config = makeConfig(@["--debug-parallel"])
+      check:
+        config.parallelStateRootComputation == true
+        config.parallelSenderRecovery == true
+        config.optimisticStatePrefetch == true
+        config.balStatePrefetch == true
+        config.balParallelExecution == true
+        config.threadSafeCaches() == true
+        config.parallelFeaturesEnabled() == true
+
+    test "debug-parallel overrides the individual parallel flags":
+      let config = makeConfig(@[
+        "--debug-parallel=false",
+        "--debug-parallel-sender-recovery=true",
+        "--debug-bal-parallel-execution=true"])
+      check:
+        config.parallelStateRootComputation == false
+        config.parallelSenderRecovery == false
+        config.optimisticStatePrefetch == false
+        config.balStatePrefetch == false
+        config.balParallelExecution == false
+        config.threadSafeCaches() == false
+        config.parallelFeaturesEnabled() == false
+
     let rng = newRng()
     test "net-key random":
       let config = makeConfig(@["--net-key:random"])
