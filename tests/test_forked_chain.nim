@@ -15,7 +15,7 @@ import
   pkg/chronos,
   pkg/unittest2,
   testutils,
-  std/[os, sets, strutils],
+  std/[os, sets, strutils, tempfiles],
   eth/common/blocks_rlp,
   ../execution_chain/common,
   ../execution_chain/conf,
@@ -26,8 +26,11 @@ import
   ../execution_chain/core/chain/forked_chain/chain_branch,
   ../execution_chain/db/ledger,
   ../execution_chain/db/storage_types,
+  ../execution_chain/db/tx_frame_db,
   ../execution_chain/evm/[state, types],
   ../execution_chain/db/core_db/memory_only,
+  ../execution_chain/db/core_db/persistent,
+  ../execution_chain/db/opts,
   ../execution_chain/history/db/ere_db,
   ../execution_chain/db/fcu_db,
   ../execution_chain/rpc/rpc_utils,
@@ -1134,6 +1137,7 @@ suite "ForkedChainRef tests":
     check checkFinalizedMarkers(chain, blk7.blockHash)
 
     check chain.serialize(chain.baseTxFrame).isOk
+    check checkFinalizedMarkers(chain, blk7.blockHash)
     com.db.persist(chain.baseTxFrame)
 
     let fc = ForkedChainRef.init(com, baseDistance = 3)
@@ -1178,6 +1182,145 @@ suite "ForkedChainRef tests":
     check fc.base == fc.latest
     check fc.heads.len == 1
     check fc.validate info & " (2)"
+
+  test "failed serialization does not publish a partial snapshot":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+      db = chain.baseTxFrame
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkForkChoice(chain, blk2, blk1)
+    check chain.serialize(db).isOk
+    let backendPut = db.kvt.putKvpFn
+    db.kvt.putKvpFn = proc(key, value: openArray[byte]): Result[void, KvtError] =
+      if key.len > 0 and key[0] == byte(ord(DBKeyKind.txFrame)):
+        return err(DataInvalid)
+      backendPut(key, value)
+    check chain.serialize(db).isErr
+    db.kvt.putKvpFn = backendPut
+    check not db.hasKey(fcStateKey(0).toOpenArray)
+    check checkFinalizedMarkers(chain, blk1.blockHash)
+    check chain.serialize(db).isOk
+    let restored = ForkedChainRef.init(com)
+    check restored.deserialize().isOk
+    check restored.latestHash == blk2.blockHash
+
+  test "failed frame restore preserves snapshot for retry":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    check chain.serialize(chain.baseTxFrame).isOk
+    let key = txFrameKey(blk2.blockHash)
+    let saved = chain.baseTxFrame.get(key.toOpenArray).expect("saved frame")
+    check chain.baseTxFrame.del(key.toOpenArray).isOk
+
+    let fc = ForkedChainRef.init(com)
+    check fc.deserialize().isErr
+    check fc.hashToBlock.len == 1
+    check fc.latest == fc.base
+    check fc.baseTxFrame.hasKey(txFrameKey(blk1.blockHash).toOpenArray)
+    check fc.baseTxFrame.hasKey(txFrameKey(blk3.blockHash).toOpenArray)
+    check fc.baseTxFrame.put(key.toOpenArray, saved).isOk
+    check fc.deserialize().isOk
+    check fc.latestHash == blk3.blockHash
+    check fc.wdWritten(blk3) == 3
+
+  test "finalization removes dead block records and preserves shared payloads":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+      db = chain.baseTxFrame
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, B4)
+    # Simulate an interrupted import after ownership registration but before
+    # the header/body writes. Retrying must not register the same owner twice.
+    let backendPut = db.kvt.putKvpFn
+    let failedKey = genericHashKey(B5.blockHash)
+    db.kvt.putKvpFn = proc(key, value: openArray[byte]): Result[void, KvtError] =
+      if key == failedKey.toOpenArray:
+        return err(DataInvalid)
+      backendPut(key, value)
+    check (waitFor chain.importBlock(B5)).isErr
+    db.kvt.putKvpFn = backendPut
+    checkImportBlock(chain, B5)
+    checkImportBlock(chain, B6)
+    # Exercise cleanup of a saved fork as well as its body and auxiliary data.
+    check chain.serialize(db).isOk
+    for b in [B4, B5, B6]:
+      check db.put(blockHashToWitnessKey(b.blockHash).toOpenArray, [1'u8]).isOk
+      check db.put(blockHashToBlockAccessListKey(b.blockHash).toOpenArray, [1'u8]).isOk
+    check db.getBlockHash(4).expect("warm block hash cache") == B4.blockHash
+
+    checkForkChoice(chain, blk4, blk4)
+    check chain.heads.len == 1
+    for b in [B4, B5, B6]:
+      check not chain.isInMemory(b.blockHash)
+      for key in [genericHashKey(b.blockHash), blockHashToScoreKey(b.blockHash),
+                  blockHashToWitnessKey(b.blockHash),
+                  blockHashToBlockAccessListKey(b.blockHash), txFrameKey(b.blockHash)]:
+        check not db.hasKey(key.toOpenArray)
+    check not db.hasKey(withdrawalsKey(B5.header.withdrawalsRoot.get).toOpenArray)
+    check not db.hasKey(withdrawalsKey(B6.header.withdrawalsRoot.get).toOpenArray)
+    check db.getBlockHash(4).expect("canonical block") == blk4.blockHash
+    check db.getBlockHash(5).isErr
+    check db.getBlockHash(6).isErr
+    check chain.wdWritten(blk4) == 4 # B4 used exactly the same withdrawals
+    check db.getBlockHeader(blk1.blockHash).isOk
+    check not db.hasKey(fcStateKey(0).toOpenArray) # old DAG is now invalid
+
+    check chain.serialize(db).isOk
+    let restored = ForkedChainRef.init(com)
+    check restored.deserialize().isOk
+    check restored.hashToBlock.len == chain.hashToBlock.len
+    check restored.wdWritten(blk4) == 4
+
+  test "RocksDB restart restores forks and can prune a dead branch":
+    let path = createTempDir("nimbus-fc-restart-", "")
+    defer: removeDir(path)
+    block:
+      let
+        db = AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+        com = env.newCom(db)
+        chain = ForkedChainRef.init(com)
+      defer: db.close()
+      for b in [blk1, blk2, blk3, blk4, B4, B5]:
+        checkImportBlock(chain, b)
+      check chain.serialize(chain.baseTxFrame).isOk
+      db.persist(chain.baseTxFrame)
+    block:
+      let
+        db = AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+        com = env.newCom(db)
+        chain = ForkedChainRef.init(com)
+      defer: db.close()
+      require chain.deserialize().isOk
+      check chain.heads.len == 2
+      check chain.wdWritten(B5) == 5
+      checkForkChoice(chain, blk4, blk4)
+      check chain.baseTxFrame.getBlockHeader(B4.blockHash).isErr
+      check not chain.baseTxFrame.hasKey(
+        withdrawalsKey(B5.header.withdrawalsRoot.get).toOpenArray)
+      check chain.wdWritten(blk4) == 4
+      check chain.serialize(chain.baseTxFrame).isOk
+      db.persist(chain.baseTxFrame)
+    block:
+      let
+        db = AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+        com = env.newCom(db)
+        chain = ForkedChainRef.init(com)
+      defer: db.close()
+      require chain.deserialize().isOk
+      check chain.heads.len == 1
+      check chain.latestHash == blk4.blockHash
+      check chain.wdWritten(blk4) == 4
+      checkImportBlock(chain, blk5)
 
   test "isCanonicalAndFinalizedAncestor":
     const info = "isCanonicalAndFinalizedAncestor"

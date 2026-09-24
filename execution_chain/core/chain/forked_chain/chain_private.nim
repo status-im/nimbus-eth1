@@ -18,7 +18,8 @@ import
   ../../../evm/types,
   ../../../evm/state,
   ../../../stateless/[witness_generation, witness_verification, stateless_execution],
-  ./chain_branch
+  ./chain_branch,
+  ./chain_db
 
 proc writeBaggage*(
     c: ForkedChainRef,
@@ -177,6 +178,8 @@ proc processBlock*(
 
   # We still need to write header to database
   # because validateUncles still need it
+  txFrame.invalidateFcSnapshot().expect("invalidate FC snapshot")
+  txFrame.retainBlockData(header, blkHash)
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
 
   var txHashes = c.writeBaggage(

@@ -237,12 +237,13 @@ proc getAncestorsHashes*(
 
 proc addBlockNumberToHashLookup*(
     db: CoreDbTxRef; blockNumber: BlockNumber, blockHash: Hash32) =
-  # TODO: Once we remove the kvt frame layers, this function should
-  # write to the kvt block hashes cache.
   let blockNumberKey = blockNumberToHashKey(blockNumber)
   var encodedHash = rlp.encode(blockHash)
   db.putMove(blockNumberKey.toOpenArray, encodedHash).isOkOr:
     warn "addBlockNumberToHashLookup", blockNumberKey, error=($$error)
+    return
+  when compileOption("threads"):
+    db.kvt.blockHashes.put(blockNumber, blockHash)
 
 proc persistTransactions*(
     db: CoreDbTxRef;

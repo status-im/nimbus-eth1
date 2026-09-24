@@ -22,8 +22,7 @@ type
     parent*  : BlockRef
 
     index*   : uint
-      # Alias to parent when serializing
-      # Also used for DAG node finalized marker
+      # DAG node finalized marker; serialization uses separate parent slots.
 
 template number*(b: BlockRef): BlockNumber =
   b.header.number
@@ -61,4 +60,3 @@ iterator ancestors*(init: BlockRef): BlockRef =
 
 iterator loopNotFinalized*(init: BlockRef): BlockRef =
   loopItImpl(notFinalized, init)
-

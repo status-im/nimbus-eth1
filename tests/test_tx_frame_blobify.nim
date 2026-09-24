@@ -29,7 +29,7 @@ import
   unittest2
 
 proc buildTxFrameBlob(aBlob: openArray[byte]): seq[byte] =
-  result = newSeqOfCap[byte](8 + aBlob.len)
+  result = newSeqOfCap[byte](4 + aBlob.len)
   result.add aBlob.len.uint32.toBytesBE
   for b in aBlob: result.add b
 
@@ -154,7 +154,7 @@ suite "TxFrame blobify round-trip":
     check preRecipientBalance == 300.u256  # 3 txs * 100 wei
     check txFrame1.getBlockHeader(blk1Hash).isOk
 
-    # --- Round-trip both halves through blobify/deblobify ---
+    # --- Round-trip the Aristo delta through blobify/deblobify ---
     let aBlob = blobifyTxFrame(txFrame1.aTx)
     check aBlob.len > 1
 
@@ -297,19 +297,13 @@ suite "TxFrame blobify round-trip":
     check fc.hashToBlock.len == preChainBlocks
     check fc.heads.len       == preChainHeads
 
-    # --- Loaded blobs are deleted from the base frame so they don't
-    # accumulate across restart/prune cycles.  KVT marks deletions with an
-    # empty-value tombstone in the delta layer: a read through baseTxFrame
-    # returns Ok with an empty seq, which `loadTxFrameAsChild` must then
-    # catch via the `blob.len < 8` size check (NOT slip through into
-    # deblobifyTxFrame).  `.valueOr` does not fire here because `get`
-    # returns Ok(empty seq). ---
-    let blk1Load =
-      loadTxFrameAsChild(fc.baseTxFrame, fc.baseTxFrame, blk1Hash)
-    let blk2Load =
-      loadTxFrameAsChild(fc.baseTxFrame, fc.baseTxFrame, blk2Hash)
-    check blk1Load.isErr and "blob too short" in blk1Load.error.ctx
-    check blk2Load.isErr and "blob too short" in blk2Load.error.ctx
+    # Loading must leave the snapshot intact for another restart or a retry.
+    check fc.baseTxFrame.hasKey(txFrameKey(blk1Hash).toOpenArray)
+    check fc.baseTxFrame.hasKey(txFrameKey(blk2Hash).toOpenArray)
+    let restartedAgain = ForkedChainRef.init(com)
+    check restartedAgain.deserialize().isOk
+    check LedgerRef.init(restartedAgain.txFrame(blk2Hash)).getBalance(recipient) ==
+      preBlk2Recipient
 
     # --- Per-block field equality proves no-replay path ---
     # If replay() were still being used, freshly-built deltas would yield
@@ -354,6 +348,81 @@ suite "TxFrame blobify round-trip":
     check LedgerRef.init(restoredBlk3).getBalance(recipient) ==
       preBlk2Recipient + 200.u256
 
+  test "finalization preserves shared transactions and deletes exclusive payloads":
+    let env = setupEnv()
+    let
+      chain = env.chain
+      xp = env.xp
+      mx = env.sender
+      acc = mx.getAccount(0)
+      parent = chain.latestHash
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+    let tx = mx.makeTx(BaseTx(gasLimit: 75000, recipient: Opt.some(recipient),
+                             amount: 100.u256), acc, 0.AccountNonce)
+    check xp.addTx(tx).isOk
+    let canonical = xp.assembleBlock(parent).get.blk
+    xp.removeNewBlockTxs(canonical)
+    var shared = canonical
+    shared.header.extraData = @[1'u8]
+
+    let xp2 = TxPoolRef.new(chain)
+    xp2.feeRecipient = feeRecipient
+    xp2.timestamp = xp.timestamp
+    let other = mx.makeTx(BaseTx(gasLimit: 75000, recipient: Opt.some(recipient),
+                                amount: 200.u256), acc, 0.AccountNonce)
+    check xp2.addTx(other).isOk
+    let exclusive = xp2.assembleBlock(parent).get.blk
+    doAssert exclusive.transactions.len == 1
+    check (waitFor chain.importBlock(canonical)).isOk
+    check (waitFor chain.importBlock(shared)).isOk
+    check (waitFor chain.importBlock(exclusive)).isOk
+    let hash = canonical.header.computeBlockHash
+    check (waitFor chain.forkChoice(hash, hash)).isOk
+
+    let db = chain.baseTxFrame
+    check db.getEthBlock(hash).get.transactions == canonical.transactions
+    check db.getReceipts(canonical.header.receiptsRoot).get.len == 1
+    check db.getTransactionByIndex(exclusive.header.txRoot, 0).isErr
+    check not db.hasKey(transactionHashToBlockKey(
+      exclusive.transactions[0].computeRlpHash).toOpenArray)
+    check db.hasKey(transactionHashToBlockKey(
+      canonical.transactions[0].computeRlpHash).toOpenArray)
+    check chain.memoryTransaction(canonical.transactions[0].computeRlpHash).isSome
+    check not db.hasKey(genericHashKey(shared.header.computeBlockHash).toOpenArray)
+    check not db.hasKey(genericHashKey(exclusive.header.computeBlockHash).toOpenArray)
+
+  test "finalization keeps a transaction on a surviving descendant":
+    let env = setupEnv()
+    let
+      chain = env.chain
+      xp = env.xp
+      mx = env.sender
+      genesis = chain.latestHash
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+    let canonical = xp.assembleBlock(genesis).get.blk
+    let tx = mx.makeTx(BaseTx(gasLimit: 75000, recipient: Opt.some(recipient),
+                             amount: 100.u256), mx.getAccount(0), 0.AccountNonce)
+    check xp.addTx(tx).isOk
+    let dead = xp.assembleBlock(genesis).get.blk
+    check (waitFor chain.importBlock(canonical)).isOk
+    xp.timestamp = xp.timestamp + 1
+    let canonicalHash = canonical.header.computeBlockHash
+    let survivor = xp.assembleBlock(canonicalHash).get.blk
+    doAssert survivor.transactions.len == 1
+    check (waitFor chain.importBlock(survivor)).isOk
+    # Import the dead fork last so both indexes initially point at it.
+    check (waitFor chain.importBlock(dead)).isOk
+    check (waitFor chain.forkChoice(canonicalHash, canonicalHash)).isOk
+
+    let hash = survivor.transactions[0].computeRlpHash
+    check chain.baseTxFrame.getTransactionKey(hash).get.blockNumber == 2
+    check chain.memoryTransaction(hash).get[1] == 2
+    check chain.baseTxFrame.getEthBlock(survivor.header.computeBlockHash).
+      get.transactions == survivor.transactions
+    check chain.baseTxFrame.getBlockHeader(dead.header.computeBlockHash).isErr
+
   test "loadTxFrameAsChild: missing key returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let h = Hash32.fromHex("0x" & "21".repeat(32))
@@ -361,7 +430,7 @@ suite "TxFrame blobify round-trip":
     let rc = loadTxFrameAsChild(base, base, h)
     check rc.isErr
 
-  test "loadTxFrameAsChild: blob shorter than 8 bytes returns DataInvalid":
+  test "loadTxFrameAsChild: blob shorter than 4 bytes returns DataInvalid":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let h = Hash32.fromHex("0x" & "22".repeat(32))
     check coreDb.baseTxFrame.put(
@@ -383,14 +452,14 @@ suite "TxFrame blobify round-trip":
     check rc.isErr
     check "aristo region truncated" in rc.error.ctx
 
-  test "loadTxFrameAsChild: kvt region truncated returns Err":
+  test "loadTxFrameAsChild: trailing bytes return Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let frame = coreDb.txFrameBegin()
     let aBlob = blobifyTxFrame(frame.aTx)
     frame.dispose()
 
     let h = Hash32.fromHex("0x" & "24".repeat(32))
-    var blob = newSeqOfCap[byte](8 + aBlob.len)
+    var blob = newSeqOfCap[byte](4 + aBlob.len)
     blob.add aBlob.len.uint32.toBytesBE
     for b in aBlob: blob.add b
     blob.add uint32(1000).toBytesBE
@@ -398,7 +467,7 @@ suite "TxFrame blobify round-trip":
     let base = coreDb.baseTxFrame
     let rc = loadTxFrameAsChild(base, base, h)
     check rc.isErr
-    check "kvt region truncated" in rc.error.ctx
+    check "invalid aristo region length" in rc.error.ctx
 
   test "loadTxFrameAsChild: corrupted aristo blob returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
@@ -415,21 +484,16 @@ suite "TxFrame blobify round-trip":
     check rc.isErr
     check "aristo deblobify" in rc.error.ctx
 
-  test "loadTxFrameAsChild: corrupted kvt blob returns Err":
+  test "loadTxFrameAsChild: empty aristo region returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
-    let frame = coreDb.txFrameBegin()
-    let aBlob = blobifyTxFrame(frame.aTx)
-    frame.dispose()
-
     let h = Hash32.fromHex("0x" & "26".repeat(32))
-    let blob = buildTxFrameBlob(aBlob)
-    check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, blob).isOk
+    check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, 0'u32.toBytesBE).isOk
     let base = coreDb.baseTxFrame
     let rc = loadTxFrameAsChild(base, base, h)
     check rc.isErr
-    check "kvt deblobify" in rc.error.ctx
+    check "invalid aristo region length" in rc.error.ctx
 
-  test "loadTxFrameAsChild: deleted (tombstone) hash returns 'blob too short'":
+  test "loadTxFrameAsChild: deleted hash returns not found":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let src    = coreDb.txFrameBegin()
     let h      = Hash32.fromHex("0x" & "32".repeat(32))
@@ -443,12 +507,12 @@ suite "TxFrame blobify round-trip":
 
     check coreDb.baseTxFrame.deleteTxFrame(h).isOk
     let probe = coreDb.baseTxFrame.get(txFrameKey(h).toOpenArray)
-    check probe.isOk and probe.value.len == 0
+    check probe.isErr and probe.error.error == KvtNotFound
 
     let base2 = coreDb.baseTxFrame
     let rc = loadTxFrameAsChild(base2, base2, h)
     check rc.isErr
-    check "blob too short" in rc.error.ctx
+    check rc.error.error == KvtNotFound
 
   test "loadTxFrameAsChild: stored frame round-trips":
     let coreDb = newCoreDbRef(AristoDbMemory)

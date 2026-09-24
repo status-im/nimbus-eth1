@@ -19,6 +19,7 @@ import
   ../../../db/fcu_db,
   ../../../db/storage_types,
   ../../../db/tx_frame_db,
+  ./chain_db,
   ../../../utils/utils
 
 logScope:
@@ -45,47 +46,11 @@ type
 # RLP serializer functions
 # ------------------------------------------------------------------------------
 
-func append(w: var RlpWriter, b: BlockRef) =
-  # Only the header is persisted in the block-index entry.  The full block
-  # body lives in the per-block txFrame blob (written separately under
-  # txFrameKey(b.hash)) and is no longer needed at deserialize time since
-  # we restore the txFrame directly instead of re-executing the block.
-  w.startList(3)
-  w.append(b.header)
-  w.append(b.hash)
-  let parentIndex = if b.parent.isNil: 0'u
-                    else: b.parent.index + 1'u
-  w.append(parentIndex)
-
-func append(w: var RlpWriter, fc: ForkedChainRef) =
-  w.startList(9)
-  w.append(fc.hashToBlock.len.uint)
-  w.append(fc.base.index)
-  w.append(fc.latest.index)
-
-  var heads = newSeqOfCap[uint](fc.heads.len)
-  for h in fc.heads:
-    heads.add h.index
-
-  w.append(heads)
-  w.append(fc.pendingFCU)
-  w.append(fc.latestFinalized)
-  w.startList(fc.txRecords.len)
-  for k, v in fc.txRecords:
-    w.append(TxRecord(
-      txHash: k,
-      blockHash: v[0],
-      blockNumber: v[1],
-    ))
-  w.append(fc.fcuHead)
-  w.append(fc.fcuSafe)
-
-func read(rlp: var Rlp, T: type BlockRef): T {.raises: [RlpError].} =
-  rlp.tryEnterList()
-  result = T()
-  rlp.read(result.header)
-  rlp.read(result.hash)
-  rlp.read(result.index)
+type
+  StoredBlock = object
+    header: Header
+    hash: Hash32
+    parentIndex: uint # zero for the base, otherwise parent slot + 1
 
 func read(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
   rlp.tryEnterList()
@@ -142,12 +107,6 @@ proc loadBranchTxFrames(parent: BlockRef;
     let frame = srcBase.loadTxFrameAsChild(p.txFrame, b.hash).valueOr:
       return err($error)
     b.txFrame = frame
-    # The blob has been materialised into memory; drop the on-disk copy so
-    # it doesn't accumulate across restart/prune cycles.  The delete sits in
-    # srcBase's in-memory delta and commits on the next baseTxFrame persist
-    # during normal chain operation.
-    srcBase.deleteTxFrame(b.hash).isOkOr:
-      return err($error)
     p = b
 
   ok()
@@ -170,17 +129,6 @@ proc loadAllTxFrames(fc: ForkedChainRef): Result[void, string] =
 
   ok()
 
-func reset(fc: ForkedChainRef, base: BlockRef) =
-  fc.base        = base
-  fc.latest      = base
-  fc.heads       = @[base]
-  fc.hashToBlock = {base.hash: base}.toTable
-  fc.pendingFCU  = zeroHash32
-  fc.latestFinalized.reset()
-  fc.txRecords.clear()
-  fc.fcuHead.reset()
-  fc.fcuSafe.reset()
-
 func toString(list: openArray[BlockRef]): string =
   result.add '['
   for i, b in list:
@@ -194,22 +142,42 @@ func toString(list: openArray[BlockRef]): string =
 # ------------------------------------------------------------------------------
 
 proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbError] =
-  var i = 0
+  # Serialization slots must not overwrite BlockRef.index: it holds the
+  # finalized marker used by the running chain.
+  var slots = initTable[Hash32, uint]()
+  var blocks: seq[BlockRef]
   for b in fc.hashToBlock.values:
-    b.index = uint i
-    inc i
+    slots[b.hash] = uint(blocks.len)
+    blocks.add b
 
-  var encodedState = rlp.encode(fc)
-  ?txFrame.putMove(FcStateKey.toOpenArray, encodedState)
+  var state = FcState(
+    numBlocks: uint(blocks.len),
+    base: slots.getOrDefault(fc.base.hash),
+    latest: slots.getOrDefault(fc.latest.hash),
+    pendingFCU: fc.pendingFCU,
+    latestFinalized: fc.latestFinalized,
+    fcuHead: fc.fcuHead,
+    fcuSafe: fc.fcuSafe)
+  for h in fc.heads:
+    state.heads.add slots.getOrDefault(h.hash)
+  for hash, record in fc.txRecords:
+    state.txRecords.add TxRecord(
+      txHash: hash, blockHash: record[0], blockNumber: record[1])
 
-  for b in fc.hashToBlock.values:
-    var encodedBlock = rlp.encode(b)
-    ?txFrame.putMove(blockIndexKey(b.index), encodedBlock)
-    # Persist the per-block txFrame delta (Aristo + KVT) so deserialize can
-    # restore the in-memory frame without re-executing the block.  The base
-    # block shares its frame with the on-disk base and needs no blob.
+  # KVT writes are immediate. Invalidate the old manifest before replacing
+  # its entries, then publish the new manifest only after every frame is saved.
+  ?txFrame.invalidateFcSnapshot(force = true)
+  for i, b in blocks:
+    let parentIndex = if b.parent.isNil: 0'u
+                      else: slots.getOrDefault(b.parent.hash) + 1'u
+    var encodedBlock = rlp.encode(StoredBlock(
+      header: b.header, hash: b.hash, parentIndex: parentIndex))
+    ?txFrame.putMove(blockIndexKey(i), encodedBlock)
     if b != fc.base:
       ?txFrame.storeTxFrame(b.txFrame, b.hash)
+
+  var encodedState = rlp.encode(state)
+  ?txFrame.putMove(FcStateKey.toOpenArray, encodedState)
 
   info "Blocks DAG written to database",
     base=fc.base.number,
@@ -229,101 +197,94 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   let state = fc.baseTxFrame.getState().valueOr:
     return err("Cannot find previous FC state in database")
 
-  let prevBase = fc.base
-  var blocks = newSeq[BlockRef](state.numBlocks)
-
-  # Sanity Checks for the FC state
-  if state.latest > state.numBlocks or
-     state.base > state.numBlocks:
-    warn "TODO: Inconsistent state found"
-    fc.reset(prevBase)
-    return err("Invalid state: latest block is greater than number of blocks")
-
-  # Sanity Checks for all the heads in FC state
+  if state.numBlocks == 0 or state.latest >= state.numBlocks or
+      state.base >= state.numBlocks or state.heads.len == 0:
+    return err("Invalid FC state: block index out of range")
   for head in state.heads:
-    if head > state.numBlocks:
-      warn "TODO: Inconsistent state found"
-      fc.reset(prevBase)
-      return err("Invalid state: heads greater than number of blocks")
+    if head >= state.numBlocks:
+      return err("Invalid FC state: head index out of range")
+
+  # Build separately so a missing/corrupt frame cannot leave a partially
+  # restored chain behind. Saved blobs remain available for another attempt.
+  let restored = ForkedChainRef(baseTxFrame: fc.baseTxFrame)
+  var blocks: seq[BlockRef]
+  var loaded = false
+  defer:
+    if not loaded:
+      for b in blocks:
+        if b.txFrame != nil and b.txFrame != fc.baseTxFrame:
+          b.txFrame.dispose()
+        b.parent = nil
 
   try:
     for i in 0..<state.numBlocks:
       let data = fc.baseTxFrame.get(blockIndexKey(i)).valueOr:
         return err("Cannot find branch data")
-      blocks[i] = rlp.decode(data, BlockRef)
+      let stored = rlp.decode(data, StoredBlock)
+      if stored.hash != stored.header.computeBlockHash():
+        return err("corrupted FC: header hash mismatch")
+      if restored.hashToBlock.hasKey(stored.hash):
+        return err("corrupted FC: duplicate block")
+      let b = BlockRef(header: stored.header, hash: stored.hash,
+                       index: stored.parentIndex)
+      blocks.add b
+      restored.hashToBlock[b.hash] = b
   except RlpError as exc:
     return err(exc.msg)
 
-  fc.base = blocks[state.base]
-  fc.latest = blocks[state.latest]
-
-  fc.heads = newSeqOfCap[BlockRef](state.heads.len)
-  for h in state.heads:
-    fc.heads.add blocks[h]
-
-  fc.pendingFCU = state.pendingFCU
-  fc.latestFinalized = state.latestFinalized
-  fc.fcuHead = state.fcuHead
-  fc.fcuSafe = state.fcuSafe
-
-  info "Loading block DAG from database",
-    base=fc.base.number,
-    pendingFCU=fc.pendingFCU.short,
-    resolvedFinNum=fc.latestFinalized.number,
-    resolvedFinHash=fc.latestFinalized.hash.short,
-    canonicalHead=fc.fcuHead.number,
-    safe=fc.fcuSafe.number,
-    numBlocks=state.numBlocks,
-    heads=fc.heads.toString
-
-  if fc.base.hash != prevBase.hash:
-    fc.reset(prevBase)
+  restored.base = blocks[state.base]
+  restored.latest = blocks[state.latest]
+  if restored.base.hash != fc.base.hash:
     return err("loaded baseHash != baseHash")
 
-  for tx in state.txRecords:
-    fc.txRecords[tx.txHash] = (tx.blockHash, tx.blockNumber)
-
   for b in blocks:
-    if b.index > 0:
-      # `index` is the parent slot as read from disk, it cannot be trusted
-      if b.index > state.numBlocks:
-        fc.reset(prevBase)
-        return err("corrupted FC: block " & $b.number &
-          " has out of range parent index " & $b.index)
-      let parentCandidate = blocks[b.index-1]
-      # Check fc corruption
-      if parentCandidate.number + 1 != b.number:
-        fc.reset(prevBase)
-        return err("corrupted FC: block " & $b.number &
-          " has parent with unexpected number " & $parentCandidate.number)
-      b.parent = parentCandidate
+    if b == restored.base:
+      if b.index != 0:
+        return err("corrupted FC: base has a parent")
+    else:
+      if b.index == 0 or b.index > state.numBlocks:
+        return err("corrupted FC: parent index out of range")
+      let parent = blocks[b.index - 1]
+      if b.number <= restored.base.number or parent.number >= b.number or
+          b.number - parent.number != 1 or b.header.parentHash != parent.hash:
+        return err("corrupted FC: inconsistent parent")
+      b.parent = parent
     b.index = 0
-    fc.hashToBlock[b.hash] = b
 
-  fc.loadAllTxFrames().isOkOr:
-    fc.reset(prevBase)
-    return err(error)
+  for h in state.heads:
+    restored.heads.add blocks[h]
+  restored.pendingFCU = state.pendingFCU
+  restored.latestFinalized = state.latestFinalized
+  restored.fcuHead = state.fcuHead
+  restored.fcuSafe = state.fcuSafe
+  for tx in state.txRecords:
+    if not restored.hashToBlock.hasKey(tx.blockHash):
+      return err("corrupted FC: transaction refers to missing block")
+    restored.txRecords[tx.txHash] = (tx.blockHash, tx.blockNumber)
 
-  # All blocks should have their txFrame loaded
+  ?restored.loadAllTxFrames()
   for b in blocks:
     if b.txFrame.isNil:
-      fc.reset(prevBase)
-      return err("corrupted FC serialization: deserialized node should have txFrame")
+      return err("corrupted FC: block is not reachable from a head")
+    if b != restored.base and b.txFrame.aTx.blockNumber != Opt.some(b.number):
+      return err("corrupted FC: frame block number mismatch")
 
-  fc.hashToBlock.withValue(fc.fcuHead.hash, val) do:
-    let txFrame = val[].txFrame
-    ?txFrame.setHead(val[].header, fc.fcuHead.hash)
-    ?txFrame.fcuHead(fc.fcuHead.hash, fc.fcuHead.number)
-
-  fc.hashToBlock.withValue(fc.fcuSafe.hash, val) do:
-    let txFrame = val[].txFrame
-    ?txFrame.fcuSafe(fc.fcuSafe.hash, fc.fcuSafe.number)
-
-  fc.hashToBlock.withValue(fc.latestFinalized.hash, val) do:
-    # Restore finalized marker
+  restored.hashToBlock.withValue(restored.latestFinalized.hash, val):
     for it in loopNotFinalized(val[]):
       it.finalize()
-    let txFrame = val[].txFrame
-    ?txFrame.fcuFinalized(fc.latestFinalized.hash, fc.latestFinalized.number)
 
+  fc.base = restored.base
+  fc.latest = restored.latest
+  fc.heads = move(restored.heads)
+  fc.hashToBlock = move(restored.hashToBlock)
+  fc.pendingFCU = restored.pendingFCU
+  fc.latestFinalized = restored.latestFinalized
+  fc.txRecords = move(restored.txRecords)
+  fc.fcuHead = restored.fcuHead
+  fc.fcuSafe = restored.fcuSafe
+  loaded = true
+
+  info "Loaded block DAG from database", base=fc.base.number,
+    latest=fc.latest.number, numBlocks=fc.hashToBlock.len,
+    heads=fc.heads.toString
   ok()
