@@ -113,7 +113,7 @@ proc validFCU*(id: Opt[Bytes8],
       latest_valid_hash: optSome(validHash.toDigest())
     ),
     payload_id:
-      if id.isSome: optSome(array[8, byte](distinctBase(id.get)))
+      if id.isSome: optSome(distinctBase(id.get))
       else: optNone(array[8, byte])
   )
 
