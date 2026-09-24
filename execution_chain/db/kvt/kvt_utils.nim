@@ -74,14 +74,12 @@ proc putBe*(
 
 # ------------
 
-proc putMove*(
+proc put*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record to store
-    data: var seq[byte];              # Value of database record to store
+    data: openArray[byte];            # Value of database record to store
       ): Result[void,KvtError] =
-  ## For the argument `key` associated the argument `data` as value (which
-  ## will be marked in the top layer cache.) The contents of `data` are taken
-  ## over, leaving it empty.
+  ## Write directly to the backend without making an intermediate copy.
   if key.len == 0:
     return err(KeyInvalid)
   if data.len == 0:
@@ -89,14 +87,15 @@ proc putMove*(
 
   db.putKvpFn(key, data)
 
-proc put*(
+proc putMove*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record to store
-    data: openArray[byte];            # Value of database record to store
+    data: var seq[byte];              # Value of database record to store
       ): Result[void,KvtError] =
-  ## Variant of `putMove()` copying `data` into the top layer cache.
-  var data = @data
-  db.putMove(key, data)
+  ## Consume `data` after a successful write; leave it intact on failure.
+  ?db.put(key, data)
+  reset(data)
+  ok()
 
 proc del*(
     db: KvtDbRef;                     # Database
@@ -151,14 +150,11 @@ proc hasKeyRc*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[bool,KvtError] =
-  ## For the argument `key` return `true` if `get()` returned a value on
-  ## that argument, `false` if it returned `GetNotFound`, and an error
-  ## otherwise.
-  ##
+  ## Check existence without copying the stored value into a byte sequence.
   if key.len == 0:
     return err(KeyInvalid)
 
-  let rc = db.getBe key
+  let rc = db.getBeLen key
   if rc.isOk:
     return ok(true)
   if rc.error == GetNotFound:

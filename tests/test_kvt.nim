@@ -35,6 +35,42 @@ suite "Kvt":
 
     db.close()
 
+  test "Put preserves input and rejects empty keys and values":
+    var data = @[1'u8, 2, 3]
+    check db.put([1'u8], data).isOk
+    data[0] = 9
+    check db.get([1'u8]).expect("entry") == @[1'u8, 2, 3]
+    check db.put([], data).error == KeyInvalid
+    check db.put([1'u8], []).error == DataInvalid
+    db.close()
+
+  test "PutMove consumes input only after a successful write":
+    var data = @[1'u8, 2, 3]
+    check db.putMove([], data).error == KeyInvalid
+    check data == @[1'u8, 2, 3]
+    check db.putMove([1'u8], data).isOk
+    check data.len == 0
+    check db.get([1'u8]).expect("entry") == @[1'u8, 2, 3]
+    check db.putMove([1'u8], data).error == DataInvalid
+    db.putKvpFn = proc(key, value: openArray[byte]): Result[void, KvtError] =
+      err(RdbBeDriverPutError)
+    data = @[4'u8, 5]
+    check db.putMove([1'u8], data).error == RdbBeDriverPutError
+    check data == @[4'u8, 5]
+    db.close()
+
+  test "HasKey checks existence without fetching values":
+    check db.put([1'u8], [2'u8]).isOk
+    db.getKvpFn = proc(key: openArray[byte]): Result[seq[byte], KvtError] =
+      raiseAssert "hasKey must not fetch the value"
+    check db.hasKeyRc([1'u8]).expect("exists")
+    check not db.hasKeyRc([2'u8]).expect("missing")
+    check db.hasKeyRc([]).error == KeyInvalid
+    db.lenKvpFn = proc(key: openArray[byte]): Result[int, KvtError] =
+      err(RdbBeDriverGetError)
+    check db.hasKeyRc([1'u8]).error == RdbBeDriverGetError
+    db.close()
+
   test "Delete - delBe":
     check:
       db.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
