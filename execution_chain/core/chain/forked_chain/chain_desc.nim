@@ -40,9 +40,19 @@ type
     kind*: ImportErrorKind
     msg*:  string
 
-  QueueItem* = object
-    responseFut*: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError])
-    handler*: proc(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).}
+  FcJobKind* = enum
+    UpdateBase
+      # Persist the next step of `baseQueue`.
+    ResumeOrphans
+      # Import the quarantined children of `parent`.
+
+  FcJob* = object
+    case kind*: FcJobKind
+    of UpdateBase:
+      discard
+    of ResumeOrphans:
+      parent*: BlockRef
+      finalized*: bool
 
   ForkedChainRef* = ref object
     com*: CommonRef
@@ -112,10 +122,19 @@ type
     fcuSafe*: FcuHashAndNumber
       # Tracking current head and safe block of FC serialization.
 
-    queue*: AsyncQueue[QueueItem]
+    fcLock*: AsyncLock
+      # Prevent async re-entrancy messing up FC state: serialises the
+      # `queue*` requests (`importBlock`, `forkChoice`, `setHead`) and the
+      # background jobs. Not re-entrant, never call a `queue*` proc while
+      # holding it.
+
+    jobs*: AsyncQueue[FcJob]
     processingQueueLoop*: Future[void].Raising([CancelledError])
-      # Prevent async re-entrancy messing up FC state
-      # on both `importBlock` and `forkChoice`.
+      # Background jobs, scheduled while holding `fcLock` so the queue must be
+      # unbounded. When `jobs` is nil they run inline instead (test mode).
+
+    lastYield*: Moment
+      # Last time FC processing handed the thread back to networking.
 
     badBlocks*: LruCache[Hash32, (Block, Opt[BlockAccessListRef])]
       # Recent blocks that failed validation for any reason,

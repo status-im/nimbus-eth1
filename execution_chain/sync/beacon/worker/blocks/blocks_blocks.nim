@@ -258,8 +258,8 @@ template blocksImport*(
         # Hand the block to the `FC` and let it classify the outcome. The `FC`
         # owns the hash/branch/finalized knowledge needed to tell a duplicate or
         # an orphaned fork from a genuinely invalid block; the syncer must not
-        # second-guess that from block numbers. `processQueue` already yields
-        # per-item, so no extra throttle is needed here.
+        # second-guess that from block numbers. `queueImportBlock` already
+        # yields on a processing budget, so no extra throttle is needed here.
         let verdict =
           try:
             await ctx.chain.queueImportBlock(

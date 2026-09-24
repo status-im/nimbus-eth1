@@ -157,12 +157,8 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
           raise invalidParams(error)
         headHash = header.computeBlockHash()
 
-      if chain.queue.isNil:
-        chain.setHead(headHash).isOkOr:
-          raise invalidParams(error)
-      else:
-        (await chain.queueSetHead(headHash)).isOkOr:
-          raise invalidParams(error.msg)
+      (await chain.queueSetHead(headHash)).isOkOr:
+        raise invalidParams(error.msg)
 
       true
 

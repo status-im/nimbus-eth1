@@ -48,20 +48,59 @@ export
 const
   BaseDistance = 128'u64
   PersistBatchSize = 4'u64
-  MaxQueueSize = 128
+
+  # Networking and block processing share this thread, so we have to hand the
+  # thread back regularly or network reads stall and peers time us out.
+  #
+  # We yield per batch, not per item:
+  #   - per item  -> costs up to `idleTimeout` for every single block
+  #   - per batch -> pay that once per `processingBudget` of work
+
+  # Cap on how long we wait for an idle slot. Under heavy network load the
+  # loop may never go idle, and we don't want to stop processing entirely.
+  # Waiting also lets reads batch up into fewer, larger ones.
+  idleTimeout = 10.milliseconds
+
+  # Max CPU time to spend before yielding. Keep well under the peer response
+  # timeouts, otherwise the syncer starts banning honest peers as slow.
+  processingBudget = 50.milliseconds
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 func toQueueResult(r: Result[void, string]): Result[ImportOutcome, ImportError] =
-  ## Adapt the `Result[void, string]` of the non-import queue handlers
-  ## (`forkChoice`, `setHead`, `processUpdateBase`, `processOrphan`) to the shared
-  ## `QueueItem` result type. The error `kind` is irrelevant on these paths:
-  ## their consumers only inspect ok/err and `msg` (the base/orphan results are
-  ## not even read back), so a plain `Valid`/`Invalid` mapping suffices.
+  ## Adapt the `Result[void, string]` of `forkChoice` and `setHead` to the
+  ## result type shared by the `queue*` requests. The error `kind` is irrelevant
+  ## on these paths: their consumers only inspect ok/err and `msg`, so a plain
+  ## `Valid`/`Invalid` mapping suffices.
   if r.isOk: ok(Valid)
   else: err(ImportError(kind: Invalid, msg: r.error))
+
+proc yieldIfBudgetSpent(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
+  if processingBudget <= Moment.now() - c.lastYield:
+    discard await idleAsync().withTimeout(idleTimeout)
+    c.lastYield = Moment.now()
+
+template withFcLock(c: ForkedChainRef, body: untyped) =
+  ## Run `body` holding `fcLock`. Expanded in place rather than wrapped in a
+  ## closure, so nothing captures (and pins) the caller's async env.
+  await c.fcLock.acquire()
+  try:
+    # Still cancellable here, nothing has been mutated yet.
+    await c.yieldIfBudgetSpent()
+    body
+  finally:
+    try:
+      c.fcLock.release()
+    except AsyncLockError:
+      raiseAssert "release matched with acquire, shouldn't happen"
+
+proc addJob(c: ForkedChainRef, job: FcJob) =
+  try:
+    c.jobs.addLastNoWait(job)
+  except AsyncQueueFullError:
+    raiseAssert "FC jobs queue is unbounded"
 
 func appendBlock(c: ForkedChainRef,
          parent: BlockRef,
@@ -440,13 +479,11 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
       c.persistedCount = 0
     return ok()
 
-  if c.queue.isNil:
+  if c.jobs.isNil:
     # This recursive mode only used in test env with small set of blocks
     discard await c.processUpdateBase()
   else:
-    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
-      toQueueResult(await c.processUpdateBase())
-    await c.queue.addLast(QueueItem(handler: asyncHandler))
+    c.addJob(FcJob(kind: UpdateBase))
 
   ok()
 
@@ -477,13 +514,11 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
   for i in countdown(steps.len-1, 0):
     c.baseQueue.addLast(steps[i])
 
-  if c.queue.isNil:
+  if c.jobs.isNil:
     # This recursive mode only used in test env with small set of blocks
     discard await c.processUpdateBase()
   else:
-    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
-      toQueueResult(await c.processUpdateBase())
-    await c.queue.addLast(QueueItem(handler: asyncHandler))
+    c.addJob(FcJob(kind: UpdateBase))
 
 proc validateBlock(
     c: ForkedChainRef,
@@ -594,14 +629,14 @@ proc validateBlock(
 
   ok(newBlock)
 
-template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): auto =
-  if c.queue.isNil:
+template queueOrphan(c: ForkedChainRef, orphanParent: BlockRef, isFinalized = false): auto =
+  # Parameter names must differ from the `FcJob` field names, a template
+  # substitutes them in the object constructor too.
+  if c.jobs.isNil:
     # This recursive mode only used in test env with small set of blocks
-    discard await c.processOrphan(parent, finalized)
+    discard await c.processOrphan(orphanParent, isFinalized)
   else:
-    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
-      toQueueResult(await c.processOrphan(parent, finalized))
-    await c.queue.addLast(QueueItem(handler: asyncHandler))
+    c.addJob(FcJob(kind: ResumeOrphans, parent: orphanParent, finalized: isFinalized))
 
 proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Future[Result[void, string]]
   {.async: (raises: [CancelledError]).} =
@@ -624,39 +659,17 @@ proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Futu
   c.queueOrphan(parent, finalized)
 
 proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
-  # Networking and block processing share this thread, so we have to hand the
-  # thread back regularly or network reads stall and peers time us out.
-  #
-  # We yield per batch, not per item:
-  #   - per item  -> costs up to `idleTimeout` for every single block
-  #   - per batch -> pay that once per `processingBudget` of work
-  const
-    # Cap on how long we wait for an idle slot. Under heavy network load the
-    # loop may never go idle, and we don't want to stop processing entirely.
-    # Waiting also lets reads batch up into fewer, larger ones.
-    idleTimeout = 10.milliseconds
-
-    # Max CPU time to spend before yielding. Keep well under the peer response
-    # timeouts, otherwise the syncer starts banning honest peers as slow.
-    processingBudget = 50.milliseconds
-
-  var lastYield = Moment.now()
   while true:
-    if processingBudget <= Moment.now() - lastYield:
-      discard await idleAsync().withTimeout(idleTimeout)
-      lastYield = Moment.now()
+    let job = await c.jobs.popFirst()
 
-    let
-      # Yields on its own when the queue is empty, so an idle node stays
-      # cooperative even though the budget check above rarely fires.
-      item = await c.queue.popFirst()
-      res = await item.handler()
-
-    if item.responseFut.isNil:
-      continue
-
-    if not item.responseFut.finished:
-      item.responseFut.complete res
+    # Waits behind the requests already holding or queued on the lock, so
+    # they interleave with long chains of base updates or orphans.
+    c.withFcLock:
+      case job.kind
+      of UpdateBase:
+        discard await noCancel c.processUpdateBase()
+      of ResumeOrphans:
+        discard await noCancel c.processOrphan(job.parent, job.finalized)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -716,6 +729,8 @@ proc init*(
       baseQueue:        initDeque[BlockRef](),
       lastBaseLogTime:  EthTime.now(),
       badBlocks:        LruCache[Hash32, (Block, Opt[BlockAccessListRef])].init(100),
+      fcLock:           newAsyncLock(),
+      lastYield:        Moment.now(),
     )
 
   # updateFinalized will stop ancestor lineage
@@ -723,7 +738,7 @@ proc init*(
   baseBlock.finalize()
 
   if enableQueue:
-    fc.queue = newAsyncQueue[QueueItem](maxsize = MaxQueueSize)
+    fc.jobs = newAsyncQueue[FcJob]()
     fc.processingQueueLoop = fc.processQueue()
 
   fc
@@ -918,52 +933,41 @@ proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: []).} =
   # at the same time FC.serialize modify the state, crash can happen.
   await noCancel c.processingQueueLoop.cancelAndWait()
 
+  # Requests run in their callers' tasks, not in the loop above. Take the lock
+  # for good: waits out the request in flight, then parks every later one so
+  # nothing touches FC state during or after FC.serialize.
+  await noCancel c.fcLock.acquire()
+
   if not c.vmState.isNil():
     c.vmState.dispose()
     c.vmState = nil
     c.vmStateBlockHash.reset()
 
-template queueImportBlock*(
+# Once a request holds the lock it runs to completion (`noCancel`), a
+# cancelled caller only gives up on waiting for the lock.
+
+proc queueImportBlock*(
     c: ForkedChainRef,
     blk: Block,
     blockAccessList = Opt.none(BlockAccessListRef),
-    finalized = false): auto =
+    finalized = false
+  ): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+  c.withFcLock:
+    return await noCancel c.importBlock(blk, blockAccessList, finalized)
 
-  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]]
-      {.async: (raises: [CancelledError], raw: true).} =
-    c.importBlock(blk, blockAccessList, finalized)
-
-  let item = QueueItem(
-    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
-    handler: asyncHandler
-  )
-  await c.queue.addLast(item)
-  item.responseFut
-
-template queueForkChoice*(c: ForkedChainRef,
+proc queueForkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
                  finalizedHash: Hash32,
-                 safeHash: Hash32 = zeroHash32): auto =
-  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
-    toQueueResult(await c.forkChoice(headHash, finalizedHash, safeHash))
+                 safeHash: Hash32 = zeroHash32
+  ): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+  c.withFcLock:
+    return toQueueResult(
+      await noCancel c.forkChoice(headHash, finalizedHash, safeHash))
 
-  let item = QueueItem(
-    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
-    handler: asyncHandler
-  )
-  await c.queue.addLast(item)
-  item.responseFut
-
-template queueSetHead*(c: ForkedChainRef, headHash: Hash32): auto =
-  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
-    toQueueResult(c.setHead(headHash))
-
-  let item = QueueItem(
-    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
-    handler: asyncHandler
-  )
-  await c.queue.addLast(item)
-  item.responseFut
+proc queueSetHead*(c: ForkedChainRef, headHash: Hash32
+  ): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
+  c.withFcLock:
+    return toQueueResult(c.setHead(headHash))
 
 func resolvedFinHash*(c: ForkedChainRef): Hash32 =
   c.latestFinalized.hash
