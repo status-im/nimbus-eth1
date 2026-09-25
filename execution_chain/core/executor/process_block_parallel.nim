@@ -113,8 +113,8 @@ proc recoverAndPrefetchTask*(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.allLogs.setLen(0)
-  vmState.gasRefunded = 0
+  vmState.blockLogs.setLen(0)
+  vmState.refundCounter = 0
   vmState.balTracker = nil
 
   # Execute the transaction discarding the results in order to fill the in memory caches.
@@ -392,8 +392,8 @@ proc processTxTask(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.allLogs.setLen(0)
-  vmState.gasRefunded = 0
+  vmState.blockLogs.setLen(0)
+  vmState.refundCounter = 0
   if not ctx[].sharedBuilder.isNil():
     vmState.balTracker =
       BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
@@ -499,13 +499,13 @@ proc processTransactionsParallel*(
     var logs = unpackLogs(entries[i].logs.data(asOpenArray = true))
     if skipReceipts:
       if collectLogs:
-        vmState.allLogs.add logs
+        vmState.blockLogs.add logs
     else:
       var callResult = LogResult(logEntries: move(logs))
       vmState.receipts[i] =
         vmState.makeReceipt(transactions[i].txType, callResult)
       if collectLogs:
-        vmState.allLogs.add vmState.receipts[i].logs
+        vmState.blockLogs.add vmState.receipts[i].logs
 
   let maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.hardFork)
   if vmState.blobGasUsed > maxBlobGasPerBlock:

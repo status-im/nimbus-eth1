@@ -399,11 +399,11 @@ proc exec(ctx: TransContext,
     output.result.currentExcessBlobGas = excessBlobGas
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
-    var allLogs: seq[Log]
+    var blockLogs: seq[Log]
     for rec in output.result.receipts:
-      allLogs.add rec.logs
+      blockLogs.add rec.logs
     var
-      depositReqs = parseDepositLogs(allLogs, vmState.com.depositContractAddress).valueOr:
+      depositReqs = parseDepositLogs(blockLogs, vmState.com.depositContractAddress).valueOr:
         return err(t8nerr(ErrorEVM, error))
       executionRequests: seq[seq[byte]]
 

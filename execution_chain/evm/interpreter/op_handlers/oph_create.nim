@@ -52,7 +52,7 @@ proc postExecutionCreate(c: Computation, child: Computation, newAccountCharged: 
       c.gasMeter.stateGasSpilled += child.gasMeter.stateGasSpilled
       c.gasMeter.repayStateGasSpill()
     c.merge(child)
-    c.stack.lsTop child.msg.contractAddress
+    c.stack.lsTop child.msg.currentTarget
   else:
     if c.fork >= FkAmsterdam:
       c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
@@ -78,7 +78,7 @@ proc execSubCreate(c: Computation; childMsg: Message;
     return ok()
 
   if c.fork >= FkAmsterdam:
-    newAccountCharged = not c.accountExistsOrAlive(child.msg.contractAddress)
+    newAccountCharged = not c.accountExistsOrAlive(child.msg.currentTarget)
     if newAccountCharged:
       c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "Create op new account").isOkOr:
         child.dispose()
@@ -169,7 +169,7 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
     return ok()
 
   if endowment.isZero.not:
-    let senderBalance = cpt.getBalance(cpt.msg.contractAddress)
+    let senderBalance = cpt.getBalance(cpt.msg.currentTarget)
     if senderBalance < endowment:
       debug "Computation Failure",
         reason = "Insufficient funds available to transfer",
@@ -182,13 +182,13 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
     code = cpt.vmState.ledger.peekCode(codeHash).valueOr:
       CodeBytesRef.init(cpt.memory.read(memPos, memLen))
     childMsg = Message(
-      kind:              CallKind.Create,
-      depth:             cpt.msg.depth + 1,
-      sender:            cpt.msg.contractAddress,
-      value:             endowment,
-      contractAddress:   generateContractAddress(
-                           cpt.vmState,
-                           cpt.msg.contractAddress),
+      kind:          CallKind.Create,
+      depth:         cpt.msg.depth + 1,
+      sender:        cpt.msg.currentTarget,
+      value:         endowment,
+      currentTarget: generateContractAddress(
+                       cpt.vmState,
+                       cpt.msg.currentTarget),
       )
   cpt.execSubCreate(childMsg, codeHash, code)
 
@@ -250,7 +250,7 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
     return ok()
 
   if endowment.isZero.not:
-    let senderBalance = cpt.getBalance(cpt.msg.contractAddress)
+    let senderBalance = cpt.getBalance(cpt.msg.currentTarget)
     if senderBalance < endowment:
       debug "Computation Failure",
         reason = "Insufficient funds available to transfer",
@@ -263,14 +263,14 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
     code = cpt.vmState.ledger.peekCode(codeHash).valueOr:
       CodeBytesRef.init(cpt.memory.read(memPos, memLen))
     childMsg = Message(
-      kind:              CallKind.Create2,
-      depth:             cpt.msg.depth + 1,
-      sender:            cpt.msg.contractAddress,
-      value:             endowment,
-      contractAddress:   generateSafeAddress(
-                           cpt.msg.contractAddress,
-                           salt,
-                           codeHash),
+      kind:          CallKind.Create2,
+      depth:         cpt.msg.depth + 1,
+      sender:        cpt.msg.currentTarget,
+      value:         endowment,
+      currentTarget: generateSafeAddress(
+                       cpt.msg.currentTarget,
+                       salt,
+                       codeHash),
       )
   cpt.execSubCreate(childMsg, codeHash, code)
 

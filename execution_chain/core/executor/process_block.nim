@@ -79,7 +79,7 @@ proc processTransactions*(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.allLogs.setLen(0)
+  vmState.blockLogs.setLen(0)
 
   if senders.isSome() and senders[].len != transactions.len:
     return err("Transaction public key count does not match block transactions")
@@ -104,11 +104,11 @@ proc processTransactions*(
       # TODO don't generate logs at all if we're not going to put them in
       #      receipts
       if collectLogs:
-        vmState.allLogs.add rc.value.logEntries
+        vmState.blockLogs.add rc.value.logEntries
     else:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType, rc.value)
       if collectLogs:
-        vmState.allLogs.add vmState.receipts[txIndex].logs
+        vmState.blockLogs.add vmState.receipts[txIndex].logs
   ok()
 
 proc procBlkPreamble(
@@ -340,7 +340,7 @@ proc procBlkEpilogue(
     if header.requestsHash.isSome:
       let
         depositReqs =
-          ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
+          ?parseDepositLogs(vmState.blockLogs, vmState.com.depositContractAddress)
         requestsHash = if vmState.com.isAmsterdamOrLater(header.timestamp):
             calcRequestsHash(
               [
