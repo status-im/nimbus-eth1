@@ -108,7 +108,7 @@ ifeq ($(NIM_PARAMS),)
 # selectively download nimbus-eth2 submodules because we don't need all of it's modules
 # also hoodi already exceeds github LFS quota
 
-GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,/parsed/parsedConsensusGenesis.json
+GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,parsedConsensusGenesis.json
 
 GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
   git $(GIT_SUBMODULE_CONFIG) submodule update vendor/nimbus-eth2; \
