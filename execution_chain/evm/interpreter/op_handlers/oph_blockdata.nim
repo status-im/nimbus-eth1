@@ -62,8 +62,8 @@ func chainIdOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.push cpt.getChainId
 
 proc selfBalanceOp(cpt: VmCpt): EvmResultVoid =
-  ## 0x47, Get current contract's balance.
-  cpt.stack.push cpt.getBalance(cpt.msg.contractAddress)
+  ## 0x47, Get current target's balance.
+  cpt.stack.push cpt.getBalance(cpt.msg.currentTarget)
 
 func baseFeeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x48, Get the block's base fee.

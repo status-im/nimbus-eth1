@@ -137,7 +137,7 @@ method captureOpEnd*(ctx: LegacyTracer, c: Computation,
       if c.msg.depth < ctx.storageKeys.len:
         var ledger = c.vmState.ledger
         for key in ctx.storage(c.msg.depth):
-          let value = ledger.getStorage(c.msg.contractAddress, key)
+          let value = ledger.getStorage(c.msg.currentTarget, key)
           storage[key.dumpHex] = %(value.dumpHex)
         j["storage"] = storage
 

@@ -69,7 +69,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid 
     log.topics.add c.stack.lsPeekTopic(^(i+3))
 
   assign(log.data, c.memory.read(memPos, len))
-  log.address = c.msg.contractAddress
+  log.address = c.msg.currentTarget
   c.addLogEntry(log)
 
   c.stack.lsShrink(stackSize)
