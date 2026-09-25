@@ -77,6 +77,9 @@ const
   lockedBalsLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 
+  beaconSyncIdleLogWaitInterval* = chronos.seconds(10)
+    ## Reduce logging noise
+
   # ---------
 
   daemonWaitClearFailInterval* = chronos.seconds(10)
@@ -92,6 +95,9 @@ const
     ## triggers some metrics updates.
 
   daemonWaitBalsFetchInterval* = chronos.seconds(5)
+    ## Poll waiting for some peer to download BALs
+
+  daemonWaitHeaderStopInterval* = chronos.seconds(5)
     ## Poll waiting for some peer to download BALs
 
   # ---------
@@ -126,12 +132,14 @@ const
     ## these intervals are sparsely filled and there will be returned not
     ## more than ~1k accounts.
 
-  nFinHeadSupportWindowSize* = 128
+  nFinHeadSupportWindowSize* = 108                  # ~84% of 128
     ## If the FCU update finalised header is more than that distance apart
     ## form the pivot state block number, a BAL download and forward cycle
-    ## will be triggerd.
+    ## will be triggerd. The download window ranges
+    ## ::
+    ##    finalised-head - nFinHeadSupportWindowSize .. finalised-head
 
-  nFinHeadSupportWindowTopMargin* = 45
+  nFinHeadSupportWindowTopMargin* = 40
     ## Top (or right end) acceptance margin for the download window. The
     ## state of the patrtial MPT representation is forwarded until it falls
     ## in the range

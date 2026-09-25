@@ -45,6 +45,7 @@ type
     ## Shared descriptor that contains some specs of the assembled database
     ## as the running/finished state of the snap sync process.
     newDbPath*: string                              # Persistent path
+    waitSync*: bool                                 # Shutdown in progress
     snapSyncStop*: bool                             # Can be monitored
 
   # -------------------
@@ -138,6 +139,7 @@ type
     lastNoHdrsLog*: chronos.Moment   ## Control update messages
     lastTrggHdrsLog*: chronos.Moment ## Control update messages
     lastMaxHdrsLog*: chronos.Moment  ## Control update messages
+    lastBcSyncLog*: chronos.Moment   ## Control update messages
     lockedBalsLog*: chronos.Moment   ## Control messages about missing peers
 
 # ------------------------------------------------------------------------------

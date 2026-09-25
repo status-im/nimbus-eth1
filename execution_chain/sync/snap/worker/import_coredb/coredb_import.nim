@@ -68,6 +68,9 @@ proc mergeCanonicalHead(
   tx2.persistHeaderAndSetHead(cHash, cHdr, startOfHist).isOkOr:
     error info & ": Error setting canonical head", header=cNum, `error`=error
     return err()
+  tx2.setFirstBlockHash(cHash).isOkOr:
+    error info & ": Error setting first hash", header=cNum, `error`=error
+    return err()
   tx2.persistBlockAccessList(cHash, cBal)
 
   ok(move cNum)
@@ -183,6 +186,14 @@ proc importFlatImpl(
       ?tx2.mergeAccount(w.accPath, w.data.account, info)
     else:
       u.nSlots += ?tx2.mergeAccAndSto(db, w.accPath, w.data.account, info)
+
+    if w.data.account.codeHash != EMPTY_CODE_HASH:
+      let code = ?db.getFlatCode(w.accPath, info)
+      tx2.persistCodeByHash(w.data.account.codeHash, code).isOkOr:
+        error info & ": Failed storing contract code", accPath=w.accPath.toStr,
+          codeHash=w.data.account.codeHash.toStr, nCode=code.len, `error`=error
+        return ok((0,0))
+
     u.nAccounts.inc
 
   tx2.checkpoint(cNum)

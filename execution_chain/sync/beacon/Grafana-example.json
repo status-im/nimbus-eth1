@@ -2,20 +2,20 @@
   "apiVersion": "dashboard.grafana.app/v2",
   "kind": "Dashboard",
   "metadata": {
-    "name": "00000000000056",
+    "name": "00000000000055",
     "namespace": "default",
-    "uid": "b60d04f6-8713-47f5-961c-348ca7395123",
-    "resourceVersion": "1789040348424008",
-    "generation": 11,
+    "uid": "b60d04f6-8713-47f5-961c-348ca7395439",
+    "resourceVersion": "1790330542993015",
+    "generation": 22,
     "creationTimestamp": "2026-07-23T09:26:04Z",
     "labels": {
-      "grafana.app/deprecatedInternalID": "4063479426818123"
+      "grafana.app/deprecatedInternalID": "4063479426818048"
     },
     "annotations": {
       "grafana.app/createdBy": "user:afsymvffaw3k0c",
-      "grafana.app/saved-from-ui": "Grafana v13.2.1 (56cd3e9288)",
+      "grafana.app/saved-from-ui": "Grafana v13.2.2 (1bea008f7e)",
       "grafana.app/updatedBy": "user:afsymvffaw3k0c",
-      "grafana.app/updatedTimestamp": "2026-09-10T11:39:08Z"
+      "grafana.app/updatedTimestamp": "2026-09-25T10:02:22Z"
     }
   },
   "spec": {
@@ -67,16 +67,38 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nec_sync_consensus_head{instance=\"172.16.210.1:9099\", job=\"devnet\"}",
+                        "expr": "nec_sync_consensus_head{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
-                        "legendFormat": "consensus_head",
+                        "legendFormat": "CL_head",
                         "range": true,
                         "useBackend": false
                       }
                     },
                     "refId": "C",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "bfsyo1ibaja4gc"
+                      },
+                      "spec": {
+                        "editorMode": "builder",
+                        "expr": "nec_sync_consensus_finalised{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "instant": false,
+                        "legendFormat": "CL_finalised",
+                        "range": true
+                      }
+                    },
+                    "refId": "D",
                     "hidden": false
                   }
                 },
@@ -97,7 +119,7 @@
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
-                        "legendFormat": "execution_head",
+                        "legendFormat": "EL_head",
                         "range": true,
                         "useBackend": false
                       }
@@ -140,7 +162,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.1",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "annotations": {
@@ -233,7 +255,8 @@
                   {
                     "matcher": {
                       "id": "byName",
-                      "options": "nec_execution_head"
+                      "scope": "series",
+                      "options": "EL_head"
                     },
                     "properties": [
                       {
@@ -248,7 +271,8 @@
                   {
                     "matcher": {
                       "id": "byName",
-                      "options": "consensus_head"
+                      "scope": "series",
+                      "options": "CL_head"
                     },
                     "properties": [
                       {
@@ -263,29 +287,39 @@
                   {
                     "matcher": {
                       "id": "byName",
-                      "options": "execution_head"
+                      "options": "CL_finalised"
                     },
                     "properties": [
                       {
                         "id": "color",
                         "value": {
-                          "fixedColor": "dark-yellow",
+                          "fixedColor": "super-light-purple",
                           "mode": "fixed"
                         }
                       }
                     ]
                   },
                   {
+                    "__systemRef": "hideSeriesFrom",
                     "matcher": {
-                      "id": "byName",
-                      "options": "sync_consensus_head"
+                      "id": "byNames",
+                      "options": {
+                        "mode": "exclude",
+                        "names": [
+                          "CL_head",
+                          "CL_finalised"
+                        ],
+                        "prefix": "All except:",
+                        "readOnly": true
+                      }
                     },
                     "properties": [
                       {
-                        "id": "color",
+                        "id": "custom.hideFrom",
                         "value": {
-                          "fixedColor": "super-light-orange",
-                          "mode": "fixed"
+                          "legend": false,
+                          "tooltip": true,
+                          "viz": true
                         }
                       }
                     ]
@@ -450,7 +484,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.1",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "annotations": {
@@ -636,7 +670,7 @@
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
-                        "legendFormat": "sync_distance_to_sync",
+                        "legendFormat": "distance_to_sync",
                         "range": true,
                         "useBackend": false
                       }
@@ -705,7 +739,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.1",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "annotations": {
@@ -859,7 +893,7 @@
                   {
                     "matcher": {
                       "id": "byName",
-                      "options": "distance_to_sync"
+                      "options": "sync_distance_to_sync"
                     },
                     "properties": [
                       {
@@ -867,6 +901,30 @@
                         "value": {
                           "fixedColor": "light-purple",
                           "mode": "fixed"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "__systemRef": "hideSeriesFrom",
+                    "matcher": {
+                      "id": "byNames",
+                      "options": {
+                        "mode": "exclude",
+                        "names": [
+                          "distance_to_sync"
+                        ],
+                        "prefix": "All except:",
+                        "readOnly": true
+                      }
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.hideFrom",
+                        "value": {
+                          "legend": false,
+                          "tooltip": true,
+                          "viz": true
                         }
                       }
                     ]
@@ -923,7 +981,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.1",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "annotations": {
@@ -1137,7 +1195,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.1",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "annotations": {
@@ -1295,7 +1353,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.1",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "annotations": {
@@ -1454,7 +1512,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.1",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "annotations": {
@@ -1616,7 +1674,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.1",
+            "version": "13.2.2",
             "spec": {
               "options": {
                 "annotations": {
@@ -1827,7 +1885,7 @@
             "spec": {
               "x": 12,
               "y": 17,
-              "width": 12,
+              "width": 11,
               "height": 5,
               "element": {
                 "kind": "ElementReference",

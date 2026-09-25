@@ -141,10 +141,14 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
     rng = nimbus.rng,
     forkIdProcs = forkIdProcs)
 
-  # Add peer service protocol capabilities.
-  let doSnapSync = config.snapSyncEnabled or config.snapServerEnabled
+  # Add eth peer service protocol capabilities.
   nimbus.ethWire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
-  if doSnapSync:
+
+  # Add snap sync service if enabled. This server is currently a dummy only
+  # and will never be fully functional. The costs of implementing the 128
+  # blocks sevice window is too expensive. What could be provided is a BAL
+  # download facility.
+  if config.snapSyncEnabled:
     nimbus.snapWire = nimbus.ethNode.addSnapHandlerCapability()
 
   # Connect directly to the static nodes
@@ -204,8 +208,8 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
       syncerShouldRun = true
 
     # Configure snap syncer.
-    nimbus.snapSyncRef.config(nimbus.ethNode, config.dataDir(params), config.maxPeers)
-
+    nimbus.snapSyncRef.config(
+      nimbus.ethNode, config.dataDir(params), config.maxPeers)
     if config.snapSyncResume:
       nimbus.snapSyncRef.configResume()
   else:
