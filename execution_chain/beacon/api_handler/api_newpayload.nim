@@ -29,7 +29,7 @@ from ../engine_ssz_types import
 from ../../rpc/engine_ssz_conv import toSsz, toWeb3
 from beacon_chain/spec/forks import ForkyExecutionPayload
 from ../ssz_eth_conv import
-  ethBlock, toHash32, sszExecutionWitness, sszPublicKeys
+  ethBlock, toHash32, sszExecutionWitness
 
 logScope:
   topics = "beacon engine"
@@ -475,6 +475,5 @@ proc newPayloadWithWitness*(
     PayloadStatusWithWitness(
       payload_status: status,
       witness: optSome(?sszExecutionWitness(witness)),
-      public_keys: ?sszPublicKeys(blk.transactions),
     )
   )

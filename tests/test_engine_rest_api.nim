@@ -68,7 +68,7 @@ proc setupBeaconEngine(): BeaconEngineRef =
 
 let
   # Deterministic test signer, funded below so that the Amsterdam payload used
-  # by the witness tests carries a transaction to recover a public key from.
+  # by the witness tests exercises account state accesses.
   witnessSenderKey = PrivateKey.fromHex(
     "0x4646464646464646464646464646464646464646464646464646464646464646").expect(
     "valid private key")
@@ -726,7 +726,7 @@ suite "Engine SSZ API REST transport: payload witness":
       resp[0] == 400
       "ssz-decode-error" in cast[string](resp[1])
 
-  test "POST /payloads/witness should return 200 VALID with the witness and one public key per transaction":
+  test "POST /payloads/witness should return 200 VALID with the witness":
     let resp = submitWitness(built.payload)
     let status = SSZ.decode(resp[1], PayloadStatusWithWitness)
     check:
@@ -738,8 +738,6 @@ suite "Engine SSZ API REST transport: payload witness":
     require:
       # The parent header supplies the pre-state root, so it is always present.
       witness.headers.len >= 1
-      # One sender key per transaction, in transaction order.
-      status.public_keys.len == built.payload.transactions.len
 
     let parent = rlp.decode(asSeq(asSeq(witness.headers)[^1]), Header)
     check:
@@ -747,7 +745,6 @@ suite "Engine SSZ API REST transport: payload witness":
       # must be proven.
       witness.state.len > 0
       parent.computeBlockHash.data == built.payload.parent_hash.data
-      @(asSeq(status.public_keys)[0]) == @(SkPublicKey(witnessSenderPubKey).toRaw())
 
   test "POST /payloads/witness for an already known payload should still return the witness":
     let resp = submitWitness(built.payload)
@@ -758,9 +755,8 @@ suite "Engine SSZ API REST transport: payload witness":
     require status.witness.isSome
     check:
       status.witness.get.headers.len >= 1
-      status.public_keys.len == built.payload.transactions.len
 
-  test "POST /payloads/witness for an invalid payload should omit witness and public keys":
+  test "POST /payloads/witness for an invalid payload should omit witness":
     var corrupted = built.payload
     corrupted.block_hash = fakeDigest(0xbb)
     let resp = submitWitness(corrupted)
@@ -769,4 +765,3 @@ suite "Engine SSZ API REST transport: payload witness":
       resp[0] == 200
       status.payload_status.status == uint8(PayloadStatusCode.INVALID)
       not status.witness.isSome
-      status.public_keys.len == 0
