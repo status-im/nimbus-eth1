@@ -606,6 +606,11 @@ type
         defaultValue: 8192
         name: "chunk-size" .}: uint64
 
+      withStateRoot* {.
+        desc: "Compute state root at the end of the import (instead of the first launch)"
+        defaultValue: false
+        name: "with-state-root".}: bool
+
       csvStats* {.
         hidden
         desc: "Save performance statistics to CSV"
