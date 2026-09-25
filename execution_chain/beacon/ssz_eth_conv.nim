@@ -25,8 +25,8 @@ from ../stateless/stateless_host import recover_transaction_public_key
 from ./engine_ssz_types import
   BlobsBundleV1, BlobsBundleV2, ExecutionRequestsList, MAX_BYTES_PER_EXECUTION_REQUEST,
   ExecutionPayloadBodyParis, ExecutionPayloadBodyShanghai, ExecutionPayloadBodyAmsterdam,
-  ExecutionWitness, WitnessItem, WitnessItems, PublicKeys,
-  MAX_WITNESS_ITEMS, MAX_WITNESS_ITEM_BYTES
+  ExecutionWitness, WitnessNodes, WitnessCodes, WitnessHeaders, PublicKeys,
+  PUBLIC_KEY_BYTES
 
 func toHash32*(d: Eth2Digest): Hash32 =
   d.data.to(Hash32)
@@ -244,22 +244,25 @@ func ethExecutionRequests*(reqs: engine_ssz_types.ExecutionRequestsList): seq[se
 
 # https://github.com/ethereum/execution-apis/pull/885
 
-func sszWitnessItems(items: openArray[seq[byte]]):
-    Result[engine_ssz_types.WitnessItems, string] =
-  var list: engine_ssz_types.WitnessItems
+func sszWitnessItems[T: List](t: typedesc[T], items: openArray[seq[byte]]):
+    Result[T, string] =
+  ## TODO: Not sure if we should care about doing these length checks as
+  ## they should normally not be exceeded at witness generation time.
+  type Item = ElemType(T)
+  var list: T
   for item in items:
-    if item.len > MAX_WITNESS_ITEM_BYTES:
-      return err("witness item exceeds MAX_WITNESS_ITEM_BYTES")
-    if not list.add(engine_ssz_types.WitnessItem.init(item)):
-      return err("witness field exceeds MAX_WITNESS_ITEMS")
+    if item.len > Item.maxLen:
+      return err("witness item exceeds its byte limit")
+    if not list.add(Item.init(item)):
+      return err("witness field exceeds its item limit")
   ok(list)
 
 func sszExecutionWitness*(w: ExecutionWitnessWithKeys):
     Result[engine_ssz_types.ExecutionWitness, string] =
   ok(engine_ssz_types.ExecutionWitness(
-    state: ?sszWitnessItems(w.state),
-    codes: ?sszWitnessItems(w.codes),
-    headers: ?sszWitnessItems(w.headers)))
+    state: ?sszWitnessItems(WitnessNodes, w.state),
+    codes: ?sszWitnessItems(WitnessCodes, w.codes),
+    headers: ?sszWitnessItems(WitnessHeaders, w.headers)))
 
 func sszPublicKeys*(txs: openArray[transactions.Transaction]):
     Result[engine_ssz_types.PublicKeys, string] =

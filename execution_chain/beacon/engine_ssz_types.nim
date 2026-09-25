@@ -17,7 +17,9 @@ import
   beacon_chain/spec/datatypes/[bellatrix, capella, deneb, gloas]
 
 from beacon_chain/spec/datatypes/fulu import BYTES_PER_CELL
-from ../stateless/stateless_types import PUBLIC_KEY_BYTES
+from ../stateless/stateless_types import
+  PUBLIC_KEY_BYTES, MAX_WITNESS_HEADERS, MAX_BYTES_PER_CODE, MAX_BYTES_PER_HEADER,
+  MAX_BYTES_PER_WITNESS_NODE
 
 export engine_types, presets, BYTES_PER_CELL, PUBLIC_KEY_BYTES
 
@@ -62,19 +64,19 @@ const
   # POST /engine/v1/payloads/witness
   # https://github.com/ethereum/execution-apis/pull/885
   MAX_WITNESS_ITEMS* = 1 shl 20
-  MAX_WITNESS_ITEM_BYTES* = 1 shl 20
 
 type
-  WitnessItem* = ByteList[Limit MAX_WITNESS_ITEM_BYTES]
-  WitnessItems* = List[WitnessItem, Limit MAX_WITNESS_ITEMS]
+  WitnessNodes* = List[ByteList[Limit MAX_BYTES_PER_WITNESS_NODE], Limit MAX_WITNESS_ITEMS]
+  WitnessCodes* = List[ByteList[Limit MAX_BYTES_PER_CODE], Limit MAX_WITNESS_ITEMS]
+  WitnessHeaders* = List[ByteList[Limit MAX_BYTES_PER_HEADER], Limit MAX_WITNESS_HEADERS]
 
   ExecutionWitness* = object
-    ## TODO: Current spec PR keeps this fork invariant with transport
-    ## local bounds, so a witness accepted here can still be unusable by
-    ## the stateless guest. Propose fork scoping it and adopting those.
-    state*: WitnessItems ## RLP encoded account and storage trie nodes
-    codes*: WitnessItems ## Contract bytecode read from the pre state
-    headers*: WitnessItems
+    ## TODO: Still different in definition from the stateless_types.ExecutionWitness
+    ## as that one uses progressive lists for state and codes.
+    ## Results in same serialization though so we could in theory also skip the defintion here.
+    state*: WitnessNodes ## RLP encoded account and storage trie nodes
+    codes*: WitnessCodes ## Contract bytecode read from the pre state
+    headers*: WitnessHeaders
       ## RLP encoded ancestor headers, oldest to newest, ending at the parent
 
   PublicKeys* = List[ByteVector[PUBLIC_KEY_BYTES], Limit MAX_TXS_PER_PAYLOAD]
