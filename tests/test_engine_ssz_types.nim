@@ -12,6 +12,7 @@
 
 import
   unittest2,
+  stew/endians2,
   ssz_serialization/bitseqs,
   beacon_chain/spec/datatypes/[bellatrix, capella, deneb],
   ../execution_chain/beacon/engine_ssz_types
@@ -96,6 +97,45 @@ suite "Engine SSZ API container types":
     check not decoded.latest_valid_hash.isSome
     check decoded.validation_error.isSome
     check decoded.validation_error.get.toString == "bad state root"
+
+  test "PayloadStatusWithWitness: VALID uses two offsets and a present witness":
+    var witness: engine_ssz_types.ExecutionWitness
+    doAssert witness.state.add(typeof(witness.state[0]).init(@[byte 0xc0]))
+    doAssert witness.codes.add(typeof(witness.codes[0]).init(@[byte 0x60, 0x00]))
+    doAssert witness.headers.add(typeof(witness.headers[0]).init(@[byte 0xc1, 0x80]))
+    let
+      response = PayloadStatusWithWitness(
+        payload_status: PayloadStatus(
+          status: uint8(PayloadStatusCode.VALID),
+          latest_valid_hash: optSome(digestOf(1))),
+        witness: optSome(witness))
+      statusBytes = SSZ.encode(response.payload_status)
+      witnessBytes = SSZ.encode(response.witness)
+      encoded = SSZ.encode(response)
+
+    # Two variable-size fields: the fixed section is exactly 8 bytes.
+    check:
+      uint32.fromBytesLE(encoded.toOpenArray(0, 3)) == 8'u32
+      uint32.fromBytesLE(encoded.toOpenArray(4, 7)) == uint32(8 + statusBytes.len)
+      encoded == @[8'u8, 0, 0, 0, 49, 0, 0, 0] & statusBytes & witnessBytes
+      SSZ.decode(encoded, PayloadStatusWithWitness) == response
+
+  test "PayloadStatusWithWitness: non-VALID statuses use two offsets and no witness":
+    for status in [PayloadStatusCode.INVALID, PayloadStatusCode.SYNCING,
+        PayloadStatusCode.ACCEPTED]:
+      let
+        response = PayloadStatusWithWitness(
+          payload_status: PayloadStatus(status: uint8(status)))
+        statusBytes = SSZ.encode(response.payload_status)
+        witnessBytes = SSZ.encode(response.witness)
+        encoded = SSZ.encode(response)
+
+      check:
+        witnessBytes.len == 0
+        uint32.fromBytesLE(encoded.toOpenArray(0, 3)) == 8'u32
+        uint32.fromBytesLE(encoded.toOpenArray(4, 7)) == uint32(8 + statusBytes.len)
+        encoded == @[8'u8, 0, 0, 0, 17, 0, 0, 0] & statusBytes & witnessBytes
+        SSZ.decode(encoded, PayloadStatusWithWitness) == response
 
   test "ForkchoiceState round trip":
     let fcs = ForkchoiceState(

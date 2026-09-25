@@ -18,10 +18,10 @@ import
 
 from beacon_chain/spec/datatypes/fulu import BYTES_PER_CELL
 from ../stateless/stateless_types import
-  PUBLIC_KEY_BYTES, MAX_WITNESS_HEADERS, MAX_BYTES_PER_CODE, MAX_BYTES_PER_HEADER,
+  MAX_WITNESS_HEADERS, MAX_BYTES_PER_CODE, MAX_BYTES_PER_HEADER,
   MAX_BYTES_PER_WITNESS_NODE
 
-export engine_types, presets, BYTES_PER_CELL, PUBLIC_KEY_BYTES
+export engine_types, presets, BYTES_PER_CELL
 
 func optSome*[T](x: T): Optional[T] =
   Optional[T].init(@[x])
@@ -79,12 +79,9 @@ type
     headers*: WitnessHeaders
       ## RLP encoded ancestor headers, oldest to newest, ending at the parent
 
-  PublicKeys* = List[ByteVector[PUBLIC_KEY_BYTES], Limit MAX_TXS_PER_PAYLOAD]
-
   PayloadStatusWithWitness* = object
     payload_status*: engine_types.PayloadStatus
     witness*: Optional[ExecutionWitness]
-    public_keys*: PublicKeys
 
   PayloadAttributesParis* = object
     timestamp*: uint64

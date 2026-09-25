@@ -20,13 +20,10 @@ import
   ../core/pooled_txs,
   ../stateless/witness_types
 
-from ../stateless/stateless_host import recover_transaction_public_key
-
 from ./engine_ssz_types import
   BlobsBundleV1, BlobsBundleV2, ExecutionRequestsList, MAX_BYTES_PER_EXECUTION_REQUEST,
   ExecutionPayloadBodyParis, ExecutionPayloadBodyShanghai, ExecutionPayloadBodyAmsterdam,
-  ExecutionWitness, WitnessNodes, WitnessCodes, WitnessHeaders, PublicKeys,
-  PUBLIC_KEY_BYTES
+  ExecutionWitness, WitnessNodes, WitnessCodes, WitnessHeaders
 
 func toHash32*(d: Eth2Digest): Hash32 =
   d.data.to(Hash32)
@@ -263,13 +260,3 @@ func sszExecutionWitness*(w: ExecutionWitnessWithKeys):
     state: ?sszWitnessItems(WitnessNodes, w.state),
     codes: ?sszWitnessItems(WitnessCodes, w.codes),
     headers: ?sszWitnessItems(WitnessHeaders, w.headers)))
-
-func sszPublicKeys*(txs: openArray[transactions.Transaction]):
-    Result[engine_ssz_types.PublicKeys, string] =
-  var list: engine_ssz_types.PublicKeys
-  for i, tx in txs:
-    let key = recover_transaction_public_key(tx).valueOr:
-      return err("failed to recover the sender public key of transaction " & $i)
-    if not list.add(key):
-      return err("public keys exceed MAX_TXS_PER_PAYLOAD")
-  ok(list)
