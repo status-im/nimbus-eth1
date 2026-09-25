@@ -132,12 +132,14 @@ const
     ## these intervals are sparsely filled and there will be returned not
     ## more than ~1k accounts.
 
-  nFinHeadSupportWindowSize* = 128
+  nFinHeadSupportWindowSize* = 108                  # ~84% of 128
     ## If the FCU update finalised header is more than that distance apart
     ## form the pivot state block number, a BAL download and forward cycle
-    ## will be triggerd.
+    ## will be triggerd. The download window ranges
+    ## ::
+    ##    finalised-head - nFinHeadSupportWindowSize .. finalised-head
 
-  nFinHeadSupportWindowTopMargin* = 45
+  nFinHeadSupportWindowTopMargin* = 40
     ## Top (or right end) acceptance margin for the download window. The
     ## state of the patrtial MPT representation is forwarded until it falls
     ## in the range
