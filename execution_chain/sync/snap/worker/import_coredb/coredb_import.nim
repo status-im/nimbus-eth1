@@ -68,6 +68,9 @@ proc mergeCanonicalHead(
   tx2.persistHeaderAndSetHead(cHash, cHdr, startOfHist).isOkOr:
     error info & ": Error setting canonical head", header=cNum, `error`=error
     return err()
+  tx2.setFirstBlockHash(cHash).isOkOr:
+    error info & ": Error setting first hash", header=cNum, `error`=error
+    return err()
   tx2.persistBlockAccessList(cHash, cBal)
 
   ok(move cNum)
