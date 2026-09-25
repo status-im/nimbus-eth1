@@ -104,9 +104,9 @@ proc processTransactions*(
       # TODO don't generate logs at all if we're not going to put them in
       #      receipts
       if collectLogs:
-        vmState.blockLogs.add rc.value.logEntries
+        vmState.blockLogs.add vmState.txLogs
     else:
-      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType, rc.value)
+      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
       if collectLogs:
         vmState.blockLogs.add vmState.receipts[txIndex].logs
   ok()

@@ -399,17 +399,17 @@ proc processTxTask(
       BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
     vmState.balTracker.setBlockAccessIndex(e[].txIndex + 1)
 
-  let logResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
+  let txResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
     e[].error = SharedString.init(error)
     ctx[].cancelled.store(true, moRelease)
     return false
 
-  e[].gasUsed = logResult.gasUsed
+  e[].gasUsed = txResult.gasUsed
   e[].blockExecutionGasUsed = vmState.blockExecutionGasUsed
   e[].blockStateGasUsed = vmState.blockStateGasUsed
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
-  e[].logs = packLogs(logResult.logEntries)
+  e[].logs = packLogs(vmState.txLogs)
 
   true
 
@@ -496,14 +496,13 @@ proc processTransactionsParallel*(
           $vmState.blockExecutionGasUsed & ", stateGas=" & $vmState.blockStateGasUsed
       )
 
-    var logs = unpackLogs(entries[i].logs.data(asOpenArray = true))
+    vmState.txLogs = unpackLogs(entries[i].logs.data(asOpenArray = true))
     if skipReceipts:
       if collectLogs:
-        vmState.blockLogs.add logs
+        vmState.blockLogs.add vmState.txLogs
     else:
-      var callResult = LogResult(logEntries: move(logs))
       vmState.receipts[i] =
-        vmState.makeReceipt(transactions[i].txType, callResult)
+        vmState.makeReceipt(transactions[i].txType)
       if collectLogs:
         vmState.blockLogs.add vmState.receipts[i].logs
 

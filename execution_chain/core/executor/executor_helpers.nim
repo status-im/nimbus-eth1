@@ -47,9 +47,7 @@ func createBloom*(receipts: openArray[StoredReceipt]): Bloom =
   bloom.value.to(Bloom)
 
 proc makeReceipt*(
-    vmState: BaseVMState; txType: TxType, callResult: var LogResult): StoredReceipt =
-  ## Builds the receipt for `callResult`, moving its log entries into the
-  ## receipt and leaving `callResult.logEntries` empty.
+    vmState: BaseVMState; txType: TxType): StoredReceipt =
   if vmState.com.isByzantiumOrLater(vmState.blockNumber, vmState.blockCtx.timestamp):
     result.isHash = false
     result.status = vmState.status
@@ -61,7 +59,7 @@ proc makeReceipt*(
 
   result.receiptType = txType
   result.cumulativeGasUsed = vmState.cumulativeGasUsed
-  result.logs = move(callResult.logEntries)
+  result.logs = move(vmState.txLogs)
 
 # ------------------------------------------------------------------------------
 # End

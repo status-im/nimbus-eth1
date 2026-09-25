@@ -44,7 +44,7 @@ proc txCallEvm*(tx: Transaction,
   when discardResult:
     discard runComputation(call, VoidResult)
   else:
-    runComputation(call, LogResult)
+    runComputation(call, TxResult)
 
 proc testCallEvm*(tx: Transaction,
                   sender: Address,
