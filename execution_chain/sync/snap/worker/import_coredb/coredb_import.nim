@@ -186,6 +186,14 @@ proc importFlatImpl(
       ?tx2.mergeAccount(w.accPath, w.data.account, info)
     else:
       u.nSlots += ?tx2.mergeAccAndSto(db, w.accPath, w.data.account, info)
+
+    if w.data.account.codeHash != EMPTY_CODE_HASH:
+      let code = ?db.getFlatCode(w.accPath, info)
+      tx2.persistCodeByHash(w.data.account.codeHash, code).isOkOr:
+        error info & ": Failed storing contract code", accPath=w.accPath.toStr,
+          codeHash=w.data.account.codeHash.toStr, nCode=code.len, `error`=error
+        return ok((0,0))
+
     u.nAccounts.inc
 
   tx2.checkpoint(cNum)
