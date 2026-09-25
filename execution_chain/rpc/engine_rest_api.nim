@@ -221,6 +221,47 @@ proc handleNewPayload(ben: BeaconEngineRef, request: HttpRequestRef,
   except RlpError as e:
     invalidRequestResponse("failed to decode block in payload: " & e.msg)
 
+# https://github.com/ethereum/execution-apis/pull/885
+proc handleNewPayloadWithWitness(
+    ben: BeaconEngineRef, request: HttpRequestRef, contentBody: Option[ContentBody]
+): Future[RestApiResponse] {.async: (raises: [CancelledError]).} =
+  let fork = getEngineFork(request).valueOr:
+    return error
+
+  # The stateless witness is specified from Amsterdam onward.
+  if fork < EngineFork.Amsterdam:
+    return
+      unsupportedForkResponse("payloads/witness is available from Amsterdam onward")
+  if contentBody.isNone:
+    return invalidRequestResponse("missing request body")
+  checkOctetStream(contentBody.get()).isOkOr:
+    return error
+
+  let body =
+    try:
+      SSZ.decode(contentBody.get().data, ExecutionPayloadEnvelopeAmsterdam)
+    except CatchableError:
+      return sszDecodeErrorResponse()
+
+  let resp =
+    try:
+      (
+        await ben.newPayloadWithWitness(
+          fork,
+          body.payload,
+          ethBlockAccessList(body.payload),
+          Opt.some(toHash32(body.parent_beacon_block_root)),
+          Opt.some(ethExecutionRequests(body.execution_requests)),
+        )
+      ).valueOr:
+        return internalErrorResponse(error)
+    except RpcResponseError as e:
+      return applicationErrorToRest(e)
+    except RlpError as e:
+      return invalidRequestResponse("failed to decode block in payload: " & e.msg)
+
+  RestApiResponse.response(SSZ.encode(resp), Http200, "application/octet-stream")
+
 proc decodePayloadId(raw: string): Result[Bytes8, RestApiResponse] =
   try:
     ok(Bytes8.fromHex(raw))
@@ -431,7 +472,7 @@ proc handleBlobsV4(ben: BeaconEngineRef, contentBody: Option[ContentBody]): Rest
 proc capabilitiesJson(): string =
   $(%*{
     "supported_forks": ["paris", "shanghai", "cancun", "prague", "osaka", "amsterdam"],
-    "fork_scoped_endpoints": ["forkchoice", "payloads", "bodies"],
+    "fork_scoped_endpoints": ["forkchoice", "payloads", "payloads/witness", "bodies"],
     "independently_versioned": {"blobs": ["v1", "v2", "v3"]}, # v4 (Amsterdam cell-range selection) not wired up yet.
     "unscoped_endpoints": ["capabilities", "identity"],
     "limits": {
@@ -471,6 +512,10 @@ proc newEngineRestRouter*(ben: BeaconEngineRef): RestRouter =
   router.api2(MethodPost, "/engine/v1/payloads") do (
       contentBody: Option[ContentBody]) -> RestApiResponse:
     await handleNewPayload(ben, request, contentBody)
+
+  router.api2(MethodPost, "/engine/v1/payloads/witness") do (
+      contentBody: Option[ContentBody]) -> RestApiResponse:
+    await handleNewPayloadWithWitness(ben, request, contentBody)
 
   router.api2(MethodGet, "/engine/v1/payloads/{payloadId}") do (
       payloadId: string) -> RestApiResponse:
