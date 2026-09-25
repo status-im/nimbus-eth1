@@ -162,7 +162,7 @@ proc prepareToRunComputation(params: CallParams) =
     var gasFee = tx.gasLimit.u256 * params.effectiveGasPrice.u256
     if fork >= Cancun:
       # EIP-4844
-      gasFee += calcDataFee(tx.versionedHashes.len,
+      gasFee += blobGasFee(tx.versionedHashes.len,
         vmState.blockCtx.excessBlobGas, vmState.com, fork)
 
     if vmState.balTrackerEnabled:

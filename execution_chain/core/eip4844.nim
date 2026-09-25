@@ -127,7 +127,7 @@ func getBlobBaseFee*(excessBlobGas: uint64, com: CommonRef, fork: HardFork): UIn
   else:
     0.u256
 
-proc calcDataFee*(versionedHashesLen: int,
+proc blobGasFee*(versionedHashesLen: int,
                   excessBlobGas: uint64,
                   com: CommonRef, fork: HardFork): UInt256 =
   getTotalBlobGas(versionedHashesLen).u256 *
