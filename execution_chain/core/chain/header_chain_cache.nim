@@ -77,6 +77,9 @@ declareGauge nec_sync_dangling, "" &
 declareGauge nec_sync_consensus_head, "" &
   "Block number of latest consensus head"
 
+declareGauge nec_sync_consensus_finalised, "" &
+  "Block number of latest finalsed header if part of chain"
+
 declareGauge nec_sync_distance_to_sync, "" &
   "Distance from execution head to consensus head"
 
@@ -564,6 +567,7 @@ proc put*(
 
       if hash == hc.chain.pendingFCU:
         hc.session.finNum = Opt.some(hdr.number)    # needed by snap sync
+        metrics.set(nec_sync_consensus_finalised, hdr.number.int64)
         if hc.chain.tryUpdatePendingFCU(hash, hdr.number):
           debug "PendingFCU resolved to block number",
             hash=hash.short,
@@ -696,7 +700,7 @@ func antecedent*(hc: HeaderChainRef): Header =
   # Header()
 
 func finNum*(hc: HeaderChainRef): Opt[BlockNumber] =
-  ## Bloack number of finalised FCU hash if it could be resolved by chaining
+  ## Block number of finalised FCU hash if it could be resolved by chaining
   ## headers using the `put()` directive.
   ##
   hc.session.finNum

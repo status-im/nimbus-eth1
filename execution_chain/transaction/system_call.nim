@@ -36,7 +36,7 @@ proc setupComputation(params: SysCallParams): Computation =
       kind:              CallKind.Call,
       gas:               params.gasLimit,
       stateGasReservoir: stateGasReservoir,
-      contractAddress:   params.to,
+      currentTarget:     params.to,
       codeAddress:       params.to,
       sender:            params.sender,
       data:              params.input,
@@ -48,9 +48,9 @@ proc setupComputation(params: SysCallParams): Computation =
     origin: params.sender,
   )
 
-  # reset global gasRefunded counter each time
+  # reset global refundCounter counter each time
   # EVM called for a new transaction
-  vmState.gasRefunded = 0
+  vmState.refundCounter = 0
   vmState.captureStart(computation, params.sender, params.to,
                        false, params.input,
                        params.gasLimit, 0.u256)
@@ -77,8 +77,8 @@ proc finishRunningComputation(c: Computation, T: type): T =
 
 proc preExecComputation(c: Computation) =
   if c.fork >= FkPrague:
-    if c.msg.contractAddress == WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS or
-       c.msg.contractAddress == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS:
+    if c.msg.currentTarget == WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS or
+       c.msg.currentTarget == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS:
 
       # EIP-7002 and EIP-7215 dicates that the code must be present, or else block is invalid
       if c.code.len <= 0:
@@ -86,8 +86,8 @@ proc preExecComputation(c: Computation) =
         return
 
     if c.fork >= FkAmsterdam and (
-      c.msg.contractAddress == BUILDER_DEPOSIT_CONTRACT_ADDRESS or
-      c.msg.contractAddress == BUILDER_EXIT_CONTRACT_ADDRESS
+      c.msg.currentTarget == BUILDER_DEPOSIT_CONTRACT_ADDRESS or
+      c.msg.currentTarget == BUILDER_EXIT_CONTRACT_ADDRESS
     ):
       # EIP-8282 dicates that the code must be present, or else block is invalid
       if c.code.len <= 0:

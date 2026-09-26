@@ -228,8 +228,8 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   if vmState.receipts.len <= inx:
     vmState.receipts.setLen(inx + receiptsExtensionSize)
 
-  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType, rc.value)
-  vmState.allLogs.add vmState.receipts[inx].logs
+  vmState.blockLogs.add vmState.txLogs
+  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
 
   pst.packedTxs.add item
   pst.numBlobPerBlock += item.tx.versionedHashes.len
@@ -262,7 +262,7 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   if vmState.fork >= FkPrague:
     pst.withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     pst.consolidationReqs = ?processDequeueConsolidationRequests(vmState)
-    pst.depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
+    pst.depositReqs = ?parseDepositLogs(vmState.blockLogs, vmState.com.depositContractAddress)
 
     if vmState.fork >= FkAmsterdam:
       # EIP-8282

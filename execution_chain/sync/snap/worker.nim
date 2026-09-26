@@ -108,7 +108,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         bodyRc = daemonWaitClearFailInterval        # take a nap
         break body
 
-      ctx.resetServices info                        # reset system
+      doAssert ctx.resetServices(info).isOk         # reset system
 
     of SnapReady:
       # Start headers download on the beacon sync server to run
@@ -155,10 +155,20 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
 
       # Done, terminate
       if 0 < ctx.pool.newCoreDb.newDbPath.len:
-        notice info & ": Snap sync will terminate successfully",
-          dbPath=ctx.pool.newCoreDb.newDbPath
-        ctx.daemon = false
-        ctx.pool.newCoreDb.snapSyncStop = true
+        if not ctx.pool.newCoreDb.waitSync:
+          notice info & ": Snap sync successful, will terminate",
+            dbPath=ctx.pool.newCoreDb.newDbPath
+          ctx.pool.newCoreDb.waitSync = true
+          ctx.headerDownloadCancel()
+        elif ctx.beaconState == BeaconState.idle:
+          ctx.daemon = false                        # all done, stop
+          ctx.pool.newCoreDb.waitSync = false
+          ctx.pool.newCoreDb.snapSyncStop = true
+        else:
+          ctx.pool.lastBcSyncLog.logCtrl(beaconSyncIdleLogWaitInterval):
+            debug info & ": Waiting for beacon sync to terminate",
+              beaconState=ctx.beaconState
+          bodyRc = daemonWaitHeaderStopInterval     # wait for beacon sync
         break body
 
       # This should have been handled by the FSA update
@@ -244,9 +254,7 @@ template runPeer*(
     of SnapBalsFetch:
       buddy.downloadBals(info).isOkOr:
         if error == ELockError:
-          let now = Moment.now                      # reduce logging noise
-          if ctx.pool.lockedBalsLog + lockedBalsLogWaitInterval < now:
-            ctx.pool.lockedBalsLog = now
+          ctx.pool.lockedBalsLog.logCtrl(lockedBalsLogWaitInterval):
             trace info & ": BALs downloading locked", peer,
               pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
               nSyncPeers=ctx.nSyncPeers()
@@ -254,9 +262,7 @@ template runPeer*(
           break body
 
         if error == EHeadersMissing:
-          let now = Moment.now                      # reduce logging noise
-          if ctx.pool.lastNoHdrsLog + noHeadersLogWaitInterval < now:
-            ctx.pool.lastNoHdrsLog = now
+          ctx.pool.lastNoHdrsLog.logCtrl(noHeadersLogWaitInterval):
             trace info & ": No BALs downloading, headers missing", peer,
               pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
               nSyncPeers=ctx.nSyncPeers()
@@ -265,9 +271,7 @@ template runPeer*(
           break body
 
         if error == EMissingEthContext:
-          let now = Moment.now                      # reduce logging noise
-          if ctx.pool.lastNoPeersLog + noPeersLogWaitInterval < now:
-            ctx.pool.lastNoPeersLog = now
+          ctx.pool.lastNoPeersLog.logCtrl(noPeersLogWaitInterval):
             trace info & ": No BALs supporting eth peers", peer,
               pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
               nSyncPeers=ctx.nSyncPeers()

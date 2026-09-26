@@ -46,18 +46,18 @@ type
   # below since copying it is (measurably) slow, specially during the ~2.3M
   # block height attack
   LocalParams = object
-    gas:             UInt256
-    value:           UInt256
-    codeAddress:     Address
-    sender:          Address
-    memInPos:        int
-    memInLen:        int
-    memOutPos:       int
-    memOutLen:       int
-    flags:           set[MsgFlags]
-    memOffset:       int
-    memLength:       int
-    contractAddress: Address
+    gas:           UInt256
+    value:         UInt256
+    codeAddress:   Address
+    sender:        Address
+    memInPos:      int
+    memInLen:      int
+    memOutPos:     int
+    memOutLen:     int
+    flags:         set[MsgFlags]
+    memOffset:     int
+    memLength:     int
+    currentTarget: Address
 
 proc updateStackAndParams(q: var LocalParams; c: Computation) =
   c.stack.lsTop(0)
@@ -143,12 +143,12 @@ proc callParams(c: Computation, res: var LocalParams): EvmResult[void] =
     memInLen       : c.stack.lsPeekMemRef(^5),
     memOutPos      : c.stack.lsPeekMemRef(^6),
     memOutLen      : c.stack.lsPeekMemRef(^7),
-    sender         : c.msg.contractAddress,
+    sender         : c.msg.currentTarget,
     flags          : c.msg.flags,
   )
 
   c.stack.lsShrink(6)
-  res.contractAddress = res.codeAddress
+  res.currentTarget = res.codeAddress
   res.updateStackAndParams(c)
   ok()
 
@@ -156,7 +156,7 @@ proc callParams(c: Computation, res: var LocalParams): EvmResult[void] =
 proc callCodeParams(c: Computation, res: var LocalParams): EvmResult[void] =
   ## Helper for callCodeOp()
   ? c.callParams(res)
-  res.contractAddress = c.msg.contractAddress
+  res.currentTarget = c.msg.currentTarget
   ok()
 
 
@@ -165,16 +165,16 @@ proc delegateCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
 
   ? c.stack.lsCheck(6)
   res = LocalParams(
-    gas            : c.stack.lsPeekInt(^1),
-    codeAddress    : c.stack.lsPeekAddress(^2),
-    memInPos       : c.stack.lsPeekMemRef(^3),
-    memInLen       : c.stack.lsPeekMemRef(^4),
-    memOutPos      : c.stack.lsPeekMemRef(^5),
-    memOutLen      : c.stack.lsPeekMemRef(^6),
-    value          : c.msg.value,
-    sender         : c.msg.sender,
-    flags          : c.msg.flags,
-    contractAddress: c.msg.contractAddress,
+    gas           : c.stack.lsPeekInt(^1),
+    codeAddress   : c.stack.lsPeekAddress(^2),
+    memInPos      : c.stack.lsPeekMemRef(^3),
+    memInLen      : c.stack.lsPeekMemRef(^4),
+    memOutPos     : c.stack.lsPeekMemRef(^5),
+    memOutLen     : c.stack.lsPeekMemRef(^6),
+    value         : c.msg.value,
+    sender        : c.msg.sender,
+    flags         : c.msg.flags,
+    currentTarget : c.msg.currentTarget,
   )
 
   c.stack.lsShrink(5)
@@ -194,12 +194,12 @@ proc staticCallParams(c: Computation, res: var LocalParams): EvmResult[void] =
     memOutPos      : c.stack.lsPeekMemRef(^5),
     memOutLen      : c.stack.lsPeekMemRef(^6),
     value          : 0.u256,
-    sender         : c.msg.contractAddress,
+    sender         : c.msg.currentTarget,
     flags          : {MsgFlags.Static},
   )
 
   c.stack.lsShrink(5)
-  res.contractAddress = res.codeAddress
+  res.currentTarget = res.codeAddress
   res.updateStackAndParams(c)
   ok()
 
@@ -271,7 +271,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   ?cpt.callParams(p)
 
   let
-    isNewAccount = proc(): bool = not cpt.accountExistsOrAlive(p.contractAddress)
+    isNewAccount = proc(): bool = not cpt.accountExistsOrAlive(p.currentTarget)
     params1 = GasParamsCall1(
       kind:            Call,
       nonZeroVal:      p.value.isZero.not,
@@ -349,7 +349,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
     gas:               childGasLimit,
     stateGasReservoir: stateGasReservoir,
     sender:            p.sender,
-    contractAddress:   p.contractAddress,
+    currentTarget:     p.currentTarget,
     codeAddress:       p.codeAddress,
     value:             p.value,
     flags:             p.flags)
@@ -425,7 +425,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
     gas:               childGasLimit,
     stateGasReservoir: stateGasReservoir,
     sender:            p.sender,
-    contractAddress:   p.contractAddress,
+    currentTarget:     p.currentTarget,
     codeAddress:       p.codeAddress,
     value:             p.value,
     flags:             p.flags)
@@ -495,7 +495,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
     gas:               childGasLimit,
     stateGasReservoir: stateGasReservoir,
     sender:            p.sender,
-    contractAddress:   p.contractAddress,
+    currentTarget:     p.currentTarget,
     codeAddress:       p.codeAddress,
     value:             p.value,
     flags:             p.flags)
@@ -564,7 +564,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
     gas:               childGasLimit,
     stateGasReservoir: stateGasReservoir,
     sender:            p.sender,
-    contractAddress:   p.contractAddress,
+    currentTarget:     p.currentTarget,
     codeAddress:       p.codeAddress,
     value:             p.value,
     flags:             p.flags)

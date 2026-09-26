@@ -197,6 +197,14 @@ proc getCanonicalHead*(
   let headHash = ?db.getCanonicalHeaderHash()
   db.getBlockHeader(headHash)
 
+proc getFirstBlockHash*(db: CoreDbTxRef): Result[Hash32, string] =
+  db.getHash(firstBlockHashKey())
+
+proc getFirstBlockHeader*(db: CoreDbTxRef): Result[Header, string] =
+  ## Returnes the header where history starts if the database history was
+  ## curbed. This first header returned is an ancestor of Genesis.
+  db.getBlockHeader(?db.getFirstBlockHash())
+
 proc getScore*(
     db: CoreDbTxRef;
     blockHash: Hash32;
@@ -535,6 +543,20 @@ proc setHead*(
   let canonicalHeadHash = canonicalHeadHashKey()
   var encodedHash = rlp.encode(headerHash)
   db.putMove(canonicalHeadHash.toOpenArray, encodedHash).isOkOr:
+    return err($$error)
+  ok()
+
+proc setFirstBlockHash*(
+    db: CoreDbTxRef;
+    firstHash: Hash32;
+      ): Result[void, string] =
+  ## Stores the block has of the header on the database where history starts
+  ## if it was curbed. If the argument `firstHash` referres to Genesis, an
+  ## error will be returned.
+  if firstHash == ?db.getBlockHash(BlockNumber 0):
+    return err("Genesis hash not accepted as first hash")
+  var encodedHash = rlp.encode(firstHash)
+  db.putMove(firstBlockHashKey().toOpenArray, encodedHash).isOkOr:
     return err($$error)
   ok()
 

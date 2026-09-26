@@ -36,8 +36,8 @@ template setLastPeerSeen(ctx: SnapCtxRef) =
 # Public helper
 # ------------------------------------------------------------------------------
 
-proc resetServices*(ctx: SnapCtxRef; info: static[string]) =
-  ## Initialisztion and reset/restart helper
+proc resetServices*(ctx: SnapCtxRef; info: static[string]): Opt[void] =
+  ## Initialisation and reset/restart helper
   ##
   # Initialise account range accounting
   ctx.accUnproc.init ItemKeyRangeMax
@@ -54,6 +54,14 @@ proc resetServices*(ctx: SnapCtxRef; info: static[string]) =
   ctx.pool.resetReq = false
   ctx.pool.newCoreDb[].reset
 
+  # Import and cache locally the Genesis header from `CoreDb` database
+  let
+    txFrame = ctx.chain.com.db.baseTxFrame()
+    gHdr = txFrame.getBlockHeader(BlockNumber 0).valueOr:
+      error info & ": Error fetching Genesis from CoreDb", `error`=error
+      return err()
+  ctx.pool.cacheDB.putHeader(gHdr, info)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -64,7 +72,8 @@ proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ctx.pool.cacheDB = CacheDbRef.init(ctx.pool.baseDir,info).valueOr:
     return false
 
-  ctx.resetServices info
+  ctx.resetServices(info).isOkOr:
+    return false
 
   # Set up manual beacon target request. If set, there is no point in
   # waiting for inital CL to sed updates.
