@@ -34,15 +34,15 @@ func emitSelfDestructLog*(c: Computation, beneficiary: Address, value: UInt256, 
   if value.isZero:
     return
 
-  if c.msg.contractAddress != beneficiary:
+  if c.msg.currentTarget != beneficiary:
     # SELFDESTRUCT to other → Transfer log (LOG3)
-    c.addLogEntry(createTransferLog(c.msg.contractAddress, beneficiary, value))
+    c.addLogEntry(createTransferLog(c.msg.currentTarget, beneficiary, value))
 
 func emitTransferLog*(c: Computation) =
   if c.msg.value.isZero:
     return
 
-  if c.msg.sender == c.msg.contractAddress:
+  if c.msg.sender == c.msg.currentTarget:
     return
 
-  c.addLogEntry(createTransferLog(c.msg.sender, c.msg.contractAddress, c.msg.value))
+  c.addLogEntry(createTransferLog(c.msg.sender, c.msg.currentTarget, c.msg.value))

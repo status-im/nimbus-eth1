@@ -31,6 +31,20 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc mergeGenesis(
+    tx2: CoreDbTxRef;
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[void] =
+  # Import Genesis
+  let
+    gHdr = ?db.getHeader(BlockNumber(0), info)
+    gHash = gHdr.computeBlockHash
+  tx2.persistHeader(gHash, gHdr).isOkOr:
+    error info & ": Error importing Genesis", `error`=error
+    return err()
+  ok()
+
 proc mergeCanonicalHead(
     tx2: CoreDbTxRef;
     db: CacheDbRef;
@@ -53,6 +67,9 @@ proc mergeCanonicalHead(
     startOfHist = cHdr.parentHash
   tx2.persistHeaderAndSetHead(cHash, cHdr, startOfHist).isOkOr:
     error info & ": Error setting canonical head", header=cNum, `error`=error
+    return err()
+  tx2.setFirstBlockHash(cHash).isOkOr:
+    error info & ": Error setting first hash", header=cNum, `error`=error
     return err()
   tx2.persistBlockAccessList(cHash, cBal)
 
@@ -132,6 +149,9 @@ proc importFlatImpl(
     db: CacheDbRef;
     info: static[string];
       ): Opt[AristoImportStats] =
+  # Import Genesis
+  ?tx2.mergeGenesis(db, info)
+
   # Import canonical head
   let cNum = ?tx2.mergeCanonicalHead(db, info)
 
@@ -166,6 +186,14 @@ proc importFlatImpl(
       ?tx2.mergeAccount(w.accPath, w.data.account, info)
     else:
       u.nSlots += ?tx2.mergeAccAndSto(db, w.accPath, w.data.account, info)
+
+    if w.data.account.codeHash != EMPTY_CODE_HASH:
+      let code = ?db.getFlatCode(w.accPath, info)
+      tx2.persistCodeByHash(w.data.account.codeHash, code).isOkOr:
+        error info & ": Failed storing contract code", accPath=w.accPath.toStr,
+          codeHash=w.data.account.codeHash.toStr, nCode=code.len, `error`=error
+        return ok((0,0))
+
     u.nAccounts.inc
 
   tx2.checkpoint(cNum)

@@ -1,15 +1,18 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-FROM debian:bullseye-slim AS build
+FROM debian:trixie-slim AS build
 
 RUN apt-get update \
- && apt-get install -y --fix-missing build-essential make git \
- && apt-get clean \
+ && apt-get install -y --no-install-recommends \
+      build-essential \
+      make \
+      git \
+      ca-certificates \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 ARG BRANCH_NAME=master
@@ -30,7 +33,7 @@ RUN cd nimbus-eth1 && \
 # --------------------------------- #
 # Starting new image to reduce size #
 # --------------------------------- #
-FROM debian:bullseye-slim AS deploy
+FROM debian:trixie-slim AS deploy
 
 COPY --from=build /usr/bin/nimbus_portal_client /usr/bin/nimbus_portal_client
 

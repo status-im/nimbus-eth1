@@ -53,8 +53,8 @@ proc init(
   self.blockStateGasUsed = 0
   self.gasCosts = self.fork.forkToSchedule
   self.blobGasUsed = 0'u64
-  self.allLogs.setLen(0)
-  self.gasRefunded = 0
+  self.blockLogs.setLen(0)
+  self.refundCounter = 0
   self.balTracker = tracker
 
 func blockCtx(header: Header): BlockContext =

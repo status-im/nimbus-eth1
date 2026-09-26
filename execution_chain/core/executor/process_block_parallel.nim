@@ -113,8 +113,8 @@ proc recoverAndPrefetchTask*(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.allLogs.setLen(0)
-  vmState.gasRefunded = 0
+  vmState.blockLogs.setLen(0)
+  vmState.refundCounter = 0
   vmState.balTracker = nil
 
   # Execute the transaction discarding the results in order to fill the in memory caches.
@@ -392,24 +392,24 @@ proc processTxTask(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.allLogs.setLen(0)
-  vmState.gasRefunded = 0
+  vmState.blockLogs.setLen(0)
+  vmState.refundCounter = 0
   if not ctx[].sharedBuilder.isNil():
     vmState.balTracker =
       BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
     vmState.balTracker.setBlockAccessIndex(e[].txIndex + 1)
 
-  let logResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
+  let txResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
     e[].error = SharedString.init(error)
     ctx[].cancelled.store(true, moRelease)
     return false
 
-  e[].gasUsed = logResult.gasUsed
+  e[].gasUsed = txResult.gasUsed
   e[].blockExecutionGasUsed = vmState.blockExecutionGasUsed
   e[].blockStateGasUsed = vmState.blockStateGasUsed
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
-  e[].logs = packLogs(logResult.logEntries)
+  e[].logs = packLogs(vmState.txLogs)
 
   true
 
@@ -496,16 +496,13 @@ proc processTransactionsParallel*(
           $vmState.blockExecutionGasUsed & ", stateGas=" & $vmState.blockStateGasUsed
       )
 
-    var logs = unpackLogs(entries[i].logs.data(asOpenArray = true))
-    if skipReceipts:
-      if collectLogs:
-        vmState.allLogs.add logs
-    else:
-      var callResult = LogResult(logEntries: move(logs))
+    vmState.txLogs = unpackLogs(entries[i].logs.data(asOpenArray = true))
+    if collectLogs:
+      vmState.blockLogs.add vmState.txLogs
+
+    if not skipReceipts:
       vmState.receipts[i] =
-        vmState.makeReceipt(transactions[i].txType, callResult)
-      if collectLogs:
-        vmState.allLogs.add vmState.receipts[i].logs
+        vmState.makeReceipt(transactions[i].txType)
 
   let maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.hardFork)
   if vmState.blobGasUsed > maxBlobGasPerBlock:

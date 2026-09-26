@@ -8,8 +8,6 @@ TODO
 
 See [bal_pruner](../../bal_pruner.nim)
 
-### Check whether states *SnapClear* and *SnapReady* can be merged
-
 Metrics
 -------
 

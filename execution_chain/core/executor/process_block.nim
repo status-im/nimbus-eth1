@@ -79,7 +79,7 @@ proc processTransactions*(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.allLogs.setLen(0)
+  vmState.blockLogs.setLen(0)
 
   if senders.isSome() and senders[].len != transactions.len:
     return err("Transaction public key count does not match block transactions")
@@ -100,15 +100,13 @@ proc processTransactions*(
     var rc = vmState.processTransaction(tx, sender)
     if rc.isErr:
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
-    if skipReceipts:
-      # TODO don't generate logs at all if we're not going to put them in
-      #      receipts
-      if collectLogs:
-        vmState.allLogs.add rc.value.logEntries
-    else:
-      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType, rc.value)
-      if collectLogs:
-        vmState.allLogs.add vmState.receipts[txIndex].logs
+
+    if collectLogs:
+      vmState.blockLogs.add vmState.txLogs
+
+    if not skipReceipts:
+      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
+
   ok()
 
 proc procBlkPreamble(
@@ -340,7 +338,7 @@ proc procBlkEpilogue(
     if header.requestsHash.isSome:
       let
         depositReqs =
-          ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
+          ?parseDepositLogs(vmState.blockLogs, vmState.com.depositContractAddress)
         requestsHash = if vmState.com.isAmsterdamOrLater(header.timestamp):
             calcRequestsHash(
               [

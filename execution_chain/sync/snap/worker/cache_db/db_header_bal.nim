@@ -19,13 +19,27 @@
 ##   + number:   `BlockNumber`
 ##   + header:   `Header`
 ##
+## * last header:
+##   + key1: <col>
+##   + value: <number>
+##   where
+##   + col:      `cLastHeader`
+##   + number:   `BlockNumber`
+##
 ## * block access lists:
-##   + key9: <col, number>
+##   + key9: <col>
 ##   + value: <bal>
 ##   where
 ##   + col:      `cBal`
 ##   + number:   `BlockNumber`
 ##   + bal:      `BlockAccessList`
+##
+## * last block access lists:
+##   + key1: <col>
+##   + value: <number>
+##   where
+##   + col:      `cLastHeader`
+##   + number:   `BlockNumber`
 ##
 
 {.push raises: [].}
@@ -63,14 +77,14 @@ proc getBlockHash*(db: CacheDbRef, number: BlockNumber): OptHashResult =
   ok Opt.some(hdr.unsafeGet.computeBlockHash)
 
 proc lastHeader*(db: CacheDbRef): OptHeaderResult =
-  let data = db.get9(cHeader, 0u64).valueOr:
+  let data = db.get1(cLastHeader).valueOr:
     return err(error)
   if data.len != 8:
     return err("")
   db.getHeader uint64.fromBytesBE data
 
 proc lastHeaderNumber*(db: CacheDbRef): OptNumberResult =
-  let data = db.get9(cHeader, 0u64).valueOr:
+  let data = db.get1(cLastHeader).valueOr:
     return err(error)
   if data.len != 8:
     return ok(Opt.none(BlockNumber))
@@ -79,15 +93,7 @@ proc lastHeaderNumber*(db: CacheDbRef): OptNumberResult =
 proc putHeader*(db: CacheDbRef, header: Header): PutResult =
   db.put9(cHeader, header.number, header.encodeHeader()).isOkOr:
     return err(error)
-  db.put9(cHeader, 0u64, uint64(header.number).toBytesBE()).isOkOr:
-    return err(error)
-  ok()
-
-proc putHeader*(db: CacheDbRef, headers: openArray[Header]): PutResult =
-  for h in headers:
-    db.put9(cHeader, h.number, h.encodeHeader()).isOkOr:
-      return err(error)
-  db.put9(cHeader, 0u64, uint64(headers[^1].number).toBytesBE()).isOkOr:
+  db.put1(cLastHeader, uint64(header.number).toBytesBE()).isOkOr:
     return err(error)
   ok()
 
@@ -124,7 +130,7 @@ proc getBal*(db: CacheDbRef, number: BlockNumber): OptBalResult =
   ok(Opt.some(bal))
 
 proc lastBalNumber*(db: CacheDbRef): OptNumberResult =
-  let data = db.get9(cBal, 0u64).valueOr:
+  let data = db.get1(cLastBal).valueOr:
     return err(error)
   if data.len != 8:
     return ok(Opt.none(BlockNumber))
@@ -137,7 +143,7 @@ proc putBal*(
       ): PutResult =
   db.put9(cBal, number, bal.encodeBal()).isOkOr:
     return err(error)
-  db.put9(cBal, 0u64, uint64(number).toBytesBE()).isOkOr:
+  db.put1(cLastBal, uint64(number).toBytesBE()).isOkOr:
     return err(error)
   ok()
 

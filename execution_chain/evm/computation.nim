@@ -66,7 +66,7 @@ template getOrigin*(c: Computation): Address =
   c.vmState.txCtx.origin
 
 template getGasPrice*(c: Computation): GasInt =
-  c.vmState.txCtx.gasPrice
+  c.vmState.txCtx.effectiveGasPrice
 
 template getVersionedHash*(c: Computation, index: int): VersionedHash =
   c.vmState.txCtx.tx.versionedHashes[index]
@@ -101,8 +101,8 @@ template accountExistsOrAlive*(c: Computation, address: Address): bool =
 
 template getStorage*(c: Computation, slot: UInt256): UInt256 =
   if c.balTrackerEnabled:
-    c.vmState.balTracker.trackStorageRead(c.msg.contractAddress, slot)
-  c.vmState.readOnlyLedger.getStorage(c.msg.contractAddress, slot)
+    c.vmState.balTracker.trackStorageRead(c.msg.currentTarget, slot)
+  c.vmState.readOnlyLedger.getStorage(c.msg.currentTarget, slot)
 
 template getBalance*(c: Computation, address: Address): UInt256 =
   if c.balTrackerEnabled:
@@ -133,12 +133,12 @@ template getCode*(c: Computation, address: Address): CodeBytesRef =
   c.vmState.readOnlyLedger.getCode(address)
 
 template setTransientStorage*(c: Computation, slot, val: UInt256) =
-  c.transientStorage.setStorage(c.msg.contractAddress, slot, val)
+  c.transientStorage.setStorage(c.msg.currentTarget, slot, val)
 
 func getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
   var cpt = c
   while cpt != nil:
-    let (ok, res) = cpt.transientStorage.getStorage(c.msg.contractAddress, slot)
+    let (ok, res) = cpt.transientStorage.getStorage(c.msg.currentTarget, slot)
     if ok:
       return res
     cpt = cpt.parent
@@ -247,13 +247,13 @@ proc accountDeployable*(c: Computation): bool =
   # Even if the creation fails, the access-list change should not be rolled
   # back EIP2929
   if c.fork >= FkBerlin:
-    c.vmState.ledger.accessList(c.msg.contractAddress)
+    c.vmState.ledger.accessList(c.msg.currentTarget)
 
   if c.balTrackerEnabled:
-    c.vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
+    c.vmState.balTracker.trackAddressAccess(c.msg.currentTarget)
 
-  if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
-    let blurb = c.msg.contractAddress.toHex
+  if c.vmState.readOnlyLedger().contractCollision(c.msg.currentTarget):
+    let blurb = c.msg.currentTarget.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
     return false
 
@@ -261,7 +261,7 @@ proc accountDeployable*(c: Computation): bool =
 
 proc writeContract*(c: Computation) =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
-    tracer args, newContract=($c.msg.contractAddress),
+    tracer args, newContract=($c.msg.currentTarget),
       blockNumber=c.vmState.blockNumber,
       parentHash=($c.vmState.parent.computeBlockHash)
 
@@ -324,8 +324,8 @@ proc writeContract*(c: Computation) =
 
     c.vmState.mutateLedger:
       if c.balTrackerEnabled:
-        c.vmState.balTracker.trackCodeChange(c.msg.contractAddress, c.output)
-      ledger.setCode(c.msg.contractAddress, c.output)
+        c.vmState.balTracker.trackCodeChange(c.msg.currentTarget, c.output)
+      ledger.setCode(c.msg.currentTarget, c.output)
     withExtra trace, "Writing new contract code"
     return
 
@@ -354,15 +354,15 @@ template chainTo*(cpt: Computation,
 
 proc execSelfDestruct*(c: Computation, beneficiary: Address) =
   c.vmState.mutateLedger:
-    let localBalance = c.getBalance(c.msg.contractAddress)
+    let localBalance = c.getBalance(c.msg.currentTarget)
     var newContract = false
 
     # Register the account to be deleted
     if c.fork >= FkCancun:
       # Zeroing contract balance except beneficiary is the same address
       if c.balTrackerEnabled:
-        c.vmState.balTracker.trackSubBalanceChange(c.msg.contractAddress, localBalance)
-      ledger.subBalance(c.msg.contractAddress, localBalance)
+        c.vmState.balTracker.trackSubBalanceChange(c.msg.currentTarget, localBalance)
+      ledger.subBalance(c.msg.currentTarget, localBalance)
 
       # Transfer to beneficiary
       if c.balTrackerEnabled:
@@ -370,43 +370,43 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
       ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
 
       newContract = if c.fork >= FkAmsterdam:
-                      ledger.selfDestruct8246(c.msg.contractAddress)
+                      ledger.selfDestruct8246(c.msg.currentTarget)
                     else:
-                      ledger.selfDestruct6780(c.msg.contractAddress)
+                      ledger.selfDestruct6780(c.msg.currentTarget)
       if c.balTrackerEnabled and newContract:
-        c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.contractAddress)
+        c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.currentTarget)
 
       if c.fork >= FkAmsterdam:
         c.emitSelfDestructLog(beneficiary, localBalance, newContract)
     else:
       # Transfer to beneficiary
       ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
-      ledger.selfDestruct(c.msg.contractAddress)
+      ledger.selfDestruct(c.msg.currentTarget)
 
     trace "SELFDESTRUCT",
-      contractAddress = c.msg.contractAddress.toHex,
+      currentTarget = c.msg.currentTarget.toHex,
       localBalance = localBalance.toString,
       beneficiary = beneficiary.toHex
 
 func merge*(c, child: Computation) =
   c.logEntries.mergeAndReset(child.logEntries)
   c.transientStorage.mergeAndReset(child.transientStorage)
-  c.gasMeter.refundGas(child.gasMeter.gasRefunded)
+  c.gasMeter.refundGas(child.gasMeter.refundCounter)
 
-# some gasRefunded operations still relying
+# some refundCounter operations still relying
 # on negative number
 func getGasRefund*(c: Computation): GasInt =
   # EIP-2183 guarantee that sum of all child gasRefund
   # should never go below zero
-  doAssert(c.msg.depth == 0 and c.gasMeter.gasRefunded >= 0)
-  var gasRefunded = c.vmState.gasRefunded
+  doAssert(c.msg.depth == 0 and c.gasMeter.refundCounter >= 0)
+  var refundCounter = c.vmState.refundCounter
   if c.isSuccess:
-    gasRefunded += c.gasMeter.gasRefunded
+    refundCounter += c.gasMeter.refundCounter
 
-  GasInt gasRefunded
+  GasInt refundCounter
 
 func addRefund*(c: Computation, amount: int64) =
-  c.vmState.gasRefunded += amount
+  c.vmState.refundCounter += amount
 
 # Using `proc` as `selfDestructLen()` might be `proc` in logging mode
 proc refundSelfDestruct*(c: Computation) =
@@ -437,7 +437,7 @@ func traceOpCodeEnded*(c: Computation, op: Op, opIndex: int) =
     c.code.pc - 1,
     op,
     c.gasMeter.executionGasLeft,
-    c.gasMeter.gasRefunded,
+    c.gasMeter.refundCounter,
     c.returnData,
     c.msg.depth + 1,
     opIndex)
@@ -448,7 +448,7 @@ func traceError*(c: Computation) =
     c.code.pc - 1,
     c.instr,
     c.gasMeter.executionGasLeft,
-    c.gasMeter.gasRefunded,
+    c.gasMeter.refundCounter,
     c.returnData,
     c.msg.depth + 1,
     c.errorOpt)

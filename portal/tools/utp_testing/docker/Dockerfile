@@ -1,5 +1,5 @@
 # Portal
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -8,11 +8,14 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-FROM debian:bullseye-slim AS build
+FROM debian:trixie-slim AS build
 
 RUN apt-get update \
- && apt-get install -y --fix-missing build-essential make git libpcre3-dev librocksdb-dev \
- && apt-get clean \
+ && apt-get install -y --no-install-recommends \
+      build-essential \
+      make \
+      git \
+      ca-certificates \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 ARG BRANCH_NAME=master
@@ -28,11 +31,10 @@ RUN cd nimbus-eth1 && \
     make -j${NPROC} NIMFLAGS="--parallelBuild:${NPROC}" utp-test-app && \
     mv build/utp_test_app /bin/
 
-FROM debian:bullseye-slim AS deploy
+FROM debian:trixie-slim AS deploy
 
 RUN apt-get update \
- && apt-get install -y ethtool net-tools \
- && apt-get clean \
+ && apt-get install -y --no-install-recommends ethtool net-tools \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 COPY --from=build /bin/utp_test_app /bin/utp_test_app
