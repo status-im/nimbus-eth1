@@ -37,6 +37,9 @@ proc lastFcuStr(ctx: BeaconCtxRef): string =
 
 proc statusLog(ctx: BeaconCtxRef) =
   ## Periodic status message, the only one issued also when nothing happens
+  logScope:
+    topics = "ticker"
+
   let now = Moment.now()
   if now < ctx.pool.lastStatusLog + statusLogInterval:
     return
