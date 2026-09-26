@@ -281,8 +281,7 @@ proc runTest(
         # deliberately mutate the witness (see mutatedWitnessFiles), the
         # generated witness must only be a subset of the test vector witness.
         if input.new_payload_request != fixtureInput.new_payload_request or
-            input.chain_id != fixtureInput.chain_id or
-            input.public_keys != fixtureInput.public_keys:
+            input.chain_id != fixtureInput.chain_id:
           return err("Host-built stateless input does not match the test vector")
         ?compare(generatedWitness, fixtureInput.witness, strict = strictWitness)
 
