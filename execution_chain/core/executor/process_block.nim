@@ -100,15 +100,13 @@ proc processTransactions*(
     var rc = vmState.processTransaction(tx, sender)
     if rc.isErr:
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
-    if skipReceipts:
-      # TODO don't generate logs at all if we're not going to put them in
-      #      receipts
-      if collectLogs:
-        vmState.blockLogs.add vmState.txLogs
-    else:
+
+    if collectLogs:
+      vmState.blockLogs.add vmState.txLogs
+
+    if not skipReceipts:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
-      if collectLogs:
-        vmState.blockLogs.add vmState.receipts[txIndex].logs
+
   ok()
 
 proc procBlkPreamble(
