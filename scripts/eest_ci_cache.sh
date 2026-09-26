@@ -15,7 +15,7 @@ FIXTURES_DIR="${REPO_DIR}/tests/fixtures"
 
 # --- Mainnet Release ---
 EEST_MAINNET_NAME="mainnet"
-EEST_MAINNET_VERSION="v20.0.2"
+EEST_MAINNET_VERSION="v21.0.0"
 EEST_MAINNET_DIR="${FIXTURES_DIR}/eest_mainnet"
 EEST_MAINNET_ARCHIVE="fixtures.tar.gz"
 EEST_MAINNET_URL="https://github.com/ethereum/execution-specs/releases/download/tests%40${EEST_MAINNET_VERSION}/${EEST_MAINNET_ARCHIVE}"
@@ -29,7 +29,7 @@ EEST_DEVNET_URL="https://github.com/ethereum/execution-specs/releases/download/$
 
 # --- zkevm Release ---
 EEST_ZKEVM_NAME="tests-zkevm"
-EEST_ZKEVM_VERSION="v0.8.4"
+EEST_ZKEVM_VERSION="v21.0.0"
 EEST_ZKEVM_DIR="${FIXTURES_DIR}/eest_zkevm"
 EEST_ZKEVM_ARCHIVE="fixtures_zkevm.tar.gz"
 EEST_ZKEVM_URL="https://github.com/ethereum/execution-specs/releases/download/${EEST_ZKEVM_NAME}%40${EEST_ZKEVM_VERSION}/${EEST_ZKEVM_ARCHIVE}"
