@@ -300,7 +300,7 @@ proc exec(ctx: TransContext,
       )
       continue
 
-    let rec = vmState.makeReceipt(tx.txType, rc.value)
+    let rec = vmState.makeReceipt(tx.txType)
     vmState.receipts.add rec
     receipts.add toTxReceipt(
       rec, tx, sender, txIndex, rc.value.gasUsed
