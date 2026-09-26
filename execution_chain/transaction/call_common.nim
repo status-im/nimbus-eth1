@@ -223,6 +223,11 @@ proc finishRunningComputation(
   # evm gas used without intrinsic gas
   c.vmState.captureEnd(c, c.output, gasUsed.evmGasUsed, c.errorOpt)
 
+  if c.isSuccess:
+    c.vmState.txLogs = move(c.logEntries)
+  else:
+    c.vmState.txLogs.setLen(0)
+
   when T is CallResult|DebugCallResult:
     # Collecting the result can be unnecessarily expensive when (re)-processing
     # transactions
@@ -236,14 +241,10 @@ proc finishRunningComputation(
     when T is DebugCallResult:
       result.stack = move(c.finalStack)
       result.memory = move(c.memory)
-      if c.isSuccess:
-        result.logEntries = move(c.logEntries)
-  elif T is LogResult:
+  elif T is TxResult:
     result.gasUsed = gasUsed.txGasUsed
     result.blockExecutionGasUsed = gasUsed.blockExecutionGasUsed
     result.blockStateGasUsed = gasUsed.blockStateGasUsed
-    if c.isSuccess:
-      result.logEntries = move(c.logEntries)
   elif T is VoidResult:
     discard
   else:

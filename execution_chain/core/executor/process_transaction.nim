@@ -37,7 +37,7 @@ proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
     savePoint: LedgerSpRef;
     tx: Transaction;
-    callResult: var LogResult;
+    callResult: var TxResult;
     blobGasUsed: GasInt;
     rollbackReads: bool;
       ): Result[void, string] =
@@ -145,7 +145,7 @@ proc processTransaction*(
     sender:  Address;  ## tx.recoverSender
     rollbackReads: bool = false;
     persist = true;
-      ): Result[LogResult, string] =
+      ): Result[TxResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framework for EIP1559.
 
