@@ -65,9 +65,8 @@ proc deleteBlockAccessListsBe*(
 ) =
   {.warning: "deleteBlockAccessListsBe: use batch write".}
   for blockHash in blockHashes:
-    kvt.put(
-      blockHashToBlockAccessListKey(blockHash).toOpenArray,
-      default(seq[byte])).expect("no error")
+    kvt.del(blockHashToBlockAccessListKey(blockHash).toOpenArray).
+      expect("delete block access list")
   kvt.put(balTailKey().toOpenArray, tail.toBytesLE()).expect("no error")
 
 # ------------------------------------------------------------------------------

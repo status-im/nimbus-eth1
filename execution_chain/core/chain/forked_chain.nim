@@ -16,7 +16,7 @@ import
   results,
   chronos,
   ../../common,
-  ../../db/[core_db, fcu_db, payload_body_db],
+  ../../db/[core_db, fcu_db, payload_body_db, tx_frame_db],
   ../../evm/types,
   ../../evm/state,
   ../validate,
@@ -27,6 +27,7 @@ import
     chain_desc,
     chain_branch,
     chain_private,
+    chain_db,
     block_quarantine]
 
 from std/sequtils import mapIt
@@ -235,6 +236,8 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
 proc updateHead(c: ForkedChainRef, head: BlockRef) =
   ## Update head if the new head is different from current head.
 
+  head.txFrame.invalidateFcSnapshot().expect("invalidate FC snapshot")
+  c.writeCanonicalMappings(head)
   c.fcuSetHead(head.txFrame,
     head.header,
     head.hash,
@@ -254,7 +257,13 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
   # 'C' will be removed
 
   let txFrame = finalized.txFrame
+  txFrame.invalidateFcSnapshot().expect("invalidate FC snapshot")
   txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
+
+  # Pin canonical payloads before releasing references from dead forks.
+  for it in loopNotFinalized(finalized):
+    txFrame.finalizeBlockData(it.header)
+    it.finalize()
 
   # There is no point running this expensive algorithm
   # if the chain have no branches, just move it forward.
@@ -267,9 +276,18 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
       it = it.parent
     it == fin
 
-  # Only finalized segment have finalized marker
-  for it in loopNotFinalized(finalized):
-    it.finalize()
+  # A transaction can appear on both a dead fork and a surviving descendant
+  # of finalized. Restore surviving locations before deleting dead lookups;
+  # the selected head's lineage takes precedence when there is a choice.
+  var visited = initHashSet[Hash32]()
+  for head in c.heads:
+    if reachable(head, finalized):
+      for it in loopNotFinalized(head):
+        if it.hash in visited:
+          break
+        visited.incl it.hash
+        c.writeTransactionMappings(it)
+  c.writeCanonicalMappings(fcuHead)
 
   var
     i = 0
@@ -285,6 +303,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
         if it.txFrame.isNil:
           # Has been deleted by previous branch
           break
+        c.deleteBlockData(it)
         c.removeBlockFromCache(it)
 
       if head == c.latest:
@@ -351,6 +370,8 @@ something else needs attention! Shutting down to preserve the database - restart
 with --debug-eager-state-root."""
 
   base.txFrame.checkpoint(base.number, skipSnapshot = true)
+  base.txFrame.invalidateFcSnapshot().expect("invalidate FC snapshot")
+  c.writeCanonicalMappings(base)
   c.com.db.persist(base.txFrame)
 
   # Update baseTxFrame when we about to yield to the event loop
@@ -362,12 +383,14 @@ with --debug-eager-state-root."""
   var count = 0'u
 
   for it in ancestors(base.parent):
+    base.txFrame.deleteTxFrame(it.hash).expect("delete persisted frame")
     c.removeBlockFromCache(it)
     inc count
 
   # Update base branch
   c.base = base
   c.base.parent = nil
+  base.txFrame.deleteTxFrame(base.hash).expect("delete base frame blob")
 
   # Base block always have finalized marker
   c.base.finalize()
@@ -675,10 +698,8 @@ proc init*(
   ## This state coincides with the canonical head that would be used for
   ## setting up the descriptor.
   ##
-  ## With `ForkedChainRef` based import, the canonical state lives only inside
-  ## a level one database transaction. Thus it will readily be available on the
-  ## running system with tools such as `getCanonicalHead()`. But it will never
-  ## be saved on the database.
+  ## The persisted Aristo checkpoint selects the base. KVT is shared by all
+  ## frames, so its current head marker may refer to a newer in-memory block.
   ##
   ## This constructor also works well when resuming import after running
   ## `persistentBlocks()` used for `Era1` or `Era` import.
