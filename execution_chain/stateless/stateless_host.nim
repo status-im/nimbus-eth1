@@ -11,9 +11,8 @@
 
 import
   results,
-  secp256k1,
   stew/[endians2, sequtils2],
-  eth/common/[blocks, eth_types_rlp, hashes, keys, transaction_utils],
+  eth/common/[blocks, eth_types_rlp, hashes],
   ./stateless_types
 
 from beacon_chain/spec/datatypes/gloas import ExecutionPayload, ExecutionRequests
@@ -28,19 +27,6 @@ export stateless_types, results
 ## Stateless host interfaces
 ## Spec:
 ## https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless_host.py#L1
-
-## https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/transactions.py#L882
-func recover_transaction_public_key*(
-    tx: Transaction
-): Opt[ByteVector[PUBLIC_KEY_BYTES]] =
-  ## Recover the canonical uncompressed SEC1 public key for a transaction.
-  ##
-  ## Returns `none` for an invalid signature.
-  let key = tx.recoverKey().valueOr:
-    return Opt.none(ByteVector[PUBLIC_KEY_BYTES])
-  # Use the secp256k1 serialization as it has the full uncompressed
-  # SEC1 form. PublicKey.toRaw (nim-eth) strips the 0x04 prefix.
-  Opt.some(ByteVector[PUBLIC_KEY_BYTES](SkPublicKey(key).toRaw()))
 
 func serialize_stateless_input*(stateless_input: StatelessInput): seq[byte] =
   ## Serialize a StatelessInput to schema-prefixed SSZ bytes.
@@ -95,22 +81,12 @@ func build_stateless_input*(
 
   let block_hash = header.computeBlockHash
 
-  # Encode transactions to bytes, recover public keys, and collect the
-  # versioned hashes.
+  # Encode transactions to bytes and collect the versioned hashes.
   var
     transactions = newSeqOfCap[gloas.Transaction](blk.transactions.len)
-    public_keys: seq[ByteVector[PUBLIC_KEY_BYTES]]
     versioned_hashes: seq[Digest]
   for tx in blk.transactions:
     transactions.add(gloas.Transaction.init(rlp.encode(tx)))
-
-    let public_key = recover_transaction_public_key(tx).valueOr:
-      # Skip transactions without a recoverable key (invalid signature values).
-      # This is similar to the spec where they skip transactions that fail to
-      # decode. However, our block already holds the decoded transaction objects,
-      # so invalid signature is the only failure that can occur here still.
-      continue
-    public_keys.add(public_key)
 
     if tx.txType == TxEip4844:
       for versioned_hash in tx.versionedHashes:
@@ -161,7 +137,6 @@ func build_stateless_input*(
       new_payload_request: new_payload,
       witness: execution_witness,
       chain_id: chain_id,
-      public_keys: public_keys,
     )
   )
 

@@ -30,7 +30,6 @@ const
   MAX_BYTES_PER_HEADER* = 1 shl 10 # 2^10
   MAX_BYTES_PER_WITNESS_NODE* = 1 shl 10 # 2^10
   MAX_OPTIONAL_FORK_ACTIVATION_VALUES* = 1
-  PUBLIC_KEY_BYTES* = 65
 
   # We should be using the HardFork enum value for Amsterdam from hardforks.nim
   # but BPO1-BPO5 are already defined there, while in the execution-specs tag
@@ -70,7 +69,6 @@ type
     new_payload_request*: NewPayloadRequest
     witness*: ExecutionWitness
     chain_id*: uint64
-    public_keys*: seq[ByteVector[PUBLIC_KEY_BYTES]]
 
   StatelessValidationResult* = object
     new_payload_request_root*: Digest
