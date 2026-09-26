@@ -60,6 +60,10 @@ type
 
     lastBaseLogTime*: EthTime
 
+    lastFcuTime*: EthTime
+      # Time of the latest forkchoice update request from the `CL`, zero if
+      # none was received yet. Only used for status logging.
+
     persistedCount*: uint
       # Count how many blocks persisted when `baseQueue`
       # consumed.

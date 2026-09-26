@@ -271,6 +271,12 @@ proc delayPayloadImport*(
     # Stash the block away for a potential forced forkchoice update to it
     # at a later time.
     ben.chain.quarantine.addOrphan(blockHash, blk, blockAccessList)
+    info "New payload with unknown parent, syncing",
+      number = blk.header.number,
+      hash = blockHash.short,
+      parent = blk.header.parentHash.short,
+      head = ben.chain.latestNumber,
+      distance = int64(blk.header.number) - int64(ben.chain.latestNumber)
     return PayloadStatusV1(status: PayloadExecutionStatus.syncing)
 
 func latestFork*(ben: BeaconEngineRef): HardFork =
