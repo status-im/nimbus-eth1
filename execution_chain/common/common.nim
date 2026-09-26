@@ -184,7 +184,6 @@ proc initializeDb(com: CommonRef) =
     txFrame.checkpoint(com.genesisHeader.number)
     com.db.persist(txFrame)
 
-
   # The database must at least contain the base and head pointers - the base
   # is implicitly considered finalized
   let
@@ -201,10 +200,18 @@ proc initializeDb(com: CommonRef) =
       debug "Reverting to base", err = error
       FcuHashAndNumber(hash: baseHash, number: base.number)
 
+  # Check for truncated history
+  var sohNum = BlockNumber(0)
+  txFrame.getFirstBlockHeader().isErrOr:
+    doAssert 0 < value.number
+    com.startOfHistory = value.parentHash
+    sohNum = value.number - 1
+
   info "Database initialized",
     base = (baseHash, base.number),
     finalized = (finalized.hash, finalized.number),
-    head = (head.hash, head.number)
+    head = (head.hash, head.number),
+    startOfHistory = sohNum
 
 proc init(com         : CommonRef,
           db          : CoreDbRef,
@@ -231,7 +238,6 @@ proc init(com         : CommonRef,
 
   # com.forkIdCalculator and com.genesisHash are set
   # by setForkId
-  let txFrame = db.baseTxFrame()
   if genesis.isNil.not:
     let
       forkDeterminer = ForkDeterminationInfo(
@@ -240,6 +246,7 @@ proc init(com         : CommonRef,
         time: Opt.some(genesis.timestamp)
       )
       fork = toHardFork(com.forkTransitionTable, forkDeterminer)
+      txFrame = db.baseTxFrame()
 
     # Must not overwrite the global state on the single state DB
 
@@ -253,11 +260,6 @@ proc init(com         : CommonRef,
 
   if initializeDb:
     com.initializeDb()
-
-  # Check for truncated history
-  txFrame.getFirstBlockHeader().isErrOr:
-    doAssert 0 < value.number
-    com.startOfHistory = value.parentHash
 
   com.statelessProvider = statelessProvider
   com.statelessWitnessValidation = statelessWitnessValidation
