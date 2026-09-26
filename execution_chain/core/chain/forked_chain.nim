@@ -728,6 +728,43 @@ proc init*(
 
   fc
 
+proc refresh*(fc: ForkedChainRef, eagerStateRoot = false) =
+  ## Flush internal caches and reassign database.
+  let newFc = ForkedChainRef.init(
+    com = fc.com,
+    baseDistance = fc.baseDistance,
+    persistBatchSize = fc.persistBatchSize,
+    dynamicBatchSize = fc.dynamicBatchSize,
+    eagerStateRoot)                                 # seems to be unused, though
+
+  newFc.queue = fc.queue                            # save temporarily
+  newFc.processingQueueLoop = fc.processingQueueLoop
+  fc[].reset                                        # clear desctiptor
+
+  # Copy base settings
+  fc.com = newFc.com
+  fc.base = newFc.base
+  fc.latest = newFc.latest
+  fc.heads = newFc.heads
+  fc.hashToBlock = newFc.hashToBlock
+  fc.baseTxFrame = newFc.baseTxFrame
+  fc.baseDistance = newFc.baseDistance
+  fc.persistBatchSize = newFc.persistBatchSize
+  fc.dynamicBatchSize = newFc.dynamicBatchSize
+  fc.quarantine = newFc.quarantine
+  fc.fcuHead = newFc.fcuHead
+  fc.fcuSafe = newFc.fcuSafe
+  fc.baseQueue = newFc.baseQueue
+  fc.lastBaseLogTime = newFc.lastBaseLogTime
+  fc.badBlocks = newFc.badBlocks
+
+  # Enable queue (if any)
+  fc.queue = newFc.queue
+  fc.processingQueueLoop = newFc.processingQueueLoop
+
+  # Force GC to clean up
+  newFc[].reset
+
 proc importBlock*(
     c: ForkedChainRef,
     blk: Block,

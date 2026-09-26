@@ -305,6 +305,9 @@ func hardFork*(xp: TxPoolRef): HardFork =
 template chain*(xp: TxPoolRef): ForkedChainRef =
   xp.chain
 
+template flags*(xp: TxPoolRef): set[TxPoolFlags] =
+  xp.flags
+
 template com*(xp: TxPoolRef): CommonRef =
   xp.chain.com
 

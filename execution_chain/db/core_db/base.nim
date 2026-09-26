@@ -93,9 +93,10 @@ proc close*(db: CoreDbRef; wipe = false) =
   ## Otherwise the destructor is allowed to remove the database. This feature
   ## depends on the backend database. Currently, only the `AristoDbRocks` type
   ## backend removes the database on `true`.
-
-  db.kvt.close(wipe)
-  db.mpt.close(wipe)
+  if not db.kvt.isNil:
+    db.kvt.close(wipe)
+    db.mpt.close(wipe)
+    db[].reset
 
 proc `$$`*(e: CoreDbError): string =
   ## Pretty print error symbol
