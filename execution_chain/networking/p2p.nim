@@ -41,6 +41,7 @@ proc newEthereumNode*(
     bindTcpPort: Port,
     bindIp = IPv6_any(),
     rng = newRng(),
+    enableDiscV5 = true,
     forkIdProcs = ForkIdProcs()): EthereumNode =
 
   if rng == nil: # newRng could fail
@@ -52,8 +53,13 @@ proc newEthereumNode*(
       tcpPort: enrTcpPort.valueOr(bindTcpPort),
       udpPort: enrUdpPort.valueOr(bindUdpPort),
     )
-    discovery = Eth1Discovery.new(
-      keys.seckey, enrIp, enrTcpPort, enrUdpPort, bootstrapNodes, bindUdpPort, bindIp, rng, forkIdProcs.compatibleForkId)
+    discovery =
+      if enableDiscV5:
+        Eth1Discovery.new(
+          keys.seckey, enrIp, enrTcpPort, enrUdpPort, bootstrapNodes,
+          bindUdpPort, bindIp, rng, forkIdProcs.compatibleForkId)
+      else:
+        nil
     node = EthereumNode(
       keys: keys,
       networkId: networkId,
@@ -98,9 +104,7 @@ proc startListening*(node: EthereumNode) {.raises: [TransportOsError].} =
 
 proc connectToNetwork*(
     node: EthereumNode,
-    startListening = true,
-    enableDiscV4 = true,
-    enableDiscV5 = true) =
+    startListening = true) =
   doAssert node.connectionState == ConnectionState.None
 
   node.connectionState = Connecting
@@ -112,8 +116,8 @@ proc connectToNetwork*(
       fatal "Cannot start listening server", msg=exc.msg
       quit(QuitFailure)
 
-  if enableDiscV4 or enableDiscV5:
-    node.peerPool.start(enableDiscV4, enableDiscV5)
+  if node.peerPool.eth1Discovery != nil:
+    node.peerPool.start()
   else:
     info "Discovery disabled"
 
