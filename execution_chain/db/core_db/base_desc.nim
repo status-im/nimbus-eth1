@@ -55,7 +55,7 @@ type
   CoreDbTxRef* = ref object
     ## Transaction descriptor
     aTx*: AristoTxRef           ## `Aristo` transaction (if any)
-    kTx*: KvtTxRef              ## `KVT` transaction (if any)
+    kvt*: KvtDbRef              ## `KVT` transaction (if any)
 
   CoreDbError* = object
     ## Generic error object

@@ -27,7 +27,6 @@
 
 import
   std/[tables, sets],
-  chronicles,
   results,
   stew/byteutils,
   ./init_common,
@@ -37,28 +36,12 @@ type
   MemBackendRef* = ref object of TypedBackendRef
     tab: Table[seq[byte],seq[byte]]  ## Structural key-value table
 
-  MemPutHdlRef = ref object of TypedPutHdlRef
-    tab: Table[seq[byte],seq[byte]]
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template logTxt(info: static[string]): static[string] =
-  "MemoryDB " & info
-
-
-proc newSession(db: MemBackendRef): MemPutHdlRef =
-  new result
-  result.TypedPutHdlRef.beginSession db
-
-proc getSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
-  hdl.TypedPutHdlRef.verifySession db
-  hdl.MemPutHdlRef
-
-proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
-  hdl.TypedPutHdlRef.finishSession db
-  hdl.MemPutHdlRef
+func getOrVoid(tab: Table[seq[byte], seq[byte]], w: seq[byte]): seq[byte] =
+  tab.getOrDefault(w, EmptyBlob)
 
 # ------------------------------------------------------------------------------
 # Private functions: interface
@@ -105,32 +88,12 @@ proc multiGetKvpFn(db: MemBackendRef): MultiGetKvpFn =
 
 # -------------
 
-proc putBegFn(db: MemBackendRef): PutBegFn =
-  result =
-    proc(): Result[PutHdlRef,KvtError] =
-      ok db.newSession()
-
 proc putKvpFn(db: MemBackendRef): PutKvpFn =
   result =
-    proc(hdl: PutHdlRef; k, v: openArray[byte]) =
-      let hdl = hdl.getSession db
-      if hdl.error == KvtError(0):
-        if k.len > 0:
-          hdl.tab[@k] = @v
-        else:
-          hdl.tab.del @k
-
-proc putEndFn(db: MemBackendRef): PutEndFn =
-  result =
-    proc(hdl: PutHdlRef): Result[void,KvtError] =
-      let hdl = hdl.endSession db
-      if hdl.error != KvtError(0):
-        debug logTxt "putEndFn: key/value failed", error=hdl.error
-        return err(hdl.error)
-
-      for k, v in hdl.tab:
-        db.tab[k] = v
-
+    proc(key, val: openArray[byte]): Result[void, KvtError] =
+      if key.len == 0:
+        return err(KeyInvalid)
+      db.tab[@key] = @val
       ok()
 
 # -------------
@@ -189,9 +152,7 @@ proc memoryBackend*: KvtDbRef =
   db.lenKvpFn = lenKvpFn be
   db.multiGetKvpFn = multiGetKvpFn be
 
-  db.putBegFn = putBegFn be
   db.putKvpFn = putKvpFn be
-  db.putEndFn = putEndFn be
 
   db.delKvpFn = delKvpFn(be)
   db.delRangeKvpFn = delRangeKvpFn(be)
