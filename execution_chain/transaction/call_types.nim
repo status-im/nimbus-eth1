@@ -42,10 +42,8 @@ type
   DebugCallResult* = object of CallResult
     stack*:      seq[UInt256]           # EVM stack on return (for test only).
     memory*:     EvmMemory              # EVM memory on return (for test only).
-    logEntries*: seq[Log]
 
-  LogResult* = object
-    logEntries*: seq[Log]
+  TxResult* = object
     gasUsed*: GasInt
     blockExecutionGasUsed*: GasInt
     blockStateGasUsed*: GasInt

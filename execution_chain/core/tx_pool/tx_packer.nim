@@ -228,8 +228,8 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   if vmState.receipts.len <= inx:
     vmState.receipts.setLen(inx + receiptsExtensionSize)
 
-  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType, rc.value)
-  vmState.blockLogs.add vmState.receipts[inx].logs
+  vmState.blockLogs.add vmState.txLogs
+  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
 
   pst.packedTxs.add item
   pst.numBlobPerBlock += item.tx.versionedHashes.len

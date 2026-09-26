@@ -300,7 +300,10 @@ proc exec(ctx: TransContext,
       )
       continue
 
-    let rec = vmState.makeReceipt(tx.txType, rc.value)
+    if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
+      vmState.blockLogs.add vmState.txLogs
+
+    let rec = vmState.makeReceipt(tx.txType)
     vmState.receipts.add rec
     receipts.add toTxReceipt(
       rec, tx, sender, txIndex, rc.value.gasUsed
@@ -399,11 +402,8 @@ proc exec(ctx: TransContext,
     output.result.currentExcessBlobGas = excessBlobGas
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
-    var blockLogs: seq[Log]
-    for rec in output.result.receipts:
-      blockLogs.add rec.logs
     var
-      depositReqs = parseDepositLogs(blockLogs, vmState.com.depositContractAddress).valueOr:
+      depositReqs = parseDepositLogs(vmState.blockLogs, vmState.com.depositContractAddress).valueOr:
         return err(t8nerr(ErrorEVM, error))
       executionRequests: seq[seq[byte]]
 
