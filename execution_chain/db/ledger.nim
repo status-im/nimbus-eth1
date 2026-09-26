@@ -514,6 +514,19 @@ proc rollback*(ledger: LedgerRef, savePoint: LedgerSpRef) =
 
   reset(savePoint[]) # Release memory
 
+proc releasePersistedCode(ledger: LedgerRef) =
+  ## Drop the code held by cached accounts once a transaction completes. Code
+  ## that is already in the database can be fetched again through the code
+  ## cache, so keeping a reference per touched account only serves to pin every
+  ## contract a block touches in memory for the whole block.
+  for acc in ledger.savePoint.cache.values():
+    if CodeChanged in acc.flags:
+      continue
+    if acc.code != nil and acc.code.persisted:
+      acc.code = nil
+    if acc.original != nil and acc.original.code != nil and acc.original.code.persisted:
+      acc.original.code = nil
+
 proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before
@@ -531,6 +544,7 @@ proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
     for codeHash, code in savePoint.pendingCode:
       ledger.code.put(codeHash, code)
     savePoint.pendingCode.clear()
+    ledger.releasePersistedCode()
   else:
     ledger.savePoint.pendingCode.mergeAndReset(savePoint.pendingCode)
 
