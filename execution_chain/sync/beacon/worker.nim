@@ -23,6 +23,48 @@ logScope:
   topics = "beacon sync"
 
 # ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc lastFcuStr(ctx: BeaconCtxRef): string =
+  ## Time since the latest forkchoice update from the `CL` (logging only)
+  let
+    t = ctx.chain.lastFcuTime.uint64
+    now = EthTime.now().uint64
+  if t == 0: "never"
+  elif now <= t: "0s"
+  else: chronos.seconds(int64(now - t)).toStr
+
+proc statusLog(ctx: BeaconCtxRef) =
+  ## Periodic status message, the only one issued also when nothing happens
+  logScope:
+    topics = "ticker"
+
+  let now = Moment.now()
+  if now < ctx.pool.lastStatusLog + statusLogInterval:
+    return
+  ctx.pool.lastStatusLog = now
+
+  let
+    head = ctx.chain.latestNumber
+    # `latestConsHeadNumber` is only updated while there is something to sync,
+    # otherwise it stays behind the chain head.
+    target = max(ctx.hdrCache.latestConsHeadNumber, head)
+
+  info "Execution chain status",
+    head,
+    headHash=ctx.chain.latestHash.short,
+    finalized=ctx.chain.resolvedFinNumber,
+    base=ctx.chain.baseNumber,
+    target,
+    distance=(target - head),
+    syncState=($ctx.pool.syncState),
+    eta=ctx.pool.syncEta.avg.toStr,
+    nSyncPeers=ctx.nSyncPeers(),
+    nPeers=ctx.node.peerPool.connectedNodes.len,
+    lastFcu=ctx.lastFcuStr()
+
+# ------------------------------------------------------------------------------
 # Public start/stop and admin functions
 # ------------------------------------------------------------------------------
 
@@ -71,6 +113,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ##
   ctx.updateEtaIdle()
   ctx.updateMetrics()
+  ctx.statusLog()
   ctx.pool.ticker(ctx)
 
   # Inform if there are no peers active while syncing

@@ -208,6 +208,7 @@ type
     lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastSyncUpdLog*: chronos.Moment  ## Control update messages
+    lastStatusLog*: chronos.Moment   ## Control periodic status messages
     syncEta*: SyncEta                ## Estimated time until all in sync
     syncTickerOk*: bool              ## Activate built in state monitor
     ticker*: Ticker                  ## Ticker function to run in background

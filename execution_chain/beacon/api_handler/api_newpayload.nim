@@ -322,8 +322,10 @@ proc newPayload*(ben: BeaconEngineRef,
   if not chain.haveBlockAndState(header.parentHash):
     chain.quarantine.addOrphan(blockHash, blk, blockAccessList)
     warn "State not available, ignoring new payload",
-      hash   = blockHash,
-      number = header.number
+      hash   = blockHash.short,
+      number = header.number,
+      parent = header.parentHash.short,
+      head   = chain.latestNumber
     let
       txFrame = chain.latestTxFrame()
       blockHash = latestValidHash(txFrame, parent, ttd)

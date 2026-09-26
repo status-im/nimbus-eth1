@@ -375,6 +375,7 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
 
       info "Activating syncer", base=b, head=ctx.chain.latestNumber,
         target=t, targetHash=ctx.subState.headHash.short,
+        distance=(int64(t) - int64(ctx.chain.latestNumber)),
         nSyncPeers=ctx.nSyncPeers()
       return
 
