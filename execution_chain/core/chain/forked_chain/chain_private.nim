@@ -178,8 +178,9 @@ proc processBlock*(
 
   # We still need to write header to database
   # because validateUncles still need it
-  txFrame.invalidateFcSnapshot().expect("invalidate FC snapshot")
-  txFrame.retainBlockData(header, blkHash)
+  c.prepareDbMutation().expect(
+    "Cannot import block: failed to invalidate saved fork-choice snapshot")
+  txFrame.writeBlockOwnershipData(header, blkHash)
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
 
   var txHashes = c.writeBaggage(

@@ -235,8 +235,8 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
 
 proc updateHead(c: ForkedChainRef, head: BlockRef) =
   ## Update head if the new head is different from current head.
-
-  head.txFrame.invalidateFcSnapshot().expect("invalidate FC snapshot")
+  c.prepareDbMutation().expect(
+    "Cannot update chain head: failed to invalidate saved fork-choice snapshot")
   c.writeCanonicalMappings(head)
   c.fcuSetHead(head.txFrame,
     head.header,
@@ -257,7 +257,8 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
   # 'C' will be removed
 
   let txFrame = finalized.txFrame
-  txFrame.invalidateFcSnapshot().expect("invalidate FC snapshot")
+  c.prepareDbMutation().expect(
+    "Cannot advance finalization: failed to invalidate saved fork-choice snapshot")
   txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
 
   # Pin canonical payloads before releasing references from dead forks.
@@ -370,7 +371,8 @@ something else needs attention! Shutting down to preserve the database - restart
 with --debug-eager-state-root."""
 
   base.txFrame.checkpoint(base.number, skipSnapshot = true)
-  base.txFrame.invalidateFcSnapshot().expect("invalidate FC snapshot")
+  c.prepareDbMutation().expect(
+    "Cannot persist chain base: failed to invalidate saved fork-choice snapshot")
   c.writeCanonicalMappings(base)
   c.com.db.persist(base.txFrame)
 
@@ -728,6 +730,7 @@ proc init*(
       heads:            @[baseBlock],
       hashToBlock:      {baseHash: baseBlock}.toTable,
       baseTxFrame:      baseTxFrame,
+      snapshotMayExist: true,
       baseDistance:     baseDistance,
       persistBatchSize: persistBatchSize,
       dynamicBatchSize: dynamicBatchSize,

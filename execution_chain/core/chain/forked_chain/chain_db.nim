@@ -19,10 +19,20 @@ import
 proc invalidateFcSnapshot*(db: CoreDbTxRef, force = false): CoreDbRc[void] =
   # Indexed DAG entries are valid only as a complete snapshot. Once the
   # shared database changes, a restart must not load the old manifest.
-  if force or db.hasKey(fcStateKey(0).toOpenArray):
-    db.kvt.delRangeBe([byte(ord(DBKeyKind.fcState))],
-                     [byte(ord(DBKeyKind.fcState) + 1)]).isOkOr:
-      return err(error.toError("invalidate FC snapshot"))
+  if not force:
+    let exists = db.kvt.hasKeyRc(fcStateKey(0).toOpenArray).valueOr:
+      return err(error.toError("Failed to read saved fork-choice snapshot manifest"))
+    if not exists:
+      return ok()
+  db.kvt.delRangeBe([byte(ord(DBKeyKind.fcState))],
+                   [byte(ord(DBKeyKind.fcState) + 1)]).isOkOr:
+    return err(error.toError("Failed to delete saved fork-choice snapshot entries"))
+  ok()
+
+proc prepareDbMutation*(c: ForkedChainRef): CoreDbRc[void] =
+  if c.snapshotMayExist:
+    ?c.baseTxFrame.invalidateFcSnapshot()
+    c.snapshotMayExist = false
   ok()
 
 type BodyData = object
@@ -47,7 +57,7 @@ proc readOwners(db: CoreDbTxRef, key: DbKey): seq[Hash32] =
     except RlpError:
       raiseAssert "Invalid block data owners"
 
-proc retainBlockData*(db: CoreDbTxRef, header: Header, hash: Hash32) =
+proc writeBlockOwnershipData*(db: CoreDbTxRef, header: Header, hash: Hash32) =
   # Register before writing the payload, idempotently even after a partial
   # import. Content already present without owners belongs to finalized
   # history (or an older database) and must survive deletion of a new fork.

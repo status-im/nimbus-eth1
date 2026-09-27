@@ -165,7 +165,9 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
 
   # KVT writes are immediate. Invalidate the old manifest before replacing
   # its entries, then publish the new manifest only after every frame is saved.
+  fc.snapshotMayExist = true
   ?txFrame.invalidateFcSnapshot(force = true)
+  fc.snapshotMayExist = false
   for i, b in blocks:
     let parentIndex = if b.parent.isNil: 0'u
                       else: slots.getOrDefault(b.parent.hash) + 1'u
@@ -177,6 +179,7 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
 
   var encodedState = rlp.encode(state)
   ?txFrame.putMove(FcStateKey.toOpenArray, encodedState)
+  fc.snapshotMayExist = true
 
   info "Blocks DAG written to database",
     base=fc.base.number,
@@ -195,6 +198,7 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
 proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   let state = fc.baseTxFrame.getState().valueOr:
     return err("Cannot find previous FC state in database")
+  fc.snapshotMayExist = true
 
   if state.numBlocks == 0 or state.latest >= state.numBlocks or
       state.base >= state.numBlocks or state.heads.len == 0:

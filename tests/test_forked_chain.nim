@@ -22,6 +22,7 @@ import
   ../execution_chain/utils/utils,
   ../execution_chain/core/chain/forked_chain,
   ../execution_chain/core/chain/forked_chain/chain_desc,
+  ../execution_chain/core/chain/forked_chain/chain_db,
   ../execution_chain/core/chain/forked_chain/chain_serialize,
   ../execution_chain/core/chain/forked_chain/chain_branch,
   ../execution_chain/db/ledger,
@@ -1182,6 +1183,74 @@ suite "ForkedChainRef tests":
     check fc.heads.len == 1
     check fc.validate info & " (2)"
 
+  test "imports check for a snapshot only once after startup or saving":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+      db = chain.baseTxFrame
+      backendGet = db.kvt.getKvpFn
+    var snapshotChecks = 0
+    db.kvt.getKvpFn = proc(key: openArray[byte]): Result[seq[byte], KvtError] =
+      if key == fcStateKey(0).toOpenArray:
+        inc snapshotChecks
+      backendGet(key)
+    defer: db.kvt.getKvpFn = backendGet
+
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    check snapshotChecks == 1
+    check chain.serialize(db).isOk
+    check chain.snapshotMayExist
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    check snapshotChecks == 2
+    check backendGet(fcStateKey(0).toOpenArray).isErr
+
+    check chain.serialize(db).isOk
+    let restored = ForkedChainRef.init(com)
+    require restored.deserialize().isOk
+    let checksAfterRestore = snapshotChecks
+    checkImportBlock(restored, blk5)
+    checkImportBlock(restored, blk6)
+    check snapshotChecks == checksAfterRestore + 1
+    check not restored.snapshotMayExist
+    check backendGet(fcStateKey(0).toOpenArray).isErr
+
+  test "snapshot invalidation failures can be retried":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+      db = chain.baseTxFrame
+      backendGet = db.kvt.getKvpFn
+      backendDelRange = db.kvt.delRangeKvpFn
+    checkImportBlock(chain, blk1)
+    check chain.serialize(db).isOk
+    defer:
+      db.kvt.getKvpFn = backendGet
+      db.kvt.delRangeKvpFn = backendDelRange
+
+    db.kvt.getKvpFn = proc(key: openArray[byte]): Result[seq[byte], KvtError] =
+      err(RdbBeDriverGetError)
+    check chain.prepareDbMutation().isErr
+    check chain.snapshotMayExist
+    check backendGet(fcStateKey(0).toOpenArray).isOk
+    db.kvt.getKvpFn = backendGet
+
+    db.kvt.delRangeKvpFn = proc(
+        startKey, endKey: openArray[byte], compactRange: bool
+    ): Result[void, KvtError] =
+      err(RdbBeDriverDelError)
+    check chain.prepareDbMutation().isErr
+    check chain.snapshotMayExist
+    check db.get(fcStateKey(0).toOpenArray).isOk
+    check chain.serialize(db).isErr
+    check chain.snapshotMayExist
+    db.kvt.delRangeKvpFn = backendDelRange
+
+    check chain.prepareDbMutation().isOk
+    check not chain.snapshotMayExist
+    check db.get(fcStateKey(0).toOpenArray).isErr
+
   test "failed serialization does not publish a partial snapshot":
     let
       com = env.newCom()
@@ -1198,9 +1267,11 @@ suite "ForkedChainRef tests":
       backendPut(key, value)
     check chain.serialize(db).isErr
     db.kvt.putKvpFn = backendPut
+    check not chain.snapshotMayExist
     check not db.hasKey(fcStateKey(0).toOpenArray)
     check checkFinalizedMarkers(chain, blk1.blockHash)
     check chain.serialize(db).isOk
+    check chain.snapshotMayExist
     let restored = ForkedChainRef.init(com)
     check restored.deserialize().isOk
     check restored.latestHash == blk2.blockHash
