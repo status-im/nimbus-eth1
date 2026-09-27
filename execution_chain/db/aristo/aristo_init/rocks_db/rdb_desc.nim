@@ -16,6 +16,7 @@
 import
   std/concurrency/atomics,
   stew/endians2,
+  eth/keccak/rapidhash,
   ../../../../concurrency/lru,
   ../../../core_db/backend/rocksdb_desc,
   ../../[aristo_blobify, aristo_desc],
@@ -38,6 +39,13 @@ type
       ## In case of an error when `false` is returned, `Aristo` will abort the
       ## write session and return a session error.
 
+  RdbCacheKey* = object
+    data: array[4, uint32]
+
+  RdbBranchVal* = object
+    vid: array[2, uint32]
+    bits: uint16
+
   RdbInst* = object
     baseDb*: RocksDbInstanceRef
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
@@ -55,13 +63,13 @@ type
     # is less memory and time efficient (the latter one due to internal LRU
     # handling of the longer key.)
     #
-    rdKeyLru*: ConcurrentLruCache[RootedVertexID,HashKey] ## Read cache
+    rdKeyLru*: ConcurrentLruCache[RdbCacheKey,HashKey] ## Read cache
     rdKeySize*: int
 
-    rdVtxLru*: ConcurrentLruCache[RootedVertexID,VertexBuf] ## Read cache
+    rdVtxLru*: ConcurrentLruCache[RdbCacheKey,VertexBuf] ## Read cache
     rdVtxSize*: int
 
-    rdBranchLru*: ConcurrentLruCache[RootedVertexID, (VertexID, uint16)]
+    rdBranchLru*: ConcurrentLruCache[RdbCacheKey, RdbBranchVal]
     rdBranchSize*: int
 
     rdbPrintStats*: bool               ## Print statistics on closure
@@ -97,6 +105,34 @@ var
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+static:
+  doAssert sizeof(RdbCacheKey) == 16 and alignof(RdbCacheKey) == 4
+  doAssert sizeof(RdbBranchVal) == 12 and alignof(RdbBranchVal) == 4
+
+func toCacheKey*(rvid: RootedVertexID): RdbCacheKey {.inline.} =
+  let
+    root = rvid.root.uint64
+    vid = rvid.vid.uint64
+  RdbCacheKey(
+    data: [uint32(root), uint32(root shr 32), uint32(vid), uint32(vid shr 32)])
+
+func `==`*(a, b: RdbCacheKey): bool {.inline.} =
+  a.data[0] == b.data[0] and a.data[1] == b.data[1] and
+    a.data[2] == b.data[2] and a.data[3] == b.data[3]
+
+func hash*(k: RdbCacheKey): Hash {.inline.} =
+  cast[Hash](rapidhashNano(cast[array[sizeof(RdbCacheKey), byte]](k)))
+
+func init*(T: type RdbBranchVal, startVid: VertexID, used: uint16): T {.inline.} =
+  let v = startVid.uint64
+  T(vid: [uint32(v), uint32(v shr 32)], bits: used)
+
+func startVid*(v: RdbBranchVal): VertexID {.inline.} =
+  VertexID(uint64(v.vid[0]) or (uint64(v.vid[1]) shl 32))
+
+func used*(v: RdbBranchVal): uint16 {.inline.} =
+  v.bits
 
 template toOpenArray*(xid: AdminTabID): openArray[byte] =
   xid.uint64.toBytesBE.toOpenArray(0,7)

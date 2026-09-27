@@ -121,13 +121,14 @@ proc getAdm*(rdb: RdbInst): Result[seq[byte], (AristoError, string)] =
 proc getKey*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
 ): Result[(HashKey, VertexRef), (AristoError, string)] =
+  let ck = rvid.toCacheKey()
   block:
     # Try LRU cache first
     let rc =
       if GetVtxFlag.PeekCache in flags:
-        rdb.rdKeyLru.peek(rvid)
+        rdb.rdKeyLru.peek(ck)
       else:
-        rdb.rdKeyLru.get(rvid)
+        rdb.rdKeyLru.get(ck)
 
     if rc.isOk:
       rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
@@ -137,7 +138,7 @@ proc getKey*(
 
   block:
     # We don't store keys for leaves, no need to hit the database
-    rdb.rdVtxLru.withPeek(rvid, cached):
+    rdb.rdVtxLru.withPeek(ck, cached):
       let vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
       if vtx.vType in Leaves:
         return ok((VOID_HASH_KEY, vtx))
@@ -163,12 +164,12 @@ proc getKey*(
   # Update cache and return - in peek mode, avoid evicting cache items
   if res.isSome() and
       (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
-    rdb.rdKeyLru.put(rvid, res.value())
+    rdb.rdKeyLru.put(ck, res.value())
 
   if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
     # Don't invalidate vertex cache entries because of key reads - the latter
     # follow a different access pattern!
-    rdb.rdVtxLru.put(rvid, vtxBuf)
+    rdb.rdVtxLru.put(ck, vtxBuf)
 
   let vtx =
     if res.isNone():
@@ -198,13 +199,14 @@ proc getKeys*(
     nFetch = 0
 
   for i, rvid in rvids:
+    let ck = rvid.toCacheKey()
     block lookup:
       block:
         let rc =
           if GetVtxFlag.PeekCache in flags:
-            rdb.rdKeyLru.peek(rvid)
+            rdb.rdKeyLru.peek(ck)
           else:
-            rdb.rdKeyLru.get(rvid)
+            rdb.rdKeyLru.get(ck)
 
         if rc.isOk:
           rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
@@ -215,7 +217,7 @@ proc getKeys*(
 
       block:
         var leafVtx: VertexRef
-        rdb.rdVtxLru.withPeek(rvid, cached):
+        rdb.rdVtxLru.withPeek(ck, cached):
           let vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
           if vtx.vType in Leaves:
             leafVtx = vtx
@@ -275,15 +277,15 @@ proc getKeys*(
     vtxBufs[j].n = typeof(vtxBufs[j].n)(valueSlices[j].len)
 
     let
-      rvid = rvids[i]
+      ck = rvids[i].toCacheKey()
       res = vtxBufs[j].data().deblobify(HashKey)
 
     if res.isSome() and
         (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
-      rdb.rdKeyLru.put(rvid, res.value())
+      rdb.rdKeyLru.put(ck, res.value())
 
     if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-      rdb.rdVtxLru.put(rvid, vtxBufs[j])
+      rdb.rdVtxLru.put(ck, vtxBufs[j])
 
     keyvtxs[i] =
       if res.isSome():
@@ -299,24 +301,25 @@ proc getKeys*(
 proc getVtx*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
 ): Result[VertexRef, (AristoError, string)] =
+  let ck = rvid.toCacheKey()
   # Try LRU cache first
   block:
     let rc =
       if GetVtxFlag.PeekCache in flags:
-        rdb.rdBranchLru.peek(rvid)
+        rdb.rdBranchLru.peek(ck)
       else:
-        rdb.rdBranchLru.get(rvid)
+        rdb.rdBranchLru.get(ck)
     if rc.isOk():
       rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok(BranchRef.init(rc[][0], rc[][1]))
+      return ok(BranchRef.init(rc[].startVid, rc[].used))
 
   block:
     var vtx: VertexRef
     if GetVtxFlag.PeekCache in flags:
-      rdb.rdVtxLru.withPeek(rvid, cached):
+      rdb.rdVtxLru.withPeek(ck, cached):
         vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
     else:
-      rdb.rdVtxLru.withGet(rvid, cached):
+      rdb.rdVtxLru.withGet(ck, cached):
         vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
 
     if vtx != nil:
@@ -358,9 +361,9 @@ proc getVtx*(
   if GetVtxFlag.PeekCache notin flags:
     if res.value.vType == Branch:
       let vtx = BranchRef(res.value())
-      rdb.rdBranchLru.put(rvid, (vtx.startVid, vtx.used))
+      rdb.rdBranchLru.put(ck, RdbBranchVal.init(vtx.startVid, vtx.used))
     else:
-      rdb.rdVtxLru.put(rvid, vtxBuf)
+      rdb.rdVtxLru.put(ck, vtxBuf)
 
   ok res.value()
 

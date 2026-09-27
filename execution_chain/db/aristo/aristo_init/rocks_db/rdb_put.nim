@@ -87,7 +87,9 @@ proc putVtx*(
     rdb: var RdbInst; session: SharedWriteBatchRef,
     rvid: RootedVertexID; vtx: VertexRef, key: HashKey
       ): Result[void,(VertexID,AristoError,string)] =
-  let dsc = session.batch
+  let
+    dsc = session.batch
+    ck = rvid.toCacheKey()
   if vtx.isValid:
     var vtxBuf: VertexBuf
     vtx.blobifyTo(key, vtxBuf)
@@ -105,27 +107,27 @@ proc putVtx*(
 
     if vtx.vType == Branch:
       let vtx = BranchRef(vtx)
-      rdb.rdVtxLru.del(rvid)
+      rdb.rdVtxLru.del(ck)
       if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
-        rdb.rdBranchLru.put(rvid, (vtx.startVid, vtx.used))
+        rdb.rdBranchLru.put(ck, RdbBranchVal.init(vtx.startVid, vtx.used))
       else:
-        discard rdb.rdBranchLru.update(rvid, (vtx.startVid, vtx.used))
+        discard rdb.rdBranchLru.update(ck, RdbBranchVal.init(vtx.startVid, vtx.used))
     else:
-      rdb.rdBranchLru.del(rvid)
+      rdb.rdBranchLru.del(ck)
       
       if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-        rdb.rdVtxLru.put(rvid, vtxBuf)
+        rdb.rdVtxLru.put(ck, vtxBuf)
       else:
-        discard rdb.rdVtxLru.update(rvid, vtxBuf)
+        discard rdb.rdVtxLru.update(ck, vtxBuf)
 
 
     if key.isValid:
       if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
-        rdb.rdKeyLru.put(rvid, key)
+        rdb.rdKeyLru.put(ck, key)
       else:
-        discard rdb.rdKeyLru.update(rvid, key)
+        discard rdb.rdKeyLru.update(ck, key)
     else:
-      rdb.rdKeyLru.del rvid
+      rdb.rdKeyLru.del ck
   else:
     dsc.delete(rvid.blobify().data(), rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will clear the `rdVtxLru` cache
@@ -135,9 +137,9 @@ proc putVtx*(
       return err((rvid.vid,errSym,error))
 
     # Update cache, vertex will most probably never be visited anymore
-    rdb.rdBranchLru.del rvid
-    rdb.rdVtxLru.del rvid
-    rdb.rdKeyLru.del rvid
+    rdb.rdBranchLru.del ck
+    rdb.rdVtxLru.del ck
+    rdb.rdKeyLru.del ck
 
   ok()
 
