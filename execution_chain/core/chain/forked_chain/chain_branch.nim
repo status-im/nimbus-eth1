@@ -51,6 +51,21 @@ template finalize*(b: BlockRef) =
 template notFinalized*(b: BlockRef): bool =
   not b.isFinalized
 
+proc branchBlockHashFn*(parent: BlockRef, number: BlockNumber, hash: Hash32): BlockHashFn =
+  ## Block hashes of the branch made of block (`number`, `hash`) on top of
+  ## `parent`. Numbers below the in-memory part of the branch resolve from the
+  ## canonical index on disk. Captures the parent rather than the block, so the
+  ## block's frame holding the closure does not form a cycle with the block.
+  proc(n: BlockNumber): Opt[Hash32] =
+    if n == number:
+      return Opt.some(hash)
+    var it = parent
+    while not it.isNil and not it.txFrame.isNil and n <= it.number:
+      if n == it.number:
+        return Opt.some(it.hash)
+      it = it.parent
+    Opt.none(Hash32)
+
 iterator ancestors*(init: BlockRef): BlockRef =
   loopItImpl(isOk, init)
 

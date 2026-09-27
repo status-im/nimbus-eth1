@@ -106,6 +106,7 @@ proc loadBranchTxFrames(parent: BlockRef;
     let b = blocks[i]
     let frame = srcBase.loadTxFrameAsChild(p.txFrame, b.hash).valueOr:
       return err($error)
+    frame.blockHashFn = branchBlockHashFn(p, b.number, b.hash)
     b.txFrame = frame
     p = b
 
@@ -166,7 +167,7 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
   # KVT writes are immediate. Invalidate the old manifest before replacing
   # its entries, then publish the new manifest only after every frame is saved.
   fc.snapshotMayExist = true
-  ?txFrame.invalidateFcSnapshot(force = true)
+  ?txFrame.invalidateFcSnapshot()
   fc.snapshotMayExist = false
   for i, b in blocks:
     let parentIndex = if b.parent.isNil: 0'u

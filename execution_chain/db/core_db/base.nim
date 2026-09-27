@@ -499,7 +499,7 @@ proc txFrameBegin*(
   let
     aTx = parent.aTx.db.txFrameBegin(parent.aTx, moveParentHashKeys)
 
-  CoreDbTxRef(kvt: parent.kvt, aTx: aTx)
+  CoreDbTxRef(kvt: parent.kvt, aTx: aTx, blockHashFn: parent.blockHashFn)
 
 proc parent*(tx: CoreDbTxRef): CoreDbTxRef =
   assert not tx.kvt.isNil()

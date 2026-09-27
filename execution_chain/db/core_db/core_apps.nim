@@ -142,6 +142,11 @@ proc getBlockHash*(
       ): Result[Hash32, string] =
   ## Return the block hash for the given block number.
   const info = "getBlockHash()"
+  if not db.blockHashFn.isNil:
+    let hash = db.blockHashFn(n)
+    if hash.isSome:
+      return ok(hash.get)
+
   let key = blockNumberToHashKey(n)
 
   when compileOption("threads"):
@@ -622,6 +627,7 @@ proc persistHeader*(
     blockHash: Hash32;
     header: Header;
     startOfHistory = GENESIS_PARENT_HASH;
+    numberToHash = true;
       ): Result[void, string] =
   const
     info = "persistHeader"
@@ -649,7 +655,8 @@ proc persistHeader*(
   # each block to simplify totalDifficulty reporting
   # TODO get rid of this and store a single value
   ?db.persistScore(blockHash, score)
-  db.addBlockNumberToHashLookup(header.number, blockHash)
+  if numberToHash:
+    db.addBlockNumberToHashLookup(header.number, blockHash)
   ok()
 
 proc persistHeaderAndSetHead*(

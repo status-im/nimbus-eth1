@@ -181,7 +181,10 @@ proc processBlock*(
   c.prepareDbMutation().expect(
     "Cannot import block: failed to invalidate saved fork-choice snapshot")
   txFrame.writeBlockOwnershipData(header, blkHash)
-  ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
+  # The number to hash index is shared by all branches, it only follows the
+  # chosen head (`writeCanonicalMappings`)
+  ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory,
+    numberToHash = false)
 
   var txHashes = c.writeBaggage(
     blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)

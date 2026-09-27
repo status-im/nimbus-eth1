@@ -539,6 +539,9 @@ proc validateBlock(
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
 
+  # BLOCKHASH resolves along the block's own branch
+  txFrame.blockHashFn = branchBlockHashFn(parent, blk.header.number, blkHash)
+
   # TODO shortLog-equivalent for eth types
   debug "Validating block",
     blkHash, blk = (

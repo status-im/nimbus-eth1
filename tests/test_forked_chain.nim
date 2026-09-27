@@ -1189,30 +1189,32 @@ suite "ForkedChainRef tests":
       chain = ForkedChainRef.init(com)
       db = chain.baseTxFrame
       backendGet = db.kvt.getKvpFn
-    var snapshotChecks = 0
-    db.kvt.getKvpFn = proc(key: openArray[byte]): Result[seq[byte], KvtError] =
+      backendDel = db.kvt.delKvpFn
+    var invalidations = 0
+    db.kvt.delKvpFn = proc(key: openArray[byte]): Result[void, KvtError] =
       if key == fcStateKey(0).toOpenArray:
-        inc snapshotChecks
-      backendGet(key)
-    defer: db.kvt.getKvpFn = backendGet
+        inc invalidations
+      backendDel(key)
+    defer: db.kvt.delKvpFn = backendDel
 
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
-    check snapshotChecks == 1
+    check invalidations == 1
     check chain.serialize(db).isOk
     check chain.snapshotMayExist
+    let invalidationsAfterSave = invalidations
     checkImportBlock(chain, blk3)
     checkImportBlock(chain, blk4)
-    check snapshotChecks == 2
+    check invalidations == invalidationsAfterSave + 1
     check backendGet(fcStateKey(0).toOpenArray).isErr
 
     check chain.serialize(db).isOk
     let restored = ForkedChainRef.init(com)
     require restored.deserialize().isOk
-    let checksAfterRestore = snapshotChecks
+    let invalidationsAfterRestore = invalidations
     checkImportBlock(restored, blk5)
     checkImportBlock(restored, blk6)
-    check snapshotChecks == checksAfterRestore + 1
+    check invalidations == invalidationsAfterRestore + 1
     check not restored.snapshotMayExist
     check backendGet(fcStateKey(0).toOpenArray).isErr
 
@@ -1222,34 +1224,34 @@ suite "ForkedChainRef tests":
       chain = ForkedChainRef.init(com)
       db = chain.baseTxFrame
       backendGet = db.kvt.getKvpFn
-      backendDelRange = db.kvt.delRangeKvpFn
+      backendDel = db.kvt.delKvpFn
     checkImportBlock(chain, blk1)
     check chain.serialize(db).isOk
     defer:
       db.kvt.getKvpFn = backendGet
-      db.kvt.delRangeKvpFn = backendDelRange
+      db.kvt.delKvpFn = backendDel
 
     db.kvt.getKvpFn = proc(key: openArray[byte]): Result[seq[byte], KvtError] =
       err(RdbBeDriverGetError)
     check chain.prepareDbMutation().isErr
     check chain.snapshotMayExist
-    check backendGet(fcStateKey(0).toOpenArray).isOk
+    # The manifest is gone, the block entries are left for the retry
+    check backendGet(fcStateKey(1).toOpenArray).isOk
     db.kvt.getKvpFn = backendGet
 
-    db.kvt.delRangeKvpFn = proc(
-        startKey, endKey: openArray[byte], compactRange: bool
-    ): Result[void, KvtError] =
+    db.kvt.delKvpFn = proc(key: openArray[byte]): Result[void, KvtError] =
       err(RdbBeDriverDelError)
     check chain.prepareDbMutation().isErr
     check chain.snapshotMayExist
-    check db.get(fcStateKey(0).toOpenArray).isOk
+    check db.get(fcStateKey(1).toOpenArray).isOk
     check chain.serialize(db).isErr
     check chain.snapshotMayExist
-    db.kvt.delRangeKvpFn = backendDelRange
+    db.kvt.delKvpFn = backendDel
 
     check chain.prepareDbMutation().isOk
     check not chain.snapshotMayExist
     check db.get(fcStateKey(0).toOpenArray).isErr
+    check db.get(fcStateKey(1).toOpenArray).isErr
 
   test "failed serialization does not publish a partial snapshot":
     let
@@ -1326,6 +1328,8 @@ suite "ForkedChainRef tests":
     for b in [B4, B5, B6]:
       check db.put(blockHashToWitnessKey(b.blockHash).toOpenArray, [1'u8]).isOk
       check db.put(blockHashToBlockAccessListKey(b.blockHash).toOpenArray, [1'u8]).isOk
+    # Only the head's lineage owns the number index, make the fork the head
+    checkForkChoice(chain, B6, blk3)
     check db.getBlockHash(4).expect("warm block hash cache") == B4.blockHash
 
     checkForkChoice(chain, blk4, blk4)
@@ -1542,6 +1546,19 @@ suite "ForkedChainRef tests":
     checkHeadHash chain, B4.blockHash
     check chain.heads.len == 1
     check chain.validate info & " (2)"
+
+  test "snapshot invalidation keeps tx data that shares the fcState kind byte":
+    # `hashIndexKey` has no kind prefix, its first byte is the root's
+    let db = env.newCom().db.baseTxFrame()
+    var root: Hash32
+    root.data[0] = byte ord(DBKeyKind.fcState)
+    check db.put(hashIndexKey(root, 0), [1'u8]).isOk
+    check db.put(fcStateKey(0).toOpenArray, [1'u8]).isOk
+    check db.put(fcStateKey(1).toOpenArray, [1'u8]).isOk
+    check db.invalidateFcSnapshot().isOk
+    check not db.hasKey(fcStateKey(0).toOpenArray)
+    check not db.hasKey(fcStateKey(1).toOpenArray)
+    check db.hasKey(hashIndexKey(root, 0))
 
   test "fcu with empty fin":
     const info = "setHead finalized"
