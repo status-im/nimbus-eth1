@@ -21,8 +21,7 @@ type
     hash*    : Hash32
     parent*  : BlockRef
 
-    index*   : uint
-      # DAG node finalized marker; serialization uses separate parent slots.
+    isFinalized*: bool
 
 template number*(b: BlockRef): BlockNumber =
   b.header.number
@@ -46,14 +45,11 @@ template loopItImpl(condition: untyped, init: BlockRef) =
 template stateRoot*(b: BlockRef): Hash32 =
   b.header.stateRoot
 
-const
-  DAG_NODE_FINALIZED = 1
-
 template finalize*(b: BlockRef) =
-  b.index = DAG_NODE_FINALIZED
+  b.isFinalized = true
 
 template notFinalized*(b: BlockRef): bool =
-  b.index != DAG_NODE_FINALIZED
+  not b.isFinalized
 
 iterator ancestors*(init: BlockRef): BlockRef =
   loopItImpl(isOk, init)

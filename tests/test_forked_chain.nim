@@ -185,7 +185,6 @@ proc patchParentIndex(txFrame: CoreDbTxRef, numBlocks: int, badIndex: uint): boo
   false
 
 func checkFinalizedMarkers(fc: ForkedChainRef, finalizedHash: Hash32): bool =
-  const finalizedMarker = 1'u  # chain_branch.DAG_NODE_FINALIZED
   let finBlk =
     try:
       fc.hashToBlock[finalizedHash]
@@ -197,10 +196,10 @@ func checkFinalizedMarkers(fc: ForkedChainRef, finalizedHash: Hash32): bool =
     expected.incl it.hash
 
   for h, b in fc.hashToBlock:
-    let expectedIndex = if h in expected: finalizedMarker else: 0'u
-    if b.index != expectedIndex:
+    let expectedFinalized = h in expected
+    if b.isFinalized != expectedFinalized:
       debugEcho "finalized marker mismatch: block ", b.number,
-        " index=", b.index, " expected=", expectedIndex
+        " isFinalized=", b.isFinalized, " expected=", expectedFinalized
       return false
 
   true

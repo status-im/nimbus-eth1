@@ -142,8 +142,7 @@ func toString(list: openArray[BlockRef]): string =
 # ------------------------------------------------------------------------------
 
 proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbError] =
-  # Serialization slots must not overwrite BlockRef.index: it holds the
-  # finalized marker used by the running chain.
+  # Keep serialization slots separate from the running chain's finalized flags.
   var slots = initTable[Hash32, uint]()
   var blocks: seq[BlockRef]
   for b in fc.hashToBlock.values:
@@ -208,6 +207,7 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   # restored chain behind. Saved blobs remain available for another attempt.
   let restored = ForkedChainRef(baseTxFrame: fc.baseTxFrame)
   var blocks: seq[BlockRef]
+  var parentIndices: seq[uint]
   var loaded = false
   defer:
     if not loaded:
@@ -225,9 +225,9 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
         return err("corrupted FC: header hash mismatch")
       if restored.hashToBlock.hasKey(stored.hash):
         return err("corrupted FC: duplicate block")
-      let b = BlockRef(header: stored.header, hash: stored.hash,
-                       index: stored.parentIndex)
+      let b = BlockRef(header: stored.header, hash: stored.hash)
       blocks.add b
+      parentIndices.add stored.parentIndex
       restored.hashToBlock[b.hash] = b
   except RlpError as exc:
     return err(exc.msg)
@@ -237,19 +237,19 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   if restored.base.hash != fc.base.hash:
     return err("loaded baseHash != baseHash")
 
-  for b in blocks:
+  for i, b in blocks:
+    let parentIndex = parentIndices[i]
     if b == restored.base:
-      if b.index != 0:
+      if parentIndex != 0:
         return err("corrupted FC: base has a parent")
     else:
-      if b.index == 0 or b.index > state.numBlocks:
+      if parentIndex == 0 or parentIndex > state.numBlocks:
         return err("corrupted FC: parent index out of range")
-      let parent = blocks[b.index - 1]
+      let parent = blocks[parentIndex - 1]
       if b.number <= restored.base.number or parent.number >= b.number or
           b.number - parent.number != 1 or b.header.parentHash != parent.hash:
         return err("corrupted FC: inconsistent parent")
       b.parent = parent
-    b.index = 0
 
   for h in state.heads:
     restored.heads.add blocks[h]

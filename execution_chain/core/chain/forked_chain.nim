@@ -75,7 +75,7 @@ func appendBlock(c: ForkedChainRef,
     txFrame : txFrame,
     hash    : blkHash,
     parent  : parent,
-    index   : 0, # Only finalized segment have finalized marker
+    isFinalized: false,
   )
 
   c.hashToBlock[blkHash] = newBlock
