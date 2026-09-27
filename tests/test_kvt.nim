@@ -21,7 +21,7 @@ import
   ../execution_chain/db/kvt,
   ../execution_chain/db/kvt/[kvt_init/memory_only, kvt_utils]
 
-suite "Kvt TxFrame":
+suite "Kvt":
   setup:
     let db = KvtDbRef.init()
 
@@ -166,7 +166,7 @@ suite "Kvt block hash cache":
 
     db.close()
 
-  test "Frame writes take precedence over the cache":
+  test "Block hash writes immediately update the shared cache":
     let base = db.baseTxFrame()
     base.addBlockNumberToHashLookup(BlockNumber(1), hashA)
     db.persist(base)
@@ -178,7 +178,7 @@ suite "Kvt block hash cache":
 
     check:
       fork.getBlockHash(BlockNumber(1)).expect("hash") == hashB
-      db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
+      db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashB
 
     db.close()
 
@@ -210,10 +210,8 @@ suite "Kvt block hash cache":
     db.close()
 
   test "A read miss fills the cache from the backend":
-    let batch = db.kvt.putBegFn().expect("batch")
-    db.kvt.putKvpFn(
-      batch, blockNumberToHashKey(BlockNumber(7)).toOpenArray, rlp.encode(hashA))
-    db.kvt.putEndFn(batch).expect("putEndFn")
+    db.kvt.putBe(
+      blockNumberToHashKey(BlockNumber(7)).toOpenArray, rlp.encode(hashA)).expect("put")
 
     check db.baseTxFrame().getBlockHash(BlockNumber(7)).expect("hash") == hashA
 
@@ -231,6 +229,7 @@ suite "Kvt block hash cache":
 
     let deleting = db.txFrameBegin()
     deleting.del(blockNumberToHashKey(BlockNumber(1)).toOpenArray).expect("del")
+    check base.getBlockHash(BlockNumber(1)).isErr()
     deleting.checkpoint(BlockNumber(1))
     db.persist(deleting)
 

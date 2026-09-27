@@ -15,6 +15,7 @@
 
 import
   results,
+  ../storage_types,
   ./[kvt_desc]
 
 export results
@@ -101,12 +102,15 @@ proc del*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record to delete
       ): Result[void,KvtError] =
-  ## For the argument `key` delete the associated value (which will be marked
-  ## in the top layer cache.)
+  ## Delete the value immediately and invalidate any cached block hash.
   if key.len == 0:
     return err(KeyInvalid)
 
-  db.delBe(key)
+  ?db.delBe(key)
+  when compileOption("threads"):
+    if key.isBlockNumberToHashKey:
+      db.blockHashes.del(key.blockNumberFromHashKey)
+  ok()
 
 # ------------
 

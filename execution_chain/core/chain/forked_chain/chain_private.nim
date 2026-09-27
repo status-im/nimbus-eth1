@@ -18,7 +18,8 @@ import
   ../../../evm/types,
   ../../../evm/state,
   ../../../stateless/[witness_generation, witness_verification, stateless_execution],
-  ./chain_branch
+  ./chain_branch,
+  ./chain_db
 
 proc writeBaggage*(
     c: ForkedChainRef,
@@ -177,7 +178,13 @@ proc processBlock*(
 
   # We still need to write header to database
   # because validateUncles still need it
-  ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
+  c.prepareDbMutation().expect(
+    "Cannot import block: failed to invalidate saved fork-choice snapshot")
+  txFrame.writeBlockOwnershipData(header, blkHash)
+  # The number to hash index is shared by all branches, it only follows the
+  # chosen head (`writeCanonicalMappings`)
+  ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory,
+    numberToHash = false)
 
   var txHashes = c.writeBaggage(
     blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)

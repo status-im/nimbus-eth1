@@ -52,10 +52,14 @@ type
     mpt*: AristoDbRef           ## `Aristo` database
     kvt*: KvtDbRef              ## `KVT` key-value table
 
+  BlockHashFn* = proc(n: BlockNumber): Opt[Hash32] {.gcsafe, raises: [].}
+    ## Resolves block hashes along the branch a frame belongs to
+
   CoreDbTxRef* = ref object
     ## Transaction descriptor
     aTx*: AristoTxRef           ## `Aristo` transaction (if any)
     kvt*: KvtDbRef              ## `KVT` transaction (if any)
+    blockHashFn*: BlockHashFn   ## Branch-local block hashes, see `getBlockHash`
 
   CoreDbError* = object
     ## Generic error object
