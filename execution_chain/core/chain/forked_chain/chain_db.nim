@@ -77,7 +77,7 @@ proc finalizeBlockData*(db: CoreDbTxRef, header: Header) =
     db.del(blockDataRefsKey(keccak256(data.key)).toOpenArray).
       expect("finalize block data")
 
-proc releaseBlockData(db: CoreDbTxRef, header: Header, hash: Hash32) =
+proc releaseBlockOwnershipData(db: CoreDbTxRef, header: Header, hash: Hash32) =
   for data in bodyData(header):
     let key = blockDataRefsKey(keccak256(data.key))
     var owners = db.readOwners(key)
@@ -139,7 +139,7 @@ proc deleteBlockData*(c: ForkedChainRef, b: BlockRef) =
           expect("delete transaction lookup")
     inc index
 
-  db.releaseBlockData(b.header, b.hash)
+  db.releaseBlockOwnershipData(b.header, b.hash)
   for key in [genericHashKey(b.hash), blockHashToScoreKey(b.hash),
               blockHashToBlockAccessListKey(b.hash), blockHashToWitnessKey(b.hash),
               txFrameKey(b.hash)]:
