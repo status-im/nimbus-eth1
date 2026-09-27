@@ -40,7 +40,7 @@ type
       ## write session and return a session error.
 
   RdbCacheKey* = object
-    data: array[4, uint32]
+    data: array[3, uint32]
 
   RdbBranchVal* = object
     data: array[2, uint32]
@@ -106,7 +106,7 @@ var
 # ------------------------------------------------------------------------------
 
 static:
-  doAssert sizeof(RdbCacheKey) == 16 and alignof(RdbCacheKey) == 4
+  doAssert sizeof(RdbCacheKey) == 12 and alignof(RdbCacheKey) == 4
   doAssert sizeof(RdbBranchVal) == 8 and alignof(RdbBranchVal) == 4
   doAssert FIRST_DYNAMIC_VID < (1'u64 shl 40)
 
@@ -114,12 +114,12 @@ func toCacheKey*(rvid: RootedVertexID): RdbCacheKey {.inline.} =
   let
     root = rvid.root.uint64
     vid = rvid.vid.uint64
+  doAssert ((root or vid) shr 48) == 0
   RdbCacheKey(
-    data: [uint32(root), uint32(root shr 32), uint32(vid), uint32(vid shr 32)])
+    data: [uint32(vid), uint32(vid shr 32) or (uint32(root) shl 16), uint32(root shr 16)])
 
 func `==`*(a, b: RdbCacheKey): bool {.inline.} =
-  a.data[0] == b.data[0] and a.data[1] == b.data[1] and
-    a.data[2] == b.data[2] and a.data[3] == b.data[3]
+  a.data[0] == b.data[0] and a.data[1] == b.data[1] and a.data[2] == b.data[2]
 
 func hash*(k: RdbCacheKey): Hash {.inline.} =
   cast[Hash](rapidhashNano(cast[array[sizeof(RdbCacheKey), byte]](k)))

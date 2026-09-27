@@ -34,12 +34,33 @@ suite "Aristo rdb cache key":
   test "Upper bits of root and vid are kept":
     let
       lo = VertexID(0x0000_0001_0000_0002'u64)
-      hi = VertexID(0x0001_0001_0000_0002'u64)
+      hi = VertexID(0x0000_8001_0000_0002'u64)
 
     check:
       (lo, lo).toCacheKey() != (hi, lo).toCacheKey()
       (lo, lo).toCacheKey() != (lo, hi).toCacheKey()
       (hi, lo).toCacheKey() != (lo, hi).toCacheKey()
+
+  test "Every root and vid bit maps to a distinct key":
+    var keys = @[(VertexID(0), VertexID(0)).toCacheKey()]
+    for i in 0 ..< 48:
+      keys.add (VertexID(1'u64 shl i), VertexID(0)).toCacheKey()
+      keys.add (VertexID(0), VertexID(1'u64 shl i)).toCacheKey()
+
+    let top = VertexID((1'u64 shl 48) - 1)
+    keys.add (top, top).toCacheKey()
+    keys.add (top, VertexID(0)).toCacheKey()
+    keys.add (VertexID(0), top).toCacheKey()
+
+    for i in 0 ..< keys.len:
+      for j in i + 1 ..< keys.len:
+        check keys[i] != keys[j]
+
+  test "Keys reject root or vid beyond 48 bits":
+    expect AssertionDefect:
+      discard (VertexID(1'u64 shl 48), VertexID(2)).toCacheKey()
+    expect AssertionDefect:
+      discard (STATE_ROOT_VID, VertexID(1'u64 shl 48)).toCacheKey()
 
   test "Branch value round trip":
     for (vid, used) in [
@@ -60,9 +81,9 @@ suite "Aristo rdb cache key":
 
   test "Cache entry sizes":
     check:
-      ConcurrentLruCache[RdbCacheKey, HashKey].entrySize == 60 + 12
-      ConcurrentLruCache[RdbCacheKey, VertexBuf].entrySize == 144 + 12
-      ConcurrentLruCache[RdbCacheKey, RdbBranchVal].entrySize == 32 + 12
+      ConcurrentLruCache[RdbCacheKey, HashKey].entrySize == 56 + 12
+      ConcurrentLruCache[RdbCacheKey, VertexBuf].entrySize == 140 + 12
+      ConcurrentLruCache[RdbCacheKey, RdbBranchVal].entrySize == 28 + 12
 
   test "Cache keeps static vids under different roots apart":
     var lru: ConcurrentLruCache[RdbCacheKey, int]
