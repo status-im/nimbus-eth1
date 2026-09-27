@@ -43,8 +43,7 @@ type
     data: array[4, uint32]
 
   RdbBranchVal* = object
-    vid: array[2, uint32]
-    bits: uint16
+    data: array[2, uint32]
 
   RdbInst* = object
     baseDb*: RocksDbInstanceRef
@@ -108,7 +107,8 @@ var
 
 static:
   doAssert sizeof(RdbCacheKey) == 16 and alignof(RdbCacheKey) == 4
-  doAssert sizeof(RdbBranchVal) == 12 and alignof(RdbBranchVal) == 4
+  doAssert sizeof(RdbBranchVal) == 8 and alignof(RdbBranchVal) == 4
+  doAssert FIRST_DYNAMIC_VID < (1'u64 shl 40)
 
 func toCacheKey*(rvid: RootedVertexID): RdbCacheKey {.inline.} =
   let
@@ -126,13 +126,14 @@ func hash*(k: RdbCacheKey): Hash {.inline.} =
 
 func init*(T: type RdbBranchVal, startVid: VertexID, used: uint16): T {.inline.} =
   let v = startVid.uint64
-  T(vid: [uint32(v), uint32(v shr 32)], bits: used)
+  doAssert (v shr 48) == 0
+  T(data: [uint32(v), uint32(v shr 32) or (uint32(used) shl 16)])
 
 func startVid*(v: RdbBranchVal): VertexID {.inline.} =
-  VertexID(uint64(v.vid[0]) or (uint64(v.vid[1]) shl 32))
+  VertexID(uint64(v.data[0]) or (uint64(v.data[1] and 0xFFFF'u32) shl 32))
 
 func used*(v: RdbBranchVal): uint16 {.inline.} =
-  v.bits
+  uint16(v.data[1] shr 16)
 
 template toOpenArray*(xid: AdminTabID): openArray[byte] =
   xid.uint64.toBytesBE.toOpenArray(0,7)

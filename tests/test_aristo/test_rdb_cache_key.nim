@@ -44,7 +44,9 @@ suite "Aristo rdb cache key":
   test "Branch value round trip":
     for (vid, used) in [
       (VertexID(0), 0'u16),
+      (VertexID(0), 0xFFFF'u16),
       (VertexID(FIRST_DYNAMIC_VID), 0x8001'u16),
+      (VertexID(0x0000_FFFF_FFFF_FFFF'u64), 0'u16),
       (VertexID(0x0000_FFFF_FFFF_FFFF'u64), 0xFFFF'u16),
     ]:
       let v = RdbBranchVal.init(vid, used)
@@ -52,11 +54,15 @@ suite "Aristo rdb cache key":
         v.startVid == vid
         v.used == used
 
+  test "Branch value rejects startVid beyond 48 bits":
+    expect AssertionDefect:
+      discard RdbBranchVal.init(VertexID(1'u64 shl 48), 0)
+
   test "Cache entry sizes":
     check:
       ConcurrentLruCache[RdbCacheKey, HashKey].entrySize == 60 + 12
       ConcurrentLruCache[RdbCacheKey, VertexBuf].entrySize == 144 + 12
-      ConcurrentLruCache[RdbCacheKey, RdbBranchVal].entrySize == 36 + 12
+      ConcurrentLruCache[RdbCacheKey, RdbBranchVal].entrySize == 32 + 12
 
   test "Cache keeps static vids under different roots apart":
     var lru: ConcurrentLruCache[RdbCacheKey, int]
