@@ -57,6 +57,9 @@ const
   syncUpdateLogWaitInterval* = chronos.seconds(30)
     ## Control log chatter for update messages
 
+  statusLogInterval* = chronos.seconds(60)
+    ## Periodic chain status message (issued even when idle)
+
   workerIdleWaitInterval* = chronos.seconds(1)
   workerIdleLongWaitInterval* = chronos.seconds(5)
     ## Sleep some time in multi-mode (i.e. concurrently running peers) if

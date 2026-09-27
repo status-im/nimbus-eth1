@@ -420,6 +420,7 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
       if c.persistedCount > 1:
         notice "Finalized blocks persisted",
           nBlocks = c.persistedCount,
+          head = c.latest.number,
           base = c.base.number,
           baseHash = c.base.hash.short,
           pendingFCU = c.pendingFCU.short,
