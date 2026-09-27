@@ -426,6 +426,12 @@ suite "ConcurrentLruCache Tests":
       defaultShardBits(16) == 6 # 64 shards
       defaultShardBits(32) == 6 # 64 shards
 
+  test "entrySize includes node padding":
+    check:
+      sizeof(LruNode[array[2, uint64], array[33, byte]]) == 64
+      ConcurrentLruCache[array[2, uint64], array[33, byte]].entrySize == 64 + 12
+      ConcurrentLruCache[array[3, uint32], array[33, byte]].entrySize == 56 + 12
+
   test "withGet promotion runs even if foundBody returns":
     # Single-shard, thread-safe cache so the promotion goes through the locked
     # path (the one that promotes in a `finally`).
