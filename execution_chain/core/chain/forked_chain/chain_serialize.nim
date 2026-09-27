@@ -31,6 +31,11 @@ type
     blockHash: Hash32
     blockNumber: uint64
 
+  StoredBlock = object
+    header: Header
+    hash: Hash32
+    parentIndex: uint # zero for the base, otherwise parent slot + 1
+
   FcState = object
     numBlocks: uint
     base: uint
@@ -45,12 +50,6 @@ type
 # ------------------------------------------------------------------------------
 # RLP serializer functions
 # ------------------------------------------------------------------------------
-
-type
-  StoredBlock = object
-    header: Header
-    hash: Hash32
-    parentIndex: uint # zero for the base, otherwise parent slot + 1
 
 func read(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
   rlp.tryEnterList()
@@ -182,17 +181,21 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
   ?txFrame.putMove(FcStateKey.toOpenArray, encodedState)
   fc.snapshotMayExist = true
 
-  info "Blocks DAG written to database",
+  # Block data is in the shared KVT already, the snapshot adds the DAG layout
+  # and the in-memory state frames of the blocks above base
+  info "Saved block DAG snapshot to database",
     base=fc.base.number,
     baseHash=fc.base.hash.short,
-    latest=fc.latest.number,
-    latestHash=fc.latest.hash.short,
     head=fc.fcuHead.number,
     headHash=fc.fcuHead.hash.short,
-    finalizedNum=fc.latestFinalized.number,
+    finalized=fc.latestFinalized.number,
     finalizedHash=fc.latestFinalized.hash.short,
-    blocksSerialized=fc.hashToBlock.len,
-    heads=fc.heads.toString
+    latest=fc.latest.number,
+    latestHash=fc.latest.hash.short,
+    heads=fc.heads.toString,
+    numBlocks=blocks.len,
+    stateFrames=blocks.len - 1,
+    txRecords=state.txRecords.len
 
   ok()
 
