@@ -122,26 +122,27 @@ proc getKey*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
 ): Result[(HashKey, VertexRef), (AristoError, string)] =
   let ck = rvid.toCacheKey()
-  block:
-    # Try LRU cache first
-    let rc =
-      if GetVtxFlag.PeekCache in flags:
-        rdb.rdKeyLru.peek(ck)
-      else:
-        rdb.rdKeyLru.get(ck)
+  if ck.isSome:
+    block:
+      # Try LRU cache first
+      let rc =
+        if GetVtxFlag.PeekCache in flags:
+          rdb.rdKeyLru.peek(ck[])
+        else:
+          rdb.rdKeyLru.get(ck[])
 
-    if rc.isOk:
-      rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok((rc.value, nil))
+      if rc.isOk:
+        rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
+        return ok((rc.value, nil))
 
-    rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
+      rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
 
-  block:
-    # We don't store keys for leaves, no need to hit the database
-    rdb.rdVtxLru.withPeek(ck, cached):
-      let vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
-      if vtx.vType in Leaves:
-        return ok((VOID_HASH_KEY, vtx))
+    block:
+      # We don't store keys for leaves, no need to hit the database
+      rdb.rdVtxLru.withPeek(ck[], cached):
+        let vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
+        if vtx.vType in Leaves:
+          return ok((VOID_HASH_KEY, vtx))
 
   # Otherwise fetch from backend database
   var
@@ -162,14 +163,15 @@ proc getKey*(
   let res = vtxBuf.data().deblobify(HashKey)
 
   # Update cache and return - in peek mode, avoid evicting cache items
-  if res.isSome() and
-      (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
-    rdb.rdKeyLru.put(ck, res.value())
+  if ck.isSome:
+    if res.isSome() and
+        (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
+      rdb.rdKeyLru.put(ck[], res.value())
 
-  if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-    # Don't invalidate vertex cache entries because of key reads - the latter
-    # follow a different access pattern!
-    rdb.rdVtxLru.put(ck, vtxBuf)
+    if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+      # Don't invalidate vertex cache entries because of key reads - the latter
+      # follow a different access pattern!
+      rdb.rdVtxLru.put(ck[], vtxBuf)
 
   let vtx =
     if res.isNone():
@@ -201,30 +203,31 @@ proc getKeys*(
   for i, rvid in rvids:
     let ck = rvid.toCacheKey()
     block lookup:
-      block:
-        let rc =
-          if GetVtxFlag.PeekCache in flags:
-            rdb.rdKeyLru.peek(ck)
-          else:
-            rdb.rdKeyLru.get(ck)
+      if ck.isSome:
+        block:
+          let rc =
+            if GetVtxFlag.PeekCache in flags:
+              rdb.rdKeyLru.peek(ck[])
+            else:
+              rdb.rdKeyLru.get(ck[])
 
-        if rc.isOk:
-          rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-          keyvtxs[i] = (rc.value, VertexRef(nil))
-          break lookup
+          if rc.isOk:
+            rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
+            keyvtxs[i] = (rc.value, VertexRef(nil))
+            break lookup
 
-        rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
+          rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
 
-      block:
-        var leafVtx: VertexRef
-        rdb.rdVtxLru.withPeek(ck, cached):
-          let vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
-          if vtx.vType in Leaves:
-            leafVtx = vtx
+        block:
+          var leafVtx: VertexRef
+          rdb.rdVtxLru.withPeek(ck[], cached):
+            let vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
+            if vtx.vType in Leaves:
+              leafVtx = vtx
 
-        if not leafVtx.isNil:
-          keyvtxs[i] = (VOID_HASH_KEY, leafVtx)
-          break lookup
+          if not leafVtx.isNil:
+            keyvtxs[i] = (VOID_HASH_KEY, leafVtx)
+            break lookup
 
       fetchIdxs[nFetch] = uint8 i
       inc nFetch
@@ -280,12 +283,13 @@ proc getKeys*(
       ck = rvids[i].toCacheKey()
       res = vtxBufs[j].data().deblobify(HashKey)
 
-    if res.isSome() and
-        (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
-      rdb.rdKeyLru.put(ck, res.value())
+    if ck.isSome:
+      if res.isSome() and
+          (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
+        rdb.rdKeyLru.put(ck[], res.value())
 
-    if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-      rdb.rdVtxLru.put(ck, vtxBufs[j])
+      if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+        rdb.rdVtxLru.put(ck[], vtxBufs[j])
 
     keyvtxs[i] =
       if res.isSome():
@@ -302,31 +306,32 @@ proc getVtx*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
 ): Result[VertexRef, (AristoError, string)] =
   let ck = rvid.toCacheKey()
-  # Try LRU cache first
-  block:
-    let rc =
+  if ck.isSome:
+    # Try LRU cache first
+    block:
+      let rc =
+        if GetVtxFlag.PeekCache in flags:
+          rdb.rdBranchLru.peek(ck[])
+        else:
+          rdb.rdBranchLru.get(ck[])
+      if rc.isOk():
+        rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
+        return ok(BranchRef.init(rc[].startVid, rc[].used))
+
+    block:
+      var vtx: VertexRef
       if GetVtxFlag.PeekCache in flags:
-        rdb.rdBranchLru.peek(ck)
+        rdb.rdVtxLru.withPeek(ck[], cached):
+          vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
       else:
-        rdb.rdBranchLru.get(ck)
-    if rc.isOk():
-      rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok(BranchRef.init(rc[].startVid, rc[].used))
+        rdb.rdVtxLru.withGet(ck[], cached):
+          vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
 
-  block:
-    var vtx: VertexRef
-    if GetVtxFlag.PeekCache in flags:
-      rdb.rdVtxLru.withPeek(ck, cached):
-        vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
-    else:
-      rdb.rdVtxLru.withGet(ck, cached):
-        vtx = cached.data().deblobify(VertexRef).expect("valid data in db")
-
-    if vtx != nil:
-      rdbVtxLruStats[rvid.to(RdbStateType)][vtx.vType.to(RdbVertexType)].inc(
-        true
-      )
-      return ok(vtx)
+      if vtx != nil:
+        rdbVtxLruStats[rvid.to(RdbStateType)][vtx.vType.to(RdbVertexType)].inc(
+          true
+        )
+        return ok(vtx)
 
   # Otherwise fetch from backend database
   var
@@ -358,12 +363,12 @@ proc getVtx*(
     )
 
   # Update cache and return - in peek mode, avoid evicting cache items
-  if GetVtxFlag.PeekCache notin flags:
-    if res.value.vType == Branch:
-      let vtx = BranchRef(res.value())
-      rdb.rdBranchLru.put(ck, RdbBranchVal.init(vtx.startVid, vtx.used))
+  if ck.isSome and GetVtxFlag.PeekCache notin flags:
+    let bv = res.value().toBranchVal()
+    if bv.isSome:
+      rdb.rdBranchLru.put(ck[], bv[])
     else:
-      rdb.rdVtxLru.put(ck, vtxBuf)
+      rdb.rdVtxLru.put(ck[], vtxBuf)
 
   ok res.value()
 

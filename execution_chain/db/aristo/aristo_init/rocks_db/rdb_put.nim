@@ -105,29 +105,28 @@ proc putVtx*(
     # likely to evict more useful items (when putting many items, we might even
     # evict those that were just added)
 
-    if vtx.vType == Branch:
-      let vtx = BranchRef(vtx)
-      rdb.rdVtxLru.del(ck)
-      if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
-        rdb.rdBranchLru.put(ck, RdbBranchVal.init(vtx.startVid, vtx.used))
+    if ck.isSome:
+      let bv = vtx.toBranchVal()
+      if bv.isSome:
+        rdb.rdVtxLru.del(ck[])
+        if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
+          rdb.rdBranchLru.put(ck[], bv[])
+        else:
+          discard rdb.rdBranchLru.update(ck[], bv[])
       else:
-        discard rdb.rdBranchLru.update(ck, RdbBranchVal.init(vtx.startVid, vtx.used))
-    else:
-      rdb.rdBranchLru.del(ck)
-      
-      if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-        rdb.rdVtxLru.put(ck, vtxBuf)
-      else:
-        discard rdb.rdVtxLru.update(ck, vtxBuf)
+        rdb.rdBranchLru.del(ck[])
+        if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+          rdb.rdVtxLru.put(ck[], vtxBuf)
+        else:
+          discard rdb.rdVtxLru.update(ck[], vtxBuf)
 
-
-    if key.isValid:
-      if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
-        rdb.rdKeyLru.put(ck, key)
+      if key.isValid:
+        if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
+          rdb.rdKeyLru.put(ck[], key)
+        else:
+          discard rdb.rdKeyLru.update(ck[], key)
       else:
-        discard rdb.rdKeyLru.update(ck, key)
-    else:
-      rdb.rdKeyLru.del ck
+        rdb.rdKeyLru.del ck[]
   else:
     dsc.delete(rvid.blobify().data(), rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will clear the `rdVtxLru` cache
@@ -137,9 +136,10 @@ proc putVtx*(
       return err((rvid.vid,errSym,error))
 
     # Update cache, vertex will most probably never be visited anymore
-    rdb.rdBranchLru.del ck
-    rdb.rdVtxLru.del ck
-    rdb.rdKeyLru.del ck
+    if ck.isSome:
+      rdb.rdBranchLru.del ck[]
+      rdb.rdVtxLru.del ck[]
+      rdb.rdKeyLru.del ck[]
 
   ok()
 

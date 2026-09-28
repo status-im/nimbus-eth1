@@ -40,9 +40,24 @@ type
       ## write session and return a session error.
 
   RdbCacheKey* = object
+    ## `RootedVertexID` packed into 12 bytes at 4-byte alignment so that LRU
+    ## nodes carry no padding. Both ids must fit in 48 bits - larger ones
+    ## bypass the caches (see `toCacheKey`).
+    ##
+    ##   data[0]  bits 31..0   vid[31..0]
+    ##   data[1]  bits 31..16  root[15..0]
+    ##            bits 15..0   vid[47..32]
+    ##   data[2]  bits 31..0   root[47..16]
     data: array[3, uint32]
 
   RdbBranchVal* = object
+    ## Cached `BranchRef` payload: the 48-bit `startVid` and the 16-bit `used`
+    ## child mask packed into 8 bytes at 4-byte alignment. A `startVid` beyond
+    ## 48 bits is cached as a blob in the vertex cache instead.
+    ##
+    ##   data[0]  bits 31..0   startVid[31..0]
+    ##   data[1]  bits 31..16  used[15..0]
+    ##            bits 15..0   startVid[47..32]
     data: array[2, uint32]
 
   RdbInst* = object
@@ -110,24 +125,35 @@ static:
   doAssert sizeof(RdbBranchVal) == 8 and alignof(RdbBranchVal) == 4
   doAssert FIRST_DYNAMIC_VID < (1'u64 shl 40)
 
-func toCacheKey*(rvid: RootedVertexID): RdbCacheKey {.inline.} =
+func toCacheKey*(rvid: RootedVertexID): Opt[RdbCacheKey] {.inline.} =
   let
     root = rvid.root.uint64
     vid = rvid.vid.uint64
-  doAssert ((root or vid) shr 48) == 0
-  RdbCacheKey(
-    data: [uint32(vid), uint32(vid shr 32) or (uint32(root) shl 16), uint32(root shr 16)])
+  if ((root or vid) shr 48) == 0:
+    Opt.some(RdbCacheKey(
+      data: [uint32(vid), uint32(vid shr 32) or (uint32(root) shl 16), uint32(root shr 16)]))
+  else:
+    Opt.none(RdbCacheKey)
 
 func `==`*(a, b: RdbCacheKey): bool {.inline.} =
   a.data[0] == b.data[0] and a.data[1] == b.data[1] and a.data[2] == b.data[2]
 
 func hash*(k: RdbCacheKey): Hash {.inline.} =
-  cast[Hash](rapidhashNano(cast[array[sizeof(RdbCacheKey), byte]](k)))
+  cast[Hash](rapidhashNano(cast[array[16, byte]]([k.data[0], k.data[1], k.data[2], 0'u32])))
 
-func init*(T: type RdbBranchVal, startVid: VertexID, used: uint16): T {.inline.} =
+func init*(T: type RdbBranchVal, startVid: VertexID, used: uint16): Opt[T] {.inline.} =
   let v = startVid.uint64
-  doAssert (v shr 48) == 0
-  T(data: [uint32(v), uint32(v shr 32) or (uint32(used) shl 16)])
+  if (v shr 48) == 0:
+    Opt.some(T(data: [uint32(v), uint32(v shr 32) or (uint32(used) shl 16)]))
+  else:
+    Opt.none(T)
+
+func toBranchVal*(vtx: VertexRef): Opt[RdbBranchVal] {.inline.} =
+  if vtx.vType == Branch:
+    let vtx = BranchRef(vtx)
+    RdbBranchVal.init(vtx.startVid, vtx.used)
+  else:
+    Opt.none(RdbBranchVal)
 
 func startVid*(v: RdbBranchVal): VertexID {.inline.} =
   VertexID(uint64(v.data[0]) or (uint64(v.data[1] and 0xFFFF'u32) shl 32))
