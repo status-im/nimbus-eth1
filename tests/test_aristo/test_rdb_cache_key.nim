@@ -122,6 +122,17 @@ suite "Aristo rdb cache key":
       lru.peek(a.toCacheKey()[]) == Opt.some(1)
       lru.peek(b.toCacheKey()[]) == Opt.some(2)
 
+  test "Default cache budgets sit just above a capacity step":
+    const slack = 2 * 1024 * 1024
+    template stepCheck(T: typedesc, budget: int) =
+      check:
+        T.capacityForBytes(budget) > T.capacityForBytes(budget - slack)
+        T.capacityForBytes(budget) == T.capacityForBytes(budget + budget div 4)
+
+    stepCheck(ConcurrentLruCache[RdbCacheKey, HashKey], defaultRdbKeyCacheSize)
+    stepCheck(ConcurrentLruCache[RdbCacheKey, VertexBuf], defaultRdbVtxCacheSize)
+    stepCheck(ConcurrentLruCache[RdbCacheKey, RdbBranchVal], defaultRdbBranchCacheSize)
+
   test "Ids beyond the packed range bypass the caches":
     let
       basePath = mkdtemp(prefix = "rdb_cache_key_", dir = getAppDir())

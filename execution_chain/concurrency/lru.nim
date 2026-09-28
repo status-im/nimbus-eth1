@@ -881,6 +881,32 @@ func shardLenForKey*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
 template capacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   lru.shardCapacity() * lru.numShards()
 
+func capacityForBytes*[K, V](
+    T: type ConcurrentLruCache[K, V], bytes: int, threadSafe = true
+): int =
+  ## Largest capacity whose bucket tables sit exactly at `fillRatio`, so no
+  ## slot beyond what open addressing needs is allocated, with nodes and
+  ## buckets of every shard fitting in `bytes`. Shards are counted the way
+  ## `init` creates them for the given `threadSafe` mode.
+  let shards =
+    if threadSafe:
+      numShards(defaultShardBits(countProcessors()))
+    else:
+      1
+  var
+    slots = 1
+    best = 0
+  while true:
+    let
+      nodes = int(float(slots) * fillRatio)
+      perShard = nodes * sizeof(LruNode[K, V]) + slots * sizeof(LruBucket)
+    if perShard * shards > bytes:
+      break
+    if nodes > 1:
+      best = (nodes - 1) * shards
+    slots *= 2
+  best
+
 func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   if lru.threadSafe:
     var total = 0
