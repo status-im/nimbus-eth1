@@ -79,12 +79,6 @@ suite "Aristo rdb cache key":
     expect AssertionDefect:
       discard RdbBranchVal.init(VertexID(1'u64 shl 48), 0)
 
-  test "Cache entry sizes":
-    check:
-      ConcurrentLruCache[RdbCacheKey, HashKey].entrySize == 56 + 12
-      ConcurrentLruCache[RdbCacheKey, VertexBuf].entrySize == 140 + 12
-      ConcurrentLruCache[RdbCacheKey, RdbBranchVal].entrySize == 28 + 12
-
   test "Cache keeps static vids under different roots apart":
     var lru: ConcurrentLruCache[RdbCacheKey, int]
     lru.init(16, shardBits = 0)

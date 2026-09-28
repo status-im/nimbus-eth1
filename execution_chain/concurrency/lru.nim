@@ -881,9 +881,6 @@ func shardLenForKey*[K, V](lru: var ConcurrentLruCache[K, V], key: K): int =
 template capacity*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   lru.shardCapacity() * lru.numShards()
 
-func entrySize*[K, V](T: type ConcurrentLruCache[K, V]): int =
-  sizeof(LruNode[K, V]) + sizeof(LruBucket) * 3 div 2
-
 func len*[K, V](lru: var ConcurrentLruCache[K, V]): int =
   if lru.threadSafe:
     var total = 0
