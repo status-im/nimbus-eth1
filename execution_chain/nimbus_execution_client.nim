@@ -222,6 +222,62 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
 
+proc getCoreDbOpts(
+    config: ExecutionClientConf;
+    params: NetworkParams;
+    numThreads: int;
+      ): DbOptions =
+  let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
+
+  var dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
+  if disableParallelFeatures:
+    info "Not enough taskpool threads, disabling parallel features", numThreads
+    dbOpts.parallelStateRootComputation = false
+    dbOpts.threadSafeCaches = false
+
+  move dbOpts
+
+proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf, params: NetworkParams) =
+  if config.rewriteDatadirId:
+    return
+
+  let
+    storedHeader = db.baseTxFrame().getBlockHeader(0'u64).valueOr:
+      return
+    storedHash = storedHeader.computeBlockHash
+    expectedHash = params.genesisBlockHash()
+
+  if storedHash != expectedHash:
+    fatal "Data dir already initialized with other network configuration",
+      get=storedHash,
+      expected=expectedHash
+    quit(QuitFailure)
+
+proc setupPruning(
+    nimbus: NimbusNode;
+    config: ExecutionClientConf;
+    com: CommonRef;
+      ) =
+  if config.backgroundPruning:
+    nimbus.backgroundPruner = BackgroundPrunerRef.init(com)
+    nimbus.backgroundPruner.start()
+  else:
+    let state = com.db.kvt.loadPrunerStateBe()
+    if state.active:
+      fatal "Node was previously started with background pruning enabled " &
+        "(--prune). Historical block data may have been deleted, and might " &
+        "cause inconsistent DB restart with --prune=true or use a fresh " &
+        "data directory."
+      quit(QuitFailure)
+
+  if config.balPruning and com.activationTime(Amsterdam).isSome:
+    nimbus.balPruner = BalPrunerRef.init(com)
+    nimbus.balPruner.start()
+
+# -----------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
+
 proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, params: NetworkParams) =
   nimbus.accountsManager = new AccountsManager
   nimbus.rng = newRng()
@@ -246,42 +302,12 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, para
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
 
-  if config.backgroundPruning:
-    nimbus.backgroundPruner = BackgroundPrunerRef.init(com)
-    nimbus.backgroundPruner.start()
-  else:
-    let state = com.db.kvt.loadPrunerStateBe()
-    if state.active:
-      fatal "Node was previously started with background pruning enabled (--prune). " &
-        "Historical block data may have been deleted, and might cause inconsistent DB " &
-        "Restart with --prune=true or use a fresh data directory."
-      quit(QuitFailure)
-
-  if config.balPruning and com.activationTime(Amsterdam).isSome:
-    nimbus.balPruner = BalPrunerRef.init(com)
-    nimbus.balPruner.start()
+  nimbus.setupPruning(config, com)
 
 proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef, params: NetworkParams): T =
   let nimbus = T()
   nimbus.init(config, com, params)
   nimbus
-
-proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf, params: NetworkParams) =
-  if config.rewriteDatadirId:
-    return
-
-  let
-    storedHeader = db.baseTxFrame().getBlockHeader(0'u64).valueOr:
-      return
-    storedHash = storedHeader.computeBlockHash
-    expectedHash = params.genesisBlockHash()
-
-  if storedHash != expectedHash:
-    fatal "Data dir already initialized with other network configuration",
-      get=storedHash,
-      expected=expectedHash
-    quit(QuitFailure)
-
 
 proc setupCommonRef*(
     config: ExecutionClientConf, params: NetworkParams, numThreads: int): (CommonRef, bool) =
@@ -295,12 +321,7 @@ proc setupCommonRef*(
 
   let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
 
-  var dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
-  if disableParallelFeatures:
-    info "Not enough taskpool threads, disabling parallel features", numThreads
-    dbOpts.parallelStateRootComputation = false
-    dbOpts.threadSafeCaches = false
-
+  var dbOpts = config.getCoreDbOpts(params, numThreads)
   let coreDB = AristoDbRocks.newCoreDbRef(config.dataDir(params), dbOpts)
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config, params)
@@ -380,7 +401,7 @@ proc runExeClient*(
     txFrame.checkpoint(fc.base.header.number, skipSnapshot = true)
     com.db.persist(txFrame)
 
- # Rlp import is there, first load the chain segment
+  # Rlp import is there, first load the chain segment
   if config.bootstrapBlocksFile.len > 0:
     try:
       waitFor importRlpBlocks(config, com, nimbus.fc)

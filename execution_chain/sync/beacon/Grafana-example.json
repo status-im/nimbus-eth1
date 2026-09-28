@@ -47,7 +47,7 @@
         "kind": "Panel",
         "spec": {
           "id": 1,
-          "title": "Base vs EL head vs CL head",
+          "title": "EL base vs EL head vs CL head",
           "description": "",
           "links": [],
           "data": {
@@ -145,7 +145,7 @@
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
-                        "legendFormat": "base",
+                        "legendFormat": "EL_base",
                         "range": true,
                         "useBackend": false
                       }
@@ -240,7 +240,8 @@
                   {
                     "matcher": {
                       "id": "byName",
-                      "options": "nec_base"
+                      "scope": "series",
+                      "options": "EL_base"
                     },
                     "properties": [
                       {
