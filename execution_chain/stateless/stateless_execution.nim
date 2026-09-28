@@ -95,8 +95,8 @@ proc statelessProcessBlock*(
     senders = Opt.none(seq[Address]),
 ): Result[void, string] =
   let
-    verifiedHeaders = ?witness.verifyHeaders(blk.header)
-    parent = verifiedHeaders[^1] # The last header is the parent
+    verified = ?witness.verifyHeaders(blk.header)
+    parent = verified.headers[^1] # The last header is the parent
     preStateRoot = parent.stateRoot
 
   # Convert the list of trie nodes into a table keyed by node hash.
@@ -123,11 +123,8 @@ proc statelessProcessBlock*(
     doAssert memoryTxFrame.persistCodeByHash(keccak256(c.asSeq()), c.asSeq()).isOk()
 
   # Load the block hashes into the database indexed by block number.
-  for h in verifiedHeaders:
-    try:
-      memoryTxFrame.addBlockNumberToHashLookup(h.number, h.computeRlpHash())
-    except RlpError as e:
-      raiseAssert e.msg
+  for i, h in verified.headers:
+    memoryTxFrame.addBlockNumberToHashLookup(h.number, verified.hashes[i])
 
   # Create evm instance using the in memory database.
   let memoryVmState = BaseVMState()
