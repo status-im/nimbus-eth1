@@ -57,17 +57,15 @@ proc start*(buddy: SnapPeerRef; info: static[string]): bool =
     debug info & ": Failed", peer
     return false
 
-  if SnapReady < ctx.pool.syncState:
-    debug info & ": New peer", peer, nSyncPeers=ctx.nSyncPeers(),
-      peerType=buddy.only.peerType, clientId=buddy.peer.clientId
+  debug info & ": New peer", peer, nSyncPeers=ctx.nSyncPeers(),
+    peerType=buddy.only.peerType, clientId=buddy.peer.clientId,
+    supportsBal=buddy.only.supportsBal, nSnap2Peers=ctx.pool.nSnap2Peers
   true
 
 proc stop*(buddy: SnapPeerRef; info: static[string]) =
   ## Clean up this peer
-  let ctx = buddy.ctx
-  if SnapReady < ctx.pool.syncState:
-    debug info & ": Release peer", peer=buddy.peer,
-      nSyncPeers=(ctx.nSyncPeers()-1), syncState=($buddy.syncState)
+  debug info & ": Release peer", peer=buddy.peer,
+    nSyncPeers=(buddy.ctx.nSyncPeers()-1), syncState=($buddy.syncState)
   buddy.stopSyncPeer()
 
 # ------------------------------------------------------------------------------
@@ -252,6 +250,11 @@ template runPeer*(
       bodyRc = peerWaitDownloadInterval
 
     of SnapBalsFetch:
+      # Prefer peers that support the snap/2 protocol
+      if not buddy.only.supportsBal and
+         0 < buddy.ctx.pool.nSnap2Peers:
+        bodyRc = peerWaitBalsLockedInterval
+        break body
       buddy.downloadBals(info).isOkOr:
         if error == ELockError:
           ctx.pool.lockedBalsLog.logCtrl(lockedBalsLogWaitInterval):
