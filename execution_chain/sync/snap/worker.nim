@@ -243,7 +243,7 @@ template runPeer*(
       buddy.downloadState(info).isOkOr:
         if error == ENoDataAvailable:
           buddy.suspend()
-          debug info & ": Peer stopped downloading", peer,
+          debug info & ": State downloading stopped", peer,
             pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
             nSyncPeers=ctx.nSyncPeers(), `error`=error
         bodyRc = peerWaitDownloadInterval

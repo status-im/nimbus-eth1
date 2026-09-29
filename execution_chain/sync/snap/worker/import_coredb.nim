@@ -18,12 +18,11 @@
 
 import
   pkg/chronicles,
-  ./import_coredb/[coredb_desc, coredb_import, coredb_stats],
+  ./import_coredb/[coredb_desc, coredb_import],
   ./[helpers, cache_db, worker_desc]
 
 export
-  coredb_desc,
-  coredb_stats
+  coredb_desc
 
 # ------------------------------------------------------------------------------
 # Public functions
