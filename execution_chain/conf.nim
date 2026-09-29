@@ -538,7 +538,7 @@ type
 
       snapSyncEnabled* {.
         hidden
-        desc: "Start syncer using snap to be followed by beacon sync." &
+        desc: "Start syncer using snap/2 to be followed by beacon sync." &
               " Otherwise, a full sync will be performed by starting beacon" &
               " sync immediately"
         defaultValue: false

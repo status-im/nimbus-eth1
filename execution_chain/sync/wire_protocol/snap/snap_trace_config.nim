@@ -12,7 +12,7 @@ const
   # Some static noisy settings for `snap` debugging
   trSnapTraceGossipOk* = true
     ## `trace` log each sync network message.
-  trEthTraceHandlerOk* = true
+  trSnapTraceHandlerOk* = true
     ## `trace` application handler message.
 
 # End

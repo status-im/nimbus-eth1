@@ -232,8 +232,6 @@ template runPeer*(
     case ctx.pool.syncState:
     of SnapDownload:
       if buddy.isSuspended():
-        #trace info & ": Suspended on current state", peer,
-        #  pivot=ctx.pool.pivotNum
         bodyRc = peerWaitExhaustedInterval
         break body
 
