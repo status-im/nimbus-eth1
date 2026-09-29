@@ -19,6 +19,8 @@ import std/strformat, results,   ../../[aristo_blobify, aristo_desc], ./rdb_desc
 # Private constructor
 # ------------------------------------------------------------------------------
 
+const lruOverhead = 20 # Approximate LRU cache overhead per entry based on minilru sizes
+
 proc dumpCacheStats(keySize, vtxSize, branchSize: int) =
   block vtx:
     var misses, hits: uint64
@@ -84,13 +86,17 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   ## Database backend constructor
   rdb.baseDb = baseDb
 
+  # bytes -> entries based on overhead estimates
   rdb.rdKeySize =
-    typeof(rdb.rdKeyLru).capacityForBytes(opts.rdbKeyCacheSize, opts.threadSafeCaches)
+    opts.rdbKeyCacheSize div (sizeof(RdbCacheKey) + sizeof(HashKey) + lruOverhead)
+
   rdb.rdVtxSize =
-    typeof(rdb.rdVtxLru).capacityForBytes(opts.rdbVtxCacheSize, opts.threadSafeCaches)
-  rdb.rdBranchSize = typeof(rdb.rdBranchLru).capacityForBytes(
-    opts.rdbBranchCacheSize, opts.threadSafeCaches
-  )
+    opts.rdbVtxCacheSize div
+    (sizeof(RdbCacheKey) + sizeof(VertexBuf) + lruOverhead)
+
+  rdb.rdBranchSize =
+    opts.rdbBranchCacheSize div
+    (sizeof(RdbCacheKey) + sizeof(typeof(rdb.rdBranchLru).V) + lruOverhead)
 
   if opts.threadSafeCaches:
     rdb.rdKeyLru.init(rdb.rdKeySize)

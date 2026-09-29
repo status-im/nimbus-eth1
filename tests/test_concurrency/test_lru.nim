@@ -11,7 +11,7 @@
 {.used.}
 
 import
-  std/[atomics, importutils, math, sequtils],
+  std/[atomics, importutils, sequtils],
   unittest2,
   taskpools,
   ../../execution_chain/concurrency/lru {.all.},
@@ -977,46 +977,6 @@ suite "ConcurrentLruCache Tests":
       check lru.get(i) == Opt.none(int)
 
     check lru.len() == 0
-
-suite "ConcurrentLruCache capacity sizing":
-  test "capacityForBytes fills every bucket table to the fill ratio within the budget":
-    type
-      K = uint64
-      V = array[13, byte]
-    for budget in [64 * 1024, 1024 * 1024, 7 * 1024 * 1024]:
-      for threadSafe in [true, false]:
-        let capacity = ConcurrentLruCache[K, V].capacityForBytes(budget, threadSafe)
-        check capacity > 0
-
-        var lru: ConcurrentLruCache[K, V]
-        if threadSafe:
-          lru.init(capacity)
-        else:
-          lru.init(capacity, shardBits = 0, threadSafe = false)
-        defer:
-          lru.dispose()
-
-        for i in 0 ..< 16 * capacity:
-          lru.put(K(i) * 0x9E3779B97F4A7C15'u64, default(V))
-
-        var bytes, nextBytes = 0
-        for s in 0 ..< lru.numShards():
-          let
-            nodes = lru.shardAllocatedNodes(s)
-            buckets = lru.shardAllocatedBuckets(s)
-          check:
-            nodes == lru.shardCapacity() + 1
-            buckets == nextPowerOfTwo(int(ceil(float(nodes) / fillRatio)))
-            nodes == int(float(buckets) * fillRatio)
-          bytes += nodes * sizeof(LruNode[K, V]) + buckets * sizeof(LruBucket)
-          nextBytes +=
-            int(float(2 * buckets) * fillRatio) * sizeof(LruNode[K, V]) +
-            2 * buckets * sizeof(LruBucket)
-
-        check:
-          lru.len == capacity
-          bytes <= budget
-          nextBytes > budget
 
 suite "ConcurrentLruCache Tests (threadSafe = false)":
   test "init and dispose":
