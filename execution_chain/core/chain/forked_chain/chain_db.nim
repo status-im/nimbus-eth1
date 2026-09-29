@@ -40,14 +40,16 @@ type BodyData = object
   root: Hash32
   indexed: bool
 
-iterator bodyData(header: Header): BodyData =
+func bodyData(header: Header): seq[BodyData] =
+  # A seq rather than an iterator: an inline iterator with several `yield`s
+  # would copy the caller's loop body once per `yield`
   for root in [header.txRoot, header.receiptsRoot]:
     if root != EMPTY_ROOT_HASH:
-      yield BodyData(key: @(hashIndexKey(root, 0)), root: root, indexed: true)
+      result.add BodyData(key: @(hashIndexKey(root, 0)), root: root, indexed: true)
   if header.ommersHash != EMPTY_UNCLE_HASH:
-    yield BodyData(key: @(genericHashKey(header.ommersHash).toOpenArray))
+    result.add BodyData(key: @(genericHashKey(header.ommersHash).toOpenArray))
   if header.withdrawalsRoot.isSome and header.withdrawalsRoot.get != EMPTY_ROOT_HASH:
-    yield BodyData(key: @(withdrawalsKey(header.withdrawalsRoot.get).toOpenArray))
+    result.add BodyData(key: @(withdrawalsKey(header.withdrawalsRoot.get).toOpenArray))
 
 proc readOwners(db: CoreDbTxRef, key: DbKey): seq[Hash32] =
   let stored = db.getOrEmpty(key.toOpenArray).expect("read block data owners")
