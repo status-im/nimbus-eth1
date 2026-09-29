@@ -69,7 +69,7 @@ func errStr(rc: Result[FetchBalData,SnapErrorEx]): string =
 
 template fetchBlockAccessLists*(
     buddy: SnapPeerRef;
-    request: BlockAccessListsRequest;               # list of block hashes
+    request: openArray[Hash32];                     # list of block hashes
     startInx: int;                                  # start at this entry
       ): auto =
   ## Async/template
@@ -78,7 +78,7 @@ template fetchBlockAccessLists*(
   ##
   var bodyRc = Result[FetchBalResult,ErrorType].err(EGeneric)
   block body:
-    doAssert startInx < request.blockHashes.len
+    doAssert startInx < request.len
 
     const
       sendInfo = trEthSendSendingGetBals
@@ -86,7 +86,7 @@ template fetchBlockAccessLists*(
     var
       peer {.inject,used.} = $buddy.peer            # logging only
 
-    let nReq {.inject.} = request.blockHashes.len - startInx
+    let nReq {.inject.} = request.len - startInx
     if nReq <= 0:
       debug sendInfo & " empty request", peer, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bal
@@ -96,17 +96,21 @@ template fetchBlockAccessLists*(
     if not buddy.only.supportsBal:
       peer = "n/a"                                  # logging: try eth peer
 
-    let startHash {.inject.} = request.blockHashes[startInx]
+    let startHash {.inject.} = request[startInx]
     trace sendInfo, peer, startHash=startHash.short, nReq,
       nErrors=buddy.nErrors.fetch.bal, firstInx=startInx,
-      nHashes=request.blockHashes.len
+      nHashes=request.len
 
-    let
-      req = BlockAccessListsRequest(
-        blockHashes: request.blockHashes[startInx .. ^1])
-      rc =
-        if buddy.only.supportsBal: await buddy.snapGetBals(req)
-        else: await buddy.ethGetBals(req)
+    var rc: Result[FetchBalData,SnapErrorEx]
+    if buddy.only.supportsBal:
+      let req = SnapBalRequest(
+        blockHashes: request[startInx .. ^1],
+        bytes:       nFetchBalSnapSizeMax)
+      rc = await buddy.snapGetBals(req)
+    else:
+      let req = BlockAccessListsRequest(
+        blockHashes: request[startInx .. ^1])
+      rc = await buddy.ethGetBals(req)
 
     var
       elapsed: Duration

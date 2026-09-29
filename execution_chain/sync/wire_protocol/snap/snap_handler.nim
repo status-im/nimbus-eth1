@@ -83,7 +83,7 @@ proc getTrieNodes*(
 
 proc getBlockAccessLists*(
     ctx: SnapWireStateRef;
-    req: BlockAccessListsRequest;
+    req: SnapBalRequest;
       ): Opt[BlockAccessListsPacket] =
   ## Note that there is a working version for BALs at `../eth/eth_handler`
   when trEthTraceHandlerOk:

@@ -24,7 +24,7 @@ logScope:
 type
   ReqEnv = object
     hdrs: seq[Header]
-    balReq: BlockAccessListsRequest
+    balReq: seq[Hash32]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -71,8 +71,7 @@ proc getReqEnv(
 
   var q = ReqEnv(
     hdrs:   newSeqOfCap[Header](nBals),
-    balReq: BlockAccessListsRequest(
-      blockHashes: newSeqOfCap[Hash32](nBals)))
+    balReq: newSeqOfCap[Hash32](nBals))
   q.hdrs.add firstHdr
 
   # Check whether BALs are available, at all.
@@ -86,20 +85,20 @@ proc getReqEnv(
     let h = db.getHeader(bn, info).valueOr:
       break
     q.hdrs.add h
-    q.balReq.blockHashes.add h.parentHash
+    q.balReq.add h.parentHash
 
   doAssert 0 < q.hdrs.len                           # FIXME, will go away
-  doAssert q.hdrs.len == q.balReq.blockHashes.len + 1
+  doAssert q.hdrs.len == q.balReq.len + 1
 
   # Fetch or compute last block hash
   let topHdr = if q.hdrs.len < nBals: Header()
                else: db.getHeader(maxBn + 1, info).valueOr: Header()
   if topHdr.number == maxBn + 1:
-    q.balReq.blockHashes.add topHdr.parentHash
+    q.balReq.add topHdr.parentHash
   else:
-    q.balReq.blockHashes.add q.hdrs[^1].computeBlockHash
+    q.balReq.add q.hdrs[^1].computeBlockHash
 
-  doAssert q.hdrs.len == q.balReq.blockHashes.len   # FIXME, will go away
+  doAssert q.hdrs.len == q.balReq.len               # FIXME, will go away
 
   ok(q)
 
