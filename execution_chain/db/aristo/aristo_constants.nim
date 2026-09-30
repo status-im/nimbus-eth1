@@ -57,6 +57,6 @@ const
     ## LRU cache size for accounts that have storage, see `.accLeaves` and
     ## `.stoLeaves` fields of the main descriptor.
 
-  MISSING_LRU_SIZE* = 1024 * 1024
+  MISSING_LRU_SIZE* = 209_600
 
 # End
