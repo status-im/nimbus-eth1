@@ -102,6 +102,11 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   # Set up database related stuff
   doAssert ctx.updateServices(info)
 
+  # External target setting is not allowed in standByMode.
+  if ctx.pool.standByMode:
+    ctx.pool.chain.com.headerTargetRequest = proc(hash, finHash: Hash32) =
+      discard
+
   # Set up ticker
   if ctx.pool.syncTickerOk:
     ctx.pool.ticker = syncTicker()
