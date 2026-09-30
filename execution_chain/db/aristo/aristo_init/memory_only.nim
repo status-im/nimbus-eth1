@@ -27,7 +27,11 @@ proc init*(T: type AristoDbRef, enableCaches: static bool = false): T =
   ##
   let db = memoryBackend()
   when enableCaches:
-    db.initInstance(accLeavesLruSize = ACC_LRU_SIZE, stoLeavesLruSize = ACC_LRU_SIZE)[]
+    db.initInstance(
+      accLeavesLruSize = ACC_LRU_SIZE,
+      stoLeavesLruSize = ACC_LRU_SIZE,
+      accMissingLruSize = MISSING_LRU_SIZE,
+      stoMissingLruSize = MISSING_LRU_SIZE)[]
   else:
     db.initInstance(accLeavesLruSize = 0, stoLeavesLruSize = 0)[]
   db

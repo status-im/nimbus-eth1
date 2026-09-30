@@ -387,3 +387,87 @@ suite "Aristo TxFrame":
 
     let tx3 = db.txFrameBegin(db.baseTxFrame())
     tx3.checkpoint(2, skipSnapshot = false)
+
+  test "Leaf caches follow keys between missing and present across persist":
+    let
+      cdb = AristoDbRef.init(enableCaches = true)
+      stoPath = acc3[0]
+      mix1 = mixUp(acc1[0], stoPath)
+      mix2 = mixUp(acc2[0], stoPath)
+    cdb.parallelStateRootComputation = false
+
+    template persistFrame(tx: AristoTxRef, blockNumber: uint64, skip: bool) =
+      tx.checkpoint(blockNumber, skipSnapshot = skip)
+      let batch = cdb.putBegFn().expect("working batch")
+      cdb.persist(batch, tx)
+      check cdb.putEndFn(batch).isOk()
+
+    block:
+      let tx = cdb.txFrameBegin(cdb.baseTxFrame())
+      check tx.mergeAccount(acc1[0], acc1[1]).isOk()
+      persistFrame(tx, 1, true)
+
+    block:
+      let base = cdb.baseTxFrame()
+      check:
+        base.fetchAccount(acc2[0]).isErr()
+        base.fetchSlot(acc1[0], stoPath).get() == 0.u256
+        acc2[0] in cdb.accMissing
+        acc2[0] notin cdb.accLeaves
+        mix1 in cdb.stoMissing
+        mix1 notin cdb.stoLeaves
+        base.fetchAccount(acc2[0]).isErr()
+        base.fetchSlot(acc1[0], stoPath).get() == 0.u256
+
+    block:
+      let tx = cdb.txFrameBegin(cdb.baseTxFrame())
+      check:
+        tx.mergeAccount(acc2[0], acc2[1]).isOk()
+        tx.mergeSlot(acc1[0], stoPath, 7.u256).isOk()
+        tx.mergeSlot(acc2[0], stoPath, 9.u256).isOk()
+      persistFrame(tx, 2, false)
+
+    block:
+      let base = cdb.baseTxFrame()
+      check:
+        acc2[0] notin cdb.accMissing
+        acc2[0] in cdb.accLeaves
+        mix1 notin cdb.stoMissing
+        mix1 in cdb.stoLeaves
+        base.hasAccount(acc2[0]).get()
+        base.fetchAccount(acc2[0]).get() == acc2[1]
+        base.fetchSlot(acc1[0], stoPath).get() == 7.u256
+        base.fetchSlot(acc2[0], stoPath).get() == 9.u256
+        mix2 in cdb.stoLeaves
+
+    block:
+      let tx = cdb.txFrameBegin(cdb.baseTxFrame())
+      check:
+        tx.deleteSlot(acc1[0], stoPath).isOk()
+        tx.deleteAccount(acc2[0]).isOk()
+      persistFrame(tx, 3, true)
+
+    block:
+      let base = cdb.baseTxFrame()
+      check:
+        acc2[0] notin cdb.accLeaves
+        mix1 notin cdb.stoLeaves
+        mix2 notin cdb.stoLeaves
+        not base.hasAccount(acc2[0]).get()
+        base.fetchSlot(acc1[0], stoPath).get() == 0.u256
+        base.fetchSlot(acc2[0], stoPath).isErr()
+        acc2[0] in cdb.accMissing
+        mix1 in cdb.stoMissing
+
+    block:
+      let tx = cdb.txFrameBegin(cdb.baseTxFrame())
+      check tx.mergeAccount(acc2[0], acc3[1]).isOk()
+      persistFrame(tx, 4, false)
+
+    block:
+      let base = cdb.baseTxFrame()
+      check:
+        acc2[0] notin cdb.accMissing
+        base.fetchAccount(acc2[0]).get() == acc3[1]
+
+    cdb.close()

@@ -145,6 +145,9 @@ type
         ## Mixed account/storage path to payload cache - same as above but caches
         ## the full lookup of storage slots
 
+      accMissing*: ConcurrentLruCache[Hash32, bool]
+      stoMissing*: ConcurrentLruCache[Hash32, bool]
+
     staticLevel*: Atomic[int]
       ## MPT level where "most" leaves can be found, for static vid lookups
     lookupsLower*, lookupsHits*, lookupsHigher*: Atomic[int]

@@ -86,14 +86,10 @@ type
   ## written from background pre-fetch threads under refc (which uses thread-local heaps).
   
   CachedAccLeaf* = object
-    case empty*: bool
-    of true:
-      discard
-    of false:
-      pfx*: NibblesBuf
-      account*: AristoAccount
-      stoID*: StorageID
-      stoHint*: uint8
+    pfx*: NibblesBuf
+    account*: AristoAccount
+    stoID*: StorageID
+    stoHint*: uint8
 
   CachedStoLeaf* = object
     pfx*: NibblesBuf
@@ -154,33 +150,17 @@ template init*(_: type BoundaryNodeRef, pfxp: NibblesBuf, childKeyp: HashKey): B
 template init*(
     T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID,
     stoHintp: uint8 = 0): T =
-  T(empty: false, pfx: pfxp, account: accountp, stoID: stoIDp, stoHint: stoHintp)
+  T(pfx: pfxp, account: accountp, stoID: stoIDp, stoHint: stoHintp)
 
 template init*(
     T: type CachedStoLeaf, pfxp: NibblesBuf, stoDatap: UInt256): T =
   T(pfx: pfxp, stoData: stoDatap)
 
-const
-  emptyCachedAccLeaf* = CachedAccLeaf(empty: true)
-  emptyCachedStoLeaf* = CachedStoLeaf(stoData: 0.u256)
-
-template isEmpty*(c: CachedAccLeaf): bool =
-  c.empty
-
-template isEmpty*(c: CachedStoLeaf): bool =
-  c.stoData.isZero()
-
 func toLeaf*(c: CachedAccLeaf): AccLeafRef =
-  if c.isEmpty(): 
-    AccLeafRef(nil) 
-  else: 
-    AccLeafRef.init(c.pfx, c.account, c.stoID, c.stoHint)
+  AccLeafRef.init(c.pfx, c.account, c.stoID, c.stoHint)
 
 func toLeaf*(c: CachedStoLeaf): StoLeafRef =
-  if c.isEmpty(): 
-    StoLeafRef(nil) 
-  else: 
-    StoLeafRef.init(c.pfx, c.stoData)
+  StoLeafRef.init(c.pfx, c.stoData)
 
 func toStoData*(c: CachedStoLeaf): UInt256 =
   c.stoData

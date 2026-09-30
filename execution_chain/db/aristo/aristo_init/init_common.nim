@@ -85,6 +85,8 @@ proc initInstance*(
     threadSafeCaches = true,
     accLeavesLruSize = 0,
     stoLeavesLruSize = 0,
+    accMissingLruSize = 0,
+    stoMissingLruSize = 0,
     stoStatic = true
 ): Result[void, AristoError] =
   doAssert maxSnapshots > 0
@@ -96,9 +98,13 @@ proc initInstance*(
     if threadSafeCaches:
       db.accLeaves.init(accLeavesLruSize)
       db.stoLeaves.init(stoLeavesLruSize)
+      db.accMissing.init(accMissingLruSize)
+      db.stoMissing.init(stoMissingLruSize)
     else:
       db.accLeaves.init(accLeavesLruSize, shardBits = 0, threadSafe = false)
       db.stoLeaves.init(stoLeavesLruSize, shardBits = 0, threadSafe = false)
+      db.accMissing.init(accMissingLruSize, shardBits = 0, threadSafe = false)
+      db.stoMissing.init(stoMissingLruSize, shardBits = 0, threadSafe = false)
   db.maxSnapshots = maxSnapshots
   db.parallelStateRootComputation = parallelStateRootComputation
 
@@ -118,8 +124,12 @@ proc close*(db: AristoDbRef; wipe = false) =
   when compileOption("threads"):
     db.accLeaves.dispose()
     db.stoLeaves.dispose()
+    db.accMissing.dispose()
+    db.stoMissing.dispose()
     db.accLeaves.reset()
     db.stoLeaves.reset()
+    db.accMissing.reset()
+    db.stoMissing.reset()
 
   db.closeFn wipe
 

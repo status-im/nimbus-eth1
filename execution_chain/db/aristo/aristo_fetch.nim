@@ -48,6 +48,14 @@ template cacheStoLeaf(db: AristoTxRef; mixPath: Hash32; cached: CachedStoLeaf) =
   when compileOption("threads"):
     db.db.stoLeaves.put(mixPath, cached)
 
+template cacheAccMissing(db: AristoTxRef; accPath: Hash32) =
+  when compileOption("threads"):
+    db.db.accMissing.put(accPath, true)
+
+template cacheStoMissing(db: AristoTxRef; mixPath: Hash32) =
+  when compileOption("threads"):
+    db.db.stoMissing.put(mixPath, true)
+
 proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
@@ -57,10 +65,10 @@ proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
   when compileOption("threads"):
     db.db.accLeaves.withGet(accPath, cached):
       return Opt.some(cached.toLeaf())
-    do:
-      return Opt.none(AccLeafRef)
-  else:
-    Opt.none(AccLeafRef)
+    if db.db.accMissing.get(accPath).isSome():
+      return Opt.some(AccLeafRef(nil))
+
+  Opt.none(AccLeafRef)
 
 proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
@@ -71,10 +79,10 @@ proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   when compileOption("threads"):
     db.db.stoLeaves.withGet(mixPath, cached):
       return Opt.some(cached.toLeaf())
-    do:
-      return Opt.none(StoLeafRef)
-  else:
-    Opt.none(StoLeafRef)
+    if db.db.stoMissing.get(mixPath).isSome():
+      return Opt.some(StoLeafRef(nil))
+
+  Opt.none(StoLeafRef)
 
 proc retrieveStatic[LeafType](
     db: AristoTxRef;
@@ -171,7 +179,7 @@ proc retrieveAccLeaf(
   let (staticVtx, path, next) = retrieveStatic[AccLeafRef](
       db, STATE_ROOT_VID, accPath, db.db.getStaticLevel(), true).valueOr:
     if error == FetchPathNotFound:
-      db.cacheAccLeaf(accPath, emptyCachedAccLeaf)
+      db.cacheAccMissing(accPath)
     return err(error)
 
   if staticVtx.isValid():
@@ -187,7 +195,7 @@ proc retrieveAccLeaf(
         # meaning that it was a hit - else searches for non-existing paths would
         # skew the results towards more depth than exists in the MPT
         discard db.db.lookupsHits.fetchAdd(1, moRelaxed)
-        db.cacheAccLeaf(accPath, emptyCachedAccLeaf)
+        db.cacheAccMissing(accPath)
       return err(error)
 
   discard db.db.lookupsHigher.fetchAdd(1, moRelaxed)
@@ -336,13 +344,15 @@ proc fetchSlot*(
   when compileOption("threads"):
     db.db.stoLeaves.withGet(mixPath, cached):
       return ok cached.toStoData()
+    if db.db.stoMissing.get(mixPath).isSome():
+      return ok 0'u256
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
 
   let (stoID, startLevel) = ?db.fetchStorageInfo(accPath)
   if not stoID.isValid():
-    db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
+    db.cacheStoMissing(mixPath)
     return ok 0'u256
 
   var
@@ -353,7 +363,7 @@ proc fetchSlot*(
     let (staticVtx, rest, nxt) = retrieveStatic[StoLeafRef](
         db, stoID, stoPath, startLevel[], false).valueOr:
       if error == FetchPathNotFound:
-        db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
+        db.cacheStoMissing(mixPath)
         return ok 0'u256
       return err(error)
 
@@ -369,7 +379,7 @@ proc fetchSlot*(
   let leafRc = db.retrieveLeaf(stoID, path, next)
   if leafRc.isErr:
     if leafRc.error == FetchPathNotFound:
-      db.cacheStoLeaf(mixPath, emptyCachedStoLeaf)
+      db.cacheStoMissing(mixPath)
       return ok 0'u256
 
     # `HikeDanglingEdge` / `HikeBranchUnresolvedEdge`: missing state in

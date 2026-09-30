@@ -56,7 +56,6 @@ proc slotValue(i: int): CachedStoLeaf =
 
 proc accountValue(i: int): CachedAccLeaf =
   CachedAccLeaf(
-    empty: false,
     pfx: NibblesBuf.nibble(byte(i and 15)),
     account: AristoAccount(
       nonce: uint64(i + 1), balance: u256(i + 1), codeHash: default(Hash32)
