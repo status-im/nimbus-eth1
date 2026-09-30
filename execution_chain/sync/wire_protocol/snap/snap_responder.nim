@@ -64,9 +64,9 @@ const
     trSnapRecvReceived & " trieNodes"
 
   trSnapSendSendingGetBals* =
-    trSnapSendSending & " getBlockAccessLists (0x06)" # same as `GetTrieNodes`
+    trSnapSendSending & " getBlockAccessLists (0x06)"
   trSnapSendReplyingBals* =
-    trSnapSendReplying & " blockAccessLists (0x07)"   # same as `trieNodes`
+    trSnapSendReplying & " blockAccessLists (0x07)"
   trSnapRecvReceivedBals* =
     trSnapRecvReceived & " blockAccessLists"
 

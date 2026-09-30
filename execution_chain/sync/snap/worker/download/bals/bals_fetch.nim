@@ -81,25 +81,31 @@ template fetchBlockAccessLists*(
     doAssert startInx < request.len
 
     const
-      sendInfo = trEthSendSendingGetBals
-      recvInfo = trEthRecvReceivedBals
+      sendEthInfo = trEthSendSendingGetBals
+      recvEthInfo = trEthRecvReceivedBals
+      sendSnapInfo = trSnapSendSendingGetBals
+      recvSnapInfo = trSnapRecvReceivedBals
     var
       peer {.inject,used.} = $buddy.peer            # logging only
 
     let nReq {.inject.} = request.len - startInx
     if nReq <= 0:
-      debug sendInfo & " empty request", peer, state=($buddy.syncState),
-        nErrors=buddy.nErrors.fetch.bal
+      if buddy.only.supportsBal:
+        debug sendSnapInfo & " empty request", peer, state=($buddy.syncState),
+          nErrors=buddy.nErrors.fetch.bal
+      else:
+        debug sendEthInfo & " empty request", state=($buddy.syncState),
+          nErrors=buddy.nErrors.fetch.bal
       bodyRc = typeof(bodyRc).ok((emptyRawBal,Hash 0))
       break body
 
-    if not buddy.only.supportsBal:
-      peer = "n/a"                                  # logging: try eth peer
-
     let startHash {.inject.} = request[startInx]
-    trace sendInfo, peer, startHash=startHash.short, nReq,
-      nErrors=buddy.nErrors.fetch.bal, firstInx=startInx,
-      nHashes=request.len
+    if buddy.only.supportsBal:
+      debug sendSnapInfo, peer, startHash=startHash.short, nReq,
+        nErrors=buddy.nErrors.fetch.bal, firstInx=startInx, nHashes=request.len
+    else:
+      debug sendEthInfo, startHash=startHash.short, nReq,
+        nErrors=buddy.nErrors.fetch.bal, firstInx=startInx, nHashes=request.len
 
     var rc: Result[FetchBalData,SnapErrorEx]
     if buddy.only.supportsBal:
@@ -126,9 +132,14 @@ template fetchBlockAccessLists*(
           if buddy.only.supportsBal:                # supported by `buddy`?
             break evalError
         of EAlreadyTriedAndFailed:
-          trace recvInfo & " error", peer, startHash=startHash.short, nReq,
-            ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
-            nErrors=buddy.nErrors.fetch.bal
+          if buddy.only.supportsBal:
+            trace recvSnapInfo & " error", peer, startHash=startHash.short,
+              nReq, ela=elapsed.toStr, state=($buddy.syncState),
+              error=rc.errStr, nErrors=buddy.nErrors.fetch.bal
+          else:
+            trace recvEthInfo & " error", startHash=startHash.short,
+              nReq, ela=elapsed.toStr, state=($buddy.syncState),
+              error=rc.errStr, nErrors=buddy.nErrors.fetch.bal
           break body                                # return err()
         of EPeerDisconnected, ECancelledError:
           if buddy.only.supportsBal:                # supported by `buddy`?
@@ -138,18 +149,28 @@ template fetchBlockAccessLists*(
           if buddy.only.supportsBal:                # supported by `buddy`?
             buddy.balFetchRegisterError()           # `buddy` error handling
         of EMissingEthContext:
-          trace recvInfo & " error eth peers missing", peer,
-            startHash=startHash.short, nReq, ela=elapsed.toStr,
-            state=($buddy.syncState), error=rc.errStr
+          if buddy.only.supportsBal:
+            trace recvSnapInfo & " error eth peers missing", peer,
+              startHash=startHash.short, nReq, ela=elapsed.toStr,
+              state=($buddy.syncState), error=rc.errStr
+          else:
+            trace recvEthInfo & " error eth peers missing",
+              startHash=startHash.short, nReq, ela=elapsed.toStr,
+              state=($buddy.syncState), error=rc.errStr
           break body
         of EUnusedForFetch:
           # Not allowed here -- internal error
           raiseAssert "Unexpected fetch error " & $rc.error.excp
 
         # Debug message for other errors
-        debug recvInfo & " error", peer, startHash=startHash.short, nReq,
-          ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
-          nErrors=buddy.nErrors.fetch.bal
+        if buddy.only.supportsBal:
+          debug recvSnapInfo & " error", peer, startHash=startHash.short, nReq,
+            ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+            nErrors=buddy.nErrors.fetch.bal
+        else:
+          debug recvEthInfo & " error", startHash=startHash.short, nReq,
+            ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
+            nErrors=buddy.nErrors.fetch.bal
 
         if not buddy.only.supportsBal:              # borrowed from `eth`?
           buddy.ctx.pool.failedEthBalId.put(peerID, zeroHash32)
@@ -163,8 +184,11 @@ template fetchBlockAccessLists*(
     if rc.isErr or buddy.ctrl.stopped:
       if buddy.only.supportsBal:                    # supported by `buddy`
         buddy.maybeSlowPeerError(elapsed, startHash)
-      trace recvInfo & " error", peer, startHash=startHash.short, nReq,
-        ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.bal
+        trace recvSnapInfo & " error", peer, startHash=startHash.short, nReq,
+          ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.bal
+      else:
+        trace recvEthInfo & " error", startHash=startHash.short, nReq,
+          ela, state, error=rc.errStr, nErrors=buddy.nErrors.fetch.bal
       break body                                    # return err()
 
     # Verify the correct number of BALs received
@@ -180,8 +204,12 @@ template fetchBlockAccessLists*(
         # No data available
         buddy.maybeSlowPeerError(elapsed, startHash)
 
-      trace recvInfo & " error", peer, startHash=startHash.short, nReq,
-        nResp=b.len, ela, state, nErrors=buddy.nErrors.fetch.bal
+      if buddy.only.supportsBal:
+        trace recvSnapInfo & " error", peer, startHash=startHash.short, nReq,
+          nResp=b.len, ela, state, nErrors=buddy.nErrors.fetch.bal
+      else:
+        trace recvEthInfo & " error", startHash=startHash.short, nReq,
+          nResp=b.len, ela, state, nErrors=buddy.nErrors.fetch.bal
       break body                                    # return err()
 
     if buddy.only.supportsBal:
@@ -203,8 +231,12 @@ template fetchBlockAccessLists*(
         # Request did not fail
         buddy.ctx.pool.failedEthBalId.del(peerID)   # reset error count
 
-    trace recvInfo, peer, startHash=startHash.short, nReq, nResp=b.len, ela,
-      state, nErrors=buddy.nErrors.fetch.bal
+    if buddy.only.supportsBal:
+      trace recvSnapInfo, peer, startHash=startHash.short, nReq, nResp=b.len,
+        ela, state, nErrors=buddy.nErrors.fetch.bal
+    else:
+      trace recvEthInfo, startHash=startHash.short, nReq, nResp=b.len,
+        ela, state, nErrors=buddy.nErrors.fetch.bal
 
     bodyRc = typeof(bodyRc).ok((b,peerID))
 
