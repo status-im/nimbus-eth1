@@ -16,7 +16,7 @@ import
   ../../../../../block_access_list/bal_utils,
   ../../../../wire_protocol,
   ../../[helpers, cache_db, worker_desc],
-  ./bals_fetch
+  ./[bals_helpers, bals_fetch]
 
 logScope:
   topics = "snap sync"
@@ -29,6 +29,9 @@ type
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+func idStr(id: Hash): string =
+  id.toHex.toLowerAscii
 
 proc verifyArgs(
     minBn: BlockNumber;
@@ -140,46 +143,60 @@ template balsDownload*(
   ##
   var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
+    let
+      ctx = buddy.ctx
+
     # Check arguments for sanity
-    let peer {.inject,used.} = $buddy.peer          # logging only
     verifyArgs(minBn, nBals, peer, info).isOkOr:
       bodyRc = typeof(bodyRc).err(EArgumentError)
       break body
 
     let q = buddy.getReqEnv(minBn, nBals, info).valueOr:
-      debug info & ": Error assembling BAL request", peer, `error`=error
+      debug info & ": Error assembling BAL request", `error`=error
       bodyRc = typeof(bodyRc).err(error)            # no headers available
       break body
 
     # Fetch block hashes, check them and store on cache DB
-    var fromInx = 0
+    var
+      fromInx = 0
+      peer {.inject,used.} =
+        if buddy.only.supportsBal: $buddy.peer      # logging only
+        else: "n/a"
+
     while fromInx < q.hdrs.len:
       let resp = buddy.fetchBlockAccessLists(q.balReq, fromInx).valueOr:
         bodyRc = typeof(bodyRc).err(error)
         trace info & ": Fetch error", fromInx=fromInx, `error`=error
         break body
+      if not buddy.only.supportsBal:                # logging only
+        peer = resp.peerID.idStr                    # logging only
       if resp.bal.len == 0:
-        trace info & ": Fetch empty resopnse", fromInx=fromInx
+        trace info & ": Fetch empty resopnse", peer, fromInx=fromInx
         bodyRc = typeof(bodyRc).ok()
         break body
 
-      trace info & ": Fetched BALS", fromInx=fromInx,
+      trace info & ": Fetched BALS", peer, fromInx=fromInx,
         fromNumber=q.hdrs[fromInx].number, nResp=resp.bal.len
 
       # Verify BALs and store on cache DB.
       let nProcessed = buddy.storeBals(resp.bal, q.hdrs, fromInx, info).valueOr:
         if error == EValidationError:
-          # Mark remote peer unusable (if eth peer)
-          buddy.ctx.pool.failedEthBalId.put(resp.peerID, zeroHash32)
-          trace info & ": Validation error", peerID=resp.peerID.toHex,
-            fromInx=fromInx, nResp=resp.bal.len, `error`=error
+          if buddy.only.supportsBal:
+            # Register error for this peer
+            buddy.only.failedReq.balHash = q.balReq[fromInx]
+            buddy.accProcRegisterError()
+          else:
+            # Mark remote eth/xx peer unusable
+            ctx.pool.failedEthBalId.put(resp.peerID, zeroHash32)
+          trace info & ": Validation error", peer, fromInx=fromInx,
+            nResp=resp.bal.len, `error`=error
         bodyRc = typeof(bodyRc).err(error)
         break body
       if nProcessed == 0:
         bodyRc = typeof(bodyRc).ok()
         break body
 
-      trace info & ": Verified & stored BALS", fromInx=fromInx,
+      trace info & ": Verified & stored BALS", peer, fromInx=fromInx,
         nProcessed=nProcessed, fromNumber=q.hdrs[fromInx].number,
         nResp=resp.bal.len
 
@@ -217,7 +234,7 @@ template balsDownloadAppend*(
     # Download and save blocks
     let
       maxBn = min(topBalBn + nBalsMax.uint, topHdrBn)
-      firstBalBn = topBalBn + 1                    # first BAL to fetch
+      firstBalBn = topBalBn + 1                     # first BAL to fetch
     var
       minBn = firstBalBn
     while minBn <= maxBn:
