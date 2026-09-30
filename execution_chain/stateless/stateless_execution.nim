@@ -13,7 +13,7 @@ import
   std/tables,
   results,
   stew/endians2,
-  eth/common/[headers, blocks, hashes, keys, transaction_utils],
+  eth/common/[headers, blocks, hashes],
   eth/trie/ordered_trie,
   beacon_chain/spec/eth2_merkleization,
   beacon_chain/spec/datatypes/constants,
@@ -21,7 +21,7 @@ import
   ../db/ledger,
   ../db/core_db/memory_only,
   ../evm/[types, state],
-  ../core/[pubkey_recovery, executor/process_block],
+  ../core/[validate, executor/process_block],
   ../block_access_list/bal_validation,
   ./[witness_types, witness_verification, stateless_types]
 
@@ -43,56 +43,8 @@ func toExecutionWitness*(w: ExecutionWitnessWithKeys): ExecutionWitness =
     discard res.headers.add(ByteList[MAX_BYTES_PER_HEADER].init(header))
   res
 
-# https://github.com/ethereum/execution-specs/blob/tests-zkevm%40v0.8.4/src/ethereum/forks/amsterdam/transactions.py#L895
-template recoverSenderFromPublicKey(
-    tx: Transaction, key: ByteVector[PUBLIC_KEY_BYTES], index: int
-): Address =
-  ## Verify that `key` is the transaction sender's canonical uncompressed SEC1
-  ## public key.
-  ##
-  ## Like the reference implementation, the supplied key is verified by
-  ## recovering the canonical public key from the transaction signature and
-  ## comparing the two.
-  ##
-  ## TODO: optimized implementations may avoid full public-key recovery, but
-  ## must still verify that the supplied key validates the signature and is
-  ## consistent with the transaction's recovery id / y-parity bit. Otherwise,
-  ## another valid recovery candidate could derive a different sender address.
-  ##
-  ## Returns the sender address derived from the verified public key.
-  block:
-    let
-      sig = tx.signature().valueOr:
-        return err("Invalid transaction signature at index " & $index)
-      sigHash = tx.rlpHashForSigning(tx.isEip155())
-      pubkey = recoverPubkeyRaw(sigHash, sig).valueOr:
-        return err("Invalid transaction signature at index " & $index)
-
-    # `key` is the full uncompressed SEC1 form, so it carries the 0x04 prefix
-    # that the recovered `x ‖ y` does not.
-    if key[0] != 0x04'u8 or pubkey != key.toOpenArray(1, 64):
-      return err("Transaction public key mismatch at index " & $index)
-
-    keccak256(pubkey).to(Address)
-
-func recoverSendersFromPublicKeys(
-    txs: openArray[Transaction], keys: openArray[ByteVector[PUBLIC_KEY_BYTES]]
-): Result[seq[Address], string] =
-  # https://github.com/ethereum/execution-specs/blob/tests-zkevm%40v0.8.4/src/ethereum/forks/amsterdam/fork.py#L312
-  if keys.len != txs.len:
-    return err("Transaction public key count does not match block transactions")
-
-  var senders = newSeqOfCap[Address](txs.len)
-  for i, tx in txs:
-    senders.add(recoverSenderFromPublicKey(tx, keys[i], i))
-
-  ok(senders)
-
 proc statelessProcessBlock*(
-    witness: ExecutionWitness,
-    com: CommonRef,
-    blk: Block,
-    senders = Opt.none(seq[Address]),
+    witness: ExecutionWitness, com: CommonRef, blk: Block
 ): Result[void, string] =
   let
     verified = ?witness.verifyHeaders(blk.header)
@@ -126,6 +78,18 @@ proc statelessProcessBlock*(
   for i, h in verified.headers:
     memoryTxFrame.addBlockNumberToHashLookup(h.number, verified.hashes[i])
 
+  # Validate the header against the parent taken from the witness:
+  # https://github.com/ethereum/execution-specs/blob/3ebcb5d02126918eb2aad599b3cf286200d4f458/src/ethereum/forks/amsterdam/fork.py#L308
+  # TODO: on the payload path this rebuilds the withdrawals trie that `toBlock`
+  # just built, and `processBlock` below rebuilds the transaction trie likewise.
+  ?com.validateHeader(
+    blk,
+    blockAccessList = Opt.none(BlockAccessListRef),
+    skipPreExecBalCheck = true,
+    parentHeader = parent,
+    txFrame = memoryTxFrame,
+  )
+
   # Create evm instance using the in memory database.
   let memoryVmState = BaseVMState()
   memoryVmState.init(
@@ -144,7 +108,6 @@ proc statelessProcessBlock*(
   # Execute the block with all validations enabled
   ?memoryVmState.processBlock(
     blk,
-    senders = senders,
     skipValidation = false,
     skipReceipts = false,
     skipUncles = true,
@@ -340,6 +303,11 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
       initializeDb = false,
     )
 
+  # https://github.com/ethereum/execution-specs/blob/3ebcb5d02126918eb2aad599b3cf286200d4f458/src/ethereum/forks/amsterdam/execution_engine/new_payload.py#L27
+  if blk.header.computeRlpHash !=
+      Hash32(input.new_payload_request.executionPayload.block_hash.data):
+    return err("Invalid block hash")
+
   ?is_valid_versioned_hashes(input.new_payload_request.versionedHashes, blk)
 
   # Early validation of the input BAL before execution, just like is done for the
@@ -356,9 +324,7 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
       return err("Failed to decode block access list: " & error)
     ?bal.validate(expectedBalHash, blk.header.gasLimit)
 
-  let senders = ?recoverSendersFromPublicKeys(blk.transactions, input.public_keys)
-
-  statelessProcessBlock(input.witness, com, blk, Opt.some(senders))
+  statelessProcessBlock(input.witness, com, blk)
 
 # https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless.py#L229
 proc verify_stateless_new_payload*(input: StatelessInput): StatelessValidationResult =

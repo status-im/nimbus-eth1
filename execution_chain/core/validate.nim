@@ -61,7 +61,7 @@ func validateBlockAccessList*(
 
   return ok()
 
-proc validateHeader(
+proc validateHeader*(
     com: CommonRef;
     blk: Block;
     blockAccessList: Opt[BlockAccessListRef];
