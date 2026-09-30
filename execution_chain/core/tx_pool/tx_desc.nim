@@ -457,7 +457,7 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     debug "Transaction rejected: txpool is full"
     return err(txErrorPoolIsFull)
 
-  let item = TxItemRef.new(ptx, id, sender)
+  let item = TxItemRef.new(ptx, id, sender, size.uint64)
   if XP_ORDERED notin xp.flags:
     ?xp.insertToSenderTab(item)
   xp.idTab[item.id] = item
