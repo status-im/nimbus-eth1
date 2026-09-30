@@ -38,6 +38,16 @@ type
       ## In case of an error when `false` is returned, `Aristo` will abort the
       ## write session and return a session error.
 
+  RdbBranchVal* = object
+    ## Cached `BranchRef` payload: the 48-bit `startVid` and the 16-bit `used`
+    ## child mask packed into 8 bytes at 4-byte alignment. A `startVid` beyond
+    ## 48 bits is cached as a blob in the vertex cache instead.
+    ##
+    ##   data[0]  bits 31..0   startVid[31..0]
+    ##   data[1]  bits 31..16  used[15..0]
+    ##            bits 15..0   startVid[47..32]
+    data: array[2, uint32]
+
   RdbInst* = object
     baseDb*: RocksDbInstanceRef
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
@@ -61,7 +71,7 @@ type
     rdVtxLru*: ConcurrentLruCache[RootedVertexID,VertexBuf] ## Read cache
     rdVtxSize*: int
 
-    rdBranchLru*: ConcurrentLruCache[RootedVertexID, (VertexID, uint16)]
+    rdBranchLru*: ConcurrentLruCache[RootedVertexID, RdbBranchVal]
     rdBranchSize*: int
 
     rdbPrintStats*: bool               ## Print statistics on closure
@@ -97,6 +107,22 @@ var
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+static:
+  doAssert sizeof(RdbBranchVal) == 8 and alignof(RdbBranchVal) == 4
+
+func fitsBranchVal*(vtx: BranchRef): bool {.inline.} =
+  (vtx.startVid.uint64 shr 48) == 0
+
+func toBranchVal*(vtx: BranchRef): RdbBranchVal {.inline.} =
+  let v = vtx.startVid.uint64
+  RdbBranchVal(data: [uint32(v), uint32(v shr 32) or (uint32(vtx.used) shl 16)])
+
+func startVid*(v: RdbBranchVal): VertexID {.inline.} =
+  VertexID(uint64(v.data[0]) or (uint64(v.data[1] and 0xFFFF'u32) shl 32))
+
+func used*(v: RdbBranchVal): uint16 {.inline.} =
+  uint16(v.data[1] shr 16)
 
 template toOpenArray*(xid: AdminTabID): openArray[byte] =
   xid.uint64.toBytesBE.toOpenArray(0,7)

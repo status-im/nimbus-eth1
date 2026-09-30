@@ -308,7 +308,7 @@ proc getVtx*(
         rdb.rdBranchLru.get(rvid)
     if rc.isOk():
       rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok(BranchRef.init(rc[][0], rc[][1]))
+      return ok(BranchRef.init(rc[].startVid, rc[].used))
 
   block:
     var vtx: VertexRef
@@ -356,9 +356,8 @@ proc getVtx*(
 
   # Update cache and return - in peek mode, avoid evicting cache items
   if GetVtxFlag.PeekCache notin flags:
-    if res.value.vType == Branch:
-      let vtx = BranchRef(res.value())
-      rdb.rdBranchLru.put(rvid, (vtx.startVid, vtx.used))
+    if res.value.vType == Branch and BranchRef(res.value()).fitsBranchVal():
+      rdb.rdBranchLru.put(rvid, BranchRef(res.value()).toBranchVal())
     else:
       rdb.rdVtxLru.put(rvid, vtxBuf)
 

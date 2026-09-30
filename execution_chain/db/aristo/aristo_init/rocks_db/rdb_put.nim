@@ -103,13 +103,13 @@ proc putVtx*(
     # likely to evict more useful items (when putting many items, we might even
     # evict those that were just added)
 
-    if vtx.vType == Branch:
-      let vtx = BranchRef(vtx)
+    if vtx.vType == Branch and BranchRef(vtx).fitsBranchVal():
+      let bv = BranchRef(vtx).toBranchVal()
       rdb.rdVtxLru.del(rvid)
       if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
-        rdb.rdBranchLru.put(rvid, (vtx.startVid, vtx.used))
+        rdb.rdBranchLru.put(rvid, bv)
       else:
-        discard rdb.rdBranchLru.update(rvid, (vtx.startVid, vtx.used))
+        discard rdb.rdBranchLru.update(rvid, bv)
     else:
       rdb.rdBranchLru.del(rvid)
       
