@@ -135,6 +135,9 @@ template fetchBodies*(
             ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
             nErrors=buddy.nErrors.fetch.bdy
           break body                                # return err()
+        of EUnusedForFetch:
+          # Not allowed here -- internal error
+          raiseAssert "Unexpected fetch error " & $rc.error.excp
 
         # Debug message for other errors
         debug recvInfo & " error", peer, startHash=startHash.short, nReq,
