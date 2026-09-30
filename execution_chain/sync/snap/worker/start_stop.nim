@@ -102,6 +102,9 @@ proc startSyncPeer*(buddy: SnapPeerRef): bool =
   # Reset global register for fall-back peer
   ctx.pool.lastSlowPeer = Opt.none(Hash)
 
+  if buddy.only.supportsBal:
+    ctx.pool.nSnap2Peers.inc
+
   metrics.set(nec_snap_peers, nSnapPeers)
   true
 
@@ -113,6 +116,9 @@ proc stopSyncPeer*(buddy: SnapPeerRef) =
   if nSnapPeers < 1:
     ctx.pool.lastSlowPeer = Opt.none(Hash)
     ctx.setLastPeerSeen()
+    ctx.pool.nSnap2Peers = 0
+  elif buddy.only.supportsBal:
+    ctx.pool.nSnap2Peers.dec
 
   metrics.set(nec_snap_peers, nSnapPeers)
 

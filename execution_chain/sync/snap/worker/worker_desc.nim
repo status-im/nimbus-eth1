@@ -129,6 +129,7 @@ type
     forwardNum*: BlockNumber         ## Max possible BALs forward
     lastConsNum*: BlockNumber        ## Wait a bit until next header download
     balsLocked*: SnapPeerRef         ## Only one peer can download BALs
+    nSnap2Peers*: int                ## # of Active snap/2 peers for proto use
     failedEthBalId*: EthBalHashSet   ## Ditto for eth peers
     resetReq*: bool                  ## Restart system (problem with cache data)
 

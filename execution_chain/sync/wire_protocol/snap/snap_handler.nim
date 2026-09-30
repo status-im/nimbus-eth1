@@ -34,7 +34,7 @@ proc getAccountRange*(
     ctx: SnapWireStateRef;
     req: AccountRangeRequest;
       ): Opt[AccountRangePacket] =
-  when trEthTraceHandlerOk:
+  when trSnapTraceHandlerOk:
     trace "getAccountRange: not implemented",
       rootHash      = req.rootHash.short,
       startingHash  = req.startingHash.short,
@@ -46,7 +46,7 @@ proc getStorageRanges*(
     ctx: SnapWireStateRef;
     req: StorageRangesRequest;
       ): Opt[StorageRangesPacket] =
-  when trEthTraceHandlerOk:
+  when trSnapTraceHandlerOk:
     trace "getStorageRanges: not implemented",
       rootHash       = req.rootHash.short,
       accountHashes  = (if req.accountHashes.len == 0: "n/a"
@@ -61,7 +61,7 @@ proc getByteCodes*(
    ctx: SnapWireStateRef;
    req: ByteCodesRequest;
      ): Opt[ByteCodesPacket] =
-  when trEthTraceHandlerOk:
+  when trSnapTraceHandlerOk:
     trace "getByteCodes: not implemented",
       hashes = (if req.hashes.len == 0: "n/a"
                 else: "[" & req.hashes[0].short & ",..]"),
@@ -72,7 +72,7 @@ proc getTrieNodes*(
    ctx: SnapWireStateRef;
    req: TrieNodesRequest;
      ): Opt[TrieNodesPacket] =
-  when trEthTraceHandlerOk:
+  when trSnapTraceHandlerOk:
     trace "getTrieNodes: not implemented",
       rootHash = req.rootHash.short,
       paths    = (if req.paths.len == 0: "n/a"
@@ -83,10 +83,10 @@ proc getTrieNodes*(
 
 proc getBlockAccessLists*(
     ctx: SnapWireStateRef;
-    req: BlockAccessListsRequest;
+    req: SnapBalRequest;
       ): Opt[BlockAccessListsPacket] =
   ## Note that there is a working version for BALs at `../eth/eth_handler`
-  when trEthTraceHandlerOk:
+  when trSnapTraceHandlerOk:
     trace "getBlockAccessLists: not implemented",
       nReq=req.blockHashes.len
   err()
