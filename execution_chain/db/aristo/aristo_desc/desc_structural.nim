@@ -90,14 +90,14 @@ type
     of true:
       discard
     of false:
-      pfx*: NibblesBuf
       account*: AristoAccount
       stoID*: StorageID
       stoHint*: uint8
+      pfxLen*: uint8
 
   CachedStoLeaf* = object
-    pfx*: NibblesBuf
     stoData*: UInt256
+    pfxLen*: uint8
 
   NodeRef* = ref object of RootRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
@@ -154,11 +154,12 @@ template init*(_: type BoundaryNodeRef, pfxp: NibblesBuf, childKeyp: HashKey): B
 template init*(
     T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID,
     stoHintp: uint8 = 0): T =
-  T(empty: false, pfx: pfxp, account: accountp, stoID: stoIDp, stoHint: stoHintp)
+  T(empty: false, account: accountp, stoID: stoIDp, stoHint: stoHintp,
+    pfxLen: uint8(pfxp.len))
 
 template init*(
     T: type CachedStoLeaf, pfxp: NibblesBuf, stoDatap: UInt256): T =
-  T(pfx: pfxp, stoData: stoDatap)
+  T(stoData: stoDatap, pfxLen: uint8(pfxp.len))
 
 const
   emptyCachedAccLeaf* = CachedAccLeaf(empty: true)
@@ -170,17 +171,20 @@ template isEmpty*(c: CachedAccLeaf): bool =
 template isEmpty*(c: CachedStoLeaf): bool =
   c.stoData.isZero()
 
-func toLeaf*(c: CachedAccLeaf): AccLeafRef =
+template leafPfx(path: Hash32, pfxLen: uint8): NibblesBuf =
+  NibblesBuf.fromBytes(path.data).slice(64 - int(pfxLen))
+
+func toLeaf*(c: CachedAccLeaf, accPath: Hash32): AccLeafRef =
   if c.isEmpty(): 
     AccLeafRef(nil) 
   else: 
-    AccLeafRef.init(c.pfx, c.account, c.stoID, c.stoHint)
+    AccLeafRef.init(leafPfx(accPath, c.pfxLen), c.account, c.stoID, c.stoHint)
 
-func toLeaf*(c: CachedStoLeaf): StoLeafRef =
+func toLeaf*(c: CachedStoLeaf, stoPath: Hash32): StoLeafRef =
   if c.isEmpty(): 
     StoLeafRef(nil) 
   else: 
-    StoLeafRef.init(c.pfx, c.stoData)
+    StoLeafRef.init(leafPfx(stoPath, c.pfxLen), c.stoData)
 
 func toStoData*(c: CachedStoLeaf): UInt256 =
   c.stoData

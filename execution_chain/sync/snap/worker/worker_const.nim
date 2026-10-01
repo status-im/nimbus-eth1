@@ -219,6 +219,9 @@ const
   nFetchBalEthPeersMax* = 5
     ## Try at most this many `eth` peers for fetchinga block access lists.
 
+  nFetchBalSnapSizeMax* = 2 * 1024 * 1024
+    ## Maximal response size for a BAL request
+
   fetchBalRlpxTimeout* = chronos.seconds(50)
     ## Timeout cap for the `RLPx` handlers, either `snap` or `eth`
     ## when fetching block access lists.

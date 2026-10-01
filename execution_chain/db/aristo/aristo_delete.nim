@@ -209,7 +209,7 @@ proc deleteSlot*(
 
   let
     mixPath = mixUp(accPath, stoPath)
-    stoLeaf = db.cachedStoLeaf(mixPath)
+    stoLeaf = db.cachedStoLeaf(mixPath, stoPath)
 
   if stoLeaf == Opt.some(nil):
     return ok() # Trying to delete something that doesn't exist is ok

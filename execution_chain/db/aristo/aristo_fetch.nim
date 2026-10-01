@@ -56,13 +56,13 @@ proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
 
   when compileOption("threads"):
     db.db.accLeaves.withGet(accPath, cached):
-      return Opt.some(cached.toLeaf())
+      return Opt.some(cached.toLeaf(accPath))
     do:
       return Opt.none(AccLeafRef)
   else:
     Opt.none(AccLeafRef)
 
-proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
+proc cachedStoLeaf*(db: AristoTxRef; mixPath, stoPath: Hash32): Opt[StoLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
   db.layersGetStoLeaf(mixPath).isErrOr:
@@ -70,7 +70,7 @@ proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
 
   when compileOption("threads"):
     db.db.stoLeaves.withGet(mixPath, cached):
-      return Opt.some(cached.toLeaf())
+      return Opt.some(cached.toLeaf(stoPath))
     do:
       return Opt.none(StoLeafRef)
   else:
