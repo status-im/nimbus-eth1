@@ -119,7 +119,7 @@ suite "Aristo fetch leaf-cache benchmark":
     db.close()
     db.initInstance(
       accLeavesLruSize = ACC_LRU_SIZE,
-      stoLeavesLruSize = ACC_LRU_SIZE,
+      stoLeavesLruSize = STO_LRU_SIZE,
       parallelStateRootComputation = false,
     ).expect("re-init instance")
     let tx = db.baseTxFrame()

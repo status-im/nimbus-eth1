@@ -301,7 +301,7 @@ proc mergeSlot*(
     stoStatic = not stoID.isValid or 0 < accVtx.stoHint
     # Call merge
     updated = db.mergePayloadImpl(
-      useID.vid, stoPath, db.cachedStoLeaf(mixPath), stoData, stoStatic
+      useID.vid, stoPath, db.cachedStoLeaf(mixPath, stoPath), stoData, stoStatic
     ).valueOr:
       if error == MergeNoAction:
         assert stoID.isValid         # debugging only
