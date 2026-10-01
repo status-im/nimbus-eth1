@@ -435,6 +435,8 @@ proc configurationMain*() =
       check config.rdbVtxCacheSize == 37
       check config.rdbKeyCacheSize == 38
       check config.rdbBranchCacheSize == 39
+      check config.accLeafCacheSize == 40
+      check config.stoLeafCacheSize == 41
       check config.rdbPrintStats == true
       check config.rewriteDatadirId == true
       check config.eagerStateRootCheck == false

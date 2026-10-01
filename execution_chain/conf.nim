@@ -343,6 +343,18 @@ type
       defaultValue: defaultRdbBranchCacheSize
       name: "debug-rdb-branch-cache-size".}: int
 
+    accLeafCacheSize {.
+      hidden
+      defaultValue: defaultAccLeafCacheSize
+      desc: "Number of entries in the account leaf cache"
+      name: "debug-acc-leaf-cache-size".}: int
+
+    stoLeafCacheSize {.
+      hidden
+      defaultValue: defaultStoLeafCacheSize
+      desc: "Number of entries in the storage leaf cache"
+      name: "debug-sto-leaf-cache-size".}: int
+
     rdbPrintStats {.
       hidden
       desc: "Print RDB statistics at exit"
@@ -869,6 +881,8 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
       # The import command does not use the key cache - better give it to branch
       if noKeyCache: config.rdbKeyCacheSize + config.rdbBranchCacheSize
       else: config.rdbBranchCacheSize,
+    accLeafCacheSize = config.accLeafCacheSize,
+    stoLeafCacheSize = config.stoLeafCacheSize,
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
