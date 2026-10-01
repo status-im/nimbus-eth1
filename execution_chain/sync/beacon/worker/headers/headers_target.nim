@@ -109,7 +109,8 @@ template headersTargetActivate*(
           # This error can appear with an unsolicited block hash. Not
           # removing this target will send the syncer in an endles loop
           # trying to fetch the same item time and again.
-          ctx.pool.failedPeers.clear()                     # not restoring trg
+          ctx.pool.failedPeers.clear()                     # clear target
+          ctx.pool.initTarget = Opt.none(InitTarget)
         else:
           ctx.pool.initTarget = Opt.some(trg)              # restore target
 
@@ -124,7 +125,7 @@ template headersTargetActivate*(
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
             nErrors=buddy.nErrors.fetch.hdr
           ctx.pool.failedPeers.clear()
-          # not restoring target
+          ctx.pool.initTarget = Opt.none(InitTarget)       # not restoring trg
 
         else:
           trace info & ": Peer repeatedly failed", peer,

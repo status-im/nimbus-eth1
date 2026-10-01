@@ -79,6 +79,12 @@ proc updateServices*(ctx: BeaconCtxRef; info: static[string]): bool  =
   # the same `initTarget` activation pipeline that the `--debug-beacon-sync-
   # target` CLI flag drives.
   ctx.pool.chain.com.headerTargetRequest = proc(hash, finHash: Hash32) =
+    if ctx.pool.standByMode or
+       ctx.pool.stopBase.isSome():
+      # It makes no sense to try syncing against a block hash in stand-by
+      # mode from the FCU. All that will happen is a header chain download
+      # which will be discarded afterwards. No blocks import will take place.
+      return
     let fin =
       if finHash == zeroHash32: Opt.none(Hash32)
       else: Opt.some(finHash)
