@@ -110,7 +110,7 @@ template headersTargetActivate*(
           # removing this target will send the syncer in an endles loop
           # trying to fetch the same item time and again.
           ctx.pool.failedPeers.clear()                     # clear target
-          ctx.pool.initTarget = Opt.none(InitTarget)
+          ctx.pool.initTarget = Opt.none(InitTarget)       # not restoring trg
         else:
           ctx.pool.initTarget = Opt.some(trg)              # restore target
 
@@ -124,7 +124,7 @@ template headersTargetActivate*(
             targetHash=trg.hash.short, isFinal=trg.isFinal,
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
             nErrors=buddy.nErrors.fetch.hdr
-          ctx.pool.failedPeers.clear()
+          ctx.pool.failedPeers.clear()                     # clear target
           ctx.pool.initTarget = Opt.none(InitTarget)       # not restoring trg
 
         else:

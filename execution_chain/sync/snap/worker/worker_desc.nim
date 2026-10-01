@@ -142,7 +142,6 @@ type
     lastTrggHdrsLog*: chronos.Moment ## Control update messages
     lastMaxHdrsLog*: chronos.Moment  ## Control update messages
     lastBcSyncLog*: chronos.Moment   ## Control update messages
-    lockedBalsLog*: chronos.Moment   ## Control messages about missing peers
     lastNoBalSupport*: chronos.Moment ## Control update messages
 
 # ------------------------------------------------------------------------------

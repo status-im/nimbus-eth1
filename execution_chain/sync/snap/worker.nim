@@ -251,14 +251,10 @@ template runPeer*(
       # Prefer peers that support the snap/2 protocol
       if not buddy.only.supportsBal and
          0 < buddy.ctx.pool.nSnap2Peers:
-        bodyRc = peerWaitBalsLockedInterval
+        bodyRc = peerWaitBalsSnap1Interval
         break body
       buddy.downloadBals(info).isOkOr:
         if error == ELockError:
-          ctx.pool.lockedBalsLog.logCtrl(lockedBalsLogWaitInterval):
-            trace info & ": BALs downloading locked", peer,
-              pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
-              nSyncPeers=ctx.nSyncPeers()
           bodyRc = peerWaitBalsLockedInterval
           break body
 

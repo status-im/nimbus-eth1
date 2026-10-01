@@ -40,7 +40,7 @@ proc storeCachedHeaders(
       if ctx.chain.com.isAmsterdamOrLater(value.timestamp):
         ctx.pool.balSupported = true
   ctx.pool.lastConsNum = ctx.hdrCache.head.number
-  trace info & ": Registered headers", leastBn, topBn, count,
+  chronicles.info info & ": Registered headers", leastBn, topBn, count,
     lastConsHead=ctx.pool.lastConsNum,
     consHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState),
     balSupported=ctx.pool.balSupported

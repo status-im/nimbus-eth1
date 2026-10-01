@@ -74,9 +74,6 @@ const
   maxHeadersLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 
-  lockedBalsLogWaitInterval* = chronos.seconds(30)
-    ## Reduce logging noise
-
   beaconSyncIdleLogWaitInterval* = chronos.seconds(10)
     ## Reduce logging noise
 
@@ -118,6 +115,10 @@ const
   peerWaitExhaustedInterval* = chronos.milliseconds(1200)
     ## Suspend peer until the download state has been forwarded. This timeout
     ## will be regularly polled for the updated state.
+
+  peerWaitBalsSnap1Interval* = chronos.milliseconds(300)
+    ## Suspend snap/1 peer for BALs download emulation when snap/2 peers
+    ## are available.
 
   peerWaitBalsLockedInterval* = chronos.milliseconds(300)
     ## Only one peer can download BALs. This constatnt is the polling timr
