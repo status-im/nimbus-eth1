@@ -112,11 +112,11 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       # Start headers download on the beacon sync server to run
       # in quasi-parallel mode to the snap sync daemon & peers.
       ctx.headerDownloadTrigger(info).isOkOr:
-        bodyRc = daemonWaitReadyFailInterval        # take a nap
+        bodyRc = daemonWaitReadyDwnldFailInterval   # take a nap
         break body
 
       ctx.downloadInit(info).isOkOr:                # get ready
-        bodyRc = daemonWaitReadyFailInterval        # take a nap
+        bodyRc = daemonWaitReadyInitFailInterval    # take a nap
 
     of SnapDownload:
       # Download headers. The request will be silently ignored if the
@@ -251,14 +251,10 @@ template runPeer*(
       # Prefer peers that support the snap/2 protocol
       if not buddy.only.supportsBal and
          0 < buddy.ctx.pool.nSnap2Peers:
-        bodyRc = peerWaitBalsLockedInterval
+        bodyRc = peerWaitBalsSnap1Interval
         break body
       buddy.downloadBals(info).isOkOr:
         if error == ELockError:
-          ctx.pool.lockedBalsLog.logCtrl(lockedBalsLogWaitInterval):
-            trace info & ": BALs downloading locked", peer,
-              pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
-              nSyncPeers=ctx.nSyncPeers()
           bodyRc = peerWaitBalsLockedInterval
           break body
 

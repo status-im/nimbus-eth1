@@ -118,6 +118,7 @@ type
     ## Globally shared data extension
     newCoreDb*: SnapCoreDb2Ref       ## Will become new database (or copy of)
     syncState*: SnapState            ## Last known layout state
+    balSupported*: bool              ## Becomes `true` on `Amsterdam` or later
     contPrevSession*: bool           ## Request resuming previous session
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
     beaconTarget*: bool              ## inital beacon target if `true`
@@ -141,7 +142,7 @@ type
     lastTrggHdrsLog*: chronos.Moment ## Control update messages
     lastMaxHdrsLog*: chronos.Moment  ## Control update messages
     lastBcSyncLog*: chronos.Moment   ## Control update messages
-    lockedBalsLog*: chronos.Moment   ## Control messages about missing peers
+    lastNoBalSupport*: chronos.Moment ## Control update messages
 
 # ------------------------------------------------------------------------------
 # Public helpers
