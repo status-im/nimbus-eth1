@@ -25,6 +25,7 @@ import
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
+  ../../evm/interpreter/gas_costs,
   ../executor,
   ../validate,
   ../eip4844,
@@ -72,6 +73,19 @@ func getExtraData(com: CommonRef): seq[byte] =
     com.extraData.toBytes[0..<32]
   else:
     com.extraData.toBytes
+
+func blockGasUsed(vmState: BaseVMState): GasInt =
+  ## Gas counted against the block gas limit so far
+  if vmState.fork >= FkAmsterdam:
+    # EIP-8037
+    max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
+  else:
+    vmState.cumulativeGasUsed
+
+func minTxGas(fork: EVMFork): GasInt =
+  ## Intrinsic gas of the cheapest possible tx, see `intrinsicGas`
+  if fork >= FkAmsterdam: TX_BASE_COST_2780
+  else: TX_BASE_COST
 
 func rlpLengthBytes(v: uint64): uint64 =
   var v = v
@@ -133,12 +147,7 @@ func prospectiveBlockSize(pst: TxPacker, item: TxItemRef): uint64 =
   ## block passing this check cannot exceed the cap.
   let
     vmState = pst.vmState
-    gasUsedSoFar =
-      if vmState.fork >= FkAmsterdam:
-        max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
-      else:
-        vmState.cumulativeGasUsed
-    gasUsed = min(gasUsedSoFar + item.tx.gasLimit, vmState.blockCtx.gasLimit)
+    gasUsed = min(vmState.blockGasUsed + item.tx.gasLimit, vmState.blockCtx.gasLimit)
     blobGasUsed = vmState.blobGasUsed + item.tx.getTotalBlobGas
     headerLen = pst.headerFixedSize + rlpUintLen(gasUsed) + rlpUintLen(blobGasUsed)
     txsLen = pst.txsRlpSize + item.rlpSize
@@ -155,10 +164,7 @@ func classifyPackedNext(vmState: BaseVMState): bool =
   ##
   ## This function is typically called as a follow up after a `false` return of
   ## `classifyPack()`.
-  if vmState.fork >= FkAmsterdam:
-    max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed) < vmState.blockCtx.gasLimit
-  else:
-    vmState.cumulativeGasUsed < vmState.blockCtx.gasLimit
+  vmState.blockGasUsed < vmState.blockCtx.gasLimit
 
 # ------------------------------------------------------------------------------
 # Private functions: packer packerVmExec() helpers
@@ -206,6 +212,17 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   ## values are below the maximum block size.
   let
     vmState = pst.vmState
+
+  # Nothing fits once less gas than the cheapest possible tx needs is left
+  if vmState.blockCtx.gasLimit - vmState.blockGasUsed < vmState.fork.minTxGas:
+    return StopCollecting
+
+  # Same check `processTransaction` starts with, minus building its error
+  # message. The pool then skips the sender's later txs, as they can't fit
+  # without this one.
+  template doesNotFit(_: untyped) =
+    return ContinueWithNextAccount
+  check2dGasInclusion(vmState, item.tx.gasLimit, doesNotFit)
 
   # EIP-4844
   if item.tx.txType == TxEip4844:
