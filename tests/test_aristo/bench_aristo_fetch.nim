@@ -23,6 +23,7 @@ import
   stew/endians2,
   results,
   eth/common/hashes,
+  ../../execution_chain/db/opts,
   ../../execution_chain/db/aristo/[
     aristo_desc,
     aristo_fetch,
@@ -118,8 +119,8 @@ suite "Aristo fetch leaf-cache benchmark":
     # layers into the leaf caches (backed by the persisted data).
     db.close()
     db.initInstance(
-      accLeavesLruSize = ACC_LRU_SIZE,
-      stoLeavesLruSize = STO_LRU_SIZE,
+      accLeavesLruSize = defaultAccLeafCacheSize,
+      stoLeavesLruSize = defaultStoLeafCacheSize,
       parallelStateRootComputation = false,
     ).expect("re-init instance")
     let tx = db.baseTxFrame()
