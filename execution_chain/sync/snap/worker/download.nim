@@ -86,6 +86,14 @@ proc downloadInit*(
     info: static[string];
       ): Opt[void] =
   if not ctx.accUnproc.synced():
+    if not ctx.pool.balSupported:                   # need `Amsterdam` or later
+      ctx.pool.cacheDB.lastHeader().isErrOr:        # wait for 2nd header batch
+        if value.isNone() or value.unsafeGet().number == BlockNumber(0):
+          return err()
+      ctx.pool.lastNoBalSupport.logCtrl(noBalSupportLogWaitInterval):
+        chronicles.info info & ": No BAL support yet (needs Amsterdam or later)"
+      return err()
+
     # Update state number that can be advanced to
     ctx.pool.forwardNum = ctx.getLastBalNum()       # can forward to that state
 

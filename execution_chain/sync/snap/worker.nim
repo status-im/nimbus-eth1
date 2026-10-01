@@ -112,11 +112,11 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       # Start headers download on the beacon sync server to run
       # in quasi-parallel mode to the snap sync daemon & peers.
       ctx.headerDownloadTrigger(info).isOkOr:
-        bodyRc = daemonWaitReadyFailInterval        # take a nap
+        bodyRc = daemonWaitReadyDwnldFailInterval   # take a nap
         break body
 
       ctx.downloadInit(info).isOkOr:                # get ready
-        bodyRc = daemonWaitReadyFailInterval        # take a nap
+        bodyRc = daemonWaitReadyInitFailInterval    # take a nap
 
     of SnapDownload:
       # Download headers. The request will be silently ignored if the

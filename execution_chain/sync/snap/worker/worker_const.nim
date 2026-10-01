@@ -80,15 +80,20 @@ const
   beaconSyncIdleLogWaitInterval* = chronos.seconds(10)
     ## Reduce logging noise
 
+  noBalSupportLogWaitInterval* = chronos.seconds(30)
+    ## Reduce logging noise
+
   # ---------
 
   daemonWaitClearFailInterval* = chronos.seconds(10)
     ## Something failed in `SnapClear` state, e.g. starting header
     ## download (just avoiding some extra polling.)
 
-  daemonWaitReadyFailInterval* = chronos.seconds(10)
-    ## Something failed in `SnapReady` state, e.g. starting header
-    ## download (just avoiding some extra polling.)
+  daemonWaitReadyDwnldFailInterval* = chronos.seconds(15)
+    ## Header download trigger failed
+
+  daemonWaitReadyInitFailInterval* = chronos.seconds(5)
+    ## Snap download init failed. System is not ready yet.
 
   daemonWaitDownloadInterval* = chronos.seconds(2)
     ## Poll waiting for peers downloading snap data. The polling cycle also
