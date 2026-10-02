@@ -162,11 +162,17 @@ proc retrieveStatic[LeafType](
 proc retrieveAccLeaf(
     db: AristoTxRef;
     accPath: Hash32;
-      ): Result[AccLeafRef,AristoError] =
-  if (let leafVtx = db.cachedAccLeaf(accPath); leafVtx.isSome()):
-    if not leafVtx[].isValid():
+      ): Result[CachedAccLeaf,AristoError] {.noinit.} =
+  db.layersGetAccLeaf(accPath).isErrOr:
+    if not value.isValid():
       return err(FetchPathNotFound)
-    return ok leafVtx[]
+    return ok CachedAccLeaf.init(value.pfx, value.account, value.stoID, value.stoHint)
+
+  when compileOption("threads"):
+    db.db.accLeaves.withGet(accPath, cached):
+      if cached.isEmpty():
+        return err(FetchPathNotFound)
+      return ok cached
 
   let (staticVtx, path, next) = retrieveStatic[AccLeafRef](
       db, STATE_ROOT_VID, accPath, db.db.getStaticLevel(), true).valueOr:
@@ -175,8 +181,9 @@ proc retrieveAccLeaf(
     return err(error)
 
   if staticVtx.isValid():
-    db.cacheAccLeaf(accPath, CachedAccLeaf.init(staticVtx.pfx, staticVtx.account, staticVtx.stoID, staticVtx.stoHint))
-    return ok staticVtx
+    let leaf = CachedAccLeaf.init(staticVtx.pfx, staticVtx.account, staticVtx.stoID, staticVtx.stoHint)
+    db.cacheAccLeaf(accPath, leaf)
+    return ok leaf
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
@@ -192,10 +199,12 @@ proc retrieveAccLeaf(
 
   discard db.db.lookupsHigher.fetchAdd(1, moRelaxed)
 
-  let accLeaf = AccLeafRef(leafVtx)
-  db.cacheAccLeaf(accPath, CachedAccLeaf.init(accLeaf.pfx, accLeaf.account, accLeaf.stoID, accLeaf.stoHint))
+  let
+    accLeaf = AccLeafRef(leafVtx)
+    leaf = CachedAccLeaf.init(accLeaf.pfx, accLeaf.account, accLeaf.stoID, accLeaf.stoHint)
+  db.cacheAccLeaf(accPath, leaf)
 
-  ok accLeaf
+  ok leaf
 
 proc retrieveMerkleHash(
     db: AristoTxRef;
@@ -243,8 +252,8 @@ proc fetchStorageID*(
   ## Returns `VertexID()` if the account has no storage and `err(FetchPathNotFound)`
   ## if the account does not exist.
   let
-    leafVtx = ?db.retrieveAccLeaf(accPath)
-    stoID = leafVtx[].stoID
+    leaf = ?db.retrieveAccLeaf(accPath)
+    stoID = leaf.stoID
 
   ok if stoID.isValid:
     stoID.vid
@@ -257,10 +266,10 @@ proc fetchStorageInfo*(
       ): Result[(VertexID, Opt[int]),AristoError] =
   ## Storage root vid and the static level to start probing slot leaves at,
   ## `none` when the trie was not built with static vids
-  let leafVtx = ?db.retrieveAccLeaf(accPath)
-  ok if leafVtx.stoID.isValid:
-    (leafVtx.stoID.vid,
-     if 0 < leafVtx.stoHint: Opt.some(int leafVtx.stoHint - 1)
+  let leaf = ?db.retrieveAccLeaf(accPath)
+  ok if leaf.stoID.isValid:
+    (leaf.stoID.vid,
+     if 0 < leaf.stoHint: Opt.some(int leaf.stoHint - 1)
      else: Opt.none(int))
   else:
     (default(VertexID), Opt.none(int))
@@ -287,9 +296,9 @@ proc fetchAccount*(
       ): Result[AristoAccount,AristoError] =
   ## Fetch an account record from the database indexed by `accPath`.
   ##
-  let leafVtx = ? db.retrieveAccLeaf(accPath)
+  let leaf = ? db.retrieveAccLeaf(accPath)
 
-  ok leafVtx.account
+  ok leaf.account
 
 proc fetchStateRoot*(
     db: AristoTxRef;
