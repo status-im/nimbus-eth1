@@ -264,7 +264,7 @@ template downloadBals*(
     ctx.pool.forwardNum = ctx.getLastBalNum()
     bodyRc = typeof(bodyRc).ok()
 
-    trace info & ": Imported BALs", pivotNum=ctx.pool.pivotNum,
+    chronicles.info info & ": Imported BALs", pivotNum=ctx.pool.pivotNum,
       forwardNum=ctx.pool.forwardNum, nBALs=rc.value
 
   bodyRc
