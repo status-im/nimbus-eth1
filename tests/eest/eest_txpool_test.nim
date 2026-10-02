@@ -13,14 +13,12 @@ import
   ./eest_runner,
   ./eest_txpool
 
+from ./eest_shared_releases import eestReleases
+
 const
   baseFolder = "tests/fixtures"
   suiteName = "Transaction Pool Test"
   eestType = "blockchain_tests"
-  eestReleases = [
-    "eest_mainnet",
-    "eest_devnet",
-  ]
 
 const skipFiles = [
   "",

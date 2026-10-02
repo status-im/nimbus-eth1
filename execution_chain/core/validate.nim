@@ -280,18 +280,21 @@ func validateTxBasic*(
 
   let
     minGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
-    
+
   if minGasLimit > tx.gasLimit:
     return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
-  
+
   if fork >= Osaka:
     if fork >= Amsterdam:
-      if minGasLimit > TX_GAS_LIMIT:
-        return err(&"invalid tx: Intrinsic execution or calldata floor exceeds TX_GAS_LIMIT={TX_GAS_LIMIT}, require={minGasLimit}")
+      if minGasLimit > TX_MAX_GAS_LIMIT:
+        return err(&"invalid tx: Intrinsic execution or calldata floor exceeds TX_MAX_GAS_LIMIT={TX_MAX_GAS_LIMIT}, require={minGasLimit}")
+
+      if tx.gasLimit > TX_MAX_TOTAL_GAS_LIMIT:
+        return err("invalid tx: gas limit exceeds TX_MAX_TOTAL_GAS_LIMIT 1^32 - 1")
     else:
       # https://eips.ethereum.org/EIPS/eip-7825
-      if tx.gasLimit > TX_GAS_LIMIT:
-        return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_GAS_LIMIT)
+      if tx.gasLimit > TX_MAX_GAS_LIMIT:
+        return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_MAX_GAS_LIMIT)
 
   if fork >= Cancun:
     if tx.payload.len > MAX_CALLDATA_SIZE:
