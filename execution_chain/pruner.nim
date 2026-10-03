@@ -90,7 +90,11 @@ proc pruneLoop(pruner: BackgroundPrunerRef) {.async: (raises: [CancelledError]).
       if header.timestamp >= cutoff:
         break
 
-      kvt.deleteBlockBodyAndReceiptsBe(header)
+      if not kvt.deleteBlockBodyAndReceiptsBe(header):
+        warn "Background pruner: failed to delete block data",
+          blkNum = currentBlock
+        break
+
       currentBlock += 1
       blocksSinceSave += 1
 
