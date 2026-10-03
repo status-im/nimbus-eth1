@@ -93,9 +93,9 @@ proc verifyAmsterdamOrLater(
       # Not logging until the first headers batch was downloaded
       if lastHdr.number == BlockNumber(0):
         return err()
-
-    # Not logging until the first headers batch was downloaded
-    return err()
+    else:
+      # Not logging until the first headers batch was downloaded
+      return err()
 
   ctx.pool.lastNoBalSupport.logCtrl(noBalSupportLogWaitInterval):
     chronicles.info info & ": No BAL support yet (needs Amsterdam or later)"
