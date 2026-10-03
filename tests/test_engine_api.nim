@@ -607,6 +607,63 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc getPayloadBodiesByHashV2ReturnsBALForBlocksWithoutWD(env: TestEnv): Result[void, string] =
+  let
+    client = env.client
+    header = ? client.latestHeader()
+    update = ForkchoiceStateV1(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+      parentBeaconBlockRoot: Opt.some(default(Hash32)),
+      slotNumber:            Opt.some(w3Qty(9'u64)),
+      targetGasLimit:        Opt.some(w3Qty(60_000_000'u64)),
+    )
+
+  let
+    fcuRes = ? client.forkchoiceUpdated(Version.V4, update, Opt.some(attr))
+    bundle = ? client.getPayload(Version.V6, fcuRes.payloadId.get)
+
+  var payload = bundle.executionPayload
+
+  # An undecodable blockAccessList is an invalid block, not an invalid request,
+  # so it is reported as an invalid payload status.
+  let res = client.newPayloadV5(
+    payload,
+    Opt.some(newSeq[Hash32]()),
+    Opt.some(default(Hash32)),
+    bundle.executionRequests)
+
+  if res.isErr:
+    return err("res should not error: " & res.error)
+
+  if res.get.status != PayloadExecutionStatus.valid:
+    return err("res.status should be equal to PayloadExecutionStatus.valid")
+
+  if res.get.latestValidHash.isNone:
+    return err("latestValidHash should have some value")
+
+  if res.get.latestValidHash.get != payload.blockHash:
+    return err("latestValidHash should be equal to: " & $payload.blockHash)
+
+  let bodies = ? client.getPayloadBodiesByHashV2(@[payload.blockHash])
+
+  if bodies.len != 1:
+    return err("bodies len should == 1")
+
+  if bodies[0].isNone:
+    return err("bodies at[0] should have something")
+    
+  if bodies[0].value.blockAccessList.isNone:
+    return err("bodies should have BAL")
+
+  ok()
+
 const testList = [
   TestSpec(
     name: "Basic cycle",
@@ -663,6 +720,11 @@ const testList = [
     name: "PayloadAttributesV4 preserve withdrawals",
     fork: Amsterdam,
     testProc: payloadAttrV4PreserveWithdrawalsTest
+  ),
+  TestSpec(
+    name: "getPayloadBodiesByHashV2 returns BAL for blocks without withdrawals",
+    fork: Amsterdam,
+    testProc: getPayloadBodiesByHashV2ReturnsBALForBlocksWithoutWD
   ),
   ]
 
