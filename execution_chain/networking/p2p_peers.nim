@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -70,6 +70,11 @@ type
     snappyEnabled*: bool
     clientId*: string
     inbound*: bool  # true if connection was initiated by remote peer
+    lastReceived*: Moment
+      # Time the last message arrived from this peer - a connection whose
+      # remote end silently went away is detected by this going stale
+    keepAlive*: Future[void].Raising([CancelledError])
+      # Liveness monitor, see `keepAliveLoop` in rlpx.nim
 
 #------------------------------------------------------------------------------
 # PeerRef public functions

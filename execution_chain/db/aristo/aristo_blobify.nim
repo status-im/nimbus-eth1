@@ -18,7 +18,7 @@ import
 
 export aristo_desc, results
 
-const MAX_VERTEX_BLOB_SIZE = 117
+const MAX_VERTEX_BLOB_SIZE = 118
 
 # Allocation-free version short big-endian encoding that skips the leading
 # zeroes
@@ -154,6 +154,10 @@ proc blobifyTo*(pyl: AccLeafRef, data: var VertexBuf) =
     lens += uint16(tmp.len - 1) shl 8 # 3 bits
     data &= tmp.data()
 
+  if 0 < pyl.stoHint:
+    mask = mask or 0x10
+    data &= [pyl.stoHint]
+
   if pyl.account.codeHash != EMPTY_CODE_HASH:
     mask = mask or 0x08
     data &= pyl.account.codeHash.data
@@ -234,7 +238,7 @@ proc blobifyTo*(lSst: SavedState; data: var seq[byte]) =
   ## Serialise a last saved state record
   data.add lSst.vTop.uint64.toBytesBE
   data.add lSst.serial.toBytesBE
-  data.add @[0x7fu8]
+  data.add @[0x7eu8]
 
 proc blobify*(lSst: SavedState): seq[byte] =
   ## Variant of `blobify()`
@@ -255,7 +259,7 @@ proc deblobifyLeaf(
       pfx,
       ?deblobify(data.toOpenArray(0, data.len - 2), UInt256),
     )
-  elif (mask and 0xf0) == 0: # Only account fields set
+  elif (mask and 0xe0) == 0: # Only account fields set
     let vtx = AccLeafRef(vType: AccLeaf, pfx: pfx)
     var
       start = 0
@@ -272,6 +276,14 @@ proc deblobifyLeaf(
     if (mask and 0x04) > 0:
       let len = (lens shr 8) and 0b111
       vtx.stoID = (true, VertexID(?load64(data, start, int(len + 1))))
+
+    if (mask and 0x10) > 0:
+      if data.len() < start + 1:
+        return err(DeblobVtxTooShort)
+      if data[start] > STATIC_VID_LEVELS + 1:
+        return err(DeblobStoHintUnsupported)
+      vtx.stoHint = data[start]
+      inc start
 
     if (mask and 0x08) > 0:
       if data.len() < start + 32:
@@ -354,7 +366,7 @@ proc deblobify*(
   ## `blobify()`.
   if data.len != 17:
     return err(DeblobWrongSize)
-  if data[^1] != 0x7f:
+  if data[^1] notin [0x7fu8, 0x7eu8]:
     return err(DeblobWrongType)
 
   ok(SavedState(

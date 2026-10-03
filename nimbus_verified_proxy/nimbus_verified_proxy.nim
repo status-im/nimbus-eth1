@@ -321,8 +321,6 @@ proc run(
 
   try:
     while true:
-      await sleepAsync(engine.timeParams.SLOT_DURATION)
-
       let syncRes = await engine.syncOnce()
       if syncRes.isErr():
         error "LC sync failed", err = syncRes.error.errMsg
@@ -331,6 +329,8 @@ proc run(
         let opRes = await l2Engine.opSyncOnce(engine)
         if opRes.isErr():
           error "OP sync failed", err = opRes.error.errMsg
+
+      await sleepAsync(engine.syncInterval())
   except CancelledError as e:
     debug "proxy loop cancelled"
     for s in frontendServers:

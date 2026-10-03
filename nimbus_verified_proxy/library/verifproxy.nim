@@ -328,6 +328,7 @@ proc run*(
 
   engine.state = EngineState(archive: useArchive)
 
+  ctx.engine = engine
   ctx.frontend = engine.getExecutionApiFrontend()
 
   opParams.isErrOr:
@@ -371,6 +372,7 @@ proc run*(
         )
         info "Connected to L2 execution backend", url
 
+    ctx.opEngine = l2Engine
     ctx.opFrontend = getExecutionApiFrontend(l2Engine, engine)
 
 proc startVerifProxy(

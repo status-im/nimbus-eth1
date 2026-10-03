@@ -48,7 +48,7 @@ method captureOpStart*(act: AccessListTracer, c: Computation,
   let stackLen = c.stack.len
   if (op in [Sload, Sstore]) and (stackLen >= 1):
     let slot = c.stack.peekInt().expect("stack is not empty")
-    act.list.add(c.msg.contractAddress, slot)
+    act.list.add(c.msg.currentTarget, slot)
 
   if (op in [ExtCodeCopy, ExtCodeHash, ExtCodeSize, Balance, SelfDestruct]) and (stackLen >= 1):
     let address = c.stack.peekAddress().expect("stack is not empty")

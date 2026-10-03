@@ -25,12 +25,12 @@ export types
 type
   # Standard call parameters.
   CallParams* = object
-    vmState*:   BaseVMState             # Chain, database, state, block, fork.
-    gasPrice*:  GasInt                  # Gas price for this tx.
-    sender*:    addresses.Address       # Sender account.
-    isCreate*:  bool                    # True if this is a contract creation.
-    tx*:        ptr Transaction
-    intrinsic*: IntrinsicGas
+    vmState*          : BaseVMState       # Chain, database, state, block, fork.
+    effectiveGasPrice*: GasInt            # Gas price for this tx.
+    sender*           : addresses.Address # Sender account.
+    isCreate*         : bool              # True if this is a contract creation.
+    tx*               : ptr Transaction
+    intrinsic*        : IntrinsicGas
 
   # Standard call result.
   CallResult* = object of RootObj
@@ -42,10 +42,8 @@ type
   DebugCallResult* = object of CallResult
     stack*:      seq[UInt256]           # EVM stack on return (for test only).
     memory*:     EvmMemory              # EVM memory on return (for test only).
-    logEntries*: seq[Log]
 
-  LogResult* = object
-    logEntries*: seq[Log]
+  TxResult* = object
     gasUsed*: GasInt
     blockExecutionGasUsed*: GasInt
     blockStateGasUsed*: GasInt

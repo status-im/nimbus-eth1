@@ -20,7 +20,9 @@ import
   ../../evm/types,
   ../../evm/state,
   ../validate,
+  ../executor/process_block,
   ../../portal/portal,
+  ../../stateless/witness_generation,
   ./forked_chain/[
     chain_desc,
     chain_branch,
@@ -418,6 +420,7 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
       if c.persistedCount > 1:
         notice "Finalized blocks persisted",
           nBlocks = c.persistedCount,
+          head = c.latest.number,
           base = c.base.number,
           baseHash = c.base.hash.short,
           pendingFCU = c.pendingFCU.short,
@@ -725,6 +728,43 @@ proc init*(
     fc.processingQueueLoop = fc.processQueue()
 
   fc
+
+proc refresh*(fc: ForkedChainRef, eagerStateRoot = false) =
+  ## Flush internal caches and reassign database.
+  let newFc = ForkedChainRef.init(
+    com = fc.com,
+    baseDistance = fc.baseDistance,
+    persistBatchSize = fc.persistBatchSize,
+    dynamicBatchSize = fc.dynamicBatchSize,
+    eagerStateRoot)                                 # seems to be unused, though
+
+  newFc.queue = fc.queue                            # save temporarily
+  newFc.processingQueueLoop = fc.processingQueueLoop
+  fc[].reset                                        # clear desctiptor
+
+  # Copy base settings
+  fc.com = newFc.com
+  fc.base = newFc.base
+  fc.latest = newFc.latest
+  fc.heads = newFc.heads
+  fc.hashToBlock = newFc.hashToBlock
+  fc.baseTxFrame = newFc.baseTxFrame
+  fc.baseDistance = newFc.baseDistance
+  fc.persistBatchSize = newFc.persistBatchSize
+  fc.dynamicBatchSize = newFc.dynamicBatchSize
+  fc.quarantine = newFc.quarantine
+  fc.fcuHead = newFc.fcuHead
+  fc.fcuSafe = newFc.fcuSafe
+  fc.baseQueue = newFc.baseQueue
+  fc.lastBaseLogTime = newFc.lastBaseLogTime
+  fc.badBlocks = newFc.badBlocks
+
+  # Enable queue (if any)
+  fc.queue = newFc.queue
+  fc.processingQueueLoop = newFc.processingQueueLoop
+
+  # Force GC to clean up
+  newFc[].reset
 
 proc importBlock*(
     c: ForkedChainRef,
@@ -1377,3 +1417,53 @@ proc getBlockAccessList*(c: ForkedChainRef, blockHash: Hash32): Opt[BlockAccessL
     return Opt.none(BlockAccessList)
 
   bal.map(proc (v: auto): auto = v[])
+
+proc getExecutionWitness*(
+    c: ForkedChainRef, blockHash: Hash32
+): Result[ExecutionWitnessWithKeys, string] =
+  ## Return the execution witness created when importing the given block
+  let txFrame = c.txFrame(blockHash).txFrameBegin()
+  defer:
+    txFrame.dispose()
+
+  let witness = txFrame.getWitness(blockHash).valueOr:
+    return err("Witness not found")
+
+  ok(ExecutionWitnessWithKeys.build(witness, txFrame))
+
+proc generateExecutionWitness*(
+    c: ForkedChainRef, blk: Block
+): Result[ExecutionWitnessWithKeys, string] =
+  ## Build the execution witness for `blk` on demand by re-executing it against
+  ## its parent state, without requiring `--stateless-provider` and without
+  ## persisting anything. Works for a freshly imported or already known block as
+  ## long as the parent state is available, else the state root check errors.
+  template header(): Header = blk.header
+
+  let parentHeader = ?c.headerByHash(header.parentHash)
+
+  # Execute on a throwaway frame so the shared parent state is never modified.
+  let
+    parentFrame = c.txFrame(header.parentHash)
+    txFrame = parentFrame.txFrameBegin()
+  defer:
+    txFrame.dispose()
+
+  let vmState = BaseVMState()
+  vmState.init(parentHeader, header, c.com, txFrame, collectWitness = true)
+
+  # No block access list keeps execution sequential (parallel skips witness keys).
+  ?vmState.processBlock(
+    blk,
+    blockAccessList = Opt.none(BlockAccessListRef),
+    skipValidation = true,
+    skipReceipts = true,
+    skipUncles = true,
+    skipStateRootCheck = false,
+    skipPostExecBalCheck = true)
+
+  let
+    preStateLedger = LedgerRef.init(parentFrame)
+    witness = Witness.build(preStateLedger, vmState.ledger, parentHeader, header)
+
+  ok(ExecutionWitnessWithKeys.build(witness, txFrame))

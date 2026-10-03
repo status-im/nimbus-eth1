@@ -87,7 +87,7 @@ proc rpcEstimateGas*(
     # block's gasLimit act as the gas ceiling
     hi = header.gasLimit
 
-  let feeCap = params.gasPrice
+  let feeCap = params.effectiveGasPrice
 
   # Recap the highest gas limit with account's available balance.
   if feeCap > 0:

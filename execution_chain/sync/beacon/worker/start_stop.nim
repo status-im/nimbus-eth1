@@ -49,21 +49,20 @@ template setLastPeerSeen(ctx: BeaconCtxRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
-  ## Helper for `setup()`: Enable external call-back based services
+proc updateServices*(ctx: BeaconCtxRef; info: static[string]): bool  =
+  ## Some database specs might have chanage after a soft reboot.
+  if ctx.chain.isNil:
+    error info & ": Cannot update DB handlers",
+      reason="initialisation missing"
+    return false
+  if not ctx.hibernate:
+    error info & ": Cannot update DB handlers",
+      reason="syncing must be suspended"
+    return false
 
-  # Initialise up queues and lists
-  ctx.headersStagedQueueInit()
-  ctx.blocksStagedQueueInit()
-  ctx.headersUnprocInit()
-  ctx.blocksUnprocInit()
-  ctx.updateEtaInit()
-  ctx.setLastPeerSeen()
-
-  # Start in suspended mode
-  ctx.hibernate = true
-
-  # Set up header cache descriptor
+  # Set up header cache descriptor.
+  if not ctx.pool.hdrCache.isNil:
+    ctx.pool.hdrCache.stop()
   ctx.pool.hdrCache = HeaderChainRef.init(ctx.chain)
 
   # Set up the notifier informing when a new syncer session has started.
@@ -80,10 +79,34 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   # the same `initTarget` activation pipeline that the `--debug-beacon-sync-
   # target` CLI flag drives.
   ctx.pool.chain.com.headerTargetRequest = proc(hash, finHash: Hash32) =
+    if ctx.pool.standByMode or
+       ctx.pool.stopBase.isSome():
+      # It makes no sense to try syncing against a block hash in stand-by
+      # mode from the FCU. All that will happen is a header chain download
+      # which will be discarded afterwards. No blocks import will take place.
+      return
     let fin =
       if finHash == zeroHash32: Opt.none(Hash32)
       else: Opt.some(finHash)
     ctx.headersTargetRequest(hash, isFinal = false, "fcu", finHash = fin)
+  true
+
+proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
+  ## Helper for `setup()`: Enable external call-back based services
+
+  # Initialise up queues and lists
+  ctx.headersStagedQueueInit()
+  ctx.blocksStagedQueueInit()
+  ctx.headersUnprocInit()
+  ctx.blocksUnprocInit()
+  ctx.updateEtaInit()
+  ctx.setLastPeerSeen()
+
+  # Start in suspended mode
+  ctx.hibernate = true
+
+  # Set up database related stuff
+  doAssert ctx.updateServices(info)
 
   # Set up ticker
   if ctx.pool.syncTickerOk:

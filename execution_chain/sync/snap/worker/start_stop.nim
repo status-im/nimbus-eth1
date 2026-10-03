@@ -36,8 +36,8 @@ template setLastPeerSeen(ctx: SnapCtxRef) =
 # Public helper
 # ------------------------------------------------------------------------------
 
-proc resetServices*(ctx: SnapCtxRef; info: static[string]) =
-  ## Initialisztion and reset/restart helper
+proc resetServices*(ctx: SnapCtxRef; info: static[string]): Opt[void] =
+  ## Initialisation and reset/restart helper
   ##
   # Initialise account range accounting
   ctx.accUnproc.init ItemKeyRangeMax
@@ -51,8 +51,16 @@ proc resetServices*(ctx: SnapCtxRef; info: static[string]) =
   # Miscellaneous parameters to reset
   ctx.pool.pivotNum = 0
   ctx.pool.forwardNum = 0
-  ctx.pool.coreDb2Path.reset
   ctx.pool.resetReq = false
+  ctx.pool.newCoreDb[].reset
+
+  # Import and cache locally the Genesis header from `CoreDb` database
+  let
+    txFrame = ctx.chain.com.db.baseTxFrame()
+    gHdr = txFrame.getBlockHeader(BlockNumber 0).valueOr:
+      error info & ": Error fetching Genesis from CoreDb", `error`=error
+      return err()
+  ctx.pool.cacheDB.putHeader(gHdr, info)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -60,20 +68,16 @@ proc resetServices*(ctx: SnapCtxRef; info: static[string]) =
 
 proc setupServices*(ctx: SnapCtxRef; info: static[string]): bool =
   ## Helper for `setup()`: Enable external call-back based services
-
   # Set up assembly DB
   ctx.pool.cacheDB = CacheDbRef.init(ctx.pool.baseDir,info).valueOr:
     return false
 
-  ctx.resetServices info
+  ctx.resetServices(info).isOkOr:
+    return false
 
   # Set up manual beacon target request. If set, there is no point in
   # waiting for inital CL to sed updates.
   ctx.pool.beaconTarget = ctx.beaconInitTarget()
-
-  # Set up ticker, disabled by default
-  if ctx.pool.ticker.isNil:
-    ctx.pool.ticker = proc(ctx: SnapCtxRef) = discard
 
   ctx.daemon = true                                 # disabled by default
   true
@@ -98,6 +102,9 @@ proc startSyncPeer*(buddy: SnapPeerRef): bool =
   # Reset global register for fall-back peer
   ctx.pool.lastSlowPeer = Opt.none(Hash)
 
+  if buddy.only.supportsBal:
+    ctx.pool.nSnap2Peers.inc
+
   metrics.set(nec_snap_peers, nSnapPeers)
   true
 
@@ -109,6 +116,9 @@ proc stopSyncPeer*(buddy: SnapPeerRef) =
   if nSnapPeers < 1:
     ctx.pool.lastSlowPeer = Opt.none(Hash)
     ctx.setLastPeerSeen()
+    ctx.pool.nSnap2Peers = 0
+  elif buddy.only.supportsBal:
+    ctx.pool.nSnap2Peers.dec
 
   metrics.set(nec_snap_peers, nSnapPeers)
 

@@ -37,7 +37,7 @@ proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
     savePoint: LedgerSpRef;
     tx: Transaction;
-    callResult: var LogResult;
+    callResult: var TxResult;
     blobGasUsed: GasInt;
     rollbackReads: bool;
       ): Result[void, string] =
@@ -93,7 +93,7 @@ template check2dGasInclusion*(
   let
     executionGasAvailable = vmState.blockCtx.gasLimit - vmState.blockExecutionGasUsed
     stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
-    want = min(TX_GAS_LIMIT.GasInt, txGasLimit)
+    want = min(TX_MAX_GAS_LIMIT.GasInt, txGasLimit)
 
   if want > executionGasAvailable:
     fail("execution gas used exceeds limit, want: " & $want & ", available: " & $executionGasAvailable)
@@ -145,7 +145,7 @@ proc processTransaction*(
     sender:  Address;  ## tx.recoverSender
     rollbackReads: bool = false;
     persist = true;
-      ): Result[LogResult, string] =
+      ): Result[TxResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framework for EIP1559.
 

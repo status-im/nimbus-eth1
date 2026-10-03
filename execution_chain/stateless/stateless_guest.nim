@@ -51,7 +51,7 @@ proc run_stateless_guest*(data: openArray[byte]): seq[byte] =
 when isMainModule:
   # Guest program entry point: read the schema-prefixed SSZ `StatelessInput`,
   # validate it, write back the SSZ `StatelessValidationResult`.
-  import ./zkvm_io
+  import ./zkvm/zkvm_io
 
   proc main() =
     writeOutput(run_stateless_guest(readInput().toOpenArray()))

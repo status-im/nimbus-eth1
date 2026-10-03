@@ -17,14 +17,12 @@
 {.push raises: [].}
 
 import
-  std/paths,
   pkg/chronicles,
-  ./import_coredb/[coredb_desc, coredb_import, coredb_stats],
+  ./import_coredb/[coredb_desc, coredb_import],
   ./[helpers, cache_db, worker_desc]
 
 export
-  coredb_desc,
-  coredb_stats
+  coredb_desc
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -33,7 +31,7 @@ export
 proc importCoreDb*(
     ctx: SnapCtxRef;
     info: static[string];
-      ): Opt[Path] =
+      ): Opt[void] =
   ## Import the flat tables into a version of CoreDb/Aristo, different from
   ## the active one. If successful, the installation path is returned.
   ##
@@ -43,17 +41,18 @@ proc importCoreDb*(
     header = ?adb.getHeader(status.number, info)
 
     tx2 = CoreDb2Ref.init(ctx, clean=true)          # open, clear left overs
-    txStateRoot = ?tx2.fetchStateRoot(info)         # import data
+    txStats = ?tx2.importFlat(adb, info)            # import data
+    txStateRoot = ?tx2.fetchStateRoot(info)
     db2Dir = tx2.dbDir
   defer: tx2.destroy()
 
   if header.stateRoot != txStateRoot:
-    let txStats = ?tx2.importFlat(adb, info)
     error info & ": Oops, state roots differ", number=status.number,
       stateRoot=header.stateRoot.toStr, expected=txStateRoot.toStr, txStats
     return err()
 
-  ok(db2Dir)
+  ctx.pool.newCoreDb.newDbPath = string db2Dir
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

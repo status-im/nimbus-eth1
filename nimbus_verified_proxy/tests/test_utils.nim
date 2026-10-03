@@ -138,4 +138,9 @@ proc initTestEngine*(
   engine.registerBackend(initTestExecutionBackend(testState), fullExecutionCapabilities)
   engine.setupTestBeacon(testState)
 
+  try:
+    ?(waitFor engine.syncOnce())
+  except CancelledError as e:
+    return err((UnavailableDataError, "test engine sync cancelled: " & e.msg, UNTAGGED))
+
   ok((engine, engine.getExecutionApiFrontend()))

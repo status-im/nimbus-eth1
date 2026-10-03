@@ -61,6 +61,22 @@ proc downloadReady(
   w.codeDone = not ?adb.hasMissingBlob(info) and not ?adb.hasCodeLock(info)
   ok(w)
 
+proc startDownloading(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Opt[void] =
+  let
+    adb = ctx.pool.cacheDB
+    number = ?adb.lastHeaderNumber(info)        # => err() unless headers
+    accRng = ItemKeyRangeSet.init ItemKeyRangeMax
+  ?adb.putAccMissingIntv(number, accRng, info)  # new state
+  ctx.accUnproc.init ItemKeyRangeMax
+  ctx.pool.pivotNum = number                    # set pivot
+  if 0 < ctx.pool.pivotNum:
+    debug info & ": Start downloading accounts",
+      pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
+  ok()
+
 # ------------------------------------------------------------------------------
 # Public function(s)
 # ------------------------------------------------------------------------------
@@ -70,6 +86,14 @@ proc downloadInit*(
     info: static[string];
       ): Opt[void] =
   if not ctx.accUnproc.synced():
+    if not ctx.pool.balSupported:                   # need `Amsterdam` or later
+      ctx.pool.cacheDB.lastHeader().isErrOr:        # wait for 2nd header batch
+        if value.isNone() or value.unsafeGet().number == BlockNumber(0):
+          return err()
+      ctx.pool.lastNoBalSupport.logCtrl(noBalSupportLogWaitInterval):
+        chronicles.info info & ": No BAL support yet (needs Amsterdam or later)"
+      return err()
+
     # Update state number that can be advanced to
     ctx.pool.forwardNum = ctx.getLastBalNum()       # can forward to that state
 
@@ -78,20 +102,18 @@ proc downloadInit*(
       let accState = ?adb.getAccMissingIntv(info)
       ctx.accUnproc.unprocessed = accState.ranges   # copy reference (!)
       ctx.pool.pivotNum = accState.number           # set pivot
-      debug info & ": Continue downloading", pivotNum=ctx.pool.pivotNum,
-        forwardNum=ctx.pool.forwardNum
+      if 0 < ctx.pool.pivotNum:                     # ready ok?
+        debug info & ": Continue downloading accounts",
+          pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
     else:
-      let
-        number = ?adb.lastHeaderNumber(info)
-        accRng = ItemKeyRangeSet.init ItemKeyRangeMax
-      ?adb.putAccMissingIntv(number, accRng, info)  # new state
-      ctx.accUnproc.init ItemKeyRangeMax
-      ctx.pool.pivotNum = number                    # set pivot
-      debug info & ": Start downloading", pivotNum=ctx.pool.pivotNum,
-        forwardNum=ctx.pool.forwardNum
+      ?ctx.startDownloading(info)
 
     ctx.accUnproc.synced = true
-    ctx.accountDownloadMetricsUpdate()
+
+  elif ctx.pool.pivotNum == 0:                      # delayed intialisation?
+    ?ctx.startDownloading(info)
+
+  ctx.accountDownloadMetricsUpdate()
   ok()
 
 proc downloadCommit*(

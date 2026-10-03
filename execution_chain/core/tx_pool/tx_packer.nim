@@ -25,6 +25,7 @@ import
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
+  ../../evm/interpreter/gas_costs,
   ../executor,
   ../validate,
   ../eip4844,
@@ -41,6 +42,7 @@ type
     numBlobPerBlock: int
     txsRlpSize: uint64
     withdrawalsRlpSize: uint64
+    headerFixedSize: uint64
 
     # Packer results
     blockValue: UInt256
@@ -72,6 +74,19 @@ func getExtraData(com: CommonRef): seq[byte] =
   else:
     com.extraData.toBytes
 
+func blockGasUsed(vmState: BaseVMState): GasInt =
+  ## Gas counted against the block gas limit so far
+  if vmState.fork >= FkAmsterdam:
+    # EIP-8037
+    max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
+  else:
+    vmState.cumulativeGasUsed
+
+func minTxGas(fork: EVMFork): GasInt =
+  ## Intrinsic gas of the cheapest possible tx, see `intrinsicGas`
+  if fork >= FkAmsterdam: TX_BASE_COST_2780
+  else: TX_BASE_COST
+
 func rlpLengthBytes(v: uint64): uint64 =
   var v = v
   while v > 0:
@@ -82,26 +97,30 @@ func rlpListPrefixLen(payloadLen: uint64): uint64 =
   if payloadLen <= 55: 1'u64
   else: 1'u64 + rlpLengthBytes(payloadLen)
 
-proc prospectiveBlockSize(pst: TxPacker, xp: TxPoolRef,
-                          item: TxItemRef, txSize: uint64): uint64 =
-  ## Exact encoded size of the assembled block if `item` is packed next.
-  ## Header fields not known until packing completes are either fixed-width
-  ## (hash roots, bloom) or substituted with a value that RLP-encodes to at
-  ## least as many bytes as the final one (gasUsed), so the result never
-  ## underestimates — a block passing this check cannot exceed the cap.
+func rlpListPayloadLen(encodedLen: uint64): uint64 =
+  ## Inverse of `rlpListPrefixLen(p) + p`
+  result = encodedLen - 1
+  while rlpListPrefixLen(result) + result > encodedLen:
+    dec result
+
+func rlpUintLen(v: uint64): uint64 =
+  ## Encoded size of `v` as an RLP integer
+  if v < 128: 1'u64
+  else: 1'u64 + rlpLengthBytes(v)
+
+proc prospectiveHeaderFixedSize(xp: TxPoolRef): uint64 =
+  ## RLP payload size of the post-Osaka header, minus `gasUsed` and
+  ## `blobGasUsed` — the only fields whose encoded size depends on the packed
+  ## txs. Everything else is either known before packing starts or fixed-width
+  ## (hash roots, bloom).
   let
-    vmState = pst.vmState
+    vmState = xp.vmState
     com = vmState.com
-    gasUsedSoFar =
-      if vmState.fork >= FkAmsterdam:
-        max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
-      else:
-        vmState.cumulativeGasUsed
 
   var header = Header(
     number:        vmState.blockNumber,
     gasLimit:      vmState.blockCtx.gasLimit,
-    gasUsed:       min(gasUsedSoFar + item.tx.gasLimit, vmState.blockCtx.gasLimit),
+    gasUsed:       0,
     timestamp:     xp.timestamp,
     extraData:     getExtraData(com),
     baseFeePerGas: Opt.some(xp.baseFee.u256),
@@ -110,7 +129,7 @@ proc prospectiveBlockSize(pst: TxPacker, xp: TxPoolRef,
     header.withdrawalsRoot = Opt.some(default(Hash32))
   if com.isCancunOrLater(xp.timestamp):
     header.parentBeaconBlockRoot = Opt.some(default(Hash32))
-    header.blobGasUsed = Opt.some(vmState.blobGasUsed + item.tx.getTotalBlobGas)
+    header.blobGasUsed = Opt.some(0'u64)
     header.excessBlobGas = Opt.some(vmState.blockCtx.excessBlobGas)
   if com.isPragueOrLater(xp.timestamp):
     header.requestsHash = Opt.some(default(Hash32))
@@ -118,9 +137,21 @@ proc prospectiveBlockSize(pst: TxPacker, xp: TxPoolRef,
     header.blockAccessListHash = Opt.some(default(Hash32))
     header.slotNumber = Opt.some(xp.slotNumber)
 
+  rlpListPayloadLen(rlp.getEncodedLength(header).uint64) -
+    2 * rlpUintLen(0) # zero `gasUsed` and `blobGasUsed`
+
+func prospectiveBlockSize(pst: TxPacker, item: TxItemRef): uint64 =
+  ## Exact encoded size of the assembled block if `item` is packed next.
+  ## `gasUsed` is substituted with a value that RLP-encodes to at least as
+  ## many bytes as the final one, so the result never underestimates — a
+  ## block passing this check cannot exceed the cap.
   let
-    txsLen = pst.txsRlpSize + txSize
-    bodyLen = rlp.getEncodedLength(header).uint64 +
+    vmState = pst.vmState
+    gasUsed = min(vmState.blockGasUsed + item.tx.gasLimit, vmState.blockCtx.gasLimit)
+    blobGasUsed = vmState.blobGasUsed + item.tx.getTotalBlobGas
+    headerLen = pst.headerFixedSize + rlpUintLen(gasUsed) + rlpUintLen(blobGasUsed)
+    txsLen = pst.txsRlpSize + item.rlpSize
+    bodyLen = rlpListPrefixLen(headerLen) + headerLen +
               rlpListPrefixLen(txsLen) + txsLen +
               1 +   # empty ommers list
               pst.withdrawalsRlpSize
@@ -133,10 +164,7 @@ func classifyPackedNext(vmState: BaseVMState): bool =
   ##
   ## This function is typically called as a follow up after a `false` return of
   ## `classifyPack()`.
-  if vmState.fork >= FkAmsterdam:
-    max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed) < vmState.blockCtx.gasLimit
-  else:
-    vmState.cumulativeGasUsed < vmState.blockCtx.gasLimit
+  vmState.blockGasUsed < vmState.blockCtx.gasLimit
 
 # ------------------------------------------------------------------------------
 # Private functions: packer packerVmExec() helpers
@@ -156,6 +184,8 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
   # size is known before packing starts
   if xp.nextFork >= FkShanghai:
     packer.withdrawalsRlpSize = rlp.getEncodedLength(xp.withdrawals).uint64
+  if xp.nextFork >= FkOsaka:
+    packer.headerFixedSize = xp.prospectiveHeaderFixedSize()
 
   # Setup block access list tracker for pre‑execution system calls
   if vmState.balTrackerEnabled:
@@ -177,11 +207,22 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
 
   ok(packer)
 
-proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
+proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   ## Greedily collect & compact items as long as the accumulated `gasLimit`
   ## values are below the maximum block size.
   let
     vmState = pst.vmState
+
+  # Nothing fits once less gas than the cheapest possible tx needs is left
+  if vmState.blockCtx.gasLimit - vmState.blockGasUsed < vmState.fork.minTxGas:
+    return StopCollecting
+
+  # Same check `processTransaction` starts with, minus building its error
+  # message. The pool then skips the sender's later txs, as they can't fit
+  # without this one.
+  template doesNotFit(_: untyped) =
+    return ContinueWithNextAccount
+  check2dGasInclusion(vmState, item.tx.gasLimit, doesNotFit)
 
   # EIP-4844
   if item.tx.txType == TxEip4844:
@@ -205,11 +246,9 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   # EIP-7934: a tx that cannot fit within the block RLP size limit must not
   # be executed at all, otherwise the header gas values, receipts and the
   # EIP-7928 block access list would commit to a tx missing from the body
-  var txSize = 0'u64
-  if vmState.fork >= FkOsaka:
-    txSize = rlp.getEncodedLength(item.tx).uint64
-    if pst.prospectiveBlockSize(xp, item, txSize) > MAX_RLP_BLOCK_SIZE.uint64:
-      return ContinueWithNextAccount
+  if vmState.fork >= FkOsaka and
+      pst.prospectiveBlockSize(item) > MAX_RLP_BLOCK_SIZE.uint64:
+    return ContinueWithNextAccount
 
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
@@ -228,13 +267,13 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   if vmState.receipts.len <= inx:
     vmState.receipts.setLen(inx + receiptsExtensionSize)
 
-  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType, rc.value)
-  vmState.allLogs.add vmState.receipts[inx].logs
+  vmState.blockLogs.add vmState.txLogs
+  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
 
   pst.packedTxs.add item
   pst.numBlobPerBlock += item.tx.versionedHashes.len
   pst.blockValue += rc.value.txFee
-  pst.txsRlpSize += txSize
+  pst.txsRlpSize += item.rlpSize
 
   ContinueWithNextAccount
 
@@ -262,7 +301,7 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   if vmState.fork >= FkPrague:
     pst.withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     pst.consolidationReqs = ?processDequeueConsolidationRequests(vmState)
-    pst.depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
+    pst.depositReqs = ?parseDepositLogs(vmState.blockLogs, vmState.com.depositContractAddress)
 
     if vmState.fork >= FkAmsterdam:
       # EIP-8282
@@ -297,12 +336,12 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
 
   if xp.isOrdered:
     for item in xp.byOrder:
-      let rc = pst.vmExecGrabItem(item, xp)
+      let rc = pst.vmExecGrabItem(item)
       if rc == StopCollecting:
         break
   else:
     for item in xp.byPriceAndNonce:
-      let rc = pst.vmExecGrabItem(item, xp)
+      let rc = pst.vmExecGrabItem(item)
       if rc == StopCollecting:
         break
 

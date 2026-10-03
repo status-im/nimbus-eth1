@@ -73,8 +73,7 @@ method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
 
 proc verifyResult(ctx: var StateContext,
                   vmState: BaseVMState,
-                  obtainedHash: Hash32,
-                  callResult: LogResult) =
+                  obtainedHash: Hash32) =
   ctx.error = ""
   if obtainedHash != ctx.expectedHash:
     ctx.error = "post state root mismatch: got " &
@@ -83,7 +82,7 @@ proc verifyResult(ctx: var StateContext,
       $ctx.expectedHash
     return
 
-  let actualLogsHash = computeRlpHash(callResult.logEntries)
+  let actualLogsHash = computeRlpHash(vmState.txLogs)
   if actualLogsHash != ctx.expectedLogs:
     ctx.error = "post state log hash mismatch: got " &
       ($actualLogsHash).toLowerAscii &
@@ -250,13 +249,13 @@ proc runExecution(ctx: var StateContext,
       fork : ctx.forkStr
     ))
 
-  var callResult = vmState.processTransaction(ctx.tx, sender).valueOr(LogResult())
+  var callResult = vmState.processTransaction(ctx.tx, sender).valueOr(TxResult())
   coinbaseStateClearing(vmState, ctx.header.coinbase)
 
   let stateRoot = vmState.readOnlyLedger.getStateRoot()
-  ctx.verifyResult(vmState, stateRoot, callResult)
+  ctx.verifyResult(vmState, stateRoot)
   if receipt.isSome and ctx.error.len == 0:
-    let generatedReceipt = vmState.makeReceipt(ctx.tx.txType, callResult)
+    let generatedReceipt = vmState.makeReceipt(ctx.tx.txType)
     ctx.verifyReceipt(generatedReceipt, receipt.value, ctx.tx, txBytes)
 
   let res = StateResult(

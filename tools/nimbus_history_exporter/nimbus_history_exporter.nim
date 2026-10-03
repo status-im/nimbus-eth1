@@ -25,6 +25,7 @@ proc main() =
     quit QuitFailure
 
   setupLogging(config.logLevel, config.logFormat)
+  setupFileLimits()
 
   checkConfig(config)
 

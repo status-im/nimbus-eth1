@@ -90,6 +90,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     chain = ben.chain
     headHash = update.headBlockHash
 
+  # For the periodic status log: detects a silent `CL`
+  chain.lastFcuTime = EthTime.now()
+
   if headHash == zeroHash32:
     warn "Forkchoice requested update to zero hash"
     return simpleFCU(PayloadExecutionStatus.invalid)
@@ -117,6 +120,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
         hash = headHash.short,
         finHash = update.finalizedBlockHash.short,
         safe = update.safeBlockHash.short,
+        head = chain.latestNumber,
         base = chain.baseNumber,
         pendingFCU = chain.pendingFCU.short
       com.headerTargetRequest(headHash, update.finalizedBlockHash)
@@ -126,6 +130,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     info "Forkchoice requested sync to new head",
       number = header.number,
       hash   = headHash.short,
+      head   = chain.latestNumber,
+      distance = int64(header.number) - int64(chain.latestNumber),
       base   = chain.baseNumber,
       finHash= update.finalizedBlockHash.short,
       safe   = update.safeBlockHash.short,
@@ -191,6 +197,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     notice "Ignoring beacon update to old head",
       headHash   = headHash.short,
       headNumber = header.number,
+      latest     = chain.latestNumber,
       base       = chain.baseNumber,
       pendingFCU = chain.pendingFCU.short,
       resolvedFinNum = chain.resolvedFinNumber,

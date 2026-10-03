@@ -17,7 +17,7 @@ import
 
 func init*(m: var GasMeter, startGas: GasInt, stateGas: GasInt) =
   m.executionGasLeft = startGas
-  m.gasRefunded = 0
+  m.refundCounter = 0
   m.stateGasLeft = stateGas
   m.executionGasUsed = 0
 
@@ -47,7 +47,7 @@ func refundGas*(gasMeter: var GasMeter; amount: int64) =
   # After nimbus converting GasInt to uint64, the gas refund
   # cannot be converted to uint64 too, because the sum of all children gas refund,
   # no matter positive or negative will be >= 0 when EVM finish execution.
-  gasMeter.gasRefunded += amount
+  gasMeter.refundCounter += amount
 
 func chargeStateGas*(gasMeter: var GasMeter; amount: GasInt, reason: string): EvmResultVoid =
   if gasMeter.stateGasLeft >= amount:

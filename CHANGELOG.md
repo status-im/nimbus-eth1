@@ -1,7 +1,98 @@
+2026-09-29 v0.4.2
+=================
+
+The Nimbus Ethereum client `v0.4.2` beta and Nimbus verified proxy are `high-urgency` for Sepolia, due to its 6th October Glamsterdam fork activation, and `low-urgency` for other networks. The unified client and consensus client components also support QUIC, which might require additional network configuration.
+
+### Improvements
+
+- Schedule Sepolia Glamsterdam activation:
+  https://github.com/status-im/nimbus-eth1/pull/4836
+  https://github.com/status-im/nimbus-eth1/pull/4838
+
+- Improve INFO logging:
+  https://github.com/status-im/nimbus-eth1/pull/4857
+
+- Use cached code for `CREATE` and `CREATE2`-based deployments:
+  https://github.com/status-im/nimbus-eth1/pull/4779
+
+### Fixes
+
+- Fix Sepolia fork id:
+  https://github.com/status-im/nimbus-eth1/pull/4807
+
+- Fix unbounded peer count:
+  https://github.com/status-im/nimbus-eth1/pull/4748
+
+- Use shared NAT config for the light unified client:
+  https://github.com/status-im/nimbus-eth1/pull/4823
+
+- Fix requests for blocks created before verified proxy launch:
+  https://github.com/status-im/nimbus-eth1/pull/4837
+
+- Fix verified proxy pending or unknown transaction downscoring:
+  https://github.com/status-im/nimbus-eth1/pull/4834
+
+2026-09-13 v0.4.1
+=================
+
+The Nimbus Ethereum client `v0.4.1` beta and Nimbus verified proxy are `medium-urgency` releases which improve performance and compatibility. The unified client supports a `--light` parameter which runs a light consensus layer with a full execution layer, while a new `lightClient` subcommand provides standalone access to the consensus layer light client.
+
+### Improvements
+
+- Support Web3 API `pending` block tag:
+  https://github.com/status-im/nimbus-eth1/pull/4687
+
+- More compatible verified proxy encoding and decoding:
+  https://github.com/status-im/nimbus-eth1/pull/4740
+
+- Optimize state root computation by 20%:
+  https://github.com/status-im/nimbus-eth1/pull/4709
+
+- Decrease EVM performance overhead 15% across opcodes and precompiles:
+  https://github.com/status-im/nimbus-eth1/pull/4626
+
+- Double Keccak hashing-related speed, including of the `KECCAK256` opcode:
+  https://github.com/status-im/nimbus-eth1/pull/4590
+
+- Decrease devp2p blob-handling time by 99%:
+  https://github.com/status-im/nimbus-eth1/pull/4594
+
+- Improve performance by caching transaction sender recovery:
+  https://github.com/status-im/nimbus-eth1/pull/4607
+
+- Avoid non-uniformly distributed Ethereum address slowdowns:
+  https://github.com/status-im/nimbus-eth1/pull/4612
+
+- Update engine_getClientVersionV1 identification code to `NE`:
+  https://github.com/status-im/nimbus-eth1/pull/4447
+
+### Fixes
+
+- Close unified client databases properly at exit:
+  https://github.com/status-im/nimbus-eth1/pull/4630
+
+- Fix unified client hang at shutdown:
+  https://github.com/status-im/nimbus-eth1/pull/4629
+
+- Clearer eth_estimateGas error messages:
+  https://github.com/status-im/nimbus-eth1/pull/4764
+
+- Increase accuracy of engine_newPayload response rejections:
+  https://github.com/status-im/nimbus-eth1/pull/4651
+
+- Return correct engine API error code for incorrect PayloadAttributes versions:
+  https://github.com/status-im/nimbus-eth1/pull/4658
+
+- Fix verified proxy fee handling:
+  https://github.com/status-im/nimbus-eth1/pull/4741
+
+- Fix verified proxy Go transport bindings:
+  https://github.com/status-im/nimbus-eth1/pull/4772
+
 2026-07-29 v0.4.0
 =================
 
-The Nimbus Ethereum client `0.4.0` beta, along with the Nimbus verified proxy, are `medium-urgency` releases which improves performance, stability, and observability, as well as expanding verified proxy Web3 API coverage. This release marks the transition for the unified and execution clients from alpha to beta, reflecting increased suitability for testing and deployment.
+The Nimbus Ethereum client `0.4.0` beta, along with the Nimbus verified proxy, are `medium-urgency` releases which improve performance, stability, and observability, as well as expanding verified proxy Web3 API coverage. This release marks the transition for the unified and execution clients from alpha to beta, reflecting increased suitability for testing and deployment.
 
 ### Improvements
 

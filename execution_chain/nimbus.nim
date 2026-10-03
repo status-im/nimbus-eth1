@@ -311,6 +311,7 @@ proc runLightClientThread(p: LightThreadConfig) {.thread.} =
   )
   config.tcpPort = p.tcpPort
   config.udpPort = p.udpPort
+  config.nat = sharedNatConfig() # NAT is done once, on the main thread
 
   info "Launching light client",
     version = fullVersionStr, cmdParams = commandLineParams(), config

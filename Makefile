@@ -108,7 +108,7 @@ ifeq ($(NIM_PARAMS),)
 # selectively download nimbus-eth2 submodules because we don't need all of it's modules
 # also hoodi already exceeds github LFS quota
 
-GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,/parsed/parsedConsensusGenesis.json
+GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,parsedConsensusGenesis.json
 
 GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
   git $(GIT_SUBMODULE_CONFIG) submodule update vendor/nimbus-eth2; \
@@ -118,6 +118,7 @@ GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submod
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/gnosis-chain-configs; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init --recursive vendor/nim-kzg4844; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/mainnet; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/glamsterdam-devnets; \
   cd ../..
 
 .DEFAULT:
@@ -424,8 +425,12 @@ stateless_guest_baremetal: | build deps
 # and write_output over stdin/stdout in place of a zkVM runtime.
 stateless_guest_native: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) --compile:"execution_chain/stateless/zkvm_io_stdio.c" -o:build/$@ "execution_chain/stateless/stateless_guest.nim" && \
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) --compile:"execution_chain/stateless/zkvm/native/zkvm_io_stdio.c" -o:build/$@ "execution_chain/stateless/stateless_guest.nim" && \
 		echo -e $(BUILD_END_MSG) "build/$@"
+
+# Everything for building the guest into a zkVM ELF, one file per vendor.
+# Included here so it can use ENV_SCRIPT, NIMC and STATELESS_GUEST_FLAGS.
+include execution_chain/stateless/zkvm/zkvm.mk
 
 # Two runs: the full suite with standard flags, then the guest specific test
 # with flags closer to the zkVM guest.

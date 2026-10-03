@@ -226,8 +226,10 @@ template blocksImport*(
   ##
   ## The template returns the number of blocks imported.
   ##
-  var nBlocks = 0u64
+  var bodyRc = 0u64
   block body:
+    var
+      nBlocks {.inject.} = bodyRc                  # also for logging
     let
       ctx = buddy.ctx
       peer {.inject,used.} = $buddy.peer           # logging only
@@ -344,16 +346,18 @@ template blocksImport*(
       if not srcPeer.isNil:
         srcPeer.only.nErrors.apply.blk = 0
 
-    nBlocks = ctx.subState.topNum - iv.minPt + 1   # number of blocks imported
+    nBlocks = ctx.subState.topNum - iv.minPt + 1    # number of blocks imported
 
     trace info & ": blocks imported", iv=(if iv.minPt <= ctx.subState.topNum:
       (iv.minPt, ctx.subState.topNum).toStr else: "n/a"), nBlocks,
       nFailed=(iv.maxPt - ctx.subState.topNum),
       base=ctx.chain.baseNumber, head=ctx.chain.latestNumber,
       target=ctx.subState.headNum, targetHash=ctx.subState.headHash.short
+
+    bodyRc = nBlocks                                # return value
     # End block: `body`
 
-  nBlocks                                          # return value
+  bodyRc
 
 # ------------------------------------------------------------------------------
 # End

@@ -24,7 +24,7 @@ import
   beacon_chain/nimbus_binary_common,
   toml_serialization,
   eth/[common, net/nat, net/nat_toml],
-  ./networking/bootnodes,
+  ./networking/[bootnodes, peer_pool],
   ./[constants, compile_info, version_info],
   ./common/chain_config,
   ./common/chain_config_loader,
@@ -252,7 +252,7 @@ type
     maxPeersOpt {.
       desc: "Maximum number of peers to connect to"
       defaultValue: none(int)
-      defaultValueDesc: "25"
+      defaultValueDesc: $defaultMaxPeers
       name: "max-peers" .}: Option[int]
 
     elMaxPeersOpt {.
@@ -343,6 +343,18 @@ type
       defaultValue: defaultRdbBranchCacheSize
       name: "debug-rdb-branch-cache-size".}: int
 
+    accLeafCacheSize {.
+      hidden
+      defaultValue: defaultAccLeafCacheSize
+      desc: "Number of entries in the account leaf cache"
+      name: "debug-acc-leaf-cache-size".}: int
+
+    stoLeafCacheSize {.
+      hidden
+      defaultValue: defaultStoLeafCacheSize
+      desc: "Number of entries in the storage leaf cache"
+      name: "debug-sto-leaf-cache-size".}: int
+
     rdbPrintStats {.
       hidden
       desc: "Print RDB statistics at exit"
@@ -358,26 +370,33 @@ type
       defaultValue: defaultMaxSnapshots
       name: "debug-aristo-db-max-snapshots" .}: int
 
-    parallelStateRootComputation* {.
+    debugParallel* {.
+      hidden
+      defaultValue: none(bool)
+      desc: "Enable or disable all parallel features, overriding the " &
+        "individual parallel feature flags"
+      name: "debug-parallel".}: Option[bool]
+
+    parallelStateRootComputationFlag* {.
       hidden
       defaultValue: defaultParallelStateRootComputation
       desc: "Compute state root in parallel using multiple threads"
       name: "debug-parallel-state-root".}: bool
 
-    parallelSenderRecovery* {.
+    parallelSenderRecoveryFlag* {.
       hidden
       defaultValue: defaultParallelSenderRecovery
       desc: "Recover transaction senders in parallel on background threads"
       name: "debug-parallel-sender-recovery".}: bool
 
-    optimisticStatePrefetch* {.
+    optimisticStatePrefetchFlag* {.
       hidden
       defaultValue: defaultOptimisticStatePrefetch
       desc: "Optimistically pre-execute block transactions on background " &
         "threads to warm DB caches"
       name: "debug-optimistic-state-prefetch".}: bool
 
-    balStatePrefetch* {.
+    balStatePrefetchFlag* {.
       hidden
       defaultValue: defaultBalStatePrefetch
       desc: "Use the supplied block access list to prefetch state on " &
@@ -391,7 +410,7 @@ type
         "state prefetching (0 = use number equal to the taskpool threads count)"
       name: "debug-bal-state-prefetch-workers".}: int
 
-    balParallelExecution* {.
+    balParallelExecutionFlag* {.
       hidden
       defaultValue: defaultBalParallelExecution
       desc: "Execute block transactions in parallel on background threads " &
@@ -531,7 +550,7 @@ type
 
       snapSyncEnabled* {.
         hidden
-        desc: "Start syncer using snap to be followed by beacon sync." &
+        desc: "Start syncer using snap/2 to be followed by beacon sync." &
               " Otherwise, a full sync will be performed by starting beacon" &
               " sync immediately"
         defaultValue: false
@@ -825,6 +844,21 @@ proc ereDir*(config: ExecutionClientConf, params: NetworkParams): string =
 func udpPort*(config: ExecutionClientConf): Port =
   config.udpPortFlag.get(config.tcpPort)
 
+func parallelStateRootComputation*(config: ExecutionClientConf): bool =
+  config.debugParallel.get(config.parallelStateRootComputationFlag)
+
+func parallelSenderRecovery*(config: ExecutionClientConf): bool =
+  config.debugParallel.get(config.parallelSenderRecoveryFlag)
+
+func optimisticStatePrefetch*(config: ExecutionClientConf): bool =
+  config.debugParallel.get(config.optimisticStatePrefetchFlag)
+
+func balStatePrefetch*(config: ExecutionClientConf): bool =
+  config.debugParallel.get(config.balStatePrefetchFlag)
+
+func balParallelExecution*(config: ExecutionClientConf): bool =
+  config.debugParallel.get(config.balParallelExecutionFlag)
+
 func threadSafeCaches*(config: ExecutionClientConf): bool =
   (config.parallelSenderRecovery and config.optimisticStatePrefetch) or
     config.parallelStateRootComputation or
@@ -847,6 +881,8 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
       # The import command does not use the key cache - better give it to branch
       if noKeyCache: config.rdbKeyCacheSize + config.rdbBranchCacheSize
       else: config.rdbBranchCacheSize,
+    accLeafCacheSize = config.accLeafCacheSize,
+    stoLeafCacheSize = config.stoLeafCacheSize,
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,
@@ -876,7 +912,7 @@ func maxPeers*(config: ExecutionClientConf): int =
   if config.elMaxPeersOpt.isSome:
     return config.elMaxPeersOpt.get
 
-  25
+  defaultMaxPeers
 
 {.pop.}
 

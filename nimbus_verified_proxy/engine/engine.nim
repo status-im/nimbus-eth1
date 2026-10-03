@@ -363,6 +363,25 @@ proc isSynced*(engine: RpcVerificationEngine): bool =
   # the signing slot for sync committees. So we allow some room
   engine.getLCOptimisticSlot() + 1 >= current
 
+proc requireSynced*(engine: RpcVerificationEngine): EngineResult[void] =
+  let notSynced = err(
+    (
+      UnavailableDataError,
+      "light client doesn't know the current and next sync committees, sync first",
+      UNTAGGED,
+    )
+  )
+
+  if engine.getBeaconTime == nil or not engine.isLCStoreInitialized() or
+      not engine.isLCNextSyncCommitteeKnown():
+    return notSynced
+
+  let current = engine.getBeaconTime().slotOrZero(engine.timeParams)
+  if engine.getLCFinalizedSlot().sync_committee_period != current.sync_committee_period:
+    return notSynced
+
+  ok()
+
 proc processObject[T: SomeForkedLightClientObject](
     engine: RpcVerificationEngine, obj: T, endpoint: static string
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
@@ -391,9 +410,19 @@ proc processObject[T: SomeForkedLightClientObject](
     warn "Received invalid LC value", endpoint = endpoint
     return err((VerificationError, "invalid LC value", UNTAGGED))
 
+func syncInterval*(engine: RpcVerificationEngine): Duration =
+  engine.timeParams.SLOT_DURATION
+
 proc syncOnce*(
     engine: RpcVerificationEngine
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
+  await engine.syncLock.acquire()
+  defer:
+    try:
+      engine.syncLock.release()
+    except AsyncLockError:
+      discard
+
   if engine.lcProcessor == nil:
     return err((UnavailableDataError, "beacon not initialized", UNTAGGED))
 
@@ -475,7 +504,7 @@ proc syncOnce*(
     debug "Fetching LC finality update", finalized, current
 
     let
-      (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconOptimistic))
+      (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconFinality))
       finRes = ?((await backend.getLightClientFinalityUpdate()).tagBackend(backendIdx))
     ?((await engine.processObject(finRes, "finality")).tagBackend(backendIdx))
 

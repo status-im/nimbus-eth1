@@ -44,7 +44,7 @@ proc getEreFile(db: EreDB, era: Era): Result[EreFile, string] =
   if not isFile(path):
     return err("Ere file no longer available: " & path)
 
-  let (_, noProofs, noReceipts) = ?parseEreFileName(path)
+  let (_, _, noProofs, noReceipts) = ?parseEreFileName(path)
   let f = ?EreFile.open(path, db.mergeBlockNumber, noProofs, noReceipts)
 
   if db.files.len > 16: # TODO LRU

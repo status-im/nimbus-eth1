@@ -10,7 +10,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/os,
+  std/[algorithm, os],
   chronicles,
   stew/[io2, byteutils],
   ../../execution_chain/history/e2store_formats/ere,
@@ -19,7 +19,7 @@ import
   ../../execution_chain/history/block_proofs/block_proof_historical_hashes_accumulator,
   ../../execution_chain/history/block_proofs/block_proof_historical_roots,
   ../../execution_chain/history/block_proofs/block_proof_historical_summaries,
-  ../../execution_chain/common/[hardforks, chain_config],
+  ../../execution_chain/common/[hardforks, chain_config, genesis],
   ../../execution_chain/db/core_db,
   ../../execution_chain/db/core_db/persistent,
   ../../execution_chain/db/opts,
@@ -166,7 +166,7 @@ proc exportEreFile(
     endNumber = era.endNumber()
 
     isPreMerge = endNumber < mergeBlockNumber
-    isMergeEra = startNumber <= mergeBlockNumber and mergeBlockNumber <= endNumber
+    isMergeEra = startNumber < mergeBlockNumber and mergeBlockNumber <= endNumber
 
     endHeaderHash = (?db.getBlockHeader(endNumber)).computeRlpHash()
     filename =
@@ -353,7 +353,7 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
     networkName = config.network
 
   if mergeBlockNumber == 0:
-    fatal "exportEreFromEra1 is not supported for post-merge-only networks",
+    fatal "exportEreFromEra1 is not supported for PoS only networks",
       network = networkName
     quit(QuitFailure)
 
@@ -389,7 +389,7 @@ proc exportEreFromEra1*(config: HistoryExportConf) =
 proc verifyEreFile(ereFilename: string, v: HeaderVerifier): Result[void, string] =
   ## Verify a single ere file using a pre-loaded HeaderVerifier.
   let
-    (network, noProofs, noReceipts) = ?parseEreFileName(ereFilename)
+    (network, _, noProofs, noReceipts) = ?parseEreFileName(ereFilename)
     nid = parseNetworkId(network).valueOr:
       return err("Unsupported network in filename '" & ereFilename & "': " & error)
     networkMetadata = getMetadataForNetwork(network)
@@ -423,18 +423,27 @@ proc buildHeaderVerifier(
         defaultDataDir("", network) / "era"
     (historicalRoots, historicalSummaries) =
       ?loadHistoricalDataFromEraDir(networkMetadata.cfg, eraDirPath)
-    # Post-merge-only networks (e.g. hoodi) have no pre-merge history, so there
-    # is no baked-in accumulator to load.
+    isPosOnly = mergeBlockNumber(nid) == 0
+    # PoS only networks (e.g. hoodi) have no pre-merge history, so there is no
+    # baked-in accumulator to load.
     historicalHashes =
-      if mergeBlockNumber(nid) == 0:
+      if isPosOnly:
         Opt.none(FinishedHistoricalHashesAccumulator)
       else:
         Opt.some(loadAccumulator(network))
+    # Their genesis block cannot be proven, so it gets verified against the
+    # genesis block of the network itself.
+    genesisHash =
+      if isPosOnly:
+        Opt.some(genesisBlockHash(networkParams(nid)))
+      else:
+        Opt.none(Hash32)
   ok(
     HeaderVerifier(
       historicalHashes: historicalHashes,
       historicalRoots: historicalRoots,
       historicalSummaries: historicalSummaries,
+      genesisBlockHash: genesisHash,
     )
   )
 
@@ -442,38 +451,67 @@ proc verifyEreFile*(
     config: HistoryExportConf, ereFilename: string
 ): Result[void, string] =
   let
-    (network, _, _) = ?parseEreFileName(ereFilename)
+    (network, _, _, _) = ?parseEreFileName(ereFilename)
     v = ?buildHeaderVerifier(config, network)
   verifyEreFile(ereFilename, v)
 
 proc verifyEreDir*(config: HistoryExportConf, dirPath: string) =
   var
-    v: HeaderVerifier
-    verifierReady = false
-    count, failed = 0
+    files: seq[tuple[era: ere.Era, path: string]]
+    firstNetwork: string
   try:
     for kind, path in walkDir(dirPath):
-      if kind == pcFile and path.splitFile.ext == ".ere":
-        inc count
-        if not verifierReady:
-          let (network, _, _) = parseEreFileName(path).valueOr:
-            fatal "Cannot parse ere filename", file = path, error = error
-            quit(QuitFailure)
-          v = buildHeaderVerifier(config, network).valueOr:
-            fatal "Failed to load historical data from era files", error = error
-            quit(QuitFailure)
-          verifierReady = true
-        verifyEreFile(path, v).isOkOr:
-          warn "Verification failed", file = path, error = error
-          inc failed
+      if kind in {pcFile, pcLinkToFile} and path.splitFile.ext == ".ere":
+        let (network, era, _, _) = parseEreFileName(path).valueOr:
+          fatal "Cannot parse ere filename", file = path, error = error
+          quit(QuitFailure)
+
+        if firstNetwork.len() == 0:
+          firstNetwork = network
+        elif network != firstNetwork:
+          fatal "Directory holds ere files of multiple networks",
+            dir = dirPath, network = firstNetwork, otherNetwork = network, file = path
+          quit(QuitFailure)
+
+        files.add((era, path))
   except OSError as e:
     fatal "Failed to read directory", dir = dirPath, error = e.msg
     quit(QuitFailure)
 
-  if failed > 0:
-    fatal "Verification completed with failures", total = count, failed
-    quit(QuitFailure)
-  elif count == 0:
+  if files.len() == 0:
     notice "No ere files found to verify", dir = dirPath
+    return
+
+  # Verify in era order, so that the files are covered chronologically and the
+  # era range can be checked for gaps along the way.
+  files.sort()
+
+  let v = buildHeaderVerifier(config, firstNetwork).valueOr:
+    fatal "Failed to load historical data from era files", error = error
+    quit(QuitFailure)
+
+  var failed, missing, duplicateEras = 0
+  for i, (era, path) in files:
+    if i > 0:
+      let previousEra = files[i - 1].era
+      if era == previousEra:
+        warn "Multiple ere files for the same era", era, file = path
+        inc duplicateEras
+      elif era > previousEra + 1:
+        warn "Missing ere files", firstMissing = previousEra + 1, lastMissing = era - 1
+        missing += int(era - previousEra - 1)
+
+    verifyEreFile(path, v).isOkOr:
+      warn "Verification failed", file = path, error = error
+      inc failed
+
+  if failed > 0 or missing > 0 or duplicateEras > 0:
+    fatal "Verification completed with failures",
+      total = files.len(), failed, missing, duplicateEras
+    quit(QuitFailure)
   else:
-    notice "All ere files verified successfully", total = count, dir = dirPath
+    notice "All ere files verified successfully",
+      total = files.len(),
+      firstEra = files[0].era,
+      lastEra = files[^1].era,
+      dir = dirPath

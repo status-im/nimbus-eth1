@@ -143,6 +143,38 @@ export default class NimbusVerifiedProxy {
     });
   }
 
+  sync() {
+    return new Promise((resolve, reject) => {
+      const id = this.#nextId++;
+      this.#callbacks.set(id, { resolve, reject });
+      this.#mod.ccall('wasmEthSync', null, ['number', 'number'], [this.#unifiedCb, id]);
+    });
+  }
+
+  syncIntervalMs() {
+    return new Promise((resolve, reject) => {
+      const id = this.#nextId++;
+      this.#callbacks.set(id, { resolve: res => resolve(Number(JSON.parse(res))), reject });
+      this.#mod.ccall('wasmEthSyncInterval', null, ['number', 'number'], [this.#unifiedCb, id]);
+    });
+  }
+
+  opSync() {
+    return new Promise((resolve, reject) => {
+      const id = this.#nextId++;
+      this.#callbacks.set(id, { resolve, reject });
+      this.#mod.ccall('wasmOpSync', null, ['number', 'number'], [this.#unifiedCb, id]);
+    });
+  }
+
+  opSyncIntervalMs() {
+    return new Promise((resolve, reject) => {
+      const id = this.#nextId++;
+      this.#callbacks.set(id, { resolve: res => resolve(Number(JSON.parse(res))), reject });
+      this.#mod.ccall('wasmOpSyncInterval', null, ['number', 'number'], [this.#unifiedCb, id]);
+    });
+  }
+
   destroy() {
     if (this.#intervalId !== null) {
       clearInterval(this.#intervalId);

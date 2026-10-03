@@ -45,6 +45,8 @@ const supportedMethods: HashSet[string] =
     "engine_newPayloadV3",
     "engine_newPayloadV4",
     "engine_newPayloadV5",
+    "engine_newPayloadWithWitnessV4",
+    "engine_newPayloadWithWitnessV5",
     "engine_getPayloadV1",
     "engine_getPayloadV2",
     "engine_getPayloadV3",
@@ -105,28 +107,60 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
         await engine.newPayload(Version.V5, payload,
           expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
-    proc engine_getPayloadV1(payloadId: Bytes8): ExecutionPayloadV1 {.async: (raises: [CancelledError, ApplicationError]).} =
+    proc engine_newPayloadWithWitnessV4(
+        payload: ExecutionPayload,
+        expectedBlobVersionedHashes: Opt[seq[Hash32]],
+        parentBeaconBlockRoot: Opt[Hash32],
+        executionRequests: Opt[seq[seq[byte]]],
+    ): PayloadStatusV1 {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
+      apiTiming("engine_newPayloadWithWitnessV4"):
+        await engine.newPayload(
+          Version.V4,
+          payload,
+          expectedBlobVersionedHashes,
+          parentBeaconBlockRoot,
+          executionRequests,
+          withWitness = true,
+        )
+
+    proc engine_newPayloadWithWitnessV5(
+        payload: ExecutionPayload,
+        expectedBlobVersionedHashes: Opt[seq[Hash32]],
+        parentBeaconBlockRoot: Opt[Hash32],
+        executionRequests: Opt[seq[seq[byte]]],
+    ): PayloadStatusV1 {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
+      apiTiming("engine_newPayloadWithWitnessV5"):
+        await engine.newPayload(
+          Version.V5,
+          payload,
+          expectedBlobVersionedHashes,
+          parentBeaconBlockRoot,
+          executionRequests,
+          withWitness = true,
+        )
+
+    proc engine_getPayloadV1(payloadId: Bytes8): ExecutionPayloadV1 {.async: (raises: [CancelledError, RpcResponseError]).} =
       apiTiming("engine_getPayloadV1"):
         let bundle = await engine.getPayload(Version.V1, payloadId)
         bundle.executionPayload.V1
 
-    proc engine_getPayloadV2(payloadId: Bytes8): GetPayloadV2Response {.async: (raises: [CancelledError, ApplicationError]).} =
+    proc engine_getPayloadV2(payloadId: Bytes8): GetPayloadV2Response {.async: (raises: [CancelledError, RpcResponseError]).} =
       apiTiming("engine_getPayloadV2"):
         await engine.getPayload(Version.V2, payloadId)
 
-    proc engine_getPayloadV3(payloadId: Bytes8): GetPayloadV3Response {.async: (raises: [CancelledError, ApplicationError]).} =
+    proc engine_getPayloadV3(payloadId: Bytes8): GetPayloadV3Response {.async: (raises: [CancelledError, RpcResponseError]).} =
       apiTiming("engine_getPayloadV3"):
         await engine.getPayloadV3(payloadId)
 
-    proc engine_getPayloadV4(payloadId: Bytes8): GetPayloadV4Response {.async: (raises: [CancelledError, ApplicationError]).} =
+    proc engine_getPayloadV4(payloadId: Bytes8): GetPayloadV4Response {.async: (raises: [CancelledError, RpcResponseError]).} =
       apiTiming("engine_getPayloadV4"):
         await engine.getPayloadV4(payloadId)
 
-    proc engine_getPayloadV5(payloadId: Bytes8): GetPayloadV5Response {.async: (raises: [CancelledError, ApplicationError]).} =
+    proc engine_getPayloadV5(payloadId: Bytes8): GetPayloadV5Response {.async: (raises: [CancelledError, RpcResponseError]).} =
       apiTiming("engine_getPayloadV5"):
         await engine.getPayloadV5(payloadId)
 
-    proc engine_getPayloadV6(payloadId: Bytes8): GetPayloadV6Response {.async: (raises: [CancelledError, ApplicationError]).} =
+    proc engine_getPayloadV6(payloadId: Bytes8): GetPayloadV6Response {.async: (raises: [CancelledError, RpcResponseError]).} =
       apiTiming("engine_getPayloadV6"):
         await engine.getPayloadV6(payloadId)
 

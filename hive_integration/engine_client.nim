@@ -286,6 +286,10 @@ proc newPayload*(client: RpcClient,
       payload.executionRequests)
   of Version.V6: discard
 
+proc getPayloadBodiesByHashV2*(client: RpcClient, hashes: seq[Hash32]): Result[seq[Opt[ExecutionPayloadBodyV2]], string] =
+  wrapTrySimpleRes:
+    client.engine_getPayloadBodiesByHashV2(hashes)
+
 proc exchangeCapabilities*(client: RpcClient,
       methods: seq[string]):
         Result[seq[string], string] =

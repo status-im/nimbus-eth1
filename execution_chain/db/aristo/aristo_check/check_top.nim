@@ -25,7 +25,7 @@ proc checkTopStrict*(
       ): Result[void,(VertexID,AristoError)] =
   # No need to specify zero keys if implied by a leaf path with valid target
   # vertex ID (i.e. not deleted).
-  var zeroKeys: HashSet[VertexID]
+  var zeroKeys: HashSet[RootedVertexID]
   for (rvid,vtx) in db.layersWalkVtx:
     let key = db.layersGetKeyOrVoid rvid
 
@@ -33,7 +33,7 @@ proc checkTopStrict*(
       if key.isValid:
         return err((rvid.vid,CheckStkVtxKeyMismatch))
       else: # Empty key flags key is for update
-        zeroKeys.incl rvid.vid
+        zeroKeys.incl rvid
 
     elif key.isValid:
       # So `vtx` and `key` exist
@@ -47,10 +47,10 @@ proc checkTopStrict*(
         return err((rvid.vid,CheckStkVtxKeyMismatch))
 
     else: # Empty key flags key is for update
-      zeroKeys.incl rvid.vid
+      zeroKeys.incl rvid
 
   for (rvid,key) in db.layersWalkKey:
-    if not key.isValid and rvid.vid notin zeroKeys:
+    if not key.isValid and rvid notin zeroKeys:
       if not db.getVtx(rvid).isValid:
         return err((rvid.vid,CheckStkKeyStrayZeroEntry))
 

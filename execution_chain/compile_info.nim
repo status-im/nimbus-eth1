@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Copyright (c) 2021-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,3 +18,10 @@ when chronicles_line_numbers notin ["0", "off"]:
 const enable_mcl_lib* {.booldefine.} = true
 when enable_mcl_lib:
   {.hint: "*** Compiling with mcl library".}
+
+# Route precompiles at the zkVM's own implementations, which prove far more
+# cheaply than the same work in RISC-V. Guest builds only: the symbols come from
+# the zkVM's static library.
+const enable_zkvm_accelerators* {.booldefine.} = false
+when enable_zkvm_accelerators:
+  {.hint: "*** Compiling with zkVM accelerators".}

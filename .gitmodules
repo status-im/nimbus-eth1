@@ -12,7 +12,12 @@
 	path = vendor/nim-libp2p
 	url = https://github.com/vacp2p/nim-libp2p.git
 	ignore = untracked
-	branch = master
+	branch = release/v2.3
+[submodule "vendor/nim-libplum"]
+	path = vendor/nim-libplum
+	url = https://github.com/logos-storage/nim-libplum.git
+	ignore = untracked
+	branch = main
 [submodule "vendor/nimbus-build-system"]
 	path = vendor/nimbus-build-system
 	url = https://github.com/status-im/nimbus-build-system.git
@@ -254,3 +259,6 @@
 	url = https://github.com/eth-act/zkevm-standards.git
 	ignore = untracked
 	branch = main
+[submodule "vendor/nim-libplum"]
+	path = vendor/nim-libplum
+	url = https://github.com/logos-storage/nim-libplum.git

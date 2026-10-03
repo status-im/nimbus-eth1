@@ -290,14 +290,16 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       muirGlacierBlock:    Opt.some(0.BlockNumber),
       berlinBlock:         Opt.some(0.BlockNumber),
       londonBlock:         Opt.some(0.BlockNumber),
-      mergeNetsplitBlock:  Opt.some(1450409.BlockNumber),
+      posBlock:            Opt.some(1450409.BlockNumber),
+      mergeNetsplitBlock:  Opt.some(1735371.BlockNumber),
       terminalTotalDifficulty: Opt.some(sepoliaTTD),
-      shanghaiTime:        Opt.some(1_677_557_088.EthTime), # Tuesday, 28 February 2023 04:04:48
-      cancunTime:          Opt.some(1_706_655_072.EthTime), # Tuesday, 30 January 2024 22:51:12
-      pragueTime:          Opt.some(1_741_159_776.EthTime), # Wednesday, 5 March 2025 07:29:36
-      osakaTime:           Opt.some(1_760_427_360.EthTime), # Tuesday, 14 October 2025 07:36:00
-      bpo1Time:            Opt.some(1_761_017_184.EthTime), # Tuesday, 21 October 2025 03:26:24
-      bpo2Time:            Opt.some(1_761_607_008.EthTime), # Monday, 27 October 2025 23:16:48
+      shanghaiTime:        Opt.some(1_677_557_088.EthTime), # Tuesday, 28 February 2023 04:04:48 UTC
+      cancunTime:          Opt.some(1_706_655_072.EthTime), # Tuesday, 30 January 2024 22:51:12 UTC
+      pragueTime:          Opt.some(1_741_159_776.EthTime), # Wednesday, 5 March 2025 07:29:36 UTC
+      osakaTime:           Opt.some(1_760_427_360.EthTime), # Tuesday, 14 October 2025 07:36:00 UTC
+      bpo1Time:            Opt.some(1_761_017_184.EthTime), # Tuesday, 21 October 2025 03:26:24 UTC
+      bpo2Time:            Opt.some(1_761_607_008.EthTime), # Monday, 27 October 2025 23:16:48 UTC
+      amsterdamTime:       Opt.some(1_791_294_816.EthTime), # Tuesday, 6 October 2026 13:53:36 UTC
       depositContractAddress: Opt.some(SEPOLIANET_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )

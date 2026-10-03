@@ -163,6 +163,9 @@ type
     parallelStateRootComputation*: bool
       ## Enables parallel state root computation.
 
+    stoStatic*: bool
+      ## Resolve slot lookups through the storage trie's static vids
+
     when compileOption("threads"):
       taskpool*: Taskpool
         ## Shared task pool for offloading computation to other threads.

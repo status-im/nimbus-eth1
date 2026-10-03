@@ -34,8 +34,6 @@ import
   ./eest_helpers,
   ./bal_parser
 
-from ../../execution_chain/rpc/debug import getExecutionWitness
-
 proc fromJson(T: type ExecutionWitness, n: JsonNode): ExecutionWitness =
   var res: ExecutionWitness
   for item in n["state"]:
@@ -126,10 +124,8 @@ const
   # executor. The generated witness legitimately differs from these, so the
   # comparison falls back to the subset check instead of the strict one.
   mutatedWitnessFiles = [
-    "validation_state_extra_unused_trie_node.json",
-    "validation_state_unsorted_but_complete.json",
-    "validation_codes_extra_unused_bytecode.json",
-    "validation_codes_unsorted_but_complete.json",
+    "validation_state_complete_witness_still_validates.json",
+    "validation_codes_complete_witness_still_validates.json",
     "witness_headers_extra_unused_older_ancestor.json",
   ]
 
@@ -283,8 +279,7 @@ proc runTest(
         # deliberately mutate the witness (see mutatedWitnessFiles), the
         # generated witness must only be a subset of the test vector witness.
         if input.new_payload_request != fixtureInput.new_payload_request or
-            input.chain_id != fixtureInput.chain_id or
-            input.public_keys != fixtureInput.public_keys:
+            input.chain_id != fixtureInput.chain_id:
           return err("Host-built stateless input does not match the test vector")
         ?compare(generatedWitness, fixtureInput.witness, strict = strictWitness)
 

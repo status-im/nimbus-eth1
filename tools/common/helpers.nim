@@ -50,6 +50,7 @@ proc createForkTransitionTable(transitionFork: HardFork,
 
   result.mergeForkTransitionThreshold.number = blockNumberToUse(HardFork.MergeFork)
   result.mergeForkTransitionThreshold.ttd = ttd
+  result.mergeNetsplitBlock = blockNumberToUse(HardFork.MergeFork)
 
   for f in firstTimeBasedFork .. high(HardFork):
     result.timeThresholds[f] = timeToUse(f)

@@ -22,7 +22,7 @@ import
 proc getPayload*(ben: BeaconEngineRef,
                  expectedVersion: Version,
                  id: Bytes8): Future[GetPayloadV2Response]
-                   {.async: (raises: [CancelledError, ApplicationError]).} =
+                   {.async: (raises: [CancelledError, RpcResponseError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
@@ -50,7 +50,7 @@ proc getPayload*(ben: BeaconEngineRef,
   )
 
 proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV3Response]
-    {.async: (raises: [CancelledError, ApplicationError]).} =
+    {.async: (raises: [CancelledError, RpcResponseError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
@@ -78,7 +78,7 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV3Respons
   )
 
 proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV4Response]
-    {.async: (raises: [CancelledError, ApplicationError]).} =
+    {.async: (raises: [CancelledError, RpcResponseError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
@@ -109,7 +109,7 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV4Respons
   )
 
 proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV5Response]
-    {.async: (raises: [CancelledError, ApplicationError]).} =
+    {.async: (raises: [CancelledError, RpcResponseError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
@@ -140,7 +140,7 @@ proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV5Respons
   )
 
 proc getPayloadV6*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV6Response]
-    {.async: (raises: [CancelledError, ApplicationError]).} =
+    {.async: (raises: [CancelledError, RpcResponseError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
