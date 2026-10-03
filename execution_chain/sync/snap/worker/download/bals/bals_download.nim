@@ -175,9 +175,6 @@ template balsDownload*(
         bodyRc = typeof(bodyRc).ok()
         break body
 
-      trace info & ": Fetched BALS", peer, fromInx=fromInx,
-        fromNumber=q.hdrs[fromInx].number, nResp=resp.bal.len
-
       # Verify BALs and store on cache DB.
       let nProcessed = buddy.storeBals(resp.bal, q.hdrs, fromInx, info).valueOr:
         if error == EValidationError:
@@ -196,7 +193,7 @@ template balsDownload*(
         bodyRc = typeof(bodyRc).ok()
         break body
 
-      trace info & ": Verified & stored BALS", peer, fromInx=fromInx,
+      chronicles.info info & ": Verified & stored BALS", peer, fromInx=fromInx,
         nProcessed=nProcessed, fromNumber=q.hdrs[fromInx].number,
         nResp=resp.bal.len
 
@@ -245,7 +242,6 @@ template balsDownloadAppend*(
       let balNum = db.lastBalNumber(info).valueOr:  # get latest BAL
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body
-      trace info & ": Processed BALs", nProcessed=(balNum - minBn)
       if balNum == minBn:                           # no progress
         bodyRc = typeof(bodyRc).ok((minBn - firstBalBn).int)
         break body
