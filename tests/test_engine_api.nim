@@ -13,13 +13,13 @@ import
   eth/common,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
-  web3/engine_api,
-  web3/conversions,
-  web3/execution_types,
   unittest2
 
 import
   eth/common/keys,
+  ../execution_api/conversions,
+  ../execution_api/execution_types,
+  ../execution_api/execution_api,
   ../execution_chain/rpc,
   ../execution_chain/conf,
   ../execution_chain/common,
@@ -29,7 +29,7 @@ import
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/beacon/beacon_engine,
   ../execution_chain/beacon/web3_eth_conv,
-  ../hive_integration/engine_client,
+  ../execution_api/engine_client,
    ./shared_data/eip8282data
 
 type
@@ -156,7 +156,7 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -170,7 +170,7 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
     payload = ? client.getPayload(Version.V1, fcuRes.payloadId.get)
     npRes = ? client.newPayloadV1(payload.executionPayload)
 
-  discard ? client.forkchoiceUpdated(Version.V1, ForkchoiceStateV1(
+  discard ? client.forkchoiceUpdated(Version.V1, ForkchoiceState(
     headBlockHash: npRes.latestValidHash.get
   ))
   let bn = ? client.blockNumber()
@@ -208,7 +208,7 @@ proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -275,7 +275,7 @@ proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
     client = env.client
     genesisHeader = ? client.latestHeader()
     genesisHash = genesisHeader.computeBlockHash
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: genesisHash
     )
     time = getTime().toUnix
@@ -314,7 +314,7 @@ proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
       suggestedFeeRecipient: default(Address),
       withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
     )
-    updateC = ForkchoiceStateV1(
+    updateC = ForkchoiceState(
       headBlockHash: payloadA.blockHash,
       finalizedBlockHash: genesisHash,
     )
@@ -334,7 +334,7 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -411,7 +411,7 @@ proc genesisShouldCanonicalTest(env: TestEnv): Result[void, string] =
     return err("lastestValidHash should not empty")
 
   let
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: params.payload.blockHash,
       safeBlockHash: params.payload.parentHash,
       finalizedBlockHash: params.payload.parentHash,
@@ -481,7 +481,7 @@ proc newPayloadV5UndecodableBAL(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -556,7 +556,7 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -611,7 +611,7 @@ proc getPayloadBodiesByHashV2ReturnsBALForBlocksWithoutWD(env: TestEnv): Result[
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -658,7 +658,7 @@ proc getPayloadBodiesByHashV2ReturnsBALForBlocksWithoutWD(env: TestEnv): Result[
 
   if bodies[0].isNone:
     return err("bodies at[0] should have something")
-    
+
   if bodies[0].value.blockAccessList.isNone:
     return err("bodies should have BAL")
 

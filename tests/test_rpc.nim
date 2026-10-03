@@ -14,7 +14,7 @@ import
   json_rpc/[rpcserver, rpcclient],
   eth/rlp,
   eth/common/[transaction_utils, addresses],
-  ../hive_integration/engine_client,
+  ../execution_api/engine_client,
   ../execution_chain/[constants, transaction, conf, version_info],
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/[ledger, storage_types],

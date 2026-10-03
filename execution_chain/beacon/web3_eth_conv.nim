@@ -13,15 +13,16 @@ import
   web3/primitives as web3types,
   web3/eth_api_types,
   web3/engine_api_types,
-  web3/execution_types,
   eth/common/eth_types_rlp,
   stew/byteutils,
+  ../../execution_api/execution_types,
   ../utils/utils
 
 import eth/common/eth_types as common
 
 export
-  primitives
+  primitives,
+  execution_types
 
 type
   Web3Quantity*      = web3types.Quantity
