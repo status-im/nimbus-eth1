@@ -17,7 +17,6 @@ on:
       - 'doc/**'
       - 'portal/docs/**'
       - '**/*.md'
-      - 'hive_integration/**'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
@@ -29,7 +28,6 @@ on:
       - 'doc/**'
       - 'portal/docs/**'
       - '**/*.md'
-      - 'hive_integration/**'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
@@ -141,5 +139,5 @@ jobs:
           ./env.sh nim --version
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
-          make ${DEFAULT_MAKE_FLAGS} rocksdb          
+          make ${DEFAULT_MAKE_FLAGS} rocksdb
           make eest_full_test
