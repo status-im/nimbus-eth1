@@ -20,18 +20,18 @@ import
   web3/engine_api_types,
   web3/primitives,
   web3/conversions,
-  web3/execution_types,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
+  ../../execution_api/execution_types,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
-  ../../hive_integration/engine_client,
+  ../../execution_api/engine_client,
   ./eest_helpers
 
-proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[PayloadStatusV1, string] =
+proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[PayloadStatus, string] =
   if not env.client.isSome:
     return err("Client is not initialized")
 
@@ -65,7 +65,7 @@ proc sendFCU(env: TestEnv, version: uint64, param: PayloadParam): Result[Forkcho
   if not env.client.isSome:
     return err("Client is not initialized")
 
-  let update = ForkchoiceStateV1(
+  let update = ForkchoiceState(
     headblockHash:      param.payload.blockHash,
     finalizedblockHash: param.payload.blockHash
   )

@@ -19,10 +19,10 @@ import
   web3/eth_api_types,
   web3/engine_api_types,
   web3/primitives,
-  web3/conversions,
-  web3/execution_types,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
+  ../../execution_api/conversions,
+  ../../execution_api/execution_types,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/beacon/beacon_engine,
@@ -30,7 +30,7 @@ import
   ../../execution_chain/stateless/stateless_execution,
   ../../execution_chain/stateless/stateless_guest,
   ../../execution_chain/stateless/stateless_host,
-  ../../hive_integration/engine_client,
+  ../../execution_api/engine_client,
   ./eest_helpers,
   ./bal_parser
 

@@ -12,7 +12,7 @@ import
   results,
   chronos,
   eth/common/[eth_types_json_serialization, headers, hashes, times],
-  web3/[conversions, execution_types],
+  web3/conversions,
   json_rpc/errors,
   chronicles,
   ../../core/tx_pool,

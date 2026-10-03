@@ -18,7 +18,7 @@ import
   eth/common/[base, headers_rlp, blocks_rlp, receipts],
   eth/p2p/discoveryv5/random2,
   ../../../execution_chain/beacon/web3_eth_conv,
-  ../../../hive_integration/engine_client,
+  ../../../execution_api/engine_client,
   ../../rpc/portal_rpc_client,
   ../../network/history/[history_content, history_validation],
   ../../../execution_chain/history/db/ere_db,
