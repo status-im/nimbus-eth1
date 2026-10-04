@@ -59,6 +59,7 @@ jobs:
     env:
       XPACK_GCC_VERSION: 15.2.0-1
       ZISK_REF: v1.2.0-alpha
+      RUST_NIGHTLY: nightly-2026-09-20
 
     defaults:
       run:
@@ -103,16 +104,16 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.local/zisk/libziskos_staticlib.a
-          key: ziskos-staticlib-${{ env.ZISK_REF }}
+          key: ziskos-staticlib-${{ env.ZISK_REF }}-${{ env.RUST_NIGHTLY }}
 
       - name: Build ZisK static library
         if: steps.zisk-cache.outputs.cache-hit != 'true'
         run: |
-          rustup toolchain install nightly --component rust-src
+          rustup toolchain install "${RUST_NIGHTLY}" --component rust-src
           git clone --depth 1 --branch "${ZISK_REF}" \
             https://github.com/0xPolygonHermez/zisk.git /tmp/zisk
           cd /tmp/zisk
-          cargo +nightly build -p ziskos-staticlib --release \
+          cargo "+${RUST_NIGHTLY}" build -p ziskos-staticlib --release \
             --target riscv64im-unknown-none-elf -Z build-std=core,alloc \
             --config 'profile.release.lto="fat"' --features panic-handler
           mkdir -p "$HOME/.local/zisk"
