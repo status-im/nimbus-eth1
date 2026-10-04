@@ -22,7 +22,7 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
-  ../../hive_integration/engine_client,
+  ../../execution_api/engine_client,
   ./eest_parser
 
 import ../../tools/common/helpers as chp except HardFork

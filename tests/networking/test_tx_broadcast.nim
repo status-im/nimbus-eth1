@@ -28,7 +28,7 @@ import
   ../../execution_chain/core/pooled_txs,
   ../../execution_chain/sync/wire_protocol,
   ../../execution_chain/conf,
-  ../../hive_integration/tx_sender,
+  ../transaction/tx_sender,
   ./stubloglevel
 
 # No explicit kzg trusted-setup load here: the kzg binding lazy-loads a
