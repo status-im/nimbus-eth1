@@ -13,6 +13,7 @@ import
   chronicles,
   chronos,
   minilru,
+  web3/conversions,
   ./web3_eth_conv,
   ./payload_conv,
   ./api_handler/api_utils,
