@@ -55,9 +55,7 @@ proc savePrunerStateBe*(kvt: KvtDbRef, state: PrunerState) =
   let
     key = prunerStateKey()
     value = rlp.encode(state)
-    batch = kvt.putBegFn().expect("pruner: savePrunerState putBegFn")
-  kvt.putKvpFn(batch, key.toOpenArray, value)
-  kvt.putEndFn(batch).expect("pruner: savePrunerState putEndFn")
+  kvt.put(key.toOpenArray, value).expect("pruner: savePrunerState put")
 
 proc loadPrunerStateBe*(kvt: KvtDbRef): PrunerState =
   let data = kvt.getBe(prunerStateKey().toOpenArray).valueOr:

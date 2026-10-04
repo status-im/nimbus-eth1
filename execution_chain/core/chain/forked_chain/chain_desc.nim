@@ -50,8 +50,8 @@ type
       # A map of block hash to a block.
 
     base*        : BlockRef
-      # The base block, the last block stored in database.
-      # Any blocks newer than base is kept in memory.
+      # The last block whose Aristo state is persisted. Newer state frames
+      # stay in memory; headers and bodies are already in shared KVT.
 
     baseQueue*   : Deque[BlockRef]
       # Queue of blocks that will become base.
@@ -83,6 +83,10 @@ type
     baseTxFrame* : CoreDbTxRef
       # Frame that skips all in-memory state that ForkedChain holds - used to
       # lookup items straight from the database
+
+    snapshotMayExist*: bool
+      # Check for a saved snapshot before the next database mutation.
+      # Cleared only after successful invalidation; set again after saving.
 
     baseDistance*: uint64
       # Minimum number of blocks and its state stored in memory.

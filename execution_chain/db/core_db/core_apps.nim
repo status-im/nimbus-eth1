@@ -22,7 +22,7 @@ import
   "../.."/[constants],
   "../.."/stateless/witness_types,
   ".."/[aristo, storage_types],
-  "../kvt"/[kvt_desc, kvt_layers, kvt_utils],
+  "../kvt"/[kvt_desc, kvt_utils],
   "."/base
 
 logScope:
@@ -142,22 +142,21 @@ proc getBlockHash*(
       ): Result[Hash32, string] =
   ## Return the block hash for the given block number.
   const info = "getBlockHash()"
-  let key = blockNumberToHashKey(n)
+  if not db.blockHashFn.isNil:
+    let hash = db.blockHashFn(n)
+    if hash.isSome:
+      return ok(hash.get)
 
-  let pending = db.kTx.layersGet(key.toOpenArray)
-  if pending.isSome():
-    wrapRlpException info:
-      return ok(rlp.decode(pending.unsafeGet(), Hash32))
+  let key = blockNumberToHashKey(n)
 
   when compileOption("threads"):
     let
-      kvt = db.kTx.db
-      keyHash = kvt.blockHashes.toKeyHash(n)
+      keyHash = db.kvt.blockHashes.toKeyHash(n)
 
-    kvt.blockHashes.withGetByHash(keyHash, n, cached):
+    db.kvt.blockHashes.withGetByHash(keyHash, n, cached):
       return ok(cached)
 
-  let data = db.kTx.db.getBe(key.toOpenArray).valueOr:
+  let data = db.kvt.getBe(key.toOpenArray).valueOr:
     let dbError =
       if error == GetNotFound:
         error.toError("", KvtNotFound)
@@ -170,7 +169,7 @@ proc getBlockHash*(
   wrapRlpException info:
     let blockHash = rlp.decode(data, Hash32)
     when compileOption("threads"):
-      kvt.blockHashes.putByHash(keyHash, n, blockHash)
+      db.kvt.blockHashes.putByHash(keyHash, n, blockHash)
     return ok(blockHash)
 
 proc getBlockHeader*(
@@ -251,12 +250,13 @@ proc getAncestorsHashes*(
 
 proc addBlockNumberToHashLookup*(
     db: CoreDbTxRef; blockNumber: BlockNumber, blockHash: Hash32) =
-  # TODO: Once we remove the kvt frame layers, this function should
-  # write to the kvt block hashes cache.
   let blockNumberKey = blockNumberToHashKey(blockNumber)
   var encodedHash = rlp.encode(blockHash)
   db.putMove(blockNumberKey.toOpenArray, encodedHash).isOkOr:
     warn "addBlockNumberToHashLookup", blockNumberKey, error=($$error)
+    return
+  when compileOption("threads"):
+    db.kvt.blockHashes.put(blockNumber, blockHash)
 
 proc persistTransactions*(
     db: CoreDbTxRef;
@@ -627,6 +627,7 @@ proc persistHeader*(
     blockHash: Hash32;
     header: Header;
     startOfHistory = GENESIS_PARENT_HASH;
+    numberToHash = true;
       ): Result[void, string] =
   const
     info = "persistHeader"
@@ -654,7 +655,8 @@ proc persistHeader*(
   # each block to simplify totalDifficulty reporting
   # TODO get rid of this and store a single value
   ?db.persistScore(blockHash, score)
-  db.addBlockNumberToHashLookup(header.number, blockHash)
+  if numberToHash:
+    db.addBlockNumberToHashLookup(header.number, blockHash)
   ok()
 
 proc persistHeaderAndSetHead*(
