@@ -41,6 +41,14 @@ EEST_BENCHMARK_DIR="${FIXTURES_DIR}/eest_benchmark"
 EEST_BENCHMARK_ARCHIVE="fixtures_benchmark.tar.gz"
 EEST_BENCHMARK_URL="https://github.com/ethereum/execution-specs/releases/download/${EEST_BENCHMARK_NAME}%40${EEST_BENCHMARK_VERSION}/${EEST_BENCHMARK_ARCHIVE}"
 
+# --- zkevm Benchmark Release ---
+# One tarball per gas value, selecting 30M version.
+EEST_ZKEVM_BENCHMARK_NAME="tests-zkevm-benchmark"
+EEST_ZKEVM_BENCHMARK_VERSION="v21.0.5"
+EEST_ZKEVM_BENCHMARK_DIR="${FIXTURES_DIR}/eest_zkevm_benchmark"
+EEST_ZKEVM_BENCHMARK_ARCHIVE="fixtures_zkevm-benchmark_0030M.tar.gz"
+EEST_ZKEVM_BENCHMARK_URL="https://github.com/ethereum/execution-specs/releases/download/${EEST_ZKEVM_BENCHMARK_NAME}%40${EEST_ZKEVM_BENCHMARK_VERSION}/${EEST_ZKEVM_BENCHMARK_ARCHIVE}"
+
 download_and_extract() {
   local url="$1"
   local dest_dir="$2"
@@ -117,9 +125,12 @@ for release in "${RELEASES[@]}"; do
     benchmark)
       download_and_extract "${EEST_BENCHMARK_URL}" "${EEST_BENCHMARK_DIR}" "${EEST_BENCHMARK_NAME}" "${EEST_BENCHMARK_VERSION}" "${EEST_BENCHMARK_ARCHIVE}"
       ;;
+    zkevm_benchmark)
+      download_and_extract "${EEST_ZKEVM_BENCHMARK_URL}" "${EEST_ZKEVM_BENCHMARK_DIR}" "${EEST_ZKEVM_BENCHMARK_NAME}" "${EEST_ZKEVM_BENCHMARK_VERSION}" "${EEST_ZKEVM_BENCHMARK_ARCHIVE}"
+      ;;
     *)
       echo "Unknown EEST release: ${release}" >&2
-      echo "Known releases: ${DEFAULT_RELEASES[*]} benchmark" >&2
+      echo "Known releases: ${DEFAULT_RELEASES[*]} benchmark zkevm_benchmark" >&2
       exit 1
       ;;
   esac
