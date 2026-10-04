@@ -10,6 +10,7 @@
 {.push raises: [].}
 
 import
+  std/[os, strutils],
   unittest2,
   ./path_handler
 
@@ -17,6 +18,14 @@ const eestTestFilter* {.strdefine.} = ""
 
 func normSep(c: char): char {.inline.} =
   if c == '\\': '/' else: c
+
+func shouldSkip*(filePath: string, skipFiles: openArray[string]): bool =
+  let path = filePath.normalizedPath()
+  for skipFile in skipFiles:
+    let skip = skipFile.normalizedPath()
+    if path == skip or path.endsWith(DirSep & skip):
+      return true
+  false
 
 func globMatch*(path, filter: string): bool =
   if filter.len == 0:

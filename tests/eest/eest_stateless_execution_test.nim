@@ -18,10 +18,20 @@ const
   suiteName = "Stateless Execution Test"
   eestType = "blockchain_tests"
   eestReleases = [
-    "eest_zkevm"
+    "eest_zkevm",
+    "eest_zkevm_benchmark"
   ]
 
-const skipFiles = []
+# Witness generation failures:
+# - storage_access_cold: missing 7702 delegation designator code
+# - deploy_then_interact: missing code deployed within the block + one with too many state nodes
+# - selfdestruct_created: missing code of created contract
+# TBI
+const skipFiles = [
+  "eest_zkevm_benchmark/blockchain_tests/for_amsterdam_at_0030M/compute/instruction/storage/storage_access_cold.json",
+  "eest_zkevm_benchmark/blockchain_tests/for_amsterdam_at_0030M/compute/instruction/system/selfdestruct_created.json",
+  "eest_zkevm_benchmark/blockchain_tests/for_amsterdam_at_0030M/compute/eip7928_block_level_access_lists/block_access_list/deploy_then_interact.json",
+]
 
 runEESTSuite(
   eestReleases,

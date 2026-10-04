@@ -32,6 +32,7 @@ import
   ../../execution_chain/stateless/stateless_host,
   ../../execution_api/engine_client,
   ./eest_helpers,
+  ./eest_runner,
   ./bal_parser
 
 proc fromJson(T: type ExecutionWitness, n: JsonNode): ExecutionWitness =
@@ -323,7 +324,7 @@ proc processFile*(
       testName = unit.name
       testUnit = unit.unit
     test testName & " from " & filePath:
-      if fileName in skipFiles:
+      if filePath.shouldSkip(skipFiles):
         skip()
       else:
         let header = testUnit.genesisBlockHeader.to(Header)

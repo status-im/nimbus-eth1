@@ -13,7 +13,6 @@
 {.define: unittest2DisableParamFiltering.}
 
 import
-  std/os,
   unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
@@ -29,7 +28,8 @@ import
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
   ../../execution_api/engine_client,
-  ./eest_helpers
+  ./eest_helpers,
+  ./eest_runner
 
 proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[PayloadStatus, string] =
   if not env.client.isSome:
@@ -123,14 +123,13 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
 
 proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = false, skipFiles: seq[string] = @[]) =
   let fixture = parseFixture(filePath, EngineFixture)
-  let fileName = filePath.splitPath().tail
 
   for unit in fixture.units:
     let
       testName = unit.name
       testUnit = unit.unit
     test testName & " from " & filePath:
-      if fileName in skipFiles:
+      if filePath.shouldSkip(skipFiles):
         skip()
       else:
         let header = testUnit.genesisBlockHeader.to(Header)
@@ -143,7 +142,7 @@ proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = 
         env.close()
 
 when isMainModule:
-  import std/cmdline
+  import std/[cmdline, os]
 
   if paramCount() == 0:
     let testFile = getAppFilename().splitPath().tail
