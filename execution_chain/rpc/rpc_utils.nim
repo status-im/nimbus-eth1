@@ -111,7 +111,8 @@ proc populateTransactionObject*(tx: Transaction,
                                 optionalNumber: Opt[uint64] = Opt.none(uint64),
                                 optionalTimestamp: Opt[EthTime] = Opt.none(EthTime),
                                 txIndex: Opt[uint64] = Opt.none(uint64),
-                                chainId: Opt[UInt256] = Opt.none(UInt256)): TransactionObject =
+                                chainId: Opt[UInt256] = Opt.none(UInt256),
+                                baseFeePerGas: Opt[UInt256] = Opt.none(UInt256)): TransactionObject =
   result = TransactionObject()
   result.`type` = Opt.some Quantity(tx.txType)
   result.blockHash = optionalHash
@@ -121,7 +122,15 @@ proc populateTransactionObject*(tx: Transaction,
   if (let sender = tx.recoverSenderCached(); sender.isOk):
     result.`from` = sender[]
   result.gas = Quantity(tx.gasLimit)
-  result.gasPrice = Quantity(tx.gasPrice)
+  let baseFee = baseFeePerGas.get(0.u256).truncate(GasInt)
+  result.gasPrice =
+    if tx.txType < TxEip1559:
+      Quantity(tx.gasPrice)
+    elif baseFeePerGas.isNone or tx.maxFeePerGas < baseFee:
+      # Pending transactions, and transactions of rejected blocks.
+      Quantity(tx.maxFeePerGas)
+    else:
+      Quantity(tx.effectiveGasPrice(baseFee))
   result.hash = tx.computeRlpHash
   result.input = tx.payload
   result.nonce = Quantity(tx.nonce)
@@ -136,6 +145,7 @@ proc populateTransactionObject*(tx: Transaction,
   if tx.txType >= TxEip2930:
     result.chainId = Opt.some(tx.chainId)
     result.accessList = Opt.some(tx.accessList)
+    result.yParity = Opt.some(Quantity(tx.V))
   else:
     if chainId.isSome:
       result.chainId = chainId
@@ -193,7 +203,8 @@ proc populateBlockObject*(blockHash: Hash32,
         Opt.some(blockHash),
         Opt.some(header.number),
         Opt.some(header.timestamp),
-        Opt.some(i.uint64))
+        Opt.some(i.uint64),
+        baseFeePerGas = header.baseFeePerGas)
       result.transactions.add txOrHash(txObj)
   else:
     for i, tx in blk.transactions:

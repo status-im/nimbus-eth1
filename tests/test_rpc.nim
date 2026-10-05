@@ -735,6 +735,21 @@ proc rpcMain*() =
       check contractTx.isNil.not
       check contractTx.to.isNone
 
+      # Mined EIP-155 legacy tx: chainId set, no yParity, gasPrice as paid.
+      check res.chainId == Opt.some(env.chainId)
+      check res.yParity.isNone
+      check res.gasPrice == w3Qty(30_000_000_000'u64)
+
+      # Pending typed tx: gasPrice is the max fee, yParity is set.
+      let pendingTx = env.makeBlobTx(6)
+      discard env.txPool.addTx(pendingTx) # no-op when an earlier test added it
+      let pending = await client.eth_getTransactionByHash(computeRlpHash(pendingTx.tx))
+      check pending.isNil.not
+      check pending.blockNumber.isNone
+      check pending.gasPrice == w3Qty(uint64(10 ^ 9))
+      check pending.yParity == Opt.some(w3Qty(uint64(pendingTx.tx.V)))
+      check pending.yParity.get.uint64 <= 1
+
     test "eth_getTransactionByBlockHashAndIndex":
       let res = await client.eth_getTransactionByBlockHashAndIndex(env.blockHash, w3Qty(0'u64))
       check res.isNil.not
