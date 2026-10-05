@@ -151,7 +151,9 @@ func getPayloadBundle*(ben: BeaconEngineRef, id: Bytes8): Opt[ExecutionBundle] =
 proc generateExecutionBundle*(
   ben: BeaconEngineRef,
   headHash: Hash32,
-  attrs: PayloadAttributes
+  attrs: PayloadAttributes,
+  txs = Opt.none(seq[TxItemRef]),
+  extraData = Opt.none(seq[byte])
 ): Result[ExecutionBundle, string] =
 
   wrapException:
@@ -181,9 +183,13 @@ proc generateExecutionBundle*(
 
     # someBaseFee = true: make sure bundle.blk.header
     # have the same blockHash with generated payload
-    let bundle = xp.assembleBlock(someBaseFee = true,
-                                  parentHash = headHash).valueOr:
+    var bundle = xp.assembleBlock(someBaseFee = true,
+                                  parentHash = headHash,
+                                  txs = txs).valueOr:
       return err(error)
+
+    if extraData.isSome:
+      bundle.blk.header.extraData = extraData.get
 
     if bundle.blk.header.extraData.len > 32:
       return err "extraData length should not exceed 32 bytes"
