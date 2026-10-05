@@ -294,20 +294,18 @@ proc applyBlockAccessListState(ledger: LedgerRef, bal: BlockAccessList, txCount:
       ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
 
 proc packLogs(logs: openArray[Log]): SharedBytes =
-  if logs.len == 0:
-    return default(SharedBytes)
-
   var size = sizeof(uint32)
   for log in logs:
     size +=
       sizeof(Address) + sizeof(uint32) + log.topics.len * sizeof(Topic) + sizeof(uint32) +
       log.data.len
 
-  result = SharedBytes.init(size, zeroed = false)
-  var pos = 0
+  var
+    packed = SharedBytes.init(size, zeroed = false)
+    pos = 0
 
   template put(src: pointer, n: int) =
-    copyMem(addr result[pos], src, n)
+    copyMem(addr packed[pos], src, n)
     pos += n
 
   template putLen(v: int) =
@@ -324,10 +322,9 @@ proc packLogs(logs: openArray[Log]): SharedBytes =
     if log.data.len > 0:
       put(unsafeAddr log.data[0], log.data.len)
 
-proc unpackLogs(buf: openArray[byte]): seq[Log] =
-  if buf.len == 0:
-    return default(seq[Log])
+  packed
 
+proc unpackLogs(buf: openArray[byte]): seq[Log] =
   var pos = 0
 
   template get(dst: pointer, n: int) =
@@ -412,7 +409,8 @@ proc processTxTask(
   e[].blockStateGasUsed = vmState.blockStateGasUsed
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
-  e[].logs = packLogs(vmState.txLogs)
+  if vmState.txLogs.len > 0:
+    e[].logs = packLogs(vmState.txLogs)
 
   true
 
@@ -499,7 +497,10 @@ proc processTransactionsParallel*(
           $vmState.blockExecutionGasUsed & ", stateGas=" & $vmState.blockStateGasUsed
       )
 
-    vmState.txLogs = unpackLogs(entries[i].logs.data(asOpenArray = true))
+    if entries[i].logs.len > 0:
+      vmState.txLogs = unpackLogs(entries[i].logs.data(asOpenArray = true))
+    else:
+      vmState.txLogs.setLen(0)
     if collectLogs:
       vmState.blockLogs.add vmState.txLogs
 
