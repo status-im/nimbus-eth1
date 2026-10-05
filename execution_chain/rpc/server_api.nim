@@ -199,21 +199,21 @@ template sign(privateKey: PrivateKey, message: string): seq[byte] =
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
   server.rpc(EthJson):
-    proc eth_getBalance(data: Address, blockTag: BlockTag): UInt256 {.raises: [ValueError].} =
+    proc eth_getBalance(data: Address, blockTag: Opt[BlockTag]): UInt256 {.raises: [ValueError].} =
       ## Returns the balance of the account of given address.
       let
-        txFrame = api.frameFromTag(blockTag).valueOr:
+        txFrame = api.frameFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)
         address = data
         acc = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
       acc.balance
 
     proc eth_getStorageAt(
-      data: Address, slot: UInt256, blockTag: BlockTag
+      data: Address, slot: UInt256, blockTag: Opt[BlockTag]
     ): FixedBytes[32] {.raises: [ValueError].} =
       ## Returns the value from a storage position at a given address.
       let
-        txFrame = api.frameFromTag(blockTag).valueOr:
+        txFrame = api.frameFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)
         address = data
         accPath = address.computeAccPath
@@ -222,11 +222,12 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       value.to(Bytes32)
 
     proc eth_getTransactionCount(
-      data: Address, blockTag: BlockTag
+      data: Address, blockTag: Opt[BlockTag]
     ): Quantity {.raises: [ValueError].} =
       ## Returns the number of transactions ak.s. nonce sent from an address.
       ## With the "pending" tag the sender's gap-free pooled transactions are
       ## counted as well.
+      let blockTag = blockTag.get(defaultTag)
       if blockTag.kind == bidAlias and blockTag.alias.toLowerAscii == "pending":
         return Quantity(api.txPool.getPendingNonce(data))
 
@@ -246,14 +247,14 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     proc eth_chainId(): UInt256 =
       return api.com.chainId
 
-    proc eth_getCode(data: Address, blockTag: BlockTag): seq[byte] {.raises: [ValueError].} =
+    proc eth_getCode(data: Address, blockTag: Opt[BlockTag]): seq[byte] {.raises: [ValueError].} =
       ## Returns code at a given address.
       ##
       ## data: address
       ## blockTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
       ## Returns the code from the given address.
       let
-        txFrame = api.frameFromTag(blockTag).valueOr:
+        txFrame = api.frameFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)
         address = data
         accPath = address.computeAccPath
@@ -646,7 +647,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       )
 
     proc eth_getProof(
-      data: Address, slots: seq[UInt256], quantityTag: BlockTag
+      data: Address, slots: seq[UInt256], quantityTag: Opt[BlockTag]
     ): ProofResponse {.raises: [ValueError].} =
       ## Returns information about an account and storage slots (if the account is a contract
       ## and the slots are requested) along with account and storage proofs which prove the
@@ -658,7 +659,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
       ## Returns: the proof response containing the account, account proof and storage proof
       let
-        txFrame = api.frameFromTag(quantityTag).valueOr:
+        txFrame = api.frameFromTag(quantityTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)
       getProof(txFrame, data, slots)
 
@@ -811,9 +812,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, error)
       w3Qty(maxPriorityFee.uint64)
 
-    proc eth_getStorageValues(request: StorageValuesRequest, blockTag: BlockTag): StorageValuesResponse {.raises: [ValueError].} =
+    proc eth_getStorageValues(request: StorageValuesRequest, blockTag: Opt[BlockTag]): StorageValuesResponse {.raises: [ValueError].} =
       let
-        txFrame = api.frameFromTag(blockTag).valueOr:
+        txFrame = api.frameFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)
 
       var res: StorageObject

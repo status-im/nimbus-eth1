@@ -516,6 +516,28 @@ proc rpcMain*() =
       let res = await client.eth_getCode(contractAddress, blockId(1'u64))
       check res.len == contractCode.len
 
+    test "omitted block parameter defaults to latest":
+      let
+        balance = await client.call("eth_getBalance", %[%(signer.to0xHex)], EthJson)
+        code = await client.call("eth_getCode", %[%(contractAddress.to0xHex)], EthJson)
+        nonce = await client.call("eth_getTransactionCount", %[%(signer.to0xHex)], EthJson)
+        slot = await client.call("eth_getStorageAt",
+          %[%(contractAccWithStorage.to0xHex), %"0x1"], EthJson)
+        proof = await client.call("eth_getProof", %[%(regularAcc.to0xHex), %[]], EthJson)
+        values = await client.call("eth_getStorageValues",
+          %[%*{contractAccWithStorage.to0xHex: [1.u256.to(Bytes32).to0xHex]}], EthJson)
+        expectedBalance = await client.eth_getBalance(signer, blockId("latest"))
+        expectedNonce = await client.eth_getTransactionCount(signer, blockId("latest"))
+        expectedProof = await client.eth_getProof(regularAcc, @[], blockId("latest"))
+      check:
+        EthJson.decode(balance.string, UInt256) == expectedBalance
+        EthJson.decode(code.string, seq[byte]).len == contractCode.len
+        EthJson.decode(nonce.string, Quantity) == expectedNonce
+        EthJson.decode(slot.string, FixedBytes[32]) == FixedBytes[32](2345.u256.toBytesBE)
+        EthJson.decode(proof.string, ProofResponse).balance == expectedProof.balance
+        EthJson.decode(values.string, StorageValuesResponse).list[0].data[0] ==
+          FixedBytes[32](2345.u256.toBytesBE)
+
     test "eth_sign":
       let msg = "hello world"
       let msgBytes = @(msg.toOpenArrayByte(0, msg.len-1))
