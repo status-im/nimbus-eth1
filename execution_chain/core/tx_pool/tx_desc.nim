@@ -280,6 +280,7 @@ proc init*(xp: TxPoolRef; chain: ForkedChainRef, flags: set[TxPoolFlags] = {}) =
 proc dispose*(xp: TxPoolRef) =
   if not xp.vmState.isNil():
     xp.vmState.ledger.txFrame.dispose()
+    xp.vmState.ledger.dispose()
     xp.vmState.ledger = nil
     xp.vmState.dispose()
     xp.vmState = nil
@@ -329,6 +330,7 @@ proc updateVmState*(xp: TxPoolRef, parentHeader: Header, parentHash: Hash32) =
   ## top of the given parent block.
   if not xp.vmState.isNil():
     xp.vmState.ledger.txFrame.dispose()
+    xp.vmState.ledger.dispose()
     xp.vmState.ledger = nil
     xp.vmState.dispose()
   xp.vmState = setupVMState(xp.chain.com,

@@ -6,34 +6,101 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  std/atomics,
   stew/byteutils,
   stew/assign2,
   results,
   ./interpreter/op_codes
 
+from system/ansi_c import c_malloc, c_free
+
 export results
 
-type CodeBytesRef* = ref object
-  ## Code buffer that caches invalid jump positions used for verifying jump
-  ## destinations - `bytes` is immutable once instances is created while
-  ## `invalidPositions` will be built up on demand
-  bytes: seq[byte]
-  invalidPositions: seq[byte] # bit seq of invalid jump positions
-  processed: int
-  persisted*: bool ## This code stream has been persisted to the database
+type
+  CodeBlobHeader = object
+    refCount: Atomic[int]
+    processed: Atomic[int]
+    scanLock: Atomic[bool]
+    codeLen: int
+
+  CodeBlob* = ptr CodeBlobHeader
+    ## Shared-heap code buffer: the header is followed by the code bytes and
+    ## the bitmap of invalid jump positions. The code cache and every ledger
+    ## that handed out a `CodeBytesRef` to the blob hold one reference each.
+
+  CodeBytesRef* = ref object
+    ## Code buffer that caches invalid jump positions used for verifying jump
+    ## destinations - `bytes` is immutable once instances is created while
+    ## `invalidPositions` will be built up on demand
+    blob: CodeBlob
+      ## When set, the code and jump positions live in the shared blob and the
+      ## inline fields are unused
+    inlineBytes: seq[byte]
+    invalidPositions: seq[byte] # bit seq of invalid jump positions
+    processed: int ## First position not yet scanned for PUSH data
+    persisted*: bool ## This code stream has been persisted to the database
+
+var
+  liveCodeBlobs*: Atomic[int]
+  liveCodeBlobBytes*: Atomic[int]
 
 template bitpos(pos: int): (int, byte) =
   (pos shr 3, 1'u8 shl (pos and 0x07))
 
+template bitmapLen(len: int): int =
+  (len + 7) shr 3
+
+func blobSize(len: int): int =
+  sizeof(CodeBlobHeader) + len + bitmapLen(len)
+
+func codeData(b: CodeBlob): ptr UncheckedArray[byte] =
+  cast[ptr UncheckedArray[byte]](cast[uint](b) + uint(sizeof(CodeBlobHeader)))
+
+func bitmapData(b: CodeBlob): ptr UncheckedArray[Atomic[uint8]] =
+  cast[ptr UncheckedArray[Atomic[uint8]]](
+    cast[uint](b) + uint(sizeof(CodeBlobHeader) + b.codeLen))
+
+func len*(b: CodeBlob): int =
+  b.codeLen
+
+proc newCodeBlob*(
+    bytes: openArray[byte], invalidPositions: openArray[byte] = [], processed = 0
+): CodeBlob =
+  ## Allocates a blob whose single reference is owned by the caller
+  let size = blobSize(bytes.len)
+  result = cast[CodeBlob](c_malloc(csize_t(size)))
+  result.refCount.store(1, moRelaxed)
+  result.processed.store(processed, moRelaxed)
+  result.scanLock.store(false, moRelaxed)
+  result.codeLen = bytes.len
+  if bytes.len > 0:
+    copyMem(result.codeData, unsafeAddr bytes[0], bytes.len)
+  let bitmap = cast[pointer](result.bitmapData)
+  zeroMem(bitmap, bitmapLen(bytes.len))
+  if invalidPositions.len > 0:
+    copyMem(bitmap, unsafeAddr invalidPositions[0],
+      min(invalidPositions.len, bitmapLen(bytes.len)))
+  discard liveCodeBlobs.fetchAdd(1, moRelaxed)
+  discard liveCodeBlobBytes.fetchAdd(size, moRelaxed)
+
+proc incRef*(b: CodeBlob) =
+  discard b.refCount.fetchAdd(1, moRelaxed)
+
+proc release*(b: CodeBlob) =
+  if b.refCount.fetchSub(1, moAcquireRelease) == 1:
+    discard liveCodeBlobs.fetchSub(1, moRelaxed)
+    discard liveCodeBlobBytes.fetchSub(blobSize(b.codeLen), moRelaxed)
+    c_free(b)
+
 func init*(
     T: type CodeBytesRef, bytes: sink seq[byte], persisted = false
 ): CodeBytesRef =
-  CodeBytesRef(bytes: move(bytes), persisted: persisted)
+  CodeBytesRef(inlineBytes: move(bytes), persisted: persisted)
 
 func initCopy*(
     T: type CodeBytesRef, bytes: seq[byte], persisted = false
 ): CodeBytesRef =
-  CodeBytesRef(bytes: bytes, persisted: persisted)
+  CodeBytesRef(inlineBytes: bytes, persisted: persisted)
 
 func init*(
     T: type CodeBytesRef, bytes: openArray[byte], persisted = false
@@ -43,17 +110,54 @@ func init*(
 func init*(T: type CodeBytesRef, bytes: openArray[char]): CodeBytesRef =
   CodeBytesRef.init(bytes.toOpenArrayByte(0, bytes.high()))
 
+func fromBlob*(T: type CodeBytesRef, blob: CodeBlob, persisted = false): CodeBytesRef =
+  ## Wraps a blob reference held by the caller, which must outlive the handle
+  CodeBytesRef(blob: blob, persisted: persisted)
+
 func fromHex*(T: type CodeBytesRef, hex: string): Opt[CodeBytesRef] =
   try:
     Opt.some(CodeBytesRef.init(hexToSeqByte(hex)))
   except ValueError:
     Opt.none(CodeBytesRef)
 
-func bytes*(c: CodeBytesRef): lent seq[byte] {.inline.} =
-  c[].bytes
+func codeBlob*(c: CodeBytesRef): CodeBlob =
+  c.blob
 
-template len*(c: CodeBytesRef): int =
-  len(bytes(c))
+func len*(c: CodeBytesRef): int {.inline.} =
+  if c.blob.isNil: c.inlineBytes.len else: c.blob.codeLen
+
+func codeData*(c: CodeBytesRef): ptr UncheckedArray[byte] {.inline.} =
+  if c.blob.isNil:
+    if c.inlineBytes.len > 0:
+      cast[ptr UncheckedArray[byte]](unsafeAddr c.inlineBytes[0])
+    else:
+      nil
+  else:
+    c.blob.codeData
+
+template bytes*(c: CodeBytesRef): openArray[byte] =
+  block:
+    let code = c
+    code.codeData.toOpenArray(0, code.len - 1)
+
+func toBytes*(c: CodeBytesRef): seq[byte] =
+  @(c.bytes)
+
+func sharesBlob*(a, b: CodeBytesRef): bool =
+  not a.blob.isNil and a.blob == b.blob
+
+func scannedUpTo*(c: CodeBytesRef): int =
+  ## First position not yet scanned for PUSH data
+  if c.blob.isNil: c.processed else: c.blob.processed.load(moAcquire)
+
+proc toBlob*(c: CodeBytesRef): CodeBlob =
+  ## A blob reference owned by the caller - inline code is copied into a new
+  ## blob while shared code retains the existing one
+  if c.blob.isNil:
+    newCodeBlob(c.inlineBytes, c.invalidPositions, c.processed)
+  else:
+    c.blob.incRef()
+    c.blob
 
 # Bounds checking done manually - this is a hotspot in the EVM
 {.push checks: off.}
@@ -104,35 +208,76 @@ func skipToNextPush(bytes: openArray[byte], start: int): int =
     i += 1
   i
 
-func isValidOpcode*(c: CodeBytesRef, position: int): bool =
-  if position >= len(c):
-    return false
+template scanPushData(
+    data: ptr UncheckedArray[byte], codeLen, start, position: int, mark: untyped
+): int =
+  ## Marks the PUSH data between `start` and `position`, returning the first
+  ## position left unscanned - always an opcode boundary
+  var i = start
+  while i <= position:
+    let opcode = Op(data[i])
+    if opcode >= Op.Push1 and opcode <= Op.Push32:
+      let
+        leftBound = i + 1
+        rightBound = min(leftBound + (opcode.int - 95), codeLen)
+      for z in leftBound ..< rightBound:
+        mark(z)
+      i = rightBound
+    else:
+      # Nothing to mark for this byte, nor for any byte before the next
+      # PUSH, so step over the whole run in one go
+      i = skipToNextPush(data.toOpenArray(0, codeLen - 1), i + 1)
+  i
 
+func isValidOpcodeInline(c: CodeBytesRef, position: int): bool =
   if c.invalidPositions.len == 0:
-    c.invalidPositions.setLen((len(c) + 7) div 8)
+    c.invalidPositions.setLen(bitmapLen(c.inlineBytes.len))
 
-  if c.invalidPosition(position):
+  if position < c.processed:
+    return not c.invalidPosition(position)
+
+  template mark(z: int) =
+    let (bpos, bbit) = bitpos(z)
+    c.invalidPositions[bpos] = c.invalidPositions[bpos] or bbit
+
+  let data = cast[ptr UncheckedArray[byte]](unsafeAddr c.inlineBytes[0])
+  c.processed = scanPushData(data, c.inlineBytes.len, c.processed, position, mark)
+
+  not c.invalidPosition(position)
+
+func isValidOpcodeShared(b: CodeBlob, position: int): bool =
+  let bitmap = b.bitmapData
+
+  template invalid(pos: int): bool =
+    let (bpos, bbit) = bitpos(pos)
+    (bitmap[bpos].load(moRelaxed) and bbit) > 0
+
+  if position < b.processed.load(moAcquire):
+    return not invalid(position)
+
+  while b.scanLock.exchange(true, moAcquire):
+    cpuRelax()
+
+  let processed = b.processed.load(moRelaxed)
+  if position >= processed:
+    template mark(z: int) =
+      let (bpos, bbit) = bitpos(z)
+      discard bitmap[bpos].fetchOr(bbit, moRelaxed)
+
+    b.processed.store(
+      scanPushData(b.codeData, b.codeLen, processed, position, mark), moRelease)
+
+  b.scanLock.store(false, moRelease)
+
+  not invalid(position)
+
+func isValidOpcode*(c: CodeBytesRef, position: int): bool =
+  if position >= c.len:
     false
-  elif position <= c.processed:
-    true
+  elif c.blob.isNil:
+    c.isValidOpcodeInline(position)
   else:
-    var i = c.processed
-    while i <= position:
-      var opcode = Op(c.bytes[i])
-      if opcode >= Op.Push1 and opcode <= Op.Push32:
-        var leftBound = (i + 1)
-        var rightBound = min(leftBound + (opcode.int - 95), c.bytes.len)
-        for z in leftBound ..< rightBound:
-          let (bpos, bbit) = bitpos(z)
-          c.invalidPositions[bpos] = c.invalidPositions[bpos] or bbit
-        i = rightBound
-      else:
-        # Nothing to mark for this byte, nor for any byte before the next
-        # PUSH, so step over the whole run in one go
-        i = skipToNextPush(c.bytes, i + 1)
-    c.processed = i - 1
-
-    not c.invalidPosition(position)
+    c.blob.isValidOpcodeShared(position)
 
 {.pop.}
 

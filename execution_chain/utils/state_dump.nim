@@ -83,7 +83,7 @@ proc dumpAccount(ledger: LedgerRef, acc: Address): DumpAccount =
     nonce   : ledger.getNonce(acc),
     root    : ledger.getStorageRoot(acc),
     codeHash: ledger.getCodeHash(acc),
-    code    : ledger.getCode(acc).bytes(),
+    code    : ledger.getCode(acc).toBytes(),
     key     : keccak256(acc.data)
   )
   for k, v in ledger.cachedStorage(acc):

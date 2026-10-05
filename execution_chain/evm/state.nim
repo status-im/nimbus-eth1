@@ -114,6 +114,8 @@ proc new*(
   )
 
 proc dispose*(vmState: BaseVMState) =
+  if not vmState.ledger.isNil():
+    vmState.ledger.dispose()
   if not vmState.balTracker.isNil():
     vmState.balTracker.dispose()
     vmState.balTracker = nil

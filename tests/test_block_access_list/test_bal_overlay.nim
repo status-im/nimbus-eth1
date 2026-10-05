@@ -133,7 +133,7 @@ suite "Block access list overlay":
       check:
         ledger.getBalance(address1) == 1.u256
         ledger.getNonce(address1) == 1.AccountNonce
-        ledger.getCode(address1).bytes() == code1
+        ledger.getCode(address1) == code1
         ledger.getStorage(address1, slot1) == 10.u256
         ledger.getStorage(address1, slot2) == 20.u256
         ledger.getBalance(address2) == 100.u256
@@ -144,7 +144,7 @@ suite "Block access list overlay":
       check:
         ledger.getBalance(address1) == 11.u256
         ledger.getNonce(address1) == 5.AccountNonce
-        ledger.getCode(address1).bytes() == code1
+        ledger.getCode(address1) == code1
         ledger.getStorage(address1, slot1) == 111.u256
         ledger.getCommittedStorage(address1, slot1) == 111.u256
         ledger.getStorage(address1, slot2) == 20.u256
@@ -153,13 +153,13 @@ suite "Block access list overlay":
       let ledger = ledgerWithOverlay(coreDb, bal, 4)
       check:
         ledger.getBalance(address1) == 33.u256
-        ledger.getCode(address1).bytes() == code2
+        ledger.getCode(address1) == code2
         ledger.getCodeHash(address1) == keccak256(code2)
         ledger.getStorage(address1, slot1) == 333.u256
         ledger.accountExists(address4)
         ledger.getBalance(address4) == 44.u256
         ledger.getNonce(address4) == 1.AccountNonce
-        ledger.getCode(address4).bytes() == code2
+        ledger.getCode(address4) == code2
         ledger.getStorage(address4, slot1) == 0.u256
 
 suite "BAL overlay ledger reads":
@@ -248,16 +248,16 @@ suite "BAL overlay ledger reads":
     block: # index 2 - overlayAddr code is written @2, not yet visible
       let ledger = ledgerWithOverlay(coreDb, bal, 2)
       check:
-        ledger.getCode(dbAddr).bytes() == codeDb
-        ledger.getCode(overlayAddr).bytes().len == 0
-        ledger.getCode(bothAddr).bytes() == codeDb     # no code in BAL -> DB
+        ledger.getCode(dbAddr) == codeDb
+        ledger.getCode(overlayAddr).len == 0
+        ledger.getCode(bothAddr) == codeDb     # no code in BAL -> DB
     block: # index 4 - overlayAddr code now visible
       let ledger = ledgerWithOverlay(coreDb, bal, 4)
       check:
-        ledger.getCode(overlayAddr).bytes() == codeOverlay
+        ledger.getCode(overlayAddr) == codeOverlay
         ledger.getCodeHash(overlayAddr) == keccak256(codeOverlay)
         ledger.getCodeSize(overlayAddr) == codeOverlay.len
-        ledger.getCode(bothAddr).bytes() == codeDb           # still DB
+        ledger.getCode(bothAddr) == codeDb           # still DB
         ledger.getCodeHash(bothAddr) == keccak256(codeDb)
 
   test "getStorage / getCommittedStorage read overlay pre-state and fall back":
@@ -318,7 +318,7 @@ suite "BAL overlay ledger reads":
     check:
       ledger.getBalance(dbAddr) == 1.u256
       ledger.getNonce(dbAddr) == 1.AccountNonce
-      ledger.getCode(dbAddr).bytes() == codeDb
+      ledger.getCode(dbAddr) == codeDb
       ledger.getStorage(dbAddr, slotA) == 11.u256
       ledger.getStorage(dbAddr, slotB) == 0.u256   # unset slot
       ledger.accountExists(dbAddr)
@@ -331,7 +331,7 @@ suite "BAL overlay ledger reads":
       ledger.getBalance(bothAddr) == 200.u256          # overlay
       ledger.getStorage(bothAddr, slotA) == 2000.u256  # overlay
       ledger.getNonce(bothAddr) == 7.AccountNonce       # DB
-      ledger.getCode(bothAddr).bytes() == codeDb         # DB
+      ledger.getCode(bothAddr) == codeDb         # DB
       ledger.getStorage(bothAddr, slotB) == 888.u256     # DB
 
   test "account left empty by BAL writes before the index is treated as deleted":
@@ -378,10 +378,10 @@ suite "BAL overlay ledger reads":
     block: # index 2 - overlayAddr code written @2 is not visible yet
       let ledger = ledgerWithOverlay(coreDb, bal, 2)
       check:
-        ledger.getOriginalCode(overlayAddr).bytes().len == 0
-        ledger.getOriginalCode(bothAddr).bytes() == codeDb  # from the DB
+        ledger.getOriginalCode(overlayAddr).len == 0
+        ledger.getOriginalCode(bothAddr) == codeDb  # from the DB
     block: # index 4 - overlay code visible
       let ledger = ledgerWithOverlay(coreDb, bal, 4)
       check:
-        ledger.getOriginalCode(overlayAddr).bytes() == codeOverlay
-        ledger.getOriginalCode(bothAddr).bytes() == codeDb
+        ledger.getOriginalCode(overlayAddr) == codeOverlay
+        ledger.getOriginalCode(bothAddr) == codeDb

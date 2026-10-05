@@ -92,7 +92,7 @@ proc envToHeader(env: EnvStruct): Header =
 proc postState(ledger: LedgerRef, alloc: var GenesisAlloc) =
   for accAddr in ledger.addresses():
     var acc = GenesisAccount(
-      code: ledger.getCode(accAddr).bytes(),
+      code: ledger.getCode(accAddr).toBytes(),
       balance: ledger.getBalance(accAddr),
       nonce: ledger.getNonce(accAddr)
     )

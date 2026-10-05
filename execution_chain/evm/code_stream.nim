@@ -11,31 +11,29 @@ export code_bytes
 
 type CodeStream* = object
   code: CodeBytesRef
+  data: ptr UncheckedArray[byte]
+  codeLen: int
   pc*: int
 
 func init*(T: type CodeStream, code: CodeBytesRef): T =
-  T(code: code)
+  T(code: code, data: code.codeData, codeLen: code.len)
 
 func init*(T: type CodeStream, code: sink seq[byte]): T =
-  T(code: CodeBytesRef.init(move(code)))
+  CodeStream.init(CodeBytesRef.init(move(code)))
 
 func init*(T: type CodeStream, code: openArray[byte]): T =
-  T(code: CodeBytesRef.init(code))
+  CodeStream.init(CodeBytesRef.init(code))
 
 func init*(T: type CodeStream, code: openArray[char]): T =
-  T(code: CodeBytesRef.init(code))
+  CodeStream.init(CodeBytesRef.init(code))
 
 template read*(c: var CodeStream, size: int): openArray[byte] =
   let
     pos = c.pc
-    last = pos + size
+    last = min(pos + size, c.codeLen)
 
-  if last <= c.bytes.len:
-    c.pc = last
-    c.code.bytes.toOpenArray(pos, last - 1)
-  else:
-    c.pc = c.bytes.len
-    c.code.bytes.toOpenArray(pos, c.bytes.high)
+  c.pc = last
+  c.data.toOpenArray(pos, last - 1)
 
 template readVmWord*(c: var CodeStream, n: static int): UInt256 =
   ## Reads `n` bytes from the code stream and pads
@@ -46,12 +44,12 @@ template readVmWord*(c: var CodeStream, n: static int): UInt256 =
     block:
       let
         pos = c.pc
-        bytes {.cursor.} = c.code.bytes
-        last = min(pos + n, bytes.len)
+        last = min(pos + n, c.codeLen)
+        data = c.data
       var v = 0'u64
       {.push checks: off.}
       for i in pos ..< last:
-        v = (v shl 8) or uint64(bytes[i])
+        v = (v shl 8) or uint64(data[i])
       {.pop.}
       c.pc = last
       v.u256
@@ -59,17 +57,15 @@ template readVmWord*(c: var CodeStream, n: static int): UInt256 =
     UInt256.fromBytesBE(c.read(n))
 
 func len*(c: CodeStream): int =
-  len(c.code)
+  c.codeLen
 
 template next*(c: var CodeStream): Op =
   # Retrieve the next opcode (or stop) - this is a hot spot in the interpreter
   # and must be kept small for performance
-  let
-    pc = c.pc
-    bytes {.cursor.} = c.code.bytes
-  if pc < bytes.len:
+  let pc = c.pc
+  if pc < c.codeLen:
     {.push checks: off.}
-    let op = Op(bytes[pc])
+    let op = Op(c.data[pc])
     c.pc = pc + 1
     {.pop.}
     op
@@ -83,10 +79,9 @@ iterator items*(c: var CodeStream): Op =
     nextOpcode = c.next()
 
 func `[]`*(c: CodeStream, offset: int): Op =
-  let bytes {.cursor.} = c.code.bytes
-  if offset >= 0 and offset < bytes.len:
+  if offset >= 0 and offset < c.codeLen:
     {.push checks: off.}
-    let op = Op(bytes[offset])
+    let op = Op(c.data[offset])
     {.pop.}
     op
   else:
@@ -96,23 +91,22 @@ func peek*(c: var CodeStream): Op =
   c[c.pc]
 
 func updatePc*(c: var CodeStream, value: int) =
-  c.pc = min(value, len(c))
+  c.pc = min(value, c.codeLen)
 
 func isValidOpcode*(c: CodeStream, position: int): bool =
   c.code.isValidOpcode(position)
 
-func bytes*(c: CodeStream): lent seq[byte] =
+template bytes*(c: CodeStream): openArray[byte] =
   c.code.bytes()
 
 func atEnd*(c: CodeStream): bool =
-  c.pc >= c.code.bytes.len
+  c.pc >= c.codeLen
 
 func getImmediateByte*(c: var CodeStream): int =
   var x = 0
-  let bytes {.cursor.} = c.code.bytes
-  if c.pc < c.code.bytes.len:
+  if c.pc < c.codeLen:
     {.push checks: off.}
-    x = int(bytes[c.pc])
+    x = int(c.data[c.pc])
     {.pop.}
     inc c.pc
   x

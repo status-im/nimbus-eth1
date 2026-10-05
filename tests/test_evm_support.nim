@@ -7,7 +7,6 @@
 
 import
   std/[importutils, sequtils, tables],
-  minilru,
   stew/byteutils,
   unittest2,
   eth/common/[keys, transaction_utils],
@@ -31,6 +30,12 @@ import
   ../execution_chain/utils/utils
 
 from macro_assembler import initVMEnv
+
+proc cacheCode(codeHash: Hash32, code: CodeBytesRef) =
+  let blob = code.toBlob()
+  insertCached(codeHash, blob)
+  blob.release()
+
 
 template testPush(value: untyped, expected: untyped): untyped =
   privateAccess(EvmStack)
@@ -428,7 +433,6 @@ proc runFactory(vm: BaseVMState, code, initcode: seq[byte], gas = 1_000_000.GasI
 proc runCreateCacheTests() =
   privateAccess(LedgerRef)
   privateAccess(LedgerSpRef)
-  privateAccess(CodeBytesRef)
 
   # Jump over a PUSH containing a fake JUMPDEST, then deploy one STOP byte.
   let initcode = hexToSeqByte("600656605b005b60016000f3")
@@ -438,6 +442,7 @@ proc runCreateCacheTests() =
     let op = creationOp
     suite $op & " initcode cache":
       setup:
+        resetCodeCache(2, threadSafe = false)
         let vm = initVMEnv("Cancun")
         let ledger = vm.ledger
         ledger.setNonce(factoryAddress, 1)
@@ -455,7 +460,7 @@ proc runCreateCacheTests() =
         require outer.pendingCode.hasKey(codeHash)
         let executed = outer.pendingCode[codeHash]
         check:
-          executed.processed >= 6
+          executed.scannedUpTo >= 6
           not executed.isValidOpcode(4) # PUSH data, despite being 0x5b
           not executed.persisted
 
@@ -468,21 +473,29 @@ proc runCreateCacheTests() =
         check ledger.getCode(expectedAddress) == [0x00.byte]
 
         ledger.commit(outer)
-        check ledger.peekCode(codeHash).get == executed
+        let admitted = ledger.peekCode(codeHash).get
+        check:
+          admitted == initcode
+          admitted.scannedUpTo == executed.scannedUpTo
+          not admitted.isValidOpcode(4)
 
-        let other = CodeBytesRef.init(@[0xfe.byte])
-        ledger.code.put(keccak256(other.bytes), other)
-        let order = toSeq(ledger.code.keys)
+        let
+          other = CodeBytesRef.init(@[0xfe.byte])
+          otherHash = keccak256(other.bytes)
+        cacheCode(otherHash, other)
         let next = ledger.beginSavePoint()
         let warm = vm.runFactory(factoryCode(op, salt = 1), initcode)
         require warm.isSuccess
         check warm.finalStack[0] != 0.u256
         check warm.gasMeter.executionGasUsed == cold.gasMeter.executionGasUsed
-        check toSeq(ledger.code.keys) == order
         require next.pendingCode.hasKey(codeHash)
-        check next.pendingCode[codeHash] == executed
+        check next.pendingCode[codeHash].sharesBlob(admitted)
         ledger.commit(next)
-        check toSeq(ledger.code.keys)[0] == codeHash
+        # the commit refreshed `codeHash`, leaving `otherHash` as the LRU item
+        cacheCode(keccak256([0xfd.byte]), CodeBytesRef.init(@[0xfd.byte]))
+        check:
+          ledger.peekCode(codeHash).isSome
+          ledger.peekCode(otherHash).isNone
 
       test "successful execution followed by transaction rollback does not admit code":
         let outer = ledger.beginSavePoint()
@@ -542,15 +555,20 @@ proc runCreateCacheTests() =
         check c.isError
         check ledger.peekCode(codeHash).isNone
 
-        let cached = CodeBytesRef.init(initcode)
-        ledger.code.put(codeHash, cached)
-        let other = CodeBytesRef.init(@[0xfe.byte])
-        ledger.code.put(keccak256(other.bytes), other)
-        let order = toSeq(ledger.code.keys)
+        let
+          cached = CodeBytesRef.init(initcode)
+          other = CodeBytesRef.init(@[0xfe.byte])
+          otherHash = keccak256(other.bytes)
+        cacheCode(codeHash, cached)
+        cacheCode(otherHash, other)
         let warm = vm.runFactory(factoryCode(op, revertAfter = true), initcode)
         check warm.isError
-        check cached.processed >= 6 # the cached instance was executed
-        check toSeq(ledger.code.keys) == order
+        check ledger.peekCode(codeHash).get.scannedUpTo >= 6 # the cached instance was executed
+        # the reverted run did not refresh `codeHash`, so it is still the LRU item
+        cacheCode(keccak256([0xfd.byte]), CodeBytesRef.init(@[0xfd.byte]))
+        check:
+          ledger.peekCode(codeHash).isNone
+          ledger.peekCode(otherHash).isSome
 
       test "reverted enclosing CALL excludes creation from a successful transaction":
         let innerAddress = address"0000000000000000000000000000000000003000"
@@ -564,6 +582,7 @@ proc runCreateCacheTests() =
         check ledger.peekCode(codeHash).isNone
 
   test "top-level deployment initcode is not admitted":
+    resetCodeCache(threadSafe = false)
     let vm = initVMEnv("Cancun")
     defer: vm.dispose()
     let tx = Transaction(gasLimit: 1_000_000, payload: initcode)

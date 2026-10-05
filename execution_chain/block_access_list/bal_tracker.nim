@@ -276,7 +276,7 @@ template getPreNonce*(
 
 proc capturePreCode*(tracker: BlockAccessListTrackerRef, address: Address) =
   if address notin tracker.preCodeCache:
-    tracker.preCodeCache[address] = tracker.ledger.getCode(address).bytes
+    tracker.preCodeCache[address] = tracker.ledger.getCode(address).toBytes()
 
 template getPreCode*(tracker: BlockAccessListTrackerRef, address: Address): seq[byte] =
   tracker.preCodeCache.getOrDefault(address)

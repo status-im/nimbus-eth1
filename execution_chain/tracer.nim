@@ -183,6 +183,8 @@ proc traceTransactionImpl(
   let
     cx = stateCtx
     ldgBefore = LedgerRef.init(com.ledger.baseTxFrame(), storeSlotHash = true)
+  defer:
+    ldgBefore.dispose()
 
   for idx, acc in tracedAccountsPairs(tracerInst):
     before.captureAccount(ldgBefore, acc, internalTxName & $idx)
@@ -221,6 +223,8 @@ proc dumpBlockStateImpl(
     before = newJArray()
     after = newJArray()
     stateBefore = LedgerRef.init(com.ledger.baseTxFrame(), storeSlotHash = true)
+  defer:
+    stateBefore.dispose()
 
   for idx, tx in blk.transactions:
     let sender = tx.recoverSenderCached().expect("valid signature")

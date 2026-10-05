@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[strformat, strutils, importutils, sequtils, tables],
+  std/[strformat, strutils, importutils, tables],
   eth/common/[keys, transaction_utils],
   stew/[byteutils, endians2],
   minilru,
@@ -25,6 +25,11 @@ import
   ../execution_chain/constants,
   ../execution_chain/db/ledger {.all.}, # import all private symbols
   unittest2
+
+proc cacheCode(codeHash: Hash32, code: CodeBytesRef) =
+  let blob = code.toBlob()
+  insertCached(codeHash, blob)
+  blob.release()
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
@@ -375,6 +380,10 @@ proc runLedgerBasicOperationsTests() =
         address {.used.} = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         stateRoot {.used.} : Hash32
+      resetCodeCache(threadSafe = false)
+
+    teardown:
+      ledger.dispose()
 
     test "initcode cache admission waits for the outermost commit":
       let
@@ -387,24 +396,27 @@ proc runLedgerBasicOperationsTests() =
       ledger.commit(inner)
       check ledger.peekCode(codeHash).isNone
       ledger.commit(outer)
+      let admitted = ledger.peekCode(codeHash).get
       check:
-        ledger.peekCode(codeHash).get == executed
+        admitted == code
+        admitted.scannedUpTo == executed.scannedUpTo
         not executed.persisted
         inner.pendingCode.len == 0
         outer.pendingCode.len == 0
         ledger.savePoint.pendingCode.len == 0
 
     test "initcode cache peek and rollback preserve LRU entries and order":
-      ledger.code = typeof(ledger.code).init(2)
+      resetCodeCache(2, threadSafe = false)
       let
         codeHash = keccak256(code)
         executed = CodeBytesRef.init(code)
         other = CodeBytesRef.init(@[0x00.byte])
         otherHash = keccak256(other.bytes)
-      ledger.code.put(codeHash, executed)
-      ledger.code.put(otherHash, other)
-      let before = toSeq(ledger.code.keys)
-      check ledger.peekCode(codeHash).get == executed
+        third = CodeBytesRef.init(@[0x01.byte])
+        thirdHash = keccak256(third.bytes)
+      cacheCode(codeHash, executed)
+      cacheCode(otherHash, other)
+      check ledger.peekCode(codeHash).get == code
       let
         outer = ledger.beginSavePoint()
         inner = ledger.beginSavePoint()
@@ -413,15 +425,27 @@ proc runLedgerBasicOperationsTests() =
       ledger.commit(inner)
       ledger.rollback(outer)
       check:
-        toSeq(ledger.code.keys) == before
-        ledger.code.len == 2
+        codeCacheLen() == 2
         outer.pendingCode.len == 0
+      # neither the peek nor the rolled back commit refreshed `codeHash`, so it
+      # is still the LRU item
+      cacheCode(thirdHash, third)
+      check:
+        ledger.peekCode(codeHash).isNone
+        ledger.peekCode(otherHash).isSome
+        ledger.peekCode(thirdHash).isSome
 
+      resetCodeCache(2, threadSafe = false)
+      cacheCode(codeHash, executed)
+      cacheCode(otherHash, other)
       let successful = ledger.beginSavePoint()
       ledger.cacheCodeOnCommit(codeHash, executed)
-      check toSeq(ledger.code.keys) == before
       ledger.commit(successful)
-      check toSeq(ledger.code.keys) == @[codeHash, otherHash]
+      cacheCode(thirdHash, third)
+      check:
+        ledger.peekCode(codeHash).isSome
+        ledger.peekCode(otherHash).isNone
+        ledger.peekCode(thirdHash).isSome
 
     test "rolled back child initcode is excluded from a successful parent":
       let

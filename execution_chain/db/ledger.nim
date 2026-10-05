@@ -17,24 +17,16 @@ import
   minilru,
   eth/common/[addresses, hashes],
   ../utils/[mergeutils, utils],
-  ../evm/code_bytes,
+  ../evm/[code_bytes, code_cache],
   ../constants,
   ../block_access_list/bal_overlay,
   ./[access_list as ac_access_list, core_db, storage_types],
   ./aristo/[aristo_blobify, aristo_desc, aristo_get]
 
 export
-  code_bytes, core_db.computeAccPath, core_Db.computeSlotKey
+  code_bytes, code_cache, core_db.computeAccPath, core_Db.computeSlotKey
 
 const
-  codeLruSize = 16*1024
-    # An LRU cache of 16K items gives roughly 90% hit rate anecdotally on a
-    # small range of test blocks - this number could be studied in more detail
-    # Since EIP-7954, the code of a contract can be up to
-    # `EIP7954_MAX_CODE_SIZE` = 64kb (24kb before, per EIP-170), which would
-    # cause a worst case of 1GB memory usage though in reality code sizes are
-    # much smaller - it would make sense to study these numbers in greater
-    # detail.
   slotsLruSize = 16 * 1024
 
 type
@@ -84,16 +76,10 @@ type
     cache: Table[Address, AccountRef]
       # Second-level cache for the ledger save point, which is cleared on every
       # persist
-    code: LruCache[Hash32, CodeBytesRef]
-      ## The code cache provides two main benefits:
-      ##
-      ## * duplicate code is shared in memory beween accounts
-      ## * the jump destination table does not have to be recomputed for every
-      ##   execution, for commonly called called contracts
-      ##
-      ## The former feature is specially important in the 2.3-2.7M block range
-      ## when underpriced code opcodes are being run en masse - both advantages
-      ## help performance broadly as well.
+    codePins: seq[CodeBlob]
+      ## References to the shared code blobs behind every `CodeBytesRef` this
+      ## ledger handed out - released together once the ledger no longer
+      ## reaches any of them (see `releaseCode`)
 
     slots: LruCache[UInt256, Hash32]
       ## Because the same slots often reappear, we want to avoid writing them
@@ -173,6 +159,37 @@ const
     ## proof of absence we can't tell if the account/slot exists. Covers an
     ## incomplete witness (stateless) or a not-yet-fetched trie (verified proxy).
 
+proc pinShared(ledger: LedgerRef, blob: CodeBlob, persisted: bool): CodeBytesRef =
+  ## Takes over the caller's blob reference, keeping it until `releaseCode`
+  ledger.codePins.add(blob)
+  CodeBytesRef.fromBlob(blob, persisted)
+
+proc releaseCode(ledger: LedgerRef) =
+  ## Drops every shared code handle the ledger still reaches along with the
+  ## blob references backing them - the next access fetches a fresh handle
+  if ledger.codePins.len == 0:
+    return
+
+  template clearCode(accounts: Table[Address, AccountRef]) =
+    for acc in accounts.values():
+      acc.code = nil
+      acc.original.code = nil
+
+  clearCode(ledger.cache)
+  var sp = ledger.savePoint
+  while not sp.isNil:
+    clearCode(sp.cache)
+    clearCode(sp.dirty)
+    sp.pendingCode.clear()
+    sp = sp.parentSavePoint
+
+  for blob in ledger.codePins:
+    blob.release()
+  ledger.codePins.setLen(0)
+
+proc dispose*(ledger: LedgerRef) =
+  ledger.releaseCode()
+
 proc applyOverlay(ledger: LedgerRef, address: Address, acc: AccountRef) =
   let overlayAcc = ledger.balOverlay.expect("bal overlay enabled").getAccount(address)
   if overlayAcc.balance.isSome():
@@ -181,7 +198,10 @@ proc applyOverlay(ledger: LedgerRef, address: Address, acc: AccountRef) =
     acc.statement.nonce = overlayAcc.nonce[]
   if overlayAcc.code.isSome():
     acc.statement.codeHash = keccak256(overlayAcc.code[])
-    acc.code = CodeBytesRef.init(overlayAcc.code[])
+    let blob = acquireCached(acc.statement.codeHash)
+    acc.code =
+      if blob.isNil: CodeBytesRef.init(overlayAcc.code[])
+      else: ledger.pinShared(blob, persisted = false)
     acc.flags.incl CodeChanged
 
 proc isEmpty(acc: AccountRef): bool =
@@ -460,7 +480,8 @@ template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
   if acc.code == nil:
     if acc.statement.codeHash == EMPTY_CODE_HASH:
       return 0
-    acc.code = ledger.code.get(acc.statement.codeHash).valueOr:
+    let blob = acquireCached(acc.statement.codeHash)
+    if blob.isNil:
       # On a cache miss, we don't fetch the code - instead, we fetch just the
       # length - should the code itself be needed, it will typically remain
       # cached and easily accessible in the database layer - this is to prevent
@@ -474,6 +495,8 @@ template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
         warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
         ledger.fatalError = Opt.some("getCodeSize(): failed to fetch code length from database")
         0
+
+    acc.code = ledger.pinShared(blob, persisted = true)
 
   acc.code.len()
 
@@ -529,7 +552,9 @@ proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
 
   if ledger.savePoint.parentSavePoint.isNil:
     for codeHash, code in savePoint.pendingCode:
-      ledger.code.put(codeHash, code)
+      let blob = code.toBlob()
+      insertCached(codeHash, blob)
+      blob.release()
     savePoint.pendingCode.clear()
   else:
     ledger.savePoint.pendingCode.mergeAndReset(savePoint.pendingCode)
@@ -544,7 +569,6 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   new result
   result.txFrame = db
   result.storeSlotHash = storeSlotHash
-  result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
   result.txFrame.aTx.collectWitness = collectWitness
@@ -556,6 +580,7 @@ proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   doAssert ledger.isTopLevelClean
   doAssert txFrame.aTx.parent == ledger.txFrame.aTx,
     "reinit txFrame must be a direct child of the ledger's current frame"
+  ledger.releaseCode()
   ledger.txFrame = txFrame
   ledger.txFrame.aTx.collectWitness = ledger.collectWitness
   ledger.ripemdSpecial = false
@@ -599,6 +624,18 @@ proc recordCodeRead(ledger: LedgerRef, address: Address, acc: AccountRef) =
       not ledger.isDeployedCode(acc.statement.codeHash):
     ledger.witnessKeys[(address, Opt.none(UInt256))] = true
 
+proc loadCode(ledger: LedgerRef, codeHash: Hash32): CoreDbRc[CodeBytesRef] =
+  if not ledger.stateless:
+    let blob = acquireCached(codeHash)
+    if not blob.isNil:
+      return ok(ledger.pinShared(blob, persisted = true))
+
+  let
+    bytes = ?ledger.txFrame.get(contractHashKey(codeHash).toOpenArray)
+    blob = newCodeBlob(bytes)
+  insertCached(codeHash, blob)
+  ok(ledger.pinShared(blob, persisted = true))
+
 proc getCode*(ledger: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
@@ -616,18 +653,12 @@ proc getCode*(ledger: LedgerRef,
   if acc.code.isNil:
     acc.code =
       if acc.statement.codeHash != EMPTY_CODE_HASH:
-        ledger.code.get(acc.statement.codeHash).valueOr:
-          var rc = ledger.txFrame.get(contractHashKey(acc.statement.codeHash).toOpenArray)
-          if rc.isErr:
-            # A non-empty code hash with no code in the database: record a fatalError
-            # but still return empty code so the async EVM continues.
-            warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
-            ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
-            CodeBytesRef()
-          else:
-            let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
-            ledger.code.put(acc.statement.codeHash, newCode)
-            newCode
+        ledger.loadCode(acc.statement.codeHash).valueOr:
+          # A non-empty code hash with no code in the database: record a fatalError
+          # but still return empty code so the async EVM continues.
+          warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$error)
+          ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
+          CodeBytesRef()
       else:
         CodeBytesRef()
 
@@ -648,15 +679,9 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
   if acc.original.code.isNil:
     acc.original.code =
       if acc.original.statement.codeHash != EMPTY_CODE_HASH:
-        ledger.code.get(acc.original.statement.codeHash).valueOr:
-          var rc = ledger.txFrame.get(contractHashKey(acc.original.statement.codeHash).toOpenArray)
-          if rc.isErr:
-            warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=($$rc.error)
-            CodeBytesRef()
-          else:
-            let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
-            ledger.code.put(acc.original.statement.codeHash, newCode)
-            newCode
+        ledger.loadCode(acc.original.statement.codeHash).valueOr:
+          warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=($$error)
+          CodeBytesRef()
       else:
         CodeBytesRef()
 
@@ -777,9 +802,13 @@ proc setNonce*(ledger: LedgerRef, address: Address, nonce: AccountNonce) =
 proc incNonce*(ledger: LedgerRef, address: Address) =
   ledger.setNonce(address, ledger.getNonce(address) + 1)
 
-func peekCode*(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
+proc peekCode*(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
   ## Reuse executed code without updating cache membership or recency.
-  ledger.code.peek(codeHash)
+  let blob = peekCached(codeHash)
+  if blob.isNil:
+    Opt.none(CodeBytesRef)
+  else:
+    Opt.some(ledger.pinShared(blob, persisted = false))
 
 proc cacheCodeOnCommit*(ledger: LedgerRef, codeHash: Hash32, code: CodeBytesRef) =
   ## Stage successfully executed initcode in the current call frame. A rollback
@@ -795,8 +824,13 @@ proc setCode*(ledger: LedgerRef, address: Address, code: seq[byte]) =
     var acc = ledger.makeDirty(address)
     acc.statement.codeHash = codeHash
     # Try to reuse cache entry if it exists, but don't save the code - it's not
-    # a given that it will be executed within LRU range
-    acc.code = ledger.code.get(codeHash).valueOr(CodeBytesRef.init(code))
+    # a given that it will be executed within LRU range. The reused handle is
+    # not marked persisted: the cache is shared across forks and only this
+    # ledger's own lineage can vouch for the code being in its database.
+    let blob = acquireCached(codeHash)
+    acc.code =
+      if blob.isNil: CodeBytesRef.init(code)
+      else: ledger.pinShared(blob, persisted = false)
     acc.flags.incl CodeChanged
     if ledger.collectWitness and code.len > 0:
       ledger.savePoint.deployedCodeHashes.incl(codeHash)
@@ -1014,6 +1048,7 @@ proc persist*(ledger: LedgerRef,
     # TODO https://github.com/nim-lang/Nim/issues/23759
     swap(ledger.cache, ledger.savePoint.cache)
     ledger.savePoint.cache.reset()
+    ledger.releaseCode()
 
   ledger.savePoint.dirty.clear()
   ledger.savePoint.selfDestruct.clear()

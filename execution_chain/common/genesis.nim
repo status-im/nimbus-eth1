@@ -29,6 +29,8 @@ proc writeGenesisAlloc*(alloc: GenesisAlloc, db: CoreDbTxRef): Hash32 =
     return EMPTY_ROOT_HASH
 
   let ledger = LedgerRef.init(db)
+  defer:
+    ledger.dispose()
 
   for address, account in alloc:
     ledger.setNonce(address, account.nonce)
