@@ -26,6 +26,7 @@ import
   ../transaction/call_evm_rpc,
   ../evm/evm_errors,
   ../core/eip4844,
+  ../core/gaslimit,
   ../core/pooled_txs_rlp,
   ./oracle,
   ./rpc_types,
@@ -705,6 +706,14 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         return createAccessList(header, api.com, api.chain, args)
       except CatchableError as exc:
         return AccessListResult(error: Opt.some("createAccessList error: " & exc.msg))
+
+    proc eth_baseFee(): UInt256 {.raises: [ValueError].} =
+      ## Returns the base fee per gas of the next block in wei.
+      let header = api.headerFromTag(blockId("latest")).valueOr:
+        raise newException(ValueError, "Block not found")
+      if not api.com.isLondonOrLater(header.number + 1, header.timestamp):
+        raise newException(ValueError, "base fee not available before London")
+      api.com.calcEip1599BaseFee(header)
 
     proc eth_blobBaseFee(): Quantity {.raises: [ValueError].} =
       ## Returns the base fee per blob gas in wei.
