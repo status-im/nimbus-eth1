@@ -294,18 +294,20 @@ proc applyBlockAccessListState(ledger: LedgerRef, bal: BlockAccessList, txCount:
       ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
 
 proc packLogs(logs: openArray[Log]): SharedBytes =
+  if logs.len == 0:
+    return default(SharedBytes)
+
   var size = sizeof(uint32)
   for log in logs:
     size +=
       sizeof(Address) + sizeof(uint32) + log.topics.len * sizeof(Topic) + sizeof(uint32) +
       log.data.len
 
-  var
-    packed = SharedBytes.init(size, zeroed = false)
-    pos = 0
+  result = SharedBytes.init(size, zeroed = false)
+  var pos = 0
 
   template put(src: pointer, n: int) =
-    copyMem(addr packed[pos], src, n)
+    copyMem(addr result[pos], src, n)
     pos += n
 
   template putLen(v: int) =
@@ -322,9 +324,10 @@ proc packLogs(logs: openArray[Log]): SharedBytes =
     if log.data.len > 0:
       put(unsafeAddr log.data[0], log.data.len)
 
-  packed
-
 proc unpackLogs(buf: openArray[byte]): seq[Log] =
+  if buf.len == 0:
+    return default(seq[Log])
+
   var pos = 0
 
   template get(dst: pointer, n: int) =
