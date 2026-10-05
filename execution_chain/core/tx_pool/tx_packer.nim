@@ -335,12 +335,20 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
-  ## Execute as much transactions as possible.
+proc packerVmExec*(
+    xp: TxPoolRef,
+    txs = Opt.none(seq[TxItemRef])
+): Result[TxPacker, string] =
+  ## Execute as much transactions as possible, or exactly `txs` when given.
   var pst = xp.vmExecInit.valueOr:
     return err(error)
 
-  if xp.isOrdered:
+  if txs.isSome:
+    for item in txs.get:
+      discard pst.vmExecGrabItem(item)
+      if pst.packedTxs.len == 0 or pst.packedTxs[^1] != item:
+        return err("transaction could not be included: " & $item.id)
+  elif xp.isOrdered:
     for item in xp.byOrder:
       let rc = pst.vmExecGrabItem(item)
       if rc == StopCollecting:

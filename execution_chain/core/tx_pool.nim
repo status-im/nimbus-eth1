@@ -184,7 +184,8 @@ proc assembleBlock*(
     xp: TxPoolRef,
     parentHash: Hash32,
     someBaseFee: bool = false,
-    gasLimit: Opt[GasInt] = Opt.none(GasInt)
+    gasLimit: Opt[GasInt] = Opt.none(GasInt),
+    txs = Opt.none(seq[TxItemRef])
 ): Result[AssembledBlock, string] =
   # Packing mutates the ledger (tx nonces/balances are persisted) and the
   # per-block accumulators (blobGasUsed, gas counters, receipts), and
@@ -211,7 +212,7 @@ proc assembleBlock*(
 
   # Run EVM with most profitable transactions
   var
-    pst = xp.packerVmExec().valueOr:
+    pst = xp.packerVmExec(txs).valueOr:
       return err(error)
     blk = EthBlock(
       header: pst.assembleHeader(xp)
