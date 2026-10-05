@@ -409,7 +409,8 @@ proc processTxTask(
   e[].blockStateGasUsed = vmState.blockStateGasUsed
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
-  e[].logs = packLogs(vmState.txLogs)
+  if vmState.txLogs.len > 0:
+    e[].logs = packLogs(vmState.txLogs)
 
   true
 
@@ -496,7 +497,10 @@ proc processTransactionsParallel*(
           $vmState.blockExecutionGasUsed & ", stateGas=" & $vmState.blockStateGasUsed
       )
 
-    vmState.txLogs = unpackLogs(entries[i].logs.data(asOpenArray = true))
+    if entries[i].logs.len > 0:
+      vmState.txLogs = unpackLogs(entries[i].logs.data(asOpenArray = true))
+    else:
+      vmState.txLogs.setLen(0)
     if collectLogs:
       vmState.blockLogs.add vmState.txLogs
 
