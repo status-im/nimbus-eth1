@@ -67,6 +67,7 @@ proc processTransactions*(
     collectLogs = false
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
+  vmState.receiptBlooms.setLen(vmState.receipts.len)
   vmState.cumulativeGasUsed = 0
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
@@ -94,6 +95,7 @@ proc processTransactions*(
 
     if not skipReceipts:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
+      vmState.receiptBlooms[txIndex] = calcLogsBloom(vmState.receipts[txIndex].logs)
 
   ok()
 
@@ -303,14 +305,14 @@ proc procBlkEpilogue(
           err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
 
     if not skipReceipts:
-      let bloom = createBloom(vmState.receipts)
+      let bloom = createBloom(vmState.receiptBlooms)
 
       if header.logsBloom != bloom:
         debug "wrong logsBloom in block",
           blockNumber = header.number, actual = bloom, expected = header.logsBloom
         return err("bloom mismatch")
 
-      let receiptsRoot = calcReceiptsRoot(vmState.receipts)
+      let receiptsRoot = calcReceiptsRoot(vmState.receipts, vmState.receiptBlooms)
       if header.receiptsRoot != receiptsRoot:
         # TODO replace logging with better error
         debug "wrong receiptRoot in block",

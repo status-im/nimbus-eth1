@@ -67,6 +67,7 @@ type
     blockStateGasUsed: GasInt
     blobGasUsed: uint64
     status: bool
+    bloom: Bloom
     logs: SharedBytes
     error: SharedString
     preempted: bool
@@ -409,6 +410,7 @@ proc processTxTask(
   e[].blockStateGasUsed = vmState.blockStateGasUsed
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
+  e[].bloom = calcLogsBloom(vmState.txLogs)
   e[].logs = packLogs(vmState.txLogs)
 
   true
@@ -503,6 +505,7 @@ proc processTransactionsParallel*(
     if not skipReceipts:
       vmState.receipts[i] =
         vmState.makeReceipt(transactions[i].txType)
+      vmState.receiptBlooms[i] = entries[i].bloom
 
   let maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.hardFork)
   if vmState.blobGasUsed > maxBlobGasPerBlock:
