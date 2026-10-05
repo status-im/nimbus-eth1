@@ -825,7 +825,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, error)
       w3Qty(maxPriorityFee.uint64)
 
-    proc eth_getStorageValues(request: StorageValuesRequest, blockTag: Opt[BlockTag]): StorageValuesResponse {.raises: [ValueError].} =
+    proc eth_getStorageValues(request: StorageValuesRequest, blockTag: Opt[BlockTag]): StorageValuesResponse {.raises: [RpcResponseError, ValueError].} =
+      if request.list.len == 0:
+        raise invalidParams("empty request")
       let
         txFrame = api.frameFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)

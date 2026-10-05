@@ -480,6 +480,20 @@ proc rpcMain*() =
       let res = await client.eth_getStorageAt(contractAccWithStorage, 1.u256, blockId(1'u64))
       check FixedBytes[32](2345.u256.toBytesBE) == res
 
+    test "eth_getStorageValues":
+      let r = await client.call("eth_getStorageValues",
+        %[%*{contractAccWithStorage.to0xHex: [0.u256.to(Bytes32).to0xHex, 1.u256.to(Bytes32).to0xHex]}, %"latest"], EthJson)
+      let res = EthJson.decode(r.string, StorageValuesResponse)
+      check res.list.len == 1
+      check res.list[0].data == @[Bytes32(1234.u256.toBytesBE), Bytes32(2345.u256.toBytesBE)]
+
+    test "eth_getStorageValues empty request is invalid params":
+      try:
+        discard await client.call("eth_getStorageValues", %[%*{}, %"latest"], EthJson)
+        check false
+      except RpcResponseError as exc:
+        check exc.code == -32602
+
     test "eth_getTransactionCount":
       let res = await client.eth_getTransactionCount(signer, blockId(1'u64))
       check res == w3Qty(3'u64)
