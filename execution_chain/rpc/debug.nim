@@ -63,7 +63,7 @@ ExecutionWitnessWithKeys.useDefaultSerializationIn EthJson
 #     if opts.disableState.isTrue  : result.incl TracerFlags.DisableState
 #     if opts.disableStateDiff.isTrue: result.incl TracerFlags.DisableStateDiff
 
-proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
+proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer, totalDifficulty = false) =
   let
     # chainDB = com.db
     chain = txPool.chain
@@ -179,7 +179,10 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
         badBlocks.add BadBlock(
           `block`: populateBlockObject(
-            blkHash, blk, chain.getTotalDifficulty(blkHash, blk.header), fullTx = true),
+            blkHash, blk,
+            if totalDifficulty: chain.getTotalDifficulty(blkHash, blk.header)
+            else: Opt.none(UInt256),
+            fullTx = true),
           generatedBlockAccessList: bal.map(proc (bal: auto): auto = bal[]),
           hash: blkHash,
           rlp: rlp.encode(blk))
