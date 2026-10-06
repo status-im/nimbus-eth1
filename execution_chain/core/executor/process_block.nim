@@ -90,7 +90,7 @@ proc processTransactions*(
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
 
     if collectLogs:
-      vmState.blockLogs.add vmState.txLogs
+      vmState.blockLogs.addDepositLogs(vmState.txLogs, vmState.com.depositContractAddress)
 
     if not skipReceipts:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)

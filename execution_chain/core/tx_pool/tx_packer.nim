@@ -267,7 +267,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   if vmState.receipts.len <= inx:
     vmState.receipts.setLen(inx + receiptsExtensionSize)
 
-  vmState.blockLogs.add vmState.txLogs
+  vmState.blockLogs.addDepositLogs(vmState.txLogs, vmState.com.depositContractAddress)
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
 
   pst.packedTxs.add item

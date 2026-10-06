@@ -71,6 +71,11 @@ func depositLogToRequest(data: openArray[byte]): DepositRequest =
 # Public functions
 # -----------------------------------------------------------------------------
 
+func addDepositLogs*(blockLogs: var seq[Log], logs: openArray[Log], depositContractAddress: Address) =
+  for log in logs:
+    if log.address == depositContractAddress:
+      blockLogs.add log
+
 func parseDepositLogs*(logs: openArray[Log], depositContractAddress: Address): Result[seq[byte], string] =
   var res = newSeqOfCap[byte](logs.len*depositRequestSize)
   for i, log in logs:

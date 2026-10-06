@@ -22,6 +22,7 @@ import
   ../../evm/interpreter/gas_costs,
   ../../block_access_list/[bal_builder, bal_overlay, bal_tracker, bal_utils],
   ../../concurrency/[shared_types, utils],
+  ../eip6110,
   ../eip7691,
   ./process_transaction,
   ./executor_helpers,
@@ -502,7 +503,7 @@ proc processTransactionsParallel*(
     else:
       vmState.txLogs.setLen(0)
     if collectLogs:
-      vmState.blockLogs.add vmState.txLogs
+      vmState.blockLogs.addDepositLogs(vmState.txLogs, vmState.com.depositContractAddress)
 
     if not skipReceipts:
       vmState.receipts[i] =

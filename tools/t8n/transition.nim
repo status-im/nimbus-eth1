@@ -301,7 +301,7 @@ proc exec(ctx: TransContext,
       continue
 
     if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
-      vmState.blockLogs.add vmState.txLogs
+      vmState.blockLogs.addDepositLogs(vmState.txLogs, vmState.com.depositContractAddress)
 
     let rec = vmState.makeReceipt(tx.txType)
     vmState.receipts.add rec
