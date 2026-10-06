@@ -470,37 +470,6 @@ suite "Block access list tracker":
       acc.hasStorageRead(slot2)
       acc.nonceAt(1).isNone()
 
-  test "Rollback with rollbackReads discards a nested frame entirely":
-    tracker.setBlockAccessIndex(1)
-    tracker.beginCallFrame()
-    tracker.trackAddressAccess(address1)
-    tracker.trackStorageRead(address1, slot1)
-    tracker.beginCallFrame()
-    tracker.trackStorageWrite(address2, slot1, 9.u256)
-    tracker.trackStorageRead(address2, slot2)
-    tracker.trackStorageRead(address1, slot2)
-    tracker.trackAddressAccess(address3)
-    tracker.trackBalanceChange(address1, 1.u256)
-    tracker.rollbackCallFrame(rollbackReads = true)
-    check:
-      tracker.isTouched(address1)
-      tracker.hasStorageRead(address1, slot1)
-      not tracker.hasStorageRead(address1, slot2)
-      not tracker.isTouched(address2)
-      not tracker.isTouched(address3)
-      not tracker.hasStorageRead(address2, slot2)
-      tracker.storageChange(address2, slot1).isNone()
-      tracker.balanceChange(address1).isNone()
-    tracker.commitCallFrame()
-
-    let bal = tracker.buildBal()
-    check:
-      bal.hasAccount(address1)
-      not bal.hasAccount(address2)
-      not bal.hasAccount(address3)
-      bal.findAcc(address1).get().hasStorageRead(slot1)
-      not bal.findAcc(address1).get().hasStorageRead(slot2)
-
   test "Rollback of the transaction frame with rollbackReads leaves nothing":
     tracker.setBlockAccessIndex(2)
     tracker.beginCallFrame()

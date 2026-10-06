@@ -15,12 +15,14 @@
 # All of a transaction's accesses live in two flat entry lists, one per account
 # and one per storage slot, each with an open addressing index over it. Call
 # frames do not get structures of their own: a frame records how long the
-# journal and the entry lists were when it began, every change to an existing
-# entry appends an undo record to the journal, and a revert replays the journal
-# back to the frame's mark, turning the frame's storage writes into reads as the
-# EIP requires. Committing a frame therefore costs nothing, reverting costs the
-# frame's own changes, and the lists are reused from one transaction to the
-# next without allocating.
+# journal was when it began, every change appends an undo record to the
+# journal, and a revert replays the journal back to the frame's mark, turning
+# the frame's storage writes into reads as the EIP requires. Reads and touched
+# accounts survive a revert and are therefore not journaled; the one rollback
+# that discards them too, a transaction the block cannot take, happens at the
+# transaction frame and simply clears everything. Committing a frame therefore
+# costs nothing, reverting costs the frame's own changes, and the lists are
+# reused from one transaction to the next without allocating.
 
 {.push raises: [], gcsafe.}
 
@@ -66,8 +68,6 @@ type
     post: UInt256 ## latest value written
 
   JournalKind = enum
-    jTouched ## an account's touched flag was set
-    jStorageRead ## a storage entry's read flag was set
     jStorageWrite ## a storage entry's post value and written flag changed
     jBalance
     jNonce
@@ -83,8 +83,6 @@ type
 
   FrameMark = object
     journalLen: int32
-    accountsLen: int32
-    storageLen: int32
     selfDestructsLen: int32
 
   # Tracks state changes during transaction execution for block access list
@@ -331,8 +329,6 @@ proc beginCallFrame*(tracker: BlockAccessListTrackerRef) =
   tracker.frames.add(
     FrameMark(
       journalLen: int32(tracker.journal.len),
-      accountsLen: int32(tracker.accounts.len),
-      storageLen: int32(tracker.storage.len),
       selfDestructsLen: int32(tracker.selfDestructs.len),
     )
   )
@@ -436,10 +432,8 @@ template getPreStorage*(
 # Tracking
 # ------------------------------------------------------------------------------
 
-proc touch(tracker: BlockAccessListTrackerRef, idx: int32) =
-  if not tracker.accounts[idx].touched:
-    tracker.accounts[idx].touched = true
-    tracker.journal.add(JournalEntry(kind: jTouched, idx: idx))
+template touch(tracker: BlockAccessListTrackerRef, idx: int32) =
+  tracker.accounts[idx].touched = true
 
 proc trackAddressAccess*(tracker: BlockAccessListTrackerRef, address: Address) =
   assert tracker.hasPendingCallFrame()
@@ -451,9 +445,7 @@ proc trackStorageRead*(
   assert tracker.hasPendingCallFrame()
   let idx = tracker.storageEntry((address, slot))
   tracker.touch(tracker.storage[idx].account)
-  if not tracker.storage[idx].read:
-    tracker.storage[idx].read = true
-    tracker.journal.add(JournalEntry(kind: jStorageRead, idx: idx))
+  tracker.storage[idx].read = true
 
 # The pre-transaction value of a slot, balance or nonce is captured on its
 # first write as whatever the ledger holds at that moment. A caller that has
@@ -657,9 +649,7 @@ proc handleInTransactionSelfDestruct*(
         )
       )
       e.written = false
-      if not e.read:
-        e.read = true
-        tracker.journal.add(JournalEntry(kind: jStorageRead, idx: int32(idx)))
+      e.read = true
 
   let idx = tracker.accountEntry(address)
   tracker.touch(idx)
@@ -759,25 +749,18 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
     tracker.recordTransaction()
     tracker.clearTransaction()
 
-proc undoJournal(tracker: BlockAccessListTrackerRef, mark: FrameMark, discardReads: bool) =
+proc undoJournal(tracker: BlockAccessListTrackerRef, mark: FrameMark) =
   ## Replay the journal back to `mark`. A reverted storage write becomes a
-  ## read unless the frame's reads are being discarded too.
+  ## read.
   var j = tracker.journal.len
   while j > int(mark.journalLen):
     dec j
     let entry = tracker.journal[j]
     case entry.kind
-    of jTouched:
-      if discardReads:
-        tracker.accounts[entry.idx].touched = false
-    of jStorageRead:
-      if discardReads:
-        tracker.storage[entry.idx].read = false
     of jStorageWrite:
       tracker.storage[entry.idx].post = entry.prev
       tracker.storage[entry.idx].written = entry.prevWritten
-      if not discardReads:
-        tracker.storage[entry.idx].read = true
+      tracker.storage[entry.idx].read = true
     of jBalance:
       tracker.accounts[entry.idx].postBalance = entry.prev
       tracker.accounts[entry.idx].balanceWritten = entry.prevWritten
@@ -791,16 +774,20 @@ proc undoJournal(tracker: BlockAccessListTrackerRef, mark: FrameMark, discardRea
 
 proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef, rollbackReads = false) =
   ## Revert the current call frame. As specified in EIP-7928 the frame's
-  ## storage writes become reads and its touched addresses remain, unless
-  ## `rollbackReads` is set, in which case the frame leaves no trace at all.
+  ## storage writes become reads and its touched addresses remain. With
+  ## `rollbackReads`, which is only meaningful for the transaction frame of a
+  ## transaction that is dropped altogether, the transaction leaves no trace.
   doAssert tracker.hasPendingCallFrame()
 
-  let mark = tracker.frames[^1]
-  tracker.undoJournal(mark, discardReads = rollbackReads)
-  tracker.selfDestructs.setLen(int(mark.selfDestructsLen))
   if rollbackReads:
-    tracker.truncateStorage(int(mark.storageLen))
-    tracker.truncateAccounts(int(mark.accountsLen))
+    doAssert not tracker.hasParentCallFrame(),
+      "reads can only be rolled back for the transaction frame"
+    tracker.clearTransaction()
+    return
+
+  let mark = tracker.frames[^1]
+  tracker.undoJournal(mark)
+  tracker.selfDestructs.setLen(int(mark.selfDestructsLen))
   tracker.frames.setLen(tracker.frames.len - 1)
 
 # ------------------------------------------------------------------------------
