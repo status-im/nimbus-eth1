@@ -74,8 +74,11 @@ proc opSyncOnce*(
       discard
 
   let
-    l1LatestHeader = ?(await l1Engine.getHeader(blockId("latest")))
-    l1FinalizedHeader = ?(await l1Engine.getHeader(blockId("finalized")))
+    l1Anchors = ?l1Engine.snapshotAnchors()
+    l1LatestHeader =
+      ?(await l1Engine.getVerifiedHeader(blockId("latest"), Opt.some(l1Anchors)))
+    l1FinalizedHeader =
+      ?(await l1Engine.getVerifiedHeader(blockId("finalized"), Opt.some(l1Anchors)))
 
   # the L2 chainId identifies the OP chain whose (trusted) SystemConfig we read from
   let systemConfig = getSystemConfig(opEngine.chainId).valueOr:
@@ -91,11 +94,9 @@ proc opSyncOnce*(
     (safeHeader, safeHash) =
       ?(await opEngine.verifyOutputRoot(proposal.outputRoot, proposal.l2BlockNumber))
 
-  let addRes = opEngine.headerStore.add(safeHeader, safeHash)
-  if addRes.isErr():
-    error "op-stack safe header not added to store", err = addRes.error()
-  else:
-    info "op-stack safe header added", number = safeHeader.number, hash = safeHash
+  opEngine.headerStore.put(safeHeader, safeHash, Safe)
+  opEngine.headerStore.putHash(safeHash, Safe)
+  info "op-stack safe header added", number = safeHeader.number, hash = safeHash
 
   # get finalized block
   let
@@ -107,50 +108,10 @@ proc opSyncOnce*(
     (finalizedHeader, finalizedHash) =
       ?(await opEngine.verifyOutputRoot(anchor.outputRoot, anchor.l2BlockNumber))
 
-  let finalizedAddRes =
-    opEngine.headerStore.updateFinalized(finalizedHeader, finalizedHash)
-  if finalizedAddRes.isErr():
-    debug "op-stack finalized header update skipped", err = finalizedAddRes.error()
-  else:
-    info "op-stack finalized anchor added to header store",
-      number = finalizedHeader.number, hash = finalizedHash
+  opEngine.headerStore.put(finalizedHeader, finalizedHash, Finalized)
+  opEngine.headerStore.putHash(finalizedHash, Finalized)
+  info "op-stack finalized anchor added to header store",
+    number = finalizedHeader.number, hash = finalizedHash
 
   ok()
 
-proc resolveUnsafeTip*(
-    opEngine: RpcVerificationEngine
-): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
-  let safe = opEngine.headerStore.latest().valueOr:
-    return err((UnavailableDataError, "no safe anchor yet", UNTAGGED))
-  let safeHash = opEngine.headerStore.latestHash().valueOr:
-    return err((UnavailableDataError, "no safe anchor hash yet", UNTAGGED))
-
-  # NOTE: do not use getHeader here because that will launch a full scale verification of the
-  # latest header. Whereas here we are exactly trying to achieve that for op-stack specific
-  # dynamics
-  let
-    (backend, backendIdx) = ?(opEngine.executionBackendFor(GetBlockByNumber))
-    latestTag = BlockTag(kind: bidAlias, alias: "latest")
-    blk =
-      ?((await backend.eth_getBlockByNumber(latestTag, false)).tagBackend(backendIdx))
-    header = convHeader(blk)
-
-  # loosely check integrity
-  # TODO: can we obtain the sequencer signature somehow?
-  if header.computeBlockHash != blk.hash:
-    let e = (VerificationError, "op-stack header hash mismatch", backendIdx)
-    opEngine.applyPenalty(e)
-    return err(e)
-
-  # if is before safe then latest should be safe
-  if header.number <= safe.number:
-    return ok(safe)
-
-  # verify history anchored at safe
-  ?(
-    (await opEngine.walkBlocks(header.number, safe.number, header.parentHash, safeHash)).tagBackend(
-      backendIdx
-    )
-  )
-
-  ok(header)

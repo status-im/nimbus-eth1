@@ -28,7 +28,7 @@ suite "test fees verification":
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
 
     ts.loadBlock(blk)
-    check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
 
     let
       gasPrice = waitFor frontend.eth_gasPrice()
@@ -52,7 +52,7 @@ suite "test fees verification":
     let blk2 = getBlockFromJson("nimbus_verified_proxy/tests/data/Prague.json")
 
     ts.loadBlock(blk2)
-    check engine.headerStore.add(convHeader(blk2), blk2.hash).isOk()
+    engine.setAnchor(convHeader(blk2), blk2.hash, Optimistic)
 
     let blobFeePrague = waitFor frontend.eth_blobBaseFee()
 
