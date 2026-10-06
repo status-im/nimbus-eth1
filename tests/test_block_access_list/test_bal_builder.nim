@@ -215,6 +215,29 @@ suite "Block access list builder":
       bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
 
 
+  test "An index referencing many accounts keeps every account once":
+    builder.ensureIndexCount(1)
+    var addresses: seq[Address]
+    for i in 0 ..< 40:
+      var b: array[20, byte]
+      b[0] = byte(i + 1)
+      b[19] = byte(200 - i)
+      addresses.add(b.to(Address))
+    for round in 0 ..< 3:
+      for i, a in addresses:
+        builder.addBalanceChange(0, a, u256(i + 1))
+        builder.addStorageRead(0, a, slot1)
+        if i mod 5 == 0:
+          builder.addTouchedAccount(0, a)
+    let bal = builder.buildBlockAccessList()[]
+    check bal.len() == 40
+    for i in 0 ..< 40:
+      check:
+        bal[i].balanceChanges == @[(0.BlockAccessIndex, u256(i + 1))]
+        bal[i].storageReads == @[slot1]
+      if i > 0:
+        check cmpMem(unsafeAddr bal[i - 1].address, unsafeAddr bal[i].address, 20) < 0
+
 # The builder is lock-free because each block access index has a single writer.
 # These helpers mirror that model: one task per distinct block access index.
 

@@ -38,34 +38,100 @@ import
 export block_access_lists
 
 type
-  StorageWrite = tuple[address: Address, slot: UInt256, value: UInt256]
-  StorageReadEntry = tuple[address: Address, slot: UInt256]
-  BalanceWrite = tuple[address: Address, balance: UInt256]
-  NonceWrite = tuple[address: Address, nonce: AccountNonce]
-  CodeWrite = tuple[address: Address, code: SharedBytes]
+  # Position of an account in its index's `accounts` list. Entries refer to
+  # accounts this way, which keeps them small and lets the writer thread do
+  # the address matching, so that the single-threaded build only has to map
+  # each index's distinct addresses rather than every entry.
+  LocalId = uint32
+
+  StorageWrite = tuple[slot: UInt256, value: UInt256, account: LocalId]
+  StorageReadEntry = tuple[slot: UInt256, account: LocalId]
+  BalanceWrite = tuple[balance: UInt256, account: LocalId]
+  NonceWrite = tuple[nonce: AccountNonce, account: LocalId]
+  CodeWrite = tuple[code: SharedBytes, account: LocalId]
 
 const
-  inlineTouchedAccounts = 4
+  inlineAccounts = 4
   inlineStorageChanges = 2
   inlineStorageReads = 1
   inlineBalanceChanges = 4
   inlineNonceChanges = 1
   inlineCodeChanges = 1
+  linearAccountLimit = 8
+    ## Up to this many accounts per index are matched by a linear scan; beyond
+    ## it an open addressing index over the list is maintained.
 
 type
   BalIndexData = object
-    touchedAccounts: SmallSeq[inlineTouchedAccounts, Address]
+    accounts: SmallSeq[inlineAccounts, Address]
+      ## Every address referenced at this index in first-seen order.
+    accountIndex: SharedSeq[uint32]
+      ## Open addressing index into `accounts` holding position + 1 (0 is
+      ## empty), only built once the list outgrows the linear scan.
     storageChanges: SmallSeq[inlineStorageChanges, StorageWrite]
     storageReads: SmallSeq[inlineStorageReads, StorageReadEntry]
     balanceChanges: SmallSeq[inlineBalanceChanges, BalanceWrite]
     nonceChanges: SmallSeq[inlineNonceChanges, NonceWrite]
     codeChanges: SmallSeq[inlineCodeChanges, CodeWrite]
 
+func addrHash(address: Address): uint64 =
+  # Addresses are hash outputs so a cheap fold of their bytes spreads well, and
+  # every byte takes part so that vanity addresses sharing a prefix still spread.
+  var
+    w0, w1: uint64
+    w2: uint32
+  copyMem(addr w0, unsafeAddr address.data[0], sizeof(w0))
+  copyMem(addr w1, unsafeAddr address.data[8], sizeof(w1))
+  copyMem(addr w2, unsafeAddr address.data[16], sizeof(w2))
+  let h =
+    w0 * 0x9E3779B97F4A7C15'u64 + w1 * 0xC2B2AE3D27D4EB4F'u64 +
+    uint64(w2) * 0x165667B19E3779F9'u64
+  h xor (h shr 29)
+
+proc rebuildAccountIndex(indexData: var BalIndexData, size: int) =
+  indexData.accountIndex.setLen(0)
+  indexData.accountIndex.setLen(size, zeroed = true, exact = true)
+  let mask = uint64(size - 1)
+  for i in 0 ..< indexData.accounts.len:
+    var b = int(addrHash(indexData.accounts[i]) and mask)
+    while indexData.accountIndex[b] != 0:
+      b = int((uint64(b) + 1) and mask)
+    indexData.accountIndex[b] = uint32(i + 1)
+
+proc localId(indexData: var BalIndexData, address: Address): LocalId =
+  ## Position of `address` in the index's account list, appending it if new.
+  let n = indexData.accounts.len
+  if n <= linearAccountLimit:
+    for i in 0 ..< n:
+      if indexData.accounts[i] == address:
+        return LocalId(i)
+    indexData.accounts.add(address)
+    if n + 1 > linearAccountLimit:
+      indexData.rebuildAccountIndex(4 * linearAccountLimit)
+    return LocalId(n)
+
+  let mask = uint64(indexData.accountIndex.len - 1)
+  var b = int(addrHash(address) and mask)
+  while true:
+    let e = indexData.accountIndex[b]
+    if e == 0:
+      indexData.accounts.add(address)
+      if (n + 1) * 2 > indexData.accountIndex.len:
+        indexData.rebuildAccountIndex(indexData.accountIndex.len * 2)
+      else:
+        indexData.accountIndex[b] = uint32(n + 1)
+      return LocalId(n)
+    if indexData.accounts[int(e) - 1] == address:
+      return LocalId(e - 1)
+    b = int((uint64(b) + 1) and mask)
+
+type
   BlockAccessListBuilder* = object
     perIndex: SharedSeq[BalIndexData]
 
 proc dispose(indexData: var BalIndexData) =
-  indexData.touchedAccounts.dispose()
+  indexData.accounts.dispose()
+  indexData.accountIndex.dispose()
   indexData.storageChanges.dispose()
   indexData.storageReads.dispose()
   indexData.balanceChanges.dispose()
@@ -112,7 +178,7 @@ proc addTouchedAccount*(
     builder: var BlockAccessListBuilder, blockAccessIndex: int, address: Address
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].touchedAccounts.add(address)
+  discard builder.perIndex[blockAccessIndex].localId(address)
 
 proc addStorageWrite*(
     builder: var BlockAccessListBuilder,
@@ -122,7 +188,9 @@ proc addStorageWrite*(
     newValue: UInt256,
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].storageChanges.add((address, slot, newValue))
+  let d = addr builder.perIndex[blockAccessIndex]
+  let account = d[].localId(address)
+  d[].storageChanges.add((slot, newValue, account))
 
 proc addStorageRead*(
     builder: var BlockAccessListBuilder,
@@ -131,7 +199,9 @@ proc addStorageRead*(
     slot: UInt256,
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].storageReads.add((address, slot))
+  let d = addr builder.perIndex[blockAccessIndex]
+  let account = d[].localId(address)
+  d[].storageReads.add((slot, account))
 
 proc addBalanceChange*(
     builder: var BlockAccessListBuilder,
@@ -140,7 +210,9 @@ proc addBalanceChange*(
     postBalance: UInt256,
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].balanceChanges.add((address, postBalance))
+  let d = addr builder.perIndex[blockAccessIndex]
+  let account = d[].localId(address)
+  d[].balanceChanges.add((postBalance, account))
 
 proc addNonceChange*(
     builder: var BlockAccessListBuilder,
@@ -149,7 +221,9 @@ proc addNonceChange*(
     newNonce: AccountNonce,
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].nonceChanges.add((address, newNonce))
+  let d = addr builder.perIndex[blockAccessIndex]
+  let account = d[].localId(address)
+  d[].nonceChanges.add((newNonce, account))
 
 proc addCodeChange*(
     builder: var BlockAccessListBuilder,
@@ -158,9 +232,9 @@ proc addCodeChange*(
     newCode: openArray[byte],
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].codeChanges.add(
-    (address, SharedBytes.init(newCode))
-  )
+  let d = addr builder.perIndex[blockAccessIndex]
+  let account = d[].localId(address)
+  d[].codeChanges.add((SharedBytes.init(newCode), account))
 
 type
   # Flattened per-index writes, tagged with a dense account id instead of the
@@ -176,26 +250,12 @@ type
   FlatCodeChange = tuple[acct: int32, index: BlockAccessIndex, value: ptr SharedBytes]
 
   # Open addressing table from address to dense id, with the addresses kept in
-  # id order. Addresses are hash outputs so a cheap fold of their bytes spreads
-  # well, and every byte takes part so that vanity addresses sharing a prefix
-  # still spread.
+  # id order.
   AccountIds = object
     buckets: seq[int32] ## power-of-two size; 0 is empty, otherwise id + 1
     addresses: seq[Address] ## address of each id, in first-seen order
 
   AccountOrder = tuple[address: Address, id: int32]
-
-func addrHash(address: Address): uint64 =
-  var
-    w0, w1: uint64
-    w2: uint32
-  copyMem(addr w0, unsafeAddr address.data[0], sizeof(w0))
-  copyMem(addr w1, unsafeAddr address.data[8], sizeof(w1))
-  copyMem(addr w2, unsafeAddr address.data[16], sizeof(w2))
-  let h =
-    w0 * 0x9E3779B97F4A7C15'u64 + w1 * 0xC2B2AE3D27D4EB4F'u64 +
-    uint64(w2) * 0x165667B19E3779F9'u64
-  h xor (h shr 29)
 
 template dataPtr[T](s: seq[T]): ptr UncheckedArray[T] =
   ## Unchecked view of a seq's elements for the hot loops below, which index
@@ -421,7 +481,7 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
   var totT, totS, totR, totB, totN, totC = 0
   for idx in 0 ..< builder.perIndex.len:
     let d = addr builder.perIndex[idx]
-    totT += d[].touchedAccounts.len
+    totT += d[].accounts.len
     totS += d[].storageChanges.len
     totR += d[].storageReads.len
     totB += d[].balanceChanges.len
@@ -429,9 +489,9 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
     totC += d[].codeChanges.len
 
   var
-    # The touched account count bounds the distinct addresses for a tracker
-    # driven builder and is a fair size estimate otherwise.
+    # The per-index account lists bound the distinct addresses.
     accounts = AccountIds.init(totT)
+    globalIds: seq[int32]
     sFlat = newSeq[FlatStorageChange](totS)
     rFlat = newSeq[FlatStorageRead](totR)
     bFlat = newSeq[FlatBalanceChange](totB)
@@ -449,22 +509,24 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
     let
       balIndex = BlockAccessIndex(idx)
       d = addr builder.perIndex[idx]
-    for a in d[].touchedAccounts.items():
-      discard accounts.idOf(a)
+    globalIds.setLen(d[].accounts.len)
+    let gid = globalIds.dataPtr()
+    for j in 0 ..< d[].accounts.len:
+      gid[j] = accounts.idOf(d[].accounts[j])
     for w in d[].storageChanges.items():
-      sp[si] = (accounts.idOf(w.address), balIndex, w.slot, w.value)
+      sp[si] = (gid[w.account], balIndex, w.slot, w.value)
       inc si
     for r in d[].storageReads.items():
-      rp[ri] = (accounts.idOf(r.address), r.slot)
+      rp[ri] = (gid[r.account], r.slot)
       inc ri
     for b in d[].balanceChanges.items():
-      bp[bi] = (accounts.idOf(b.address), balIndex, b.balance)
+      bp[bi] = (gid[b.account], balIndex, b.balance)
       inc bi
     for nc in d[].nonceChanges.items():
-      np[ni] = (accounts.idOf(nc.address), balIndex, nc.nonce)
+      np[ni] = (gid[nc.account], balIndex, nc.nonce)
       inc ni
     for cc in d[].codeChanges.items():
-      cp[ci] = (accounts.idOf(cc.address), balIndex, unsafeAddr cc.code)
+      cp[ci] = (gid[cc.account], balIndex, unsafeAddr cc.code)
       inc ci
 
   let numAccounts = accounts.addresses.len
