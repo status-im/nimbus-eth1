@@ -305,7 +305,8 @@ proc procBlkEpilogue(
           err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
 
     if not skipReceipts:
-      let bloom = createBloom(vmState.receiptBlooms)
+      var bloom {.noinit.}: Bloom
+      createBloom(vmState.receiptBlooms, bloom)
 
       if header.logsBloom != bloom:
         debug "wrong logsBloom in block",

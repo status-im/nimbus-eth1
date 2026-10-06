@@ -38,13 +38,20 @@ func inclBloomBits(bloom: var Bloom, h: Hash32) {.inline.} =
     let bit = ((h.data[i].int shl 8) or h.data[i + 1].int) and 2047
     bloom.data[255 - (bit shr 3)] = bloom.data[255 - (bit shr 3)] or byte(1 shl (bit and 7))
 
+func accumLogsBloom*(bloom: var Bloom, logs: openArray[Log]) =
+  for log in logs:
+    bloom.inclBloomBits keccak256(log.address.data)
+    for topic in log.topics:
+      bloom.inclBloomBits keccak256(topic.data)
+
 func calcLogsBloom*(logs: openArray[Log]): Bloom =
   if logs.len == 0:
     return
-  for log in logs:
-    result.inclBloomBits keccak256(log.address.data)
-    for topic in log.topics:
-      result.inclBloomBits keccak256(topic.data)
+  result.accumLogsBloom(logs)
+
+func calcLogsBloom*(logs: openArray[Log], bloom: var Bloom) =
+  bloom.reset()
+  bloom.accumLogsBloom(logs)
 
 template appendNetworkReceipt(w: var RlpWriter, r, bloomExpr: untyped) =
   ## Network `Receipt` wire format (bloom included) borrowing the stored

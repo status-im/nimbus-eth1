@@ -57,6 +57,7 @@ type
     blockCtx: BlockContext
     balPtr: ptr BlockAccessList
     sharedBuilder: ptr BlockAccessListBuilder
+    blooms: ptr UncheckedArray[Bloom]
     cancelled: Atomic[bool]
 
   BalParallelTxEntry = object
@@ -67,7 +68,6 @@ type
     blockStateGasUsed: GasInt
     blobGasUsed: uint64
     status: bool
-    bloom: Bloom
     logs: SharedBytes
     error: SharedString
     preempted: bool
@@ -412,8 +412,9 @@ proc processTxTask(
   e[].blockStateGasUsed = vmState.blockStateGasUsed
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
+  if not ctx[].blooms.isNil():
+    calcLogsBloom(vmState.txLogs, ctx[].blooms[e[].txIndex])
   if vmState.txLogs.len > 0:
-    e[].bloom = calcLogsBloom(vmState.txLogs)
     e[].logs = packLogs(vmState.txLogs)
 
   true
@@ -441,6 +442,9 @@ proc processTransactionsParallel*(
   ctx.blockCtx = vmState.blockCtx
   ctx.balPtr = balRef[].addr
   ctx.sharedBuilder = if vmState.balTrackerEnabled: vmState.balTracker.builder else: nil
+  if not skipReceipts and n > 0:
+    doAssert vmState.receiptBlooms.len == n
+    ctx.blooms = cast[ptr UncheckedArray[Bloom]](vmState.receiptBlooms[0].addr)
 
   for i in 0 ..< n:
     entries[i].tx = transactions[i].addr
@@ -511,7 +515,6 @@ proc processTransactionsParallel*(
     if not skipReceipts:
       vmState.receipts[i] =
         vmState.makeReceipt(transactions[i].txType)
-      vmState.receiptBlooms[i] = entries[i].bloom
 
   let maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.hardFork)
   if vmState.blobGasUsed > maxBlobGasPerBlock:

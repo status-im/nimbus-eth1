@@ -319,7 +319,7 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   vmState.receiptBlooms.setLen(pst.packedTxs.len)
 
   pst.receiptsRoot = calcReceiptsRoot(vmState.receipts, vmState.receiptBlooms)
-  pst.logsBloom = createBloom(vmState.receiptBlooms)
+  createBloom(vmState.receiptBlooms, pst.logsBloom)
   pst.stateRoot = vmState.ledger.getStateRoot()
 
   # Commit block access list tracker changes for post‑execution system calls

@@ -17,15 +17,11 @@ import
   ../../common/common,
   ../../transaction/call_types
 
-type
-  ExecutorError* = object of CatchableError
-    ## Catch and relay exception error
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-func incl(acc: var Bloom, b: Bloom) =
+func incl(acc: var Bloom, b: Bloom) {.inline.} =
   for i in 0 ..< acc.data.len:
     acc.data[i] = acc.data[i] or b.data[i]
 
@@ -35,11 +31,13 @@ func incl(acc: var Bloom, b: Bloom) =
 
 func createBloom*(receipts: openArray[StoredReceipt]): Bloom =
   for rec in receipts:
-    result.incl calcLogsBloom(rec.logs)
+    result.accumLogsBloom(rec.logs)
 
-func createBloom*(blooms: openArray[Bloom]): Bloom =
+func createBloom*(blooms: openArray[Bloom], bloom: var Bloom) =
+  var acc: Bloom
   for b in blooms:
-    result.incl b
+    acc.incl b
+  bloom = acc
 
 proc makeReceipt*(
     vmState: BaseVMState; txType: TxType): StoredReceipt =
