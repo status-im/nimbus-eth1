@@ -26,6 +26,7 @@ import
   ../execution_chain/[common, rpc],
   ../execution_chain/rpc/[rpc_types, rpc_utils, common as rpc_common],
   ../execution_chain/beacon/web3_eth_conv,
+  ../execution_chain/core/gaslimit,
   ../execution_chain/networking/p2p,
   ../execution_chain/nimbus_desc,
    ./shared_data/eip8282data,
@@ -442,6 +443,11 @@ proc rpcMain*() =
         check progress.start == res.syncObject.startingBlock.uint64
         check progress.current == res.syncObject.currentBlock.uint64
         check progress.target == res.syncObject.highestBlock.uint64
+
+    test "eth_baseFee":
+      let res = await client.call("eth_baseFee", %[], EthJson)
+      check EthJson.decode(res.string, UInt256) ==
+        com.calcEip1599BaseFee(env.chain.latestHeader)
 
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()
