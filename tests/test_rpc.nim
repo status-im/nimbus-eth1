@@ -641,9 +641,8 @@ proc rpcMain*() =
       check uint64(head) > 0
       let res = await client.eth_call(ec, "latest")
       check UInt256.fromBytesBE(res) == u256(uint64(head))
-      # Genesis keeps a simulated next block.
       let genesis = await client.eth_call(ec, "earliest")
-      check UInt256.fromBytesBE(genesis) == 1.u256
+      check UInt256.fromBytesBE(genesis) == 0.u256
 
     test "eth_call base fee depends on the call fees":
       let
