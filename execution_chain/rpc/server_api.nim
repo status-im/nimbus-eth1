@@ -367,14 +367,14 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       txHash
 
-    proc eth_call(args: TransactionArgs, blockTag: BlockTag): seq[byte] {.raises: [ValueError].} =
+    proc eth_call(args: TransactionArgs, blockTag: Opt[BlockTag]): seq[byte] {.raises: [ValueError].} =
       ## Executes a new message call immediately without creating a transaction on the block chain.
       ##
       ## call: the transaction call object.
       ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
       ## Returns the return value of executed contract.
       let
-        header = api.headerFromTag(blockTag).valueOr:
+        header = api.headerFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, "Block not found")
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
@@ -408,17 +408,21 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       return populateReceipt(receipt, receipt.cumulativeGasUsed - prevGasUsed,
                             tx, txid, header, api.com)
 
-    proc eth_estimateGas(args: TransactionArgs): Quantity {.raises: [RpcResponseError, ValueError].} =
+    proc eth_estimateGas(
+        args: TransactionArgs, blockTag: Opt[BlockTag]
+    ): Quantity {.raises: [RpcResponseError, ValueError].} =
       ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
       ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
       ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
       ##
       ## args: the transaction call object.
-      ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+      ## blockTag: integer block number, block hash, or the string "latest", "earliest" or "pending", see the default block parameter.
       ## Returns the amount of gas used.
+      let header = api.headerFromTag(blockTag.get(defaultTag)).valueOr:
+        raise newException(ValueError, "Block not found")
+      if header.number < api.chain.baseNumber:
+        raise newException(ValueError, "Historical data not available")
       let
-        header = api.headerFromTag(blockId("latest")).valueOr:
-          raise newException(ValueError, "Block not found")
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
         # TODO: change 0 to configureable gas cap
@@ -702,11 +706,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         return Opt.none(seq[ReceiptObject])
 
     proc eth_createAccessList(
-      args: TransactionArgs, quantityTag: BlockTag
+      args: TransactionArgs, quantityTag: Opt[BlockTag]
     ): AccessListResult {.raises: [ValueError].} =
       ## Generates an access list for a transaction.
       try:
-        let header = api.headerFromTag(quantityTag).valueOr:
+        let header = api.headerFromTag(quantityTag.get(defaultTag)).valueOr:
           raise newException(ValueError, "Block not found")
         return createAccessList(header, api.com, api.chain, args)
       except CatchableError as exc:
