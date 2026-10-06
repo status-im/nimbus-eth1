@@ -10,13 +10,15 @@
 
 # Throughput benchmark for the BlockAccessListBuilder.
 #
-# The workload models a block as `numTx` transactions, each of which is a
-# distinct block access index that touches a handful of accounts (with storage
-# writes/reads, balance/nonce and the occasional code change). This mirrors how
+# Each scenario models a block as `numTx` transactions, each of which is a
+# distinct block access index that touches some accounts (with storage
+# writes/reads, balance/nonce and possibly code changes). This mirrors how
 # parallel block execution assigns each transaction/block-access-index to a
-# single worker thread.
+# single worker thread. The scenarios range from plain transfers to blocks that
+# hammer a single hot contract or create thousands of fresh accounts, so that
+# every part of the builder (fill, grouping, sorting, emitting) gets exercised.
 #
-# Two scenarios are timed:
+# For every scenario two things are timed:
 #   * single-threaded fill
 #   * multi-threaded fill where N worker threads each own a disjoint range of
 #     transaction indices and write into the *same* builder concurrently
@@ -41,40 +43,132 @@ import
 
 type
   Workload = object
+    name: string
+    numTx: int ## transactions == distinct block access indices in the block
+    numAccounts: int ## address space (accounts are shared across transactions)
     accountsPerTx: int ## accounts touched by each transaction
-    writesPerAccount: int ## storage writes per touched account (per transaction)
-    readsPerAccount: int ## storage reads per touched account (per transaction)
+    storageAccounts: int ## how many of the touched accounts get storage access
+    writesPerAccount: int ## storage writes per storage account (per transaction)
+    readsPerAccount: int ## storage reads per storage account (per transaction)
     nonceAccounts: int ## how many of the touched accounts get a nonce change
-    codeChange: bool ## whether the first touched account also gets a code change
+    codeLen: int ## bytes of code set on the first touched account, 0 for none
 
 const
-  benchNameWidth = 26
-  numTx = 2048 ## transactions == distinct block access indices in the block
-  numAccounts = 4000 ## address space (accounts are shared across transactions)
-  codeLen = 32 ## bytes of code per code change
+  benchNameWidth = 16
   repeats = 10
     ## Each measured scenario builds a fresh builder and fills/builds/disposes it
     ## `repeats` times; the reported figures are averages.
+  maxCodeLen = 4096
 
-  # A contract-heavy transaction: many touched accounts, each with several
-  # storage writes and reads, plus a code change.
-  heavyTx = Workload(
-    accountsPerTx: 8,
-    writesPerAccount: 4,
-    readsPerAccount: 2,
-    nonceAccounts: 8,
-    codeChange: true,
-  )
-  # A plain transfer: sender, recipient and coinbase are touched and have their
-  # balance changed, only the sender's nonce changes, and there is no storage
-  # access or code change.
-  lightTx = Workload(
-    accountsPerTx: 3,
-    writesPerAccount: 0,
-    readsPerAccount: 0,
-    nonceAccounts: 1,
-    codeChange: false,
-  )
+  scenarios = [
+    # A contract-heavy transaction: many touched accounts, each with several
+    # storage writes and reads, plus a code change.
+    Workload(
+      name: "heavy tx",
+      numTx: 2048,
+      numAccounts: 4000,
+      accountsPerTx: 8,
+      storageAccounts: 8,
+      writesPerAccount: 4,
+      readsPerAccount: 2,
+      nonceAccounts: 8,
+      codeLen: 32,
+    ),
+    # A plain transfer: sender, recipient and coinbase are touched and have
+    # their balance changed, only the sender's nonce changes, and there is no
+    # storage access or code change.
+    Workload(
+      name: "plain transfer",
+      numTx: 2048,
+      numAccounts: 4000,
+      accountsPerTx: 3,
+      storageAccounts: 0,
+      writesPerAccount: 0,
+      readsPerAccount: 0,
+      nonceAccounts: 1,
+      codeLen: 0,
+    ),
+    # An ERC-20 transfer: sender, token contract and coinbase, with the two
+    # balance slots written and the allowance/balance read on the contract.
+    Workload(
+      name: "erc20 transfer",
+      numTx: 2048,
+      numAccounts: 4000,
+      accountsPerTx: 3,
+      storageAccounts: 1,
+      writesPerAccount: 2,
+      readsPerAccount: 1,
+      nonceAccounts: 1,
+      codeLen: 0,
+    ),
+    # A read-heavy contract call touching several contracts that mostly read.
+    Workload(
+      name: "read heavy call",
+      numTx: 2048,
+      numAccounts: 4000,
+      accountsPerTx: 6,
+      storageAccounts: 4,
+      writesPerAccount: 1,
+      readsPerAccount: 12,
+      nonceAccounts: 1,
+      codeLen: 0,
+    ),
+    # Every transaction hits the same handful of contracts, so each account
+    # accumulates thousands of storage entries that must be grouped and sorted.
+    Workload(
+      name: "hot contract",
+      numTx: 2048,
+      numAccounts: 16,
+      accountsPerTx: 4,
+      storageAccounts: 2,
+      writesPerAccount: 8,
+      readsPerAccount: 8,
+      nonceAccounts: 1,
+      codeLen: 0,
+    ),
+    # An airdrop-like block where nearly every touched account is distinct.
+    Workload(
+      name: "fresh accounts",
+      numTx: 2048,
+      numAccounts: 1_000_000,
+      accountsPerTx: 4,
+      storageAccounts: 1,
+      writesPerAccount: 1,
+      readsPerAccount: 0,
+      nonceAccounts: 1,
+      codeLen: 0,
+    ),
+    # Contract deployments: a large code change plus constructor storage.
+    Workload(
+      name: "contract deploy",
+      numTx: 2048,
+      numAccounts: 4000,
+      accountsPerTx: 2,
+      storageAccounts: 1,
+      writesPerAccount: 3,
+      readsPerAccount: 0,
+      nonceAccounts: 1,
+      codeLen: maxCodeLen,
+    ),
+    # A very large block of plain transfers over a wide address space.
+    Workload(
+      name: "large block",
+      numTx: 16384,
+      numAccounts: 50_000,
+      accountsPerTx: 3,
+      storageAccounts: 0,
+      writesPerAccount: 0,
+      readsPerAccount: 0,
+      nonceAccounts: 1,
+      codeLen: 0,
+    ),
+  ]
+
+  codePattern = block:
+    var a: array[maxCodeLen, byte]
+    for k in 0 ..< maxCodeLen:
+      a[k] = byte(k and 0xff)
+    a
 
 type
   Stats = object
@@ -115,7 +209,7 @@ proc fillTx(b: ptr BlockAccessListBuilder, w: Workload, txIndex: int) =
   ## `txIndex`. This is the unit of work owned by a single thread.
   for a in 0 ..< w.accountsPerTx:
     let
-      acctId = (txIndex * 7 + a * 131) mod numAccounts
+      acctId = (txIndex * 7 + a * 131) mod w.numAccounts
       address = makeAddress(acctId)
 
     when compiles(b[].addTouchedAccount(txIndex, address)):
@@ -123,25 +217,23 @@ proc fillTx(b: ptr BlockAccessListBuilder, w: Workload, txIndex: int) =
     else:
       b[].addTouchedAccount(address)
 
-    for s in 0 ..< w.writesPerAccount:
-      b[].addStorageWrite(txIndex, address, u256(acctId * 100 + s), u256(s + 1))
+    if a < w.storageAccounts:
+      for s in 0 ..< w.writesPerAccount:
+        b[].addStorageWrite(txIndex, address, u256(acctId * 100 + s), u256(s + 1))
 
-    for r in 0 ..< w.readsPerAccount:
-      let slot = u256(acctId * 100 + 50 + r)
-      when compiles(b[].addStorageRead(txIndex, address, slot)):
-        b[].addStorageRead(txIndex, address, slot)
-      else:
-        b[].addStorageRead(address, slot)
+      for r in 0 ..< w.readsPerAccount:
+        let slot = u256(acctId * 100 + 50 + r)
+        when compiles(b[].addStorageRead(txIndex, address, slot)):
+          b[].addStorageRead(txIndex, address, slot)
+        else:
+          b[].addStorageRead(address, slot)
 
     b[].addBalanceChange(txIndex, address, u256(acctId + 1))
     if a < w.nonceAccounts:
       b[].addNonceChange(txIndex, address, AccountNonce(txIndex + 1))
 
-    if a == 0 and w.codeChange:
-      var code: array[codeLen, byte]
-      for k in 0 ..< codeLen:
-        code[k] = byte((acctId + k) and 0xff)
-      b[].addCodeChange(txIndex, address, code)
+    if a == 0 and w.codeLen > 0:
+      b[].addCodeChange(txIndex, address, codePattern.toOpenArray(0, w.codeLen - 1))
 
 proc fillRangeProc(ctx: ptr FillRange) {.thread.} =
   for t in ctx.startTx ..< ctx.endTx:
@@ -157,9 +249,10 @@ proc benchmarkLine(name: string, w: Workload, s: Stats, baseline: float): string
   # The speedup is that of the end-to-end time relative to `baseline`.
   let
     opsPerTx =
-      w.accountsPerTx * (1 + w.writesPerAccount + w.readsPerAccount + 1) +
-      w.nonceAccounts + (if w.codeChange: 1 else: 0)
-    writesPerSec = (numTx * opsPerTx).float / s.fill
+      w.accountsPerTx * 2 +
+      w.storageAccounts * (w.writesPerAccount + w.readsPerAccount) + w.nonceAccounts +
+      (if w.codeLen > 0: 1 else: 0)
+    writesPerSec = (w.numTx * opsPerTx).float / s.fill
     speedup = baseline / s.total
   "  " & alignLeft(name, benchNameWidth) & " " & align(fmt"{s.fill * 1000:.2f}", 10) &
     " " & align(fmt"{s.build * 1000:.2f}", 10) & " " & align(fmt"{s.total * 1000:.2f}", 10) &
@@ -172,10 +265,10 @@ proc benchSingle(w: Workload): Stats =
     var builder: BlockAccessListBuilder
     initBuilder(builder, false)
     let b = addr builder
-    b.presize(numTx)
+    b.presize(w.numTx)
 
     let t0 = epochTime()
-    for t in 0 ..< numTx:
+    for t in 0 ..< w.numTx:
       fillTx(b, w, t)
     let t1 = epochTime()
     fillTotal += t1 - t0
@@ -195,7 +288,7 @@ proc benchSingle(w: Workload): Stats =
   )
 
 proc benchThreaded(nThreads: static int, w: Workload): Stats =
-  let chunk = numTx div nThreads
+  let chunk = w.numTx div nThreads
   var fillTotal, buildTotal, allTotal = 0.0
   var checksum = 0
   for r in 0 ..< repeats:
@@ -205,14 +298,14 @@ proc benchThreaded(nThreads: static int, w: Workload): Stats =
     # Pre-size on the main thread before spawning so that the workers only append
     # into already-allocated partitions (lock-free builder). No-op on the locked
     # builder.
-    b.presize(numTx)
+    b.presize(w.numTx)
 
     var
       threads: array[nThreads, Thread[ptr FillRange]]
       ranges: array[nThreads, FillRange]
     for t in 0 ..< nThreads:
       let startTx = t * chunk
-      let endTx = if t == nThreads - 1: numTx else: startTx + chunk
+      let endTx = if t == nThreads - 1: w.numTx else: startTx + chunk
       ranges[t] = FillRange(builder: b, workload: w, startTx: startTx, endTx: endTx)
 
     let t0 = epochTime()
@@ -238,19 +331,20 @@ proc benchThreaded(nThreads: static int, w: Workload): Stats =
   )
 
 proc describe(w: Workload): string =
-  "txs=" & $numTx & ", accounts/tx=" & $w.accountsPerTx & ", writes/acct=" &
+  "txs=" & $w.numTx & ", address space=" & $w.numAccounts & ", accounts/tx=" &
+    $w.accountsPerTx & ", storage accounts=" & $w.storageAccounts & ", writes/acct=" &
     $w.writesPerAccount & ", reads/acct=" & $w.readsPerAccount & ", nonces=" &
-    $w.nonceAccounts & ", code=" & $w.codeChange & ", repeats=" & $repeats
+    $w.nonceAccounts & ", code bytes=" & $w.codeLen & ", repeats=" & $repeats
 
-proc runSingle(name: string, w: Workload) =
+proc runSingle(w: Workload) =
   let s = benchSingle(w)
   debugEcho ""
-  debugEcho "  ", name, ": ", w.describe()
+  debugEcho "  ", w.name, ": ", w.describe()
   debugEcho benchmarkHeader()
   debugEcho benchmarkLine("single-threaded", w, s, s.total)
   check s.checksum > 0
 
-proc runThreaded(name: string, w: Workload) =
+proc runThreaded(w: Workload) =
   let
     s1 = benchThreaded(1, w)
     s2 = benchThreaded(2, w)
@@ -259,8 +353,8 @@ proc runThreaded(name: string, w: Workload) =
     s16 = benchThreaded(16, w)
 
   debugEcho ""
-  debugEcho "  ", name, ": ", w.describe()
-  debugEcho "  N threads each own a disjoint range of the ", numTx,
+  debugEcho "  ", w.name, ": ", w.describe()
+  debugEcho "  N threads each own a disjoint range of the ", w.numTx,
     " transaction indices; build runs on the main thread; speedup is end-to-end"
   debugEcho benchmarkHeader()
   let base = s1.total
@@ -285,14 +379,10 @@ suite "BlockAccessListBuilder throughput benchmark":
     else:
       "lock-based (shared)"
 
-  test "Single-threaded fill + build (heavy tx)":
-    runSingle("heavy tx", heavyTx)
+  for w in scenarios:
+    test w.name & ": single-threaded fill + build":
+      runSingle(w)
 
-  test "Single-threaded fill + build (light tx)":
-    runSingle("light tx", lightTx)
-
-  test "Multi-threaded fill + build (heavy tx, tx-index partitioned)":
-    runThreaded("heavy tx", heavyTx)
-
-  test "Multi-threaded fill + build (light tx, tx-index partitioned)":
-    runThreaded("light tx", lightTx)
+  for w in scenarios:
+    test w.name & ": multi-threaded fill + build (tx-index partitioned)":
+      runThreaded(w)
