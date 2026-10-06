@@ -12,7 +12,7 @@
 
 import
   std/math,
-  eth/[bloom, common/eth_types_rlp, trie/ordered_trie],
+  eth/[common/eth_types_rlp, trie/ordered_trie],
   stew/byteutils,
   stew/assign2,
   nimcrypto/sha2,
@@ -33,13 +33,18 @@ template calcTxRoot*(transactions: openArray[Transaction]): Root =
 template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Root =
   orderedTrieRoot(withdrawals)
 
+func inclBloomBits(bloom: var Bloom, h: Hash32) {.inline.} =
+  for i in [0, 2, 4]:
+    let bit = ((h.data[i].int shl 8) or h.data[i + 1].int) and 2047
+    bloom.data[255 - (bit shr 3)] = bloom.data[255 - (bit shr 3)] or byte(1 shl (bit and 7))
+
 func calcLogsBloom*(logs: openArray[Log]): Bloom =
-  var filter: bloom.BloomFilter
+  if logs.len == 0:
+    return
   for log in logs:
-    filter.incl log.address
+    result.inclBloomBits keccak256(log.address.data)
     for topic in log.topics:
-      filter.incl topic
-  filter.value.to(Bloom)
+      result.inclBloomBits keccak256(topic.data)
 
 template appendNetworkReceipt(w: var RlpWriter, r, bloomExpr: untyped) =
   ## Network `Receipt` wire format (bloom included) borrowing the stored
