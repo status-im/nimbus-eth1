@@ -110,6 +110,7 @@ proc recoverAndPrefetchTask*(
   vmState.gasCosts = vmState.fork.forkToSchedule
   vmState.tracer = nil
   vmState.receipts.setLen(0)
+  vmState.receiptBlooms.setLen(0)
   vmState.cumulativeGasUsed = 0
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
@@ -389,6 +390,7 @@ proc processTxTask(
   vmState.gasCosts = vmState.fork.forkToSchedule
   vmState.tracer = nil
   vmState.receipts.setLen(0)
+  vmState.receiptBlooms.setLen(0)
   vmState.cumulativeGasUsed = 0
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
@@ -410,8 +412,8 @@ proc processTxTask(
   e[].blockStateGasUsed = vmState.blockStateGasUsed
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
-  e[].bloom = calcLogsBloom(vmState.txLogs)
   if vmState.txLogs.len > 0:
+    e[].bloom = calcLogsBloom(vmState.txLogs)
     e[].logs = packLogs(vmState.txLogs)
 
   true
