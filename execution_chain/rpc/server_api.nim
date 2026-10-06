@@ -599,6 +599,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.timestamp),
         Opt.some(txId),
         Opt.some(api.chain.com.chainId),
+        blk.header.baseFeePerGas,
       )
 
     proc eth_getTransactionByBlockHashAndIndex(
@@ -623,6 +624,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.timestamp),
         Opt.some(index),
         Opt.some(api.chain.com.chainId),
+        blk.header.baseFeePerGas,
       )
 
     proc eth_getTransactionByBlockNumberAndIndex(
@@ -646,6 +648,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.timestamp),
         Opt.some(index),
         Opt.some(api.chain.com.chainId),
+        blk.header.baseFeePerGas,
       )
 
     proc eth_getProof(
