@@ -13,7 +13,7 @@
 import
   std/bitops,
   pkg/[chronicles, chronos, stew/interval_set],
-  ./download/[account, bals, code, header, storage],
+  ./download/[account, bals, code, download_helpers, header, storage],
   ./[helpers, cache_db, worker_desc]
 
 logScope:
@@ -268,6 +268,34 @@ template downloadBals*(
       forwardNum=ctx.pool.forwardNum, nBALs=rc.value
 
   bodyRc
+
+proc downloadResume*(ctx: SnapCtxRef; info: static[string]): Opt[void] =
+  ## Attempt to resume an interrupted download session
+  let adb = ctx.pool.cacheDB
+
+  # Cannot have lock entries
+  for _ in adb.walkStoLock:
+    return err()
+  for _ in adb.walkCodeLock:
+    return err()
+
+  # Clean up as best as possible
+  var accPaths: seq[Hash32]
+
+  # Collect paths for partial storage sub-MPTs and contract codes
+  for w in adb.walkStoMissingIntv:
+    if 0 < w.error.len:
+      error info & ": Error walking missing storage list", `error`=w.error
+      return err()
+    accPaths.add w.accPath
+  for key in adb.walkMissingBlob:
+    accPaths.add key
+
+  # Delete all accounts for partial sub-MPTs and contract codes.
+  for accPath in accPaths:
+    ctx.deleteAccount(accPath, info).isOkOr:
+      return err()
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

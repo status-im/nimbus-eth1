@@ -58,22 +58,26 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   metrics.set(nec_snap_download_window, 0)          # initialise
   if ctx.pool.contPrevSession:
+    ctx.pool.contPrevSession = false
     return SnapResume
   SnapClear
 
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
+  if ctx.pool.resetReq:
+    info info & ": Previous is unusable"
+    return SnapIdle
   if ctx.accUnproc.synced() and 0 < ctx.pool.pivotNum:
     info info & ": Resuming previous session"
     ctx.allDownloaded(info).isErrOr:
       return SnapAssembleMpt
     return SnapBalsFetch
   info info & ": No previous session available"
-  ctx.pool.contPrevSession = false
   SnapIdle
 
 proc clearNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
+  ctx.pool.resetReq = false
   let haveData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr:
     return SnapIdle                                 # DB problem, restart
   if haveData:
