@@ -21,7 +21,8 @@
 #   * multi-threaded fill where N worker threads each own a disjoint range of
 #     transaction indices and write into the *same* builder concurrently
 # In both cases the BlockAccessList is then materialized on the main thread and
-# that build step is timed separately.
+# that build step is timed separately, along with the end-to-end time from the
+# start of the fill to the end of the build which is what a block pays overall.
 #
 # The benchmark is written to compile against both the lock-based builder (which
 # serializes every write on an internal lock) and the lock-free index-partitioned
@@ -79,6 +80,7 @@ type
   Stats = object
     fill: float ## average wall-clock of the fill phase (seconds)
     build: float ## average wall-clock of the build phase (seconds)
+    total: float ## average wall-clock from fill start to build end (seconds)
     checksum: int ## consumed so the build result is not optimized away
 
   FillRange = object
@@ -147,22 +149,24 @@ proc fillRangeProc(ctx: ptr FillRange) {.thread.} =
 
 proc benchmarkHeader(): string =
   "  " & alignLeft("benchmark", benchNameWidth) & " " & align("fill(ms)", 10) & " " &
-    align("build(ms)", 10) & " " & align("Mwrites/s", 12) & " " & align("speedup", 9)
+    align("build(ms)", 10) & " " & align("total(ms)", 10) & " " & align("Mwrites/s", 12) &
+    " " & align("speedup", 9)
 
 proc benchmarkLine(name: string, w: Workload, s: Stats, baseline: float): string =
   # Roughly the number of builder mutations issued during the fill phase.
+  # The speedup is that of the end-to-end time relative to `baseline`.
   let
     opsPerTx =
       w.accountsPerTx * (1 + w.writesPerAccount + w.readsPerAccount + 1) +
       w.nonceAccounts + (if w.codeChange: 1 else: 0)
     writesPerSec = (numTx * opsPerTx).float / s.fill
-    speedup = baseline / s.fill
+    speedup = baseline / s.total
   "  " & alignLeft(name, benchNameWidth) & " " & align(fmt"{s.fill * 1000:.2f}", 10) &
-    " " & align(fmt"{s.build * 1000:.2f}", 10) & " " &
-    align(fmt"{writesPerSec / 1e6:.2f}", 12) & " " & align(fmt"{speedup:.2f}x", 9)
+    " " & align(fmt"{s.build * 1000:.2f}", 10) & " " & align(fmt"{s.total * 1000:.2f}", 10) &
+    " " & align(fmt"{writesPerSec / 1e6:.2f}", 12) & " " & align(fmt"{speedup:.2f}x", 9)
 
 proc benchSingle(w: Workload): Stats =
-  var fillTotal, buildTotal = 0.0
+  var fillTotal, buildTotal, allTotal = 0.0
   var checksum = 0
   for r in 0 ..< repeats:
     var builder: BlockAccessListBuilder
@@ -173,19 +177,26 @@ proc benchSingle(w: Workload): Stats =
     let t0 = epochTime()
     for t in 0 ..< numTx:
       fillTx(b, w, t)
-    fillTotal += epochTime() - t0
-
     let t1 = epochTime()
+    fillTotal += t1 - t0
+
     let bal = builder.buildBlockAccessList()
-    buildTotal += epochTime() - t1
+    let t2 = epochTime()
+    buildTotal += t2 - t1
+    allTotal += t2 - t0
     checksum += bal[].len()
 
     builder.dispose()
-  Stats(fill: fillTotal / repeats.float, build: buildTotal / repeats.float, checksum: checksum)
+  Stats(
+    fill: fillTotal / repeats.float,
+    build: buildTotal / repeats.float,
+    total: allTotal / repeats.float,
+    checksum: checksum,
+  )
 
 proc benchThreaded(nThreads: static int, w: Workload): Stats =
   let chunk = numTx div nThreads
-  var fillTotal, buildTotal = 0.0
+  var fillTotal, buildTotal, allTotal = 0.0
   var checksum = 0
   for r in 0 ..< repeats:
     var builder: BlockAccessListBuilder
@@ -209,15 +220,22 @@ proc benchThreaded(nThreads: static int, w: Workload): Stats =
       createThread(threads[t], fillRangeProc, addr ranges[t])
     for t in 0 ..< nThreads:
       joinThread(threads[t])
-    fillTotal += epochTime() - t0
-
     let t1 = epochTime()
+    fillTotal += t1 - t0
+
     let bal = builder.buildBlockAccessList()
-    buildTotal += epochTime() - t1
+    let t2 = epochTime()
+    buildTotal += t2 - t1
+    allTotal += t2 - t0
     checksum += bal[].len()
 
     builder.dispose()
-  Stats(fill: fillTotal / repeats.float, build: buildTotal / repeats.float, checksum: checksum)
+  Stats(
+    fill: fillTotal / repeats.float,
+    build: buildTotal / repeats.float,
+    total: allTotal / repeats.float,
+    checksum: checksum,
+  )
 
 proc describe(w: Workload): string =
   "txs=" & $numTx & ", accounts/tx=" & $w.accountsPerTx & ", writes/acct=" &
@@ -229,7 +247,7 @@ proc runSingle(name: string, w: Workload) =
   debugEcho ""
   debugEcho "  ", name, ": ", w.describe()
   debugEcho benchmarkHeader()
-  debugEcho benchmarkLine("single-threaded", w, s, s.fill)
+  debugEcho benchmarkLine("single-threaded", w, s, s.total)
   check s.checksum > 0
 
 proc runThreaded(name: string, w: Workload) =
@@ -243,9 +261,9 @@ proc runThreaded(name: string, w: Workload) =
   debugEcho ""
   debugEcho "  ", name, ": ", w.describe()
   debugEcho "  N threads each own a disjoint range of the ", numTx,
-    " transaction indices; build runs on the main thread"
+    " transaction indices; build runs on the main thread; speedup is end-to-end"
   debugEcho benchmarkHeader()
-  let base = s1.fill
+  let base = s1.total
   debugEcho benchmarkLine("1-thread", w, s1, base)
   debugEcho benchmarkLine("2-thread", w, s2, base)
   debugEcho benchmarkLine("4-thread", w, s4, base)
