@@ -120,6 +120,9 @@ const
     ## Suspend snap/1 peer for BALs download emulation when snap/2 peers
     ## are available.
 
+  peerWaitBalsNoDataInterval* = chronos.milliseconds(300)
+    ## Suspend  peer for BALs download if there were no available.
+
   peerWaitBalsLockedInterval* = chronos.milliseconds(300)
     ## Only one peer can download BALs. This constatnt is the polling timr
     ## for the waiting peers.
