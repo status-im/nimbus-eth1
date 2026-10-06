@@ -24,6 +24,10 @@ func capacity[E](s: SharedSeq[E]): int =
   privateAccess(SharedSeq)
   s.cap
 
+func onHeap[N, E](s: SmallSeq[N, E]): bool =
+  privateAccess(SmallSeq)
+  not s.data.isNil()
+
 func isPowerOfTwoOrZero(n: int): bool =
   n == 0 or (n and (n - 1)) == 0
 
@@ -841,3 +845,252 @@ suite "SharedSeq growth Tests":
         e.dispose()
       s.dispose()
     check getOccupiedSharedMem() == before
+
+suite "SmallSeq inline storage Tests":
+  test "a zero-initialised SmallSeq is empty and inline":
+    var s: SmallSeq[4, int]
+    check:
+      s.len == 0
+      not s.onHeap
+      s.data().len == 0
+      s.data(asOpenArray = true).len == 0
+    s.dispose()
+
+  test "add stays inline up to N and spills to the heap beyond N":
+    var s: SmallSeq[4, int]
+    for i in 0 ..< 4:
+      s.add(i * 10)
+      check:
+        s.len == i + 1
+        not s.onHeap
+    check s.data() == @[0, 10, 20, 30]
+
+    s.add(40)
+    check:
+      s.len == 5
+      s.onHeap
+      s.data() == @[0, 10, 20, 30, 40]
+
+    for i in 5 ..< 1000:
+      s.add(i * 10)
+    check s.len == 1000
+    for i in 0 ..< 1000:
+      check s[i] == i * 10
+    s.dispose()
+
+  test "init with len at most N is inline, beyond N is on the heap":
+    var a = SmallSeq[4, int].init(4, zeroed = true)
+    check:
+      a.len == 4
+      not a.onHeap
+    for i in 0 ..< 4:
+      check a[i] == 0
+    a.dispose()
+
+    var b = SmallSeq[4, int].init(5, zeroed = true)
+    check:
+      b.len == 5
+      b.onHeap
+    for i in 0 ..< 5:
+      check b[i] == 0
+    b.dispose()
+
+    var c = SmallSeq[4, int].init(0)
+    check:
+      c.len == 0
+      not c.onHeap
+    c.dispose()
+
+  test "init from an openArray on both sides of N":
+    var a = SmallSeq[4, byte].init([1'u8, 2, 3])
+    check:
+      a.len == 3
+      not a.onHeap
+      a.data() == @[1'u8, 2, 3]
+    a.dispose()
+
+    var b = SmallSeq[4, byte].init([1'u8, 2, 3, 4, 5, 6])
+    check:
+      b.len == 6
+      b.onHeap
+      b.data() == @[1'u8, 2, 3, 4, 5, 6]
+    b.dispose()
+
+  test "init copies the input, leaving the inline copy independent of the source":
+    var input = @[7, 8, 9]
+    var s = SmallSeq[4, int].init(input)
+    input[0] = 99
+    input.setLen(0)
+    check s.data() == @[7, 8, 9]
+    s.dispose()
+
+  test "setLen grows across N with and without exact and keeps the elements":
+    var s: SmallSeq[4, int]
+    s.setLen(3, zeroed = true)
+    check:
+      s.len == 3
+      not s.onHeap
+    s[0] = 1
+    s[1] = 2
+    s[2] = 3
+
+    s.setLen(6, zeroed = true)
+    check:
+      s.len == 6
+      s.onHeap
+      s.capacity == 16 # power-of-two growth floor
+      s[0] == 1
+      s[1] == 2
+      s[2] == 3
+    for i in 3 ..< 6:
+      check s[i] == 0
+    s.dispose()
+
+    var t: SmallSeq[4, int]
+    t.setLen(2, zeroed = true)
+    t[0] = 5
+    t[1] = 6
+    t.setLen(7, zeroed = true, exact = true)
+    check:
+      t.len == 7
+      t.onHeap
+      t.capacity == 7
+      t[0] == 5
+      t[1] == 6
+    for i in 2 ..< 7:
+      check t[i] == 0
+    t.dispose()
+
+  test "shrinking below N after a spill keeps the heap buffer and the elements":
+    var s: SmallSeq[4, int]
+    for i in 0 ..< 8:
+      s.add(i)
+    check s.onHeap
+    s.setLen(2)
+    check:
+      s.len == 2
+      s.onHeap
+      s.data() == @[0, 1]
+    s.add(100)
+    check s.data() == @[0, 1, 100]
+    s.dispose()
+
+  test "index write, items and mitems work in both modes":
+    var s: SmallSeq[4, int]
+    for i in 0 ..< 3:
+      s.add(i)
+    s[1] = 42
+    for x in s.mitems():
+      x += 1
+    var seen: seq[int]
+    for x in s.items():
+      seen.add(x)
+    check:
+      seen == @[1, 43, 3]
+      not s.onHeap
+
+    for i in 0 ..< 10:
+      s.add(i)
+    check s.onHeap
+    s[0] = 7
+    for x in s.mitems():
+      x *= 2
+    seen.setLen(0)
+    for x in s.items():
+      seen.add(x)
+    check seen == @[14, 86, 6, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
+    s.dispose()
+
+  test "data (asOpenArray = true) views the inline storage":
+    var s = SmallSeq[8, byte].init([1'u8, 2, 3])
+    check:
+      s.data(asOpenArray = true).len == 3
+      s.data(asOpenArray = true)[0] == 1'u8
+      s.data(asOpenArray = true)[2] == 3'u8
+      @(s.data(asOpenArray = true)) == @[1'u8, 2, 3]
+    s.dispose()
+
+  test "move copies the inline elements and clears the source":
+    var a = SmallSeq[4, int].init(@[10, 20, 30])
+    var b = move(a)
+    check:
+      not b.onHeap
+      b.data() == @[10, 20, 30]
+      a.len == 0
+      a.data().len == 0
+    dispose(b)
+    dispose(a)
+
+  test "move of a spilled SmallSeq transfers the heap buffer":
+    var a = SmallSeq[2, int].init(@[1, 2, 3, 4])
+    check a.onHeap
+    var b = move(a)
+    check:
+      b.onHeap
+      b.data() == @[1, 2, 3, 4]
+      not a.onHeap
+      a.len == 0
+    dispose(b)
+    dispose(a)
+
+  test "dispose is idempotent and the value is reusable afterwards":
+    var s: SmallSeq[4, int]
+    for i in 0 ..< 10:
+      s.add(i)
+    check s.onHeap
+    s.dispose()
+    check:
+      s.len == 0
+      not s.onHeap
+    s.dispose()
+    check s.len == 0
+
+    s.add(5)
+    check:
+      s.len == 1
+      not s.onHeap
+      s[0] == 5
+    s.dispose()
+
+  test "inline-only use does not touch the shared heap":
+    let before = getOccupiedSharedMem()
+    for _ in 0 ..< 100:
+      var s: SmallSeq[8, int]
+      for i in 0 ..< 8:
+        s.add(i)
+      check not s.onHeap
+      s.dispose()
+    check getOccupiedSharedMem() == before
+
+  test "works with a multi-field object element":
+    var s: SmallSeq[2, Elem]
+    s.add(Elem(id: 1'u32, tag: 'a', score: 100'i64))
+    s.add(Elem(id: 2'u32, tag: 'b', score: -200'i64))
+    check not s.onHeap
+    s.add(Elem(id: 3'u32, tag: 'c', score: 300'i64))
+    check:
+      s.onHeap
+      s.len == 3
+      s[0] == Elem(id: 1'u32, tag: 'a', score: 100'i64)
+      s[1] == Elem(id: 2'u32, tag: 'b', score: -200'i64)
+      s[2] == Elem(id: 3'u32, tag: 'c', score: 300'i64)
+    s.dispose()
+
+  test "a SmallSeq nested in a moved container keeps its inline elements":
+    type Holder = object
+      a: SmallSeq[4, int]
+      b: SmallSeq[4, int]
+
+    var h: Holder
+    h.a.add(1)
+    h.a.add(2)
+    h.b.add(3)
+
+    var moved = move(h)
+    check:
+      moved.a.data() == @[1, 2]
+      moved.b.data() == @[3]
+      h.a.len == 0
+      h.b.len == 0
+    moved.a.dispose()
+    moved.b.dispose()

@@ -59,6 +59,11 @@ type
     sharedBuilder: ptr BlockAccessListBuilder
     cancelled: Atomic[bool]
 
+  # Logs packed by `packLogs`: enough inline room for a transaction emitting a
+  # single log with three topics and a word of data, so most transactions hand
+  # their logs back to the main thread without a heap allocation.
+  PackedLogs = SmallSeq[160, byte]
+
   BalParallelTxEntry = object
     tx: ptr Transaction
     txIndex: int
@@ -67,7 +72,7 @@ type
     blockStateGasUsed: GasInt
     blobGasUsed: uint64
     status: bool
-    logs: SharedBytes
+    logs: PackedLogs
     error: SharedString
     preempted: bool
 
@@ -293,7 +298,7 @@ proc applyBlockAccessListState(ledger: LedgerRef, bal: BlockAccessList, txCount:
     if balanceZeroed:
       ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
 
-proc packLogs(logs: openArray[Log]): SharedBytes =
+proc packLogs(logs: openArray[Log]): PackedLogs =
   var size = sizeof(uint32)
   for log in logs:
     size +=
@@ -301,7 +306,7 @@ proc packLogs(logs: openArray[Log]): SharedBytes =
       log.data.len
 
   var
-    packed = SharedBytes.init(size, zeroed = false)
+    packed = PackedLogs.init(size, zeroed = false)
     pos = 0
 
   template put(src: pointer, n: int) =

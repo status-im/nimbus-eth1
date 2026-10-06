@@ -128,6 +128,11 @@ suite "supportsSharedMem Tests":
       not supportsCopyMem(SharedSeq[uint64])
       supportsSharedMem(SharedSeq[uint64])
 
+      not supportsCopyMem(SmallSeq[4, uint64])
+      supportsSharedMem(SmallSeq[4, uint64])
+      not supportsCopyMem(SmallSeq[8, Plain])
+      supportsSharedMem(SmallSeq[8, Plain])
+
       not supportsCopyMem(SharedTable[int, SharedBytes])
       supportsSharedMem(SharedTable[int, SharedBytes])
 

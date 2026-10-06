@@ -13,9 +13,11 @@
 # are tracked by address, field type, and block access list index to enable
 # efficient reconstruction of state changes.
 #
-# All collections use the non-GC SharedSeq type (rather than the standard
-# library Seq) so that the builder can be used safely with the refc memory
-# manager across threads.
+# All collections use the non-GC SharedSeq/SmallSeq types (rather than the
+# standard library Seq) so that the builder can be used safely with the refc
+# memory manager across threads. The per-index collections keep their first few
+# elements inline so that a typical transaction (a transfer touching a handful
+# of accounts) records its changes without any heap allocation.
 #
 # The idea here is that each thread writes to a separate index in the internal
 # `perIndex` array so that concurrent lock free writes are possible during
@@ -38,12 +40,20 @@ type
   NonceWrite = tuple[address: Address, nonce: AccountNonce]
   CodeWrite = tuple[address: Address, code: SharedBytes]
 
+const
+  inlineTouchedAccounts = 4
+  inlineStorageChanges = 2
+  inlineStorageReads = 4
+  inlineBalanceChanges = 4
+  inlineNonceChanges = 2
+
+type
   BalIndexData = object
-    touchedAccounts: SharedSeq[Address]
-    storageChanges: SharedSeq[StorageWrite]
-    storageReads: SharedSeq[StorageReadEntry]
-    balanceChanges: SharedSeq[BalanceWrite]
-    nonceChanges: SharedSeq[NonceWrite]
+    touchedAccounts: SmallSeq[inlineTouchedAccounts, Address]
+    storageChanges: SmallSeq[inlineStorageChanges, StorageWrite]
+    storageReads: SmallSeq[inlineStorageReads, StorageReadEntry]
+    balanceChanges: SmallSeq[inlineBalanceChanges, BalanceWrite]
+    nonceChanges: SmallSeq[inlineNonceChanges, NonceWrite]
     codeChanges: SharedSeq[CodeWrite]
 
   BlockAccessListBuilder* = object
