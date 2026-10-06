@@ -381,7 +381,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
           raise newException(ValueError, "rpcCallEvm error: " & error)
       if res.isError:
-        if res.output.len > 0 and res.error.startsWith("execution reverted"):
+        if res.status == StatusCode.Revert and res.output.len > 0:
           raise (ref RpcResponseError)(
             code: 3,
             msg: res.error,
