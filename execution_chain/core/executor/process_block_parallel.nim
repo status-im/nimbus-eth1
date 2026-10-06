@@ -318,8 +318,8 @@ proc packLogs(logs: openArray[Log]): SharedBytes =
   for log in logs:
     put(unsafeAddr log.address, sizeof(Address))
     putLen(log.topics.len)
-    for topic in log.topics:
-      put(unsafeAddr topic, sizeof(Topic))
+    if log.topics.len > 0:
+      put(unsafeAddr log.topics[0], log.topics.len * sizeof(Topic))
     putLen(log.data.len)
     if log.data.len > 0:
       put(unsafeAddr log.data[0], log.data.len)
@@ -341,12 +341,14 @@ proc unpackLogs(buf: openArray[byte]): seq[Log] =
   var logs = newSeq[Log](getLen())
   for log in logs.mitems:
     get(addr log.address, sizeof(Address))
-    log.topics = newSeq[Topic](getLen())
-    for topic in log.topics.mitems:
-      get(addr topic, sizeof(Topic))
-    log.data = newSeq[byte](getLen())
-    if log.data.len > 0:
-      get(addr log.data[0], log.data.len)
+    let topicsLen = getLen()
+    if topicsLen > 0:
+      log.topics = newSeqUninit[Topic](topicsLen)
+      get(addr log.topics[0], topicsLen * sizeof(Topic))
+    let dataLen = getLen()
+    if dataLen > 0:
+      log.data = newSeqUninit[byte](dataLen)
+      get(addr log.data[0], dataLen)
 
   logs
 
