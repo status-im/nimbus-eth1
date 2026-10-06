@@ -455,14 +455,14 @@ proc trackStorageRead*(
     tracker.storage[idx].read = true
     tracker.journal.add(JournalEntry(kind: jStorageRead, idx: idx))
 
-proc trackStorageWrite*(
-    tracker: BlockAccessListTrackerRef,
-    address: Address,
-    slot: UInt256,
-    newValue: UInt256,
+# The pre-transaction value of a slot, balance or nonce is captured on its
+# first write as whatever the ledger holds at that moment. A caller that has
+# just read that value itself, as the SSTORE handler does for its gas
+# calculation, passes it in so that it is not read a second time.
+
+proc trackStorageWriteAt(
+    tracker: BlockAccessListTrackerRef, idx: int32, newValue: UInt256, current: Opt[UInt256]
 ) =
-  assert tracker.hasPendingCallFrame()
-  let idx = tracker.storageEntry((address, slot))
   template e(): untyped =
     tracker.storage[idx]
 
@@ -470,18 +470,48 @@ proc trackStorageWrite*(
     return # nothing to do because we have already tracked this value
 
   tracker.touch(e.account)
-  tracker.capturePreStorage(idx)
+  if not e.preKnown:
+    if current.isSome():
+      e.pre = current[]
+      e.preKnown = true
+    else:
+      tracker.capturePreStorage(idx)
   tracker.journal.add(
     JournalEntry(kind: jStorageWrite, idx: idx, prevWritten: e.written, prev: e.post)
   )
   e.post = newValue
   e.written = true
 
-proc trackBalanceChange*(
-    tracker: BlockAccessListTrackerRef, address: Address, newBalance: UInt256
+proc trackStorageWrite*(
+    tracker: BlockAccessListTrackerRef,
+    address: Address,
+    slot: UInt256,
+    newValue: UInt256,
 ) =
   assert tracker.hasPendingCallFrame()
-  let idx = tracker.accountEntry(address)
+  tracker.trackStorageWriteAt(
+    tracker.storageEntry((address, slot)), newValue, Opt.none(UInt256)
+  )
+
+proc trackStorageWrite*(
+    tracker: BlockAccessListTrackerRef,
+    address: Address,
+    slot: UInt256,
+    newValue: UInt256,
+    currentValue: UInt256,
+) =
+  ## `currentValue` is the slot's value as the ledger holds it right now.
+  assert tracker.hasPendingCallFrame()
+  tracker.trackStorageWriteAt(
+    tracker.storageEntry((address, slot)), newValue, Opt.some(currentValue)
+  )
+
+proc trackBalanceChangeAt(
+    tracker: BlockAccessListTrackerRef,
+    idx: int32,
+    newBalance: UInt256,
+    current: Opt[UInt256],
+) =
   template e(): untyped =
     tracker.accounts[idx]
 
@@ -489,7 +519,12 @@ proc trackBalanceChange*(
     return # nothing to do because we have already tracked this value
 
   tracker.touch(idx)
-  tracker.capturePreBalance(idx)
+  if not e.preBalanceKnown:
+    if current.isSome():
+      e.preBalance = current[]
+      e.preBalanceKnown = true
+    else:
+      tracker.capturePreBalance(idx)
   tracker.journal.add(
     JournalEntry(
       kind: jBalance, idx: idx, prevWritten: e.balanceWritten, prev: e.postBalance
@@ -498,6 +533,14 @@ proc trackBalanceChange*(
   e.postBalance = newBalance
   e.balanceWritten = true
 
+proc trackBalanceChange*(
+    tracker: BlockAccessListTrackerRef, address: Address, newBalance: UInt256
+) =
+  assert tracker.hasPendingCallFrame()
+  tracker.trackBalanceChangeAt(
+    tracker.accountEntry(address), newBalance, Opt.none(UInt256)
+  )
+
 proc trackAddBalanceChange*(
     tracker: BlockAccessListTrackerRef, address: Address, delta: UInt256
 ) =
@@ -505,7 +548,11 @@ proc trackAddBalanceChange*(
     tracker.trackAddressAccess(address)
     return
 
-  tracker.trackBalanceChange(address, tracker.ledger.getBalance(address) + delta)
+  assert tracker.hasPendingCallFrame()
+  let current = tracker.ledger.getBalance(address)
+  tracker.trackBalanceChangeAt(
+    tracker.accountEntry(address), current + delta, Opt.some(current)
+  )
 
 proc trackSubBalanceChange*(
     tracker: BlockAccessListTrackerRef, address: Address, delta: UInt256
@@ -515,13 +562,18 @@ proc trackSubBalanceChange*(
     # due to early return as defined in EIP-4788
     return
 
-  tracker.trackBalanceChange(address, tracker.ledger.getBalance(address) - delta)
-
-proc trackNonceChange*(
-    tracker: BlockAccessListTrackerRef, address: Address, newNonce: AccountNonce
-) =
   assert tracker.hasPendingCallFrame()
-  let idx = tracker.accountEntry(address)
+  let current = tracker.ledger.getBalance(address)
+  tracker.trackBalanceChangeAt(
+    tracker.accountEntry(address), current - delta, Opt.some(current)
+  )
+
+proc trackNonceChangeAt(
+    tracker: BlockAccessListTrackerRef,
+    idx: int32,
+    newNonce: AccountNonce,
+    current: Opt[AccountNonce],
+) =
   template e(): untyped =
     tracker.accounts[idx]
 
@@ -529,7 +581,12 @@ proc trackNonceChange*(
     return # nothing to do because we have already tracked this value
 
   tracker.touch(idx)
-  tracker.capturePreNonce(idx)
+  if not e.preNonceKnown:
+    if current.isSome():
+      e.preNonce = current[]
+      e.preNonceKnown = true
+    else:
+      tracker.capturePreNonce(idx)
   tracker.journal.add(
     JournalEntry(
       kind: jNonce, idx: idx, prevWritten: e.nonceWritten, prevNonce: e.postNonce
@@ -538,8 +595,20 @@ proc trackNonceChange*(
   e.postNonce = newNonce
   e.nonceWritten = true
 
-template trackIncNonceChange*(tracker: BlockAccessListTrackerRef, address: Address) =
-  tracker.trackNonceChange(address, tracker.ledger.getNonce(address) + 1)
+proc trackNonceChange*(
+    tracker: BlockAccessListTrackerRef, address: Address, newNonce: AccountNonce
+) =
+  assert tracker.hasPendingCallFrame()
+  tracker.trackNonceChangeAt(
+    tracker.accountEntry(address), newNonce, Opt.none(AccountNonce)
+  )
+
+proc trackIncNonceChange*(tracker: BlockAccessListTrackerRef, address: Address) =
+  assert tracker.hasPendingCallFrame()
+  let current = tracker.ledger.getNonce(address)
+  tracker.trackNonceChangeAt(
+    tracker.accountEntry(address), current + 1, Opt.some(current)
+  )
 
 proc trackCodeChange*(
     tracker: BlockAccessListTrackerRef, address: Address, newCode: seq[byte]

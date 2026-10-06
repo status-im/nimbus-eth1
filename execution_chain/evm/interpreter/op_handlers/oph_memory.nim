@@ -248,7 +248,9 @@ proc sstore8038Impl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasI
   c.gasMeter.refundGas(res.gasRefund)
 
   if c.balTrackerEnabled:
-    c.vmState.balTracker.trackStorageWrite(c.msg.currentTarget, slot, newValue)
+    c.vmState.balTracker.trackStorageWrite(
+      c.msg.currentTarget, slot, newValue, currentValue
+    )
   c.vmState.mutateLedger:
     ledger.setStorage(c.msg.currentTarget, slot, newValue)
   ok()
