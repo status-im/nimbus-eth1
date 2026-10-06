@@ -173,10 +173,7 @@ proc populateBlockObject*(blockHash: Hash32,
   result.extraData = HistoricExtraData header.extraData
   result.mixHash = Hash32 header.mixHash
 
-  # discard sizeof(seq[byte]) of extraData and use actual length
-  type ExtraDataType = typeof(header.extraData)
-  let size = sizeof(eth_types.Header) - sizeof(ExtraDataType) + header.extraData.len
-  result.size = Quantity(size)
+  result.size = Quantity(rlp.getEncodedLength(blk))
 
   result.gasLimit  = Quantity(header.gasLimit)
   result.gasUsed   = Quantity(header.gasUsed)

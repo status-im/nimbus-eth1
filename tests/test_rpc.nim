@@ -741,6 +741,8 @@ proc rpcMain*() =
       let res = await client.eth_getBlockByNumber("latest", true)
       check res.isNil.not
       check res.hash == env.blockHash
+      let blk = env.chain.blockByHash(env.blockHash).expect("block exists")
+      check res.size == w3Qty(uint64(rlp.encode(blk).len))
 
       expect RpcResponseError:
         discard await client.eth_getBlockByNumber($1, true)
