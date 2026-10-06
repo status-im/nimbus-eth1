@@ -1052,6 +1052,31 @@ suite "SmallSeq inline storage Tests":
       s[0] == 5
     s.dispose()
 
+  test "clear drops the elements but keeps the storage for reuse":
+    var s: SmallSeq[4, int]
+    for i in 0 ..< 3:
+      s.add(i)
+    s.clear()
+    check:
+      s.len == 0
+      not s.onHeap
+    s.add(7)
+    check s.data() == @[7]
+
+    for i in 0 ..< 20:
+      s.add(i)
+    check:
+      s.onHeap
+      s.capacity == 32
+    s.clear()
+    check:
+      s.len == 0
+      s.onHeap
+      s.capacity == 32 # the heap buffer is kept
+    s.add(9)
+    check s.data() == @[9]
+    s.dispose()
+
   test "inline-only use does not touch the shared heap":
     let before = getOccupiedSharedMem()
     for _ in 0 ..< 100:
