@@ -31,19 +31,19 @@ proc toAsyncEvmStateBackend*(engine: RpcVerificationEngine): AsyncEvmStateBacken
       return Opt.some(account)
 
     storageProc = proc(
-        header: Header, address: Address, slotKey: UInt256
-    ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
-      let storageSlot = (
-        await engine.getStorageAt(address, slotKey, header.number, header.stateRoot)
+        header: Header, address: Address, slotKeys: seq[UInt256]
+    ): Future[Opt[seq[UInt256]]] {.async: (raises: [CancelledError]).} =
+      let storageSlots = (
+        await engine.getStorageAt(address, slotKeys, header.number, header.stateRoot)
       ).valueOr:
-        debug "Storage slot fetch failed",
+        debug "Storage slots fetch failed",
           address = $address,
-          slotKey = $slotKey,
+          count = slotKeys.len(),
           errType = error.errType,
           errMsg = error.errMsg
-        return Opt.none(UInt256)
+        return Opt.none(seq[UInt256])
 
-      Opt.some(storageSlot)
+      Opt.some(storageSlots)
 
     codeProc = proc(
         header: Header, address: Address

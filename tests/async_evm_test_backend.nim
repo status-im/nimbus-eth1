@@ -7,7 +7,7 @@
 
 {.used.}
 
-import std/tables, ../execution_chain/evm/async_evm_backend
+import std/[sequtils, tables], ../execution_chain/evm/async_evm_backend
 
 type TestEvmState* = ref object
   accounts: Table[Address, Account]
@@ -54,9 +54,9 @@ proc toAsyncEvmStateBackend*(testState: TestEvmState): AsyncEvmStateBackend =
     ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
       Opt.some(testState.getAccount(address))
     storageProc = proc(
-        header: Header, address: Address, slotKey: UInt256
-    ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
-      Opt.some(testState.getStorage(address, slotKey))
+        header: Header, address: Address, slotKeys: seq[UInt256]
+    ): Future[Opt[seq[UInt256]]] {.async: (raises: [CancelledError]).} =
+      Opt.some(slotKeys.mapIt(testState.getStorage(address, it)))
     codeProc = proc(
         header: Header, address: Address
     ): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =

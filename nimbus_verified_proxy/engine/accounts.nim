@@ -188,31 +188,42 @@ proc getCode*(
 proc getStorageAt*(
     engine: RpcVerificationEngine,
     address: Address,
-    slot: UInt256,
+    slots: seq[UInt256],
     blockNumber: base.BlockNumber,
     stateRoot: Root,
-): Future[EngineResult[UInt256]] {.async: (raises: [CancelledError]).} =
-  let
-    cacheKey = (stateRoot, address, slot)
-    cachedSlotValue = engine.storageCache.get(cacheKey)
-  if cachedSlotValue.isSome():
-    return ok(cachedSlotValue.get())
+): Future[EngineResult[seq[UInt256]]] {.async: (raises: [CancelledError]).} =
+  var
+    slotValues = newSeq[UInt256](slots.len())
+    slotsToFetch: seq[UInt256]
+    slotsToFetchIdx: seq[int]
+  for i, s in slots:
+    let cachedSlotValue = engine.storageCache.get((stateRoot, address, s))
+    if cachedSlotValue.isSome():
+      slotValues[i] = cachedSlotValue.get()
+    else:
+      slotsToFetch.add(s)
+      slotsToFetchIdx.add(i)
+
+  if slotsToFetch.len() == 0:
+    return ok(slotValues)
 
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetProof))
     proof = ?(
       (
         await backend.eth_getProof(
-          address, @[slot.toStorageKey()], blockId(blockNumber)
+          address, slotsToFetch.toStorageKeys(), blockId(blockNumber)
         )
       ).tagBackend(backendIdx)
     )
 
-    slotValue = ?(getStorageFromProof(stateRoot, slot, proof).tagBackend(backendIdx))
+  for i, s in slotsToFetch:
+    let slotValue =
+      ?(getStorageFromProof(stateRoot, s, proof, i).tagBackend(backendIdx))
+    engine.storageCache.put((stateRoot, address, s), slotValue)
+    slotValues[slotsToFetchIdx[i]] = slotValue
 
-  engine.storageCache.put(cacheKey, slotValue)
-
-  ok(slotValue)
+  ok(slotValues)
 
 proc populateCachesForAccountAndSlots(
     engine: RpcVerificationEngine,

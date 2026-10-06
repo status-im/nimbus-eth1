@@ -17,8 +17,8 @@ type
   .}
 
   GetStorageProc* = proc(
-    header: Header, address: Address, slotKey: UInt256
-  ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).}
+    header: Header, address: Address, slotKeys: seq[UInt256]
+  ): Future[Opt[seq[UInt256]]] {.async: (raises: [CancelledError]).}
 
   GetCodeProc* = proc(header: Header, address: Address): Future[Opt[seq[byte]]] {.
     async: (raises: [CancelledError])
