@@ -334,10 +334,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         # tag would be an enum (Earliest, Latest, Pending, Number), and all operations
         # would operate on this enum instead of raw strings. This change would need
         # to be done on every endpoint to be consistent.
-        if filterOptions.toBlock.isSome() and
-            filterOptions.toBlock.get().kind == bidNumber and
-            base.BlockNumber(filterOptions.toBlock.get().number) > api.chain.latestHeader.number:
-          raise invalidParams("block range extends beyond current head block")
+        let latestNumber = api.chain.latestHeader.number
+        for tag in [filterOptions.fromBlock, filterOptions.toBlock]:
+          if tag.isSome() and tag.get().kind == bidNumber and
+              base.BlockNumber(tag.get().number) > latestNumber:
+            raise invalidParams("block range extends beyond current head block")
 
         let
           blockFrom = api.headerFromTag(filterOptions.fromBlock.get(defaultTag)).valueOr:

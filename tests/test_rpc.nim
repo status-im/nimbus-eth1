@@ -865,6 +865,17 @@ proc rpcMain*() =
       let res2 = await client.eth_getUncleByBlockNumberAndIndex("latest", w3Qty(1'u64))
       check res2.isNil
 
+    test "eth_getLogs range beyond head is invalid params":
+      let head = await client.eth_blockNumber()
+      for filterOptions in [
+          FilterOptions(fromBlock: Opt.some(blockId(uint64(head) + 1))),
+          FilterOptions(toBlock: Opt.some(blockId(uint64(head) + 1)))]:
+        try:
+          discard await client.eth_getLogs(filterOptions)
+          check false
+        except RpcResponseError as exc:
+          check exc.code == -32602
+
     test "eth_getLogs by blockhash, no filters":
       let testHeader = getBlockHeader4514995()
       let testHash = testHeader.computeBlockHash
