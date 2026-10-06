@@ -27,8 +27,7 @@ import
 logScope:
   topics = "vp_engine"
 
-const
-  HISTORY_SERVE_WINDOW = 8191'u64
+const HISTORY_SERVE_WINDOW = 8191'u64
 
 func convHeader*(blk: eth_api_types.BlockObject): Header =
   let nonce = blk.nonce.valueOr:
@@ -95,8 +94,8 @@ proc getEIP2935Hash(
       anchorNumber = anchor.number, number, slot
     return err(
       (
-        UnavailableDataError, "the EIP-2935 history slot for the requested block is empty",
-        UNTAGGED,
+        UnavailableDataError,
+        "the EIP-2935 history slot for the requested block is empty", UNTAGGED,
       )
     )
 
@@ -210,10 +209,7 @@ proc verifyEIP2935Membership(
 
     let header = (await engine.getTrustedHeader(storedHash, trust)).valueOr:
       error "Couldn't fetch the EIP-2935 window jump header",
-        curAnchorNumber = curAnchor.number,
-        newAnchorNum,
-        storedHash,
-        err = error.errMsg
+        curAnchorNumber = curAnchor.number, newAnchorNum, storedHash, err = error.errMsg
       return err(error)
 
     if header.number != newAnchorNum:
@@ -407,9 +403,8 @@ proc verifyHeader(
   if engine.state.archive:
     ?(await engine.verifyEIP2935Membership(anchor, trust, header, hash))
   else:
-    let walkedHash = ?(
-      await engine.walkBlocks(anchor.number, header.number, anchor.parentHash, trust)
-    )
+    let walkedHash =
+      ?(await engine.walkBlocks(anchor.number, header.number, anchor.parentHash, trust))
 
     if walkedHash != hash:
       return err(
@@ -493,9 +488,8 @@ proc getBlock*(
 ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
   if blockTag.kind != bidNumber:
     # untagged(-1) so the relevant backend can be tagged
-    return err(
-      (InvalidDataError, "a block number is required to fetch by number", UNTAGGED)
-    )
+    return
+      err((InvalidDataError, "a block number is required to fetch by number", UNTAGGED))
 
   # get the target block
   let
@@ -527,10 +521,7 @@ proc getBlock*(
   ok(blk)
 
 proc getHeader*(
-    engine: RpcVerificationEngine,
-    anchor: Header,
-    trust: HeaderTrust,
-    blockHash: Hash32,
+    engine: RpcVerificationEngine, anchor: Header, trust: HeaderTrust, blockHash: Hash32
 ): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
   let cachedHeader = engine.headerStore.get(blockHash, trust)
 
@@ -568,9 +559,8 @@ proc getHeader*(
 ): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
   if blockTag.kind != bidNumber:
     # untagged(-1) so the relevant backend can be tagged
-    return err(
-      (InvalidDataError, "a block number is required to fetch by number", UNTAGGED)
-    )
+    return
+      err((InvalidDataError, "a block number is required to fetch by number", UNTAGGED))
 
   let
     n = distinctBase(blockTag.number)
@@ -598,9 +588,7 @@ proc getHeader*(
       )
     )
 
-  ?(
-    (await engine.verifyHeader(anchor, trust, header, blk.hash)).tagBackend(backendIdx)
-  )
+  ?((await engine.verifyHeader(anchor, trust, header, blk.hash)).tagBackend(backendIdx))
 
   ok(header)
 
@@ -644,9 +632,8 @@ proc getVerified[T](
       return err((InvalidDataError, "No support for block tag " & $blockTag, UNTAGGED))
 
     let hash = anchorHash.valueOr:
-      return err(
-        (UnavailableDataError, $blockTag & " block is not available yet", UNTAGGED)
-      )
+      return
+        err((UnavailableDataError, $blockTag & " block is not available yet", UNTAGGED))
 
     # the anchor hash is the answer, trust is the label it is stored with
     when T is Header:
@@ -709,9 +696,7 @@ proc getVerified[T](
         return await engine.getTrustedHeader(anchor.computeBlockHash, trust)
       else:
         return
-          await engine.getTrustedBlock(
-            anchor.computeBlockHash, trust, fullTransactions
-          )
+          await engine.getTrustedBlock(anchor.computeBlockHash, trust, fullTransactions)
 
     if blockTag.kind == bidHash:
       when T is Header:
@@ -725,9 +710,7 @@ proc getVerified[T](
       return await engine.getBlock(anchor, trust, blockTag, fullTransactions)
 
 proc getVerifiedHeader*(
-    engine: RpcVerificationEngine,
-    blockTag: BlockTag,
-    snapshot = Opt.none(AnchorHashes),
+    engine: RpcVerificationEngine, blockTag: BlockTag, snapshot = Opt.none(AnchorHashes)
 ): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
   await getVerified[Header](engine, blockTag, false, snapshot)
 
@@ -738,4 +721,3 @@ proc getVerifiedBlock*(
     snapshot = Opt.none(AnchorHashes),
 ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
   await getVerified[BlockObject](engine, blockTag, fullTransactions, snapshot)
-

@@ -54,10 +54,14 @@ func isEmpty*(self: HeaderStore): bool =
 
 func getHash*(self: HeaderStore, trust: HeaderTrust): Opt[Hash32] =
   case trust
-  of None: Opt.none(Hash32)
-  of Optimistic: self.latestHash
-  of Safe: self.safeHash
-  of Finalized: self.finalizedHash
+  of None:
+    Opt.none(Hash32)
+  of Optimistic:
+    self.latestHash
+  of Safe:
+    self.safeHash
+  of Finalized:
+    self.finalizedHash
 
 func getEarliestHash*(self: HeaderStore): Opt[Hash32] =
   self.earliestFinalizedHash
@@ -95,10 +99,10 @@ func get*(
   self.get(hash, minTrust)
 
 func putCache(self: HeaderStore, hash: Hash32, header: Header, trust: HeaderTrust) =
-  for (evicted, key, value) in
-      self.headers.putWithEvicted(hash, CachedHeader(header: header, trust: trust)):
-    if evicted and
-        self.hashes.getOrDefault(value.header.number, default(Hash32)) == key:
+  for (evicted, key, value) in self.headers.putWithEvicted(
+    hash, CachedHeader(header: header, trust: trust)
+  ):
+    if evicted and self.hashes.getOrDefault(value.header.number, default(Hash32)) == key:
       self.hashes.del(value.header.number)
 
   if trust == Finalized:

@@ -114,4 +114,3 @@ proc opSyncOnce*(
     number = finalizedHeader.number, hash = finalizedHash
 
   ok()
-
