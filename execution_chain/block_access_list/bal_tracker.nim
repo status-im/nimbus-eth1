@@ -100,6 +100,19 @@ proc init*(
   else:
     BlockAccessListTrackerRef(ledger: ledger, builder: builder, builderOwner: false)
 
+proc reinit*(tracker: BlockAccessListTrackerRef, ledger: ReadOnlyLedger) =
+  ## Reset the tracker for a new block, keeping the builder and its buffers.
+  tracker.ledger = ledger
+  tracker.preStorageCache.clear()
+  tracker.preBalanceCache.clear()
+  tracker.preNonceCache.clear()
+  tracker.preCodeCache.clear()
+  tracker.currentBlockAccessIndex = 0
+  tracker.callFrameSnapshots.setLen(0)
+  tracker.blockAccessList = Opt.none(BlockAccessListRef)
+  if tracker.builderOwner:
+    tracker.builder[].clear()
+
 proc dispose*(tracker: BlockAccessListTrackerRef) =
   if tracker.builderOwner:
     assert not tracker.builder.isNil()

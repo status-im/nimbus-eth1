@@ -25,6 +25,9 @@
 # In both cases the BlockAccessList is then materialized on the main thread and
 # that build step is timed separately, along with the end-to-end time from the
 # start of the fill to the end of the build which is what a block pays overall.
+# The "reused" rows keep one builder across the repeats and `clear` it between
+# blocks, which is how the node runs it in steady state; the other rows build a
+# fresh builder per block.
 #
 # The benchmark is written to compile against both the lock-based builder (which
 # serializes every write on an internal lock) and the lock-free index-partitioned
@@ -258,42 +261,70 @@ proc benchmarkLine(name: string, w: Workload, s: Stats, baseline: float): string
     " " & align(fmt"{s.build * 1000:.2f}", 10) & " " & align(fmt"{s.total * 1000:.2f}", 10) &
     " " & align(fmt"{writesPerSec / 1e6:.2f}", 12) & " " & align(fmt"{speedup:.2f}x", 9)
 
-proc benchSingle(w: Workload): Stats =
-  var fillTotal, buildTotal, allTotal = 0.0
+template withBuilder(reuse: bool, threadSafe: bool, builder, body: untyped) =
+  ## Run `body` once per repeat with `builder` either freshly created for each
+  ## repeat, or created once, warmed up with one untimed repeat and cleared in
+  ## between.
+  if reuse:
+    var shared: BlockAccessListBuilder
+    initBuilder(shared, threadSafe)
+    for r {.inject.} in 0 .. repeats:
+      template builder(): untyped =
+        shared
+
+      body
+      shared.clear()
+    shared.dispose()
+  else:
+    for r {.inject.} in 0 ..< repeats:
+      var fresh: BlockAccessListBuilder
+      initBuilder(fresh, threadSafe)
+      template builder(): untyped =
+        fresh
+
+      body
+      fresh.dispose()
+
+template timed(
+    stats: var tuple[fill, build, all: float], r: int, fillBody, buildBody: untyped
+) =
+  ## Time `fillBody` and `buildBody`, skipping the warm-up repeat of a reused
+  ## builder (`r == repeats`, the extra one) in the totals.
+  let t0 = epochTime()
+  fillBody
+  let t1 = epochTime()
+  buildBody
+  let t2 = epochTime()
+  if r < repeats:
+    stats.fill += t1 - t0
+    stats.build += t2 - t1
+    stats.all += t2 - t0
+
+proc benchSingle(w: Workload, reuse = false): Stats =
+  var totals: tuple[fill, build, all: float]
   var checksum = 0
-  for r in 0 ..< repeats:
-    var builder: BlockAccessListBuilder
-    initBuilder(builder, false)
+  withBuilder(reuse, false, builder):
     let b = addr builder
     b.presize(w.numTx)
-
-    let t0 = epochTime()
-    for t in 0 ..< w.numTx:
-      fillTx(b, w, t)
-    let t1 = epochTime()
-    fillTotal += t1 - t0
-
-    let bal = builder.buildBlockAccessList()
-    let t2 = epochTime()
-    buildTotal += t2 - t1
-    allTotal += t2 - t0
-    checksum += bal[].len()
-
-    builder.dispose()
+    totals.timed(r):
+      for t in 0 ..< w.numTx:
+        fillTx(b, w, t)
+    do:
+      let bal = builder.buildBlockAccessList()
+      if r < repeats:
+        checksum += bal[].len()
   Stats(
-    fill: fillTotal / repeats.float,
-    build: buildTotal / repeats.float,
-    total: allTotal / repeats.float,
+    fill: totals.fill / repeats.float,
+    build: totals.build / repeats.float,
+    total: totals.all / repeats.float,
     checksum: checksum,
   )
 
-proc benchThreaded(nThreads: static int, w: Workload): Stats =
+proc benchThreaded(nThreads: static int, w: Workload, reuse = false): Stats =
   let chunk = w.numTx div nThreads
-  var fillTotal, buildTotal, allTotal = 0.0
+  var totals: tuple[fill, build, all: float]
   var checksum = 0
-  for r in 0 ..< repeats:
-    var builder: BlockAccessListBuilder
-    initBuilder(builder, true)
+  withBuilder(reuse, true, builder):
     let b = addr builder
     # Pre-size on the main thread before spawning so that the workers only append
     # into already-allocated partitions (lock-free builder). No-op on the locked
@@ -308,25 +339,19 @@ proc benchThreaded(nThreads: static int, w: Workload): Stats =
       let endTx = if t == nThreads - 1: w.numTx else: startTx + chunk
       ranges[t] = FillRange(builder: b, workload: w, startTx: startTx, endTx: endTx)
 
-    let t0 = epochTime()
-    for t in 0 ..< nThreads:
-      createThread(threads[t], fillRangeProc, addr ranges[t])
-    for t in 0 ..< nThreads:
-      joinThread(threads[t])
-    let t1 = epochTime()
-    fillTotal += t1 - t0
-
-    let bal = builder.buildBlockAccessList()
-    let t2 = epochTime()
-    buildTotal += t2 - t1
-    allTotal += t2 - t0
-    checksum += bal[].len()
-
-    builder.dispose()
+    totals.timed(r):
+      for t in 0 ..< nThreads:
+        createThread(threads[t], fillRangeProc, addr ranges[t])
+      for t in 0 ..< nThreads:
+        joinThread(threads[t])
+    do:
+      let bal = builder.buildBlockAccessList()
+      if r < repeats:
+        checksum += bal[].len()
   Stats(
-    fill: fillTotal / repeats.float,
-    build: buildTotal / repeats.float,
-    total: allTotal / repeats.float,
+    fill: totals.fill / repeats.float,
+    build: totals.build / repeats.float,
+    total: totals.all / repeats.float,
     checksum: checksum,
   )
 
@@ -337,12 +362,17 @@ proc describe(w: Workload): string =
     $w.nonceAccounts & ", code bytes=" & $w.codeLen & ", repeats=" & $repeats
 
 proc runSingle(w: Workload) =
-  let s = benchSingle(w)
+  let
+    s = benchSingle(w)
+    reused = benchSingle(w, reuse = true)
   debugEcho ""
   debugEcho "  ", w.name, ": ", w.describe()
   debugEcho benchmarkHeader()
   debugEcho benchmarkLine("single-threaded", w, s, s.total)
-  check s.checksum > 0
+  debugEcho benchmarkLine("single reused", w, reused, s.total)
+  check:
+    s.checksum > 0
+    s.checksum == reused.checksum
 
 proc runThreaded(w: Workload) =
   let
@@ -351,6 +381,7 @@ proc runThreaded(w: Workload) =
     s4 = benchThreaded(4, w)
     s8 = benchThreaded(8, w)
     s16 = benchThreaded(16, w)
+    s4reused = benchThreaded(4, w, reuse = true)
 
   debugEcho ""
   debugEcho "  ", w.name, ": ", w.describe()
@@ -363,6 +394,7 @@ proc runThreaded(w: Workload) =
   debugEcho benchmarkLine("4-thread", w, s4, base)
   debugEcho benchmarkLine("8-thread", w, s8, base)
   debugEcho benchmarkLine("16-thread", w, s16, base)
+  debugEcho benchmarkLine("4-thread reused", w, s4reused, base)
 
   # All thread counts must materialize the exact same set of accounts.
   check:
@@ -370,6 +402,7 @@ proc runThreaded(w: Workload) =
     s1.checksum == s4.checksum
     s1.checksum == s8.checksum
     s1.checksum == s16.checksum
+    s1.checksum == s4reused.checksum
 
 suite "BlockAccessListBuilder throughput benchmark":
   debugEcho ""

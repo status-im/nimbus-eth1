@@ -135,8 +135,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
     return false
 
   if not self.balTracker.isNil():
-    self.balTracker.dispose()
-    self.balTracker = BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
+    self.balTracker.reinit(self.ledger.ReadOnlyLedger)
 
   let
     tracer = self.tracer
@@ -180,15 +179,16 @@ proc reinit*(self:    BaseVMState; ## Object descriptor
 
   self.ledger.reinit(txFrame)
 
-  if not self.balTracker.isNil():
+  if enableBalTracker:
+    if self.balTracker.isNil():
+      self.balTracker = BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
+    else:
+      self.balTracker.reinit(self.ledger.ReadOnlyLedger)
+  elif not self.balTracker.isNil():
     self.balTracker.dispose()
     self.balTracker = nil
 
-  let tracker =
-    if enableBalTracker:
-      BlockAccessListTrackerRef.init(self.ledger.ReadOnlyLedger)
-    else:
-      nil
+  let tracker = self.balTracker
   self.init(
     ledger   = self.ledger,
     parent   = parent,

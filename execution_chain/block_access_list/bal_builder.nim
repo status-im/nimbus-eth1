@@ -26,6 +26,10 @@
 # The idea here is that each thread writes to a separate index in the internal
 # `perIndex` array so that concurrent lock free writes are possible during
 # parallel execution.
+#
+# A builder is meant to live across blocks: `clear` drops the recorded changes
+# but keeps every buffer, so after the first few blocks the fill phase runs on
+# already sized memory and no longer touches the allocator at all.
 
 {.push raises: [], gcsafe.}
 
@@ -63,6 +67,19 @@ type
 
   BlockAccessListBuilder* = object
     perIndex: SharedSeq[BalIndexData]
+      ## Grows to the largest index count seen and is never shrunk, so that
+      ## the per-index buffers survive `clear`.
+    indexCount: int ## block access indices in use for the current block
+
+proc clear(indexData: var BalIndexData) =
+  indexData.touchedAccounts.clear()
+  indexData.storageChanges.clear()
+  indexData.storageReads.clear()
+  indexData.balanceChanges.clear()
+  indexData.nonceChanges.clear()
+  for code in indexData.codeChanges.mitems():
+    code.code.dispose()
+  indexData.codeChanges.clear()
 
 proc dispose(indexData: var BalIndexData) =
   indexData.touchedAccounts.dispose()
@@ -89,10 +106,18 @@ proc newShared*(T: type BlockAccessListBuilder): ptr BlockAccessListBuilder =
   builderPtr[].init()
   builderPtr
 
+proc clear*(builder: var BlockAccessListBuilder) =
+  ## Forget the recorded changes but keep every buffer so that the next block
+  ## records into already allocated memory.
+  for idx in 0 ..< builder.indexCount:
+    builder.perIndex[idx].clear()
+  builder.indexCount = 0
+
 proc dispose*(builder: var BlockAccessListBuilder) =
   for idxData in builder.perIndex.mitems():
     idxData.dispose()
   builder.perIndex.dispose()
+  builder.indexCount = 0
 
 proc dispose*(builderPtr: ptr BlockAccessListBuilder) =
   if not builderPtr.isNil():
@@ -107,11 +132,13 @@ proc `=copy`(
 proc ensureIndexCount*(builder: var BlockAccessListBuilder, n: int, exact = false) =
   if n > builder.perIndex.len:
     builder.perIndex.setLen(n, zeroed = true, exact)
+  if n > builder.indexCount:
+    builder.indexCount = n
 
 proc addTouchedAccount*(
     builder: var BlockAccessListBuilder, blockAccessIndex: int, address: Address
 ) =
-  assert blockAccessIndex < builder.perIndex.len
+  assert blockAccessIndex < builder.indexCount
   builder.perIndex[blockAccessIndex].touchedAccounts.add(address)
 
 proc addStorageWrite*(
@@ -121,7 +148,7 @@ proc addStorageWrite*(
     slot: UInt256,
     newValue: UInt256,
 ) =
-  assert blockAccessIndex < builder.perIndex.len
+  assert blockAccessIndex < builder.indexCount
   builder.perIndex[blockAccessIndex].storageChanges.add((address, slot, newValue))
 
 proc addStorageRead*(
@@ -130,7 +157,7 @@ proc addStorageRead*(
     address: Address,
     slot: UInt256,
 ) =
-  assert blockAccessIndex < builder.perIndex.len
+  assert blockAccessIndex < builder.indexCount
   builder.perIndex[blockAccessIndex].storageReads.add((address, slot))
 
 proc addBalanceChange*(
@@ -139,7 +166,7 @@ proc addBalanceChange*(
     address: Address,
     postBalance: UInt256,
 ) =
-  assert blockAccessIndex < builder.perIndex.len
+  assert blockAccessIndex < builder.indexCount
   builder.perIndex[blockAccessIndex].balanceChanges.add((address, postBalance))
 
 proc addNonceChange*(
@@ -148,7 +175,7 @@ proc addNonceChange*(
     address: Address,
     newNonce: AccountNonce,
 ) =
-  assert blockAccessIndex < builder.perIndex.len
+  assert blockAccessIndex < builder.indexCount
   builder.perIndex[blockAccessIndex].nonceChanges.add((address, newNonce))
 
 proc addCodeChange*(
@@ -157,7 +184,7 @@ proc addCodeChange*(
     address: Address,
     newCode: openArray[byte],
 ) =
-  assert blockAccessIndex < builder.perIndex.len
+  assert blockAccessIndex < builder.indexCount
   builder.perIndex[blockAccessIndex].codeChanges.add(
     (address, SharedBytes.init(newCode))
   )
@@ -391,7 +418,7 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
 
   # Phase 1: reserve exact capacity, then flatten.
   var totT, totS, totR, totB, totN, totC = 0
-  for idx in 0 ..< builder.perIndex.len:
+  for idx in 0 ..< builder.indexCount:
     let d = addr builder.perIndex[idx]
     totT += d[].touchedAccounts.len
     totS += d[].storageChanges.len
@@ -410,7 +437,7 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
     nFlat = newSeqOfCap[FlatNonceChange](totN)
     cFlat = newSeqOfCap[FlatCodeChange](totC)
 
-  for idx in 0 ..< builder.perIndex.len:
+  for idx in 0 ..< builder.indexCount:
     let
       balIndex = BlockAccessIndex(idx)
       d = addr builder.perIndex[idx]

@@ -143,6 +143,10 @@ proc setLen*[N, E](s: var SmallSeq[N, E], newLen: int, zeroed = true, exact = fa
     zeroMem(addr s.buf[s.count], (newLen - s.count) * sizeof(E))
   s.count = newLen
 
+proc clear*[N, E](s: var SmallSeq[N, E]) =
+  ## Drop every element but keep the allocated capacity for reuse.
+  s.count = 0
+
 proc add*[N, E](s: var SmallSeq[N, E], value: E) =
   # Not `sink`: E is always a `supportsCopyMem` type here, and the compiler
   # passes a `sink` parameter of such a type by value - an extra copy of the

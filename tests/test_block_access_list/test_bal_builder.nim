@@ -215,6 +215,41 @@ suite "Block access list builder":
       bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
 
 
+  test "clear drops the previous block's changes but keeps the builder usable":
+    builder.ensureIndexCount(3)
+    builder.addTouchedAccount(0, address1)
+    builder.addStorageWrite(1, address1, slot1, 1.u256)
+    builder.addStorageRead(2, address2, slot2)
+    builder.addBalanceChange(2, address2, 5.u256)
+    builder.addNonceChange(1, address1, 1)
+    builder.addCodeChange(2, address3, @[0x1.byte, 0x2])
+    check builder.buildBlockAccessList()[].len() == 3
+
+    builder.clear()
+    check builder.buildBlockAccessList()[].len() == 0
+
+    # A smaller block after a larger one must not see the old indices, and a
+    # larger block must still grow the builder.
+    builder.ensureIndexCount(2)
+    builder.addBalanceChange(1, address2, 7.u256)
+    var bal = builder.buildBlockAccessList()[]
+    check:
+      bal.len() == 1
+      bal[0].address == address2
+      bal[0].balanceChanges == @[(1.BlockAccessIndex, 7.u256)]
+      bal[0].storageReads.len() == 0
+
+    builder.clear()
+    builder.ensureIndexCount(5)
+    builder.addStorageWrite(4, address1, slot3, 9.u256)
+    builder.addCodeChange(4, address1, @[0x3.byte])
+    bal = builder.buildBlockAccessList()[]
+    check:
+      bal.len() == 1
+      bal[0].address == address1
+      bal[0].storageChanges == @[(slot3, @[(4.BlockAccessIndex, 9.u256)])]
+      bal[0].codeChanges == @[(4.BlockAccessIndex, @[0x3.byte])]
+
 # The builder is lock-free because each block access index has a single writer.
 # These helpers mirror that model: one task per distinct block access index.
 

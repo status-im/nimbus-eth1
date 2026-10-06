@@ -122,6 +122,31 @@ suite "Block access list tracker":
   teardown:
     tracker.dispose()
 
+  test "Reinit resets per-block state and reuses the builder":
+    tracker.setBlockAccessIndex(1)
+    tracker.beginCallFrame()
+    tracker.trackAddressAccess(address1)
+    tracker.commitCallFrame()
+    let builderBefore = tracker.builder
+    check tracker.buildBal().hasAccount(address1)
+
+    tracker.reinit(ledger.ReadOnlyLedger)
+    check:
+      tracker.builder == builderBefore
+      tracker.buildBal().len() == 0
+      tracker.currentBlockAccessIndex == 0
+      not tracker.hasPendingCallFrame()
+
+    tracker.setBlockAccessIndex(1)
+    tracker.beginCallFrame()
+    tracker.trackAddressAccess(address2)
+    tracker.commitCallFrame()
+    let bal = tracker.buildBal()
+    check:
+      bal.len() == 1
+      bal.hasAccount(address2)
+      not bal.hasAccount(address1)
+
   test "Set valid block access index":
     let balIndexes = [
       uint16.low.int,
