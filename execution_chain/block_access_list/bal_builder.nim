@@ -15,9 +15,11 @@
 #
 # All collections use the non-GC SharedSeq/SmallSeq types (rather than the
 # standard library Seq) so that the builder can be used safely with the refc
-# memory manager across threads. The per-index collections keep their first few
-# elements inline so that a typical transaction (a transfer touching a handful
-# of accounts) records its changes without any heap allocation.
+# memory manager across threads. The touched account, balance and nonce
+# collections keep inline room for a plain transfer (sender, recipient and
+# coinbase) so that such a transaction records its changes without any heap
+# allocation, while keeping the per-index record small enough that heavier
+# transactions do not pay for unused inline space in their cache footprint.
 #
 # The idea here is that each thread writes to a separate index in the internal
 # `perIndex` array so that concurrent lock free writes are possible during
@@ -41,17 +43,15 @@ type
   CodeWrite = tuple[address: Address, code: SharedBytes]
 
 const
-  inlineTouchedAccounts = 4
-  inlineStorageChanges = 2
-  inlineStorageReads = 4
-  inlineBalanceChanges = 4
-  inlineNonceChanges = 2
+  inlineTouchedAccounts = 3
+  inlineBalanceChanges = 3
+  inlineNonceChanges = 1
 
 type
   BalIndexData = object
     touchedAccounts: SmallSeq[inlineTouchedAccounts, Address]
-    storageChanges: SmallSeq[inlineStorageChanges, StorageWrite]
-    storageReads: SmallSeq[inlineStorageReads, StorageReadEntry]
+    storageChanges: SharedSeq[StorageWrite]
+    storageReads: SharedSeq[StorageReadEntry]
     balanceChanges: SmallSeq[inlineBalanceChanges, BalanceWrite]
     nonceChanges: SmallSeq[inlineNonceChanges, NonceWrite]
     codeChanges: SharedSeq[CodeWrite]

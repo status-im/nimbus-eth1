@@ -43,6 +43,7 @@ type
     accountsPerTx: int ## accounts touched by each transaction
     writesPerAccount: int ## storage writes per touched account (per transaction)
     readsPerAccount: int ## storage reads per touched account (per transaction)
+    nonceAccounts: int ## how many of the touched accounts get a nonce change
     codeChange: bool ## whether the first touched account also gets a code change
 
 const
@@ -57,12 +58,21 @@ const
   # A contract-heavy transaction: many touched accounts, each with several
   # storage writes and reads, plus a code change.
   heavyTx = Workload(
-    accountsPerTx: 8, writesPerAccount: 4, readsPerAccount: 2, codeChange: true
+    accountsPerTx: 8,
+    writesPerAccount: 4,
+    readsPerAccount: 2,
+    nonceAccounts: 8,
+    codeChange: true,
   )
-  # A plain transfer-like transaction: a couple of touched accounts with a
-  # balance and nonce change each, a single storage read and no code change.
+  # A plain transfer: sender, recipient and coinbase are touched and have their
+  # balance changed, only the sender's nonce changes, and there is no storage
+  # access or code change.
   lightTx = Workload(
-    accountsPerTx: 2, writesPerAccount: 0, readsPerAccount: 1, codeChange: false
+    accountsPerTx: 3,
+    writesPerAccount: 0,
+    readsPerAccount: 0,
+    nonceAccounts: 1,
+    codeChange: false,
   )
 
 type
@@ -122,7 +132,8 @@ proc fillTx(b: ptr BlockAccessListBuilder, w: Workload, txIndex: int) =
         b[].addStorageRead(address, slot)
 
     b[].addBalanceChange(txIndex, address, u256(acctId + 1))
-    b[].addNonceChange(txIndex, address, AccountNonce(txIndex + 1))
+    if a < w.nonceAccounts:
+      b[].addNonceChange(txIndex, address, AccountNonce(txIndex + 1))
 
     if a == 0 and w.codeChange:
       var code: array[codeLen, byte]
@@ -142,8 +153,8 @@ proc benchmarkLine(name: string, w: Workload, s: Stats, baseline: float): string
   # Roughly the number of builder mutations issued during the fill phase.
   let
     opsPerTx =
-      w.accountsPerTx * (1 + w.writesPerAccount + w.readsPerAccount + 2) +
-      (if w.codeChange: 1 else: 0)
+      w.accountsPerTx * (1 + w.writesPerAccount + w.readsPerAccount + 1) +
+      w.nonceAccounts + (if w.codeChange: 1 else: 0)
     writesPerSec = (numTx * opsPerTx).float / s.fill
     speedup = baseline / s.fill
   "  " & alignLeft(name, benchNameWidth) & " " & align(fmt"{s.fill * 1000:.2f}", 10) &
@@ -210,8 +221,8 @@ proc benchThreaded(nThreads: static int, w: Workload): Stats =
 
 proc describe(w: Workload): string =
   "txs=" & $numTx & ", accounts/tx=" & $w.accountsPerTx & ", writes/acct=" &
-    $w.writesPerAccount & ", reads/acct=" & $w.readsPerAccount & ", code=" &
-    $w.codeChange & ", repeats=" & $repeats
+    $w.writesPerAccount & ", reads/acct=" & $w.readsPerAccount & ", nonces=" &
+    $w.nonceAccounts & ", code=" & $w.codeChange & ", repeats=" & $repeats
 
 proc runSingle(name: string, w: Workload) =
   let s = benchSingle(w)
