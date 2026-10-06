@@ -15,11 +15,13 @@
 #
 # All collections use the non-GC SharedSeq/SmallSeq types (rather than the
 # standard library Seq) so that the builder can be used safely with the refc
-# memory manager across threads. The touched account, balance and nonce
-# collections keep inline room for a plain transfer (sender, recipient and
-# coinbase) so that such a transaction records its changes without any heap
-# allocation, while keeping the per-index record small enough that heavier
-# transactions do not pay for unused inline space in their cache footprint.
+# memory manager across threads. Each per-index collection keeps inline room
+# for what a plain transfer or a token transfer records (a few touched accounts
+# with their balance changes, the sender's nonce, a couple of storage writes and
+# a read, or one code change) so that such a transaction records its changes
+# without any heap allocation. The capacities were tuned on the scenarios in
+# tests/test_block_access_list/bench_bal_builder.nim: larger ones make heavier
+# transactions pay for unused inline space in their cache footprint.
 #
 # The idea here is that each thread writes to a separate index in the internal
 # `perIndex` array so that concurrent lock free writes are possible during
@@ -43,18 +45,21 @@ type
   CodeWrite = tuple[address: Address, code: SharedBytes]
 
 const
-  inlineTouchedAccounts = 3
-  inlineBalanceChanges = 3
+  inlineTouchedAccounts = 4
+  inlineStorageChanges = 2
+  inlineStorageReads = 1
+  inlineBalanceChanges = 4
   inlineNonceChanges = 1
+  inlineCodeChanges = 1
 
 type
   BalIndexData = object
     touchedAccounts: SmallSeq[inlineTouchedAccounts, Address]
-    storageChanges: SharedSeq[StorageWrite]
-    storageReads: SharedSeq[StorageReadEntry]
+    storageChanges: SmallSeq[inlineStorageChanges, StorageWrite]
+    storageReads: SmallSeq[inlineStorageReads, StorageReadEntry]
     balanceChanges: SmallSeq[inlineBalanceChanges, BalanceWrite]
     nonceChanges: SmallSeq[inlineNonceChanges, NonceWrite]
-    codeChanges: SharedSeq[CodeWrite]
+    codeChanges: SmallSeq[inlineCodeChanges, CodeWrite]
 
   BlockAccessListBuilder* = object
     perIndex: SharedSeq[BalIndexData]
