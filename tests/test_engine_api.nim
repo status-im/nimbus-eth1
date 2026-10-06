@@ -13,13 +13,13 @@ import
   eth/common,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
-  web3/engine_api,
-  web3/conversions,
-  web3/execution_types,
   unittest2
 
 import
   eth/common/keys,
+  ../execution_api/conversions,
+  ../execution_api/execution_types,
+  ../execution_api/execution_api,
   ../execution_chain/rpc,
   ../execution_chain/conf,
   ../execution_chain/common,
@@ -29,7 +29,7 @@ import
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/beacon/beacon_engine,
   ../execution_chain/beacon/web3_eth_conv,
-  ../hive_integration/engine_client,
+  ../execution_api/engine_client,
    ./shared_data/eip8282data
 
 type
@@ -156,7 +156,7 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -170,7 +170,7 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
     payload = ? client.getPayload(Version.V1, fcuRes.payloadId.get)
     npRes = ? client.newPayloadV1(payload.executionPayload)
 
-  discard ? client.forkchoiceUpdated(Version.V1, ForkchoiceStateV1(
+  discard ? client.forkchoiceUpdated(Version.V1, ForkchoiceState(
     headBlockHash: npRes.latestValidHash.get
   ))
   let bn = ? client.blockNumber()
@@ -208,7 +208,7 @@ proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -275,7 +275,7 @@ proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
     client = env.client
     genesisHeader = ? client.latestHeader()
     genesisHash = genesisHeader.computeBlockHash
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: genesisHash
     )
     time = getTime().toUnix
@@ -314,7 +314,7 @@ proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
       suggestedFeeRecipient: default(Address),
       withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
     )
-    updateC = ForkchoiceStateV1(
+    updateC = ForkchoiceState(
       headBlockHash: payloadA.blockHash,
       finalizedBlockHash: genesisHash,
     )
@@ -334,7 +334,7 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -411,7 +411,7 @@ proc genesisShouldCanonicalTest(env: TestEnv): Result[void, string] =
     return err("lastestValidHash should not empty")
 
   let
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: params.payload.blockHash,
       safeBlockHash: params.payload.parentHash,
       finalizedBlockHash: params.payload.parentHash,
@@ -481,7 +481,7 @@ proc newPayloadV5UndecodableBAL(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -556,7 +556,7 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -604,6 +604,63 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
   if slotNumber != attr.slotNumber:
     return err("Expected slotNumber: " & $attr.slotNumber &
       ", got : " & $slotNumber)
+
+  ok()
+
+proc getPayloadBodiesByHashV2ReturnsBALForBlocksWithoutWD(env: TestEnv): Result[void, string] =
+  let
+    client = env.client
+    header = ? client.latestHeader()
+    update = ForkchoiceState(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+      parentBeaconBlockRoot: Opt.some(default(Hash32)),
+      slotNumber:            Opt.some(w3Qty(9'u64)),
+      targetGasLimit:        Opt.some(w3Qty(60_000_000'u64)),
+    )
+
+  let
+    fcuRes = ? client.forkchoiceUpdated(Version.V4, update, Opt.some(attr))
+    bundle = ? client.getPayload(Version.V6, fcuRes.payloadId.get)
+
+  var payload = bundle.executionPayload
+
+  # An undecodable blockAccessList is an invalid block, not an invalid request,
+  # so it is reported as an invalid payload status.
+  let res = client.newPayloadV5(
+    payload,
+    Opt.some(newSeq[Hash32]()),
+    Opt.some(default(Hash32)),
+    bundle.executionRequests)
+
+  if res.isErr:
+    return err("res should not error: " & res.error)
+
+  if res.get.status != PayloadExecutionStatus.valid:
+    return err("res.status should be equal to PayloadExecutionStatus.valid")
+
+  if res.get.latestValidHash.isNone:
+    return err("latestValidHash should have some value")
+
+  if res.get.latestValidHash.get != payload.blockHash:
+    return err("latestValidHash should be equal to: " & $payload.blockHash)
+
+  let bodies = ? client.getPayloadBodiesByHashV2(@[payload.blockHash])
+
+  if bodies.len != 1:
+    return err("bodies len should == 1")
+
+  if bodies[0].isNone:
+    return err("bodies at[0] should have something")
+
+  if bodies[0].value.blockAccessList.isNone:
+    return err("bodies should have BAL")
 
   ok()
 
@@ -663,6 +720,11 @@ const testList = [
     name: "PayloadAttributesV4 preserve withdrawals",
     fork: Amsterdam,
     testProc: payloadAttrV4PreserveWithdrawalsTest
+  ),
+  TestSpec(
+    name: "getPayloadBodiesByHashV2 returns BAL for blocks without withdrawals",
+    fork: Amsterdam,
+    testProc: getPayloadBodiesByHashV2ReturnsBALForBlocksWithoutWD
   ),
   ]
 

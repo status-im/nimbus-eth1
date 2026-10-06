@@ -252,6 +252,12 @@ const
   nProcBalDefaultBatchMax* = 1000
     ## Default maximum number of BALs for a single auto downloading session.
 
+  # -----------
+
+  nCoreDbImportPersistBatch* = 1024 * 1024
+    ## When importing accounts, storage, and contract codes the caches are
+    ## regularly saved to disk after this many items have benn processed.
+
 static:
   doAssert 0 < nConsHeadCachedDeltaMin
   doAssert 0 < nFinHeadSupportWindowTopMargin

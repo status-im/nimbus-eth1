@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -11,7 +11,6 @@ import
   std/[typetraits],
   ../web3_eth_conv,
   ../beacon_engine,
-  web3/execution_types,
   ./api_utils,
   chronicles
 
