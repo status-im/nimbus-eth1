@@ -202,6 +202,11 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
 
   # Configure snap sync if enabled. When done it will resume beacon sync.
   if config.snapSyncEnabled:
+    if not com.chainHasAmsterdam():
+      fatal "Current block chain does not support the" &
+            " Amsterdam fork needed for snap/2"
+      quit QuitFailure
+
     if nimbus.snapSyncRef.isNil:
       nimbus.snapSyncRef = SnapSyncRef.init()
     else:
