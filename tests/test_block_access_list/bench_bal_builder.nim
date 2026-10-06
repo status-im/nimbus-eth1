@@ -21,7 +21,8 @@
 #   * multi-threaded fill where N worker threads each own a disjoint range of
 #     transaction indices and write into the *same* builder concurrently
 # In both cases the BlockAccessList is then materialized on the main thread and
-# that build step is timed separately.
+# that build step is timed separately, along with the end-to-end time from the
+# start of the fill to the end of the build which is what a block pays overall.
 #
 # The benchmark is written to compile against both the lock-based builder (which
 # serializes every write on an internal lock) and the lock-free index-partitioned
@@ -38,26 +39,53 @@ import
   eth/common/addresses,
   ../../execution_chain/block_access_list/bal_builder
 
+type
+  Workload = object
+    accountsPerTx: int ## accounts touched by each transaction
+    writesPerAccount: int ## storage writes per touched account (per transaction)
+    readsPerAccount: int ## storage reads per touched account (per transaction)
+    nonceAccounts: int ## how many of the touched accounts get a nonce change
+    codeChange: bool ## whether the first touched account also gets a code change
+
 const
   benchNameWidth = 26
   numTx = 2048 ## transactions == distinct block access indices in the block
-  accountsPerTx = 8 ## accounts touched by each transaction
   numAccounts = 4000 ## address space (accounts are shared across transactions)
-  writesPerAccount = 4 ## storage writes per touched account (per transaction)
-  readsPerAccount = 2 ## storage reads per touched account (per transaction)
   codeLen = 32 ## bytes of code per code change
   repeats = 10
     ## Each measured scenario builds a fresh builder and fills/builds/disposes it
     ## `repeats` times; the reported figures are averages.
 
+  # A contract-heavy transaction: many touched accounts, each with several
+  # storage writes and reads, plus a code change.
+  heavyTx = Workload(
+    accountsPerTx: 8,
+    writesPerAccount: 4,
+    readsPerAccount: 2,
+    nonceAccounts: 8,
+    codeChange: true,
+  )
+  # A plain transfer: sender, recipient and coinbase are touched and have their
+  # balance changed, only the sender's nonce changes, and there is no storage
+  # access or code change.
+  lightTx = Workload(
+    accountsPerTx: 3,
+    writesPerAccount: 0,
+    readsPerAccount: 0,
+    nonceAccounts: 1,
+    codeChange: false,
+  )
+
 type
   Stats = object
     fill: float ## average wall-clock of the fill phase (seconds)
     build: float ## average wall-clock of the build phase (seconds)
+    total: float ## average wall-clock from fill start to build end (seconds)
     checksum: int ## consumed so the build result is not optimized away
 
   FillRange = object
     builder: ptr BlockAccessListBuilder
+    workload: Workload
     startTx: int
     endTx: int
 
@@ -82,10 +110,10 @@ template initBuilder(b: var BlockAccessListBuilder, threadSafe: bool) =
   else:
     b.init()
 
-proc fillTx(b: ptr BlockAccessListBuilder, txIndex: int) =
+proc fillTx(b: ptr BlockAccessListBuilder, w: Workload, txIndex: int) =
   ## Emit the changes for one transaction, all recorded at block access index
   ## `txIndex`. This is the unit of work owned by a single thread.
-  for a in 0 ..< accountsPerTx:
+  for a in 0 ..< w.accountsPerTx:
     let
       acctId = (txIndex * 7 + a * 131) mod numAccounts
       address = makeAddress(acctId)
@@ -95,10 +123,10 @@ proc fillTx(b: ptr BlockAccessListBuilder, txIndex: int) =
     else:
       b[].addTouchedAccount(address)
 
-    for s in 0 ..< writesPerAccount:
+    for s in 0 ..< w.writesPerAccount:
       b[].addStorageWrite(txIndex, address, u256(acctId * 100 + s), u256(s + 1))
 
-    for r in 0 ..< readsPerAccount:
+    for r in 0 ..< w.readsPerAccount:
       let slot = u256(acctId * 100 + 50 + r)
       when compiles(b[].addStorageRead(txIndex, address, slot)):
         b[].addStorageRead(txIndex, address, slot)
@@ -106,9 +134,10 @@ proc fillTx(b: ptr BlockAccessListBuilder, txIndex: int) =
         b[].addStorageRead(address, slot)
 
     b[].addBalanceChange(txIndex, address, u256(acctId + 1))
-    b[].addNonceChange(txIndex, address, AccountNonce(txIndex + 1))
+    if a < w.nonceAccounts:
+      b[].addNonceChange(txIndex, address, AccountNonce(txIndex + 1))
 
-    if a == 0:
+    if a == 0 and w.codeChange:
       var code: array[codeLen, byte]
       for k in 0 ..< codeLen:
         code[k] = byte((acctId + k) and 0xff)
@@ -116,25 +145,28 @@ proc fillTx(b: ptr BlockAccessListBuilder, txIndex: int) =
 
 proc fillRangeProc(ctx: ptr FillRange) {.thread.} =
   for t in ctx.startTx ..< ctx.endTx:
-    fillTx(ctx.builder, t)
+    fillTx(ctx.builder, ctx.workload, t)
 
 proc benchmarkHeader(): string =
   "  " & alignLeft("benchmark", benchNameWidth) & " " & align("fill(ms)", 10) & " " &
-    align("build(ms)", 10) & " " & align("Mwrites/s", 12) & " " & align("speedup", 9)
+    align("build(ms)", 10) & " " & align("total(ms)", 10) & " " & align("Mwrites/s", 12) &
+    " " & align("speedup", 9)
 
-proc benchmarkLine(name: string, s: Stats, baseline: float): string =
+proc benchmarkLine(name: string, w: Workload, s: Stats, baseline: float): string =
   # Roughly the number of builder mutations issued during the fill phase.
-  const opsPerTx =
-    accountsPerTx * (1 + writesPerAccount + readsPerAccount + 2) + 1 # + one code change
+  # The speedup is that of the end-to-end time relative to `baseline`.
   let
+    opsPerTx =
+      w.accountsPerTx * (1 + w.writesPerAccount + w.readsPerAccount + 1) +
+      w.nonceAccounts + (if w.codeChange: 1 else: 0)
     writesPerSec = (numTx * opsPerTx).float / s.fill
-    speedup = baseline / s.fill
+    speedup = baseline / s.total
   "  " & alignLeft(name, benchNameWidth) & " " & align(fmt"{s.fill * 1000:.2f}", 10) &
-    " " & align(fmt"{s.build * 1000:.2f}", 10) & " " &
-    align(fmt"{writesPerSec / 1e6:.2f}", 12) & " " & align(fmt"{speedup:.2f}x", 9)
+    " " & align(fmt"{s.build * 1000:.2f}", 10) & " " & align(fmt"{s.total * 1000:.2f}", 10) &
+    " " & align(fmt"{writesPerSec / 1e6:.2f}", 12) & " " & align(fmt"{speedup:.2f}x", 9)
 
-proc benchSingle(): Stats =
-  var fillTotal, buildTotal = 0.0
+proc benchSingle(w: Workload): Stats =
+  var fillTotal, buildTotal, allTotal = 0.0
   var checksum = 0
   for r in 0 ..< repeats:
     var builder: BlockAccessListBuilder
@@ -144,20 +176,27 @@ proc benchSingle(): Stats =
 
     let t0 = epochTime()
     for t in 0 ..< numTx:
-      fillTx(b, t)
-    fillTotal += epochTime() - t0
-
+      fillTx(b, w, t)
     let t1 = epochTime()
+    fillTotal += t1 - t0
+
     let bal = builder.buildBlockAccessList()
-    buildTotal += epochTime() - t1
+    let t2 = epochTime()
+    buildTotal += t2 - t1
+    allTotal += t2 - t0
     checksum += bal[].len()
 
     builder.dispose()
-  Stats(fill: fillTotal / repeats.float, build: buildTotal / repeats.float, checksum: checksum)
+  Stats(
+    fill: fillTotal / repeats.float,
+    build: buildTotal / repeats.float,
+    total: allTotal / repeats.float,
+    checksum: checksum,
+  )
 
-proc benchThreaded(nThreads: static int): Stats =
+proc benchThreaded(nThreads: static int, w: Workload): Stats =
   let chunk = numTx div nThreads
-  var fillTotal, buildTotal = 0.0
+  var fillTotal, buildTotal, allTotal = 0.0
   var checksum = 0
   for r in 0 ..< repeats:
     var builder: BlockAccessListBuilder
@@ -174,60 +213,86 @@ proc benchThreaded(nThreads: static int): Stats =
     for t in 0 ..< nThreads:
       let startTx = t * chunk
       let endTx = if t == nThreads - 1: numTx else: startTx + chunk
-      ranges[t] = FillRange(builder: b, startTx: startTx, endTx: endTx)
+      ranges[t] = FillRange(builder: b, workload: w, startTx: startTx, endTx: endTx)
 
     let t0 = epochTime()
     for t in 0 ..< nThreads:
       createThread(threads[t], fillRangeProc, addr ranges[t])
     for t in 0 ..< nThreads:
       joinThread(threads[t])
-    fillTotal += epochTime() - t0
-
     let t1 = epochTime()
+    fillTotal += t1 - t0
+
     let bal = builder.buildBlockAccessList()
-    buildTotal += epochTime() - t1
+    let t2 = epochTime()
+    buildTotal += t2 - t1
+    allTotal += t2 - t0
     checksum += bal[].len()
 
     builder.dispose()
-  Stats(fill: fillTotal / repeats.float, build: buildTotal / repeats.float, checksum: checksum)
+  Stats(
+    fill: fillTotal / repeats.float,
+    build: buildTotal / repeats.float,
+    total: allTotal / repeats.float,
+    checksum: checksum,
+  )
+
+proc describe(w: Workload): string =
+  "txs=" & $numTx & ", accounts/tx=" & $w.accountsPerTx & ", writes/acct=" &
+    $w.writesPerAccount & ", reads/acct=" & $w.readsPerAccount & ", nonces=" &
+    $w.nonceAccounts & ", code=" & $w.codeChange & ", repeats=" & $repeats
+
+proc runSingle(name: string, w: Workload) =
+  let s = benchSingle(w)
+  debugEcho ""
+  debugEcho "  ", name, ": ", w.describe()
+  debugEcho benchmarkHeader()
+  debugEcho benchmarkLine("single-threaded", w, s, s.total)
+  check s.checksum > 0
+
+proc runThreaded(name: string, w: Workload) =
+  let
+    s1 = benchThreaded(1, w)
+    s2 = benchThreaded(2, w)
+    s4 = benchThreaded(4, w)
+    s8 = benchThreaded(8, w)
+    s16 = benchThreaded(16, w)
+
+  debugEcho ""
+  debugEcho "  ", name, ": ", w.describe()
+  debugEcho "  N threads each own a disjoint range of the ", numTx,
+    " transaction indices; build runs on the main thread; speedup is end-to-end"
+  debugEcho benchmarkHeader()
+  let base = s1.total
+  debugEcho benchmarkLine("1-thread", w, s1, base)
+  debugEcho benchmarkLine("2-thread", w, s2, base)
+  debugEcho benchmarkLine("4-thread", w, s4, base)
+  debugEcho benchmarkLine("8-thread", w, s8, base)
+  debugEcho benchmarkLine("16-thread", w, s16, base)
+
+  # All thread counts must materialize the exact same set of accounts.
+  check:
+    s1.checksum == s2.checksum
+    s1.checksum == s4.checksum
+    s1.checksum == s8.checksum
+    s1.checksum == s16.checksum
 
 suite "BlockAccessListBuilder throughput benchmark":
-  test "Single-threaded fill + build":
-    let s = benchSingle()
-    debugEcho ""
-    debugEcho "  builder: ",
-      when compiles((var x: BlockAccessListBuilder; x.ensureIndexCount(1))):
-        "lock-free (index-partitioned)"
-      else:
-        "lock-based (shared)"
-    debugEcho "  txs=", numTx, ", accounts/tx=", accountsPerTx, ", writes/acct=",
-      writesPerAccount, ", reads/acct=", readsPerAccount, ", repeats=", repeats
-    debugEcho benchmarkHeader()
-    debugEcho benchmarkLine("single-threaded", s, s.fill)
-    check s.checksum > 0
+  debugEcho ""
+  debugEcho "  builder: ",
+    when compiles((var x: BlockAccessListBuilder; x.ensureIndexCount(1))):
+      "lock-free (index-partitioned)"
+    else:
+      "lock-based (shared)"
 
-  test "Multi-threaded fill + build (tx-index partitioned)":
-    let
-      s1 = benchThreaded(1)
-      s2 = benchThreaded(2)
-      s4 = benchThreaded(4)
-      s8 = benchThreaded(8)
-      s16 = benchThreaded(16)
+  test "Single-threaded fill + build (heavy tx)":
+    runSingle("heavy tx", heavyTx)
 
-    debugEcho ""
-    debugEcho "  N threads each own a disjoint range of the ", numTx,
-      " transaction indices; build runs on the main thread"
-    debugEcho benchmarkHeader()
-    let base = s1.fill
-    debugEcho benchmarkLine("1-thread", s1, base)
-    debugEcho benchmarkLine("2-thread", s2, base)
-    debugEcho benchmarkLine("4-thread", s4, base)
-    debugEcho benchmarkLine("8-thread", s8, base)
-    debugEcho benchmarkLine("16-thread", s16, base)
+  test "Single-threaded fill + build (light tx)":
+    runSingle("light tx", lightTx)
 
-    # All thread counts must materialize the exact same set of accounts.
-    check:
-      s1.checksum == s2.checksum
-      s1.checksum == s4.checksum
-      s1.checksum == s8.checksum
-      s1.checksum == s16.checksum
+  test "Multi-threaded fill + build (heavy tx, tx-index partitioned)":
+    runThreaded("heavy tx", heavyTx)
+
+  test "Multi-threaded fill + build (light tx, tx-index partitioned)":
+    runThreaded("light tx", lightTx)
