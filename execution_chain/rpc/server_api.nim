@@ -378,7 +378,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
           raise newException(ValueError, "Block not found")
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
-        res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
+        res = rpcCallEvm(args, header, api.com, txFrame).valueOr:
           raise newException(ValueError, "rpcCallEvm error: " & error)
       if res.isError:
         if res.status == StatusCode.Revert and res.output.len > 0:
@@ -430,7 +430,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
         # TODO: change 0 to configureable gas cap
-        gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
+        gasUsed = rpcEstimateGas(args, header, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
           let data = EthJson.encode(error.output.to0xHex()).JsonString
           raise (ref RpcResponseError)(
             code: 3,
