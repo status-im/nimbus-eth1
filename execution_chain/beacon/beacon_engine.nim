@@ -37,7 +37,8 @@ type
 
   # Payload assembly runs in a background worker so that the engine API can
   # answer forkchoiceUpdated before the (CPU-heavy) block packing happens.
-  # The LRU stores the pending/finished build future; getPayload awaits it.
+  # The LRU stores the pending/finished build futures; getPayload serves the
+  # newest finished one.
   PayloadBuildFut* = Future[Result[ExecutionBundle, string]]
     .Raising([CancelledError])
 
@@ -46,9 +47,15 @@ type
     attrs   : PayloadAttributes
     fut     : PayloadBuildFut # same future object as stored in `queue`
 
+  # Every fcU with payload attributes schedules a fresh build, so one
+  # payloadId can have several. The single worker completes them in
+  # scheduling order, oldest first.
+  PayloadBuilds = ref object
+    futs: seq[PayloadBuildFut]
+
   BeaconEngineRef* = ref object
     txPool: TxPoolRef
-    queue : LruCache[Bytes8, PayloadBuildFut]
+    queue : LruCache[Bytes8, PayloadBuilds]
     buildQueue: AsyncQueue[PayloadBuildTask]
     buildLoopFut: Future[void].Raising([CancelledError])
 
@@ -208,7 +215,7 @@ proc new*(_: type BeaconEngineRef,
           txPool: TxPoolRef): BeaconEngineRef =
   let ben = BeaconEngineRef(
     txPool: txPool,
-    queue : LruCache[Bytes8, PayloadBuildFut].init(MaxTrackedPayloads),
+    queue : LruCache[Bytes8, PayloadBuilds].init(MaxTrackedPayloads),
     buildQueue: newAsyncQueue[PayloadBuildTask](),
   )
 
@@ -223,10 +230,24 @@ proc stop*(ben: BeaconEngineRef) {.async: (raises: []).} =
   if not ben.buildLoopFut.isNil:
     await ben.buildLoopFut.cancelAndWait()
   # Unblock any getPayload waiter whose build will never run
-  for fut in ben.queue.values:
-    if not fut.finished:
-      fut.complete(Result[ExecutionBundle, string].err(
-        "beacon engine shutting down"))
+  for builds in ben.queue.values:
+    for fut in builds.futs:
+      if not fut.finished:
+        fut.complete(Result[ExecutionBundle, string].err(
+          "beacon engine shutting down"))
+
+# ------------------------------------------------------------------------------
+# Private functions, payload building
+# ------------------------------------------------------------------------------
+
+func latestBuilt(builds: PayloadBuilds): int =
+  ## Index of the newest successfully completed build, -1 if there is none.
+  for i in countdown(builds.futs.high, 0):
+    let fut = builds.futs[i]
+    # Build futures are only ever completed with a value, never failed
+    if fut.finished and not fut.cancelled() and fut.value.isOk:
+      return i
+  -1
 
 # ------------------------------------------------------------------------------
 # Public functions, payload building
@@ -235,48 +256,59 @@ proc stop*(ben: BeaconEngineRef) {.async: (raises: []).} =
 proc startPayloadBuild*(ben: BeaconEngineRef, id: Bytes8,
                         headHash: Hash32, attrs: PayloadAttributes) =
   ## Schedule a background build for `id` and return immediately; the
-  ## assembled payload is retrieved (awaited) via `getPayloadBundle`.
-  let fut = PayloadBuildFut.init("beacon_engine.startPayloadBuild")
-  ben.queue.put(id, fut)
+  ## assembled payload is retrieved via `getPayloadBundle`. A repeated fcU
+  ## for the same `id` schedules a rebuild, so the payload picks up
+  ## transactions that arrived since the previous build.
+  let
+    fut = PayloadBuildFut.init("beacon_engine.startPayloadBuild")
+    builds = ben.queue.get(id).valueOr:
+      let fresh = PayloadBuilds()
+      ben.queue.put(id, fresh)
+      fresh
+
+  # Builds older than the newest finished one can never be served again
+  let last = builds.latestBuilt()
+  if last > 0:
+    builds.futs = builds.futs[last .. ^1]
+  builds.futs.add fut
+
   try:
     ben.buildQueue.addLastNoWait(
       PayloadBuildTask(headHash: headHash, attrs: attrs, fut: fut))
   except AsyncQueueFullError:
     raiseAssert "unbounded queue cannot be full"
 
-func hasPayloadBundle*(ben: BeaconEngineRef, id: Bytes8): bool =
-  ## True if a build for `id` is in flight or completed successfully.
-  ## A failed build reports false so that a repeated fcU with the same
-  ## attributes schedules a fresh attempt.
-  # `get` (not `contains`) refreshes LRU recency
-  let fut = ben.queue.get(id).valueOr:
-    return false
-  if fut.finished:
-    not fut.cancelled() and fut.value.isOk
-  else:
-    true
-
 func payloadBuildFinished*(ben: BeaconEngineRef, id: Bytes8): Opt[bool] =
-  ## Whether the build for `id` has completed; none if `id` is not tracked.
-  let fut = ben.queue.get(id).valueOr:
+  ## Whether the most recently scheduled build for `id` has completed; none
+  ## if `id` is not tracked.
+  let builds = ben.queue.get(id).valueOr:
     return Opt.none(bool)
-  Opt.some(fut.finished)
+  Opt.some(builds.futs[^1].finished)
 
 proc getPayloadBundle*(ben: BeaconEngineRef, id: Bytes8):
     Future[Opt[ExecutionBundle]] {.async: (raises: [CancelledError]).} =
-  let fut = ben.queue.get(id).valueOr:
+  ## Serve the newest finished build for `id` without waiting for a rebuild
+  ## still in flight. Only when nothing has finished yet, wait for the oldest
+  ## outstanding build, i.e. the one scheduled by the first fcU.
+  let builds = ben.queue.get(id).valueOr:
     return Opt.none(ExecutionBundle)
-  if not fut.finished:
+  while true:
+    let last = builds.latestBuilt()
+    if last >= 0:
+      return Opt.some(builds.futs[last].value.value)
+
+    var oldest: PayloadBuildFut
+    for fut in builds.futs:
+      if not fut.finished:
+        oldest = fut
+        break
+    if oldest.isNil:
+      # Every build for `id` failed
+      return Opt.none(ExecutionBundle)
+
     # `join` is multi-waiter safe: cancelling this getPayload call does
     # not cancel the shared build future.
-    await fut.join()
-  if fut.cancelled():
-    return Opt.none(ExecutionBundle)
-  # Build futures are only ever completed with a value, never failed
-  let res = fut.value
-  if res.isErr:
-    return Opt.none(ExecutionBundle)
-  Opt.some(res.value)
+    await oldest.join()
 
 # ------------------------------------------------------------------------------
 # Public functions

@@ -240,17 +240,17 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       raise invalidAttr("timestamp must be strictly later than parent")
 
     let id = computePayloadId(headHash, attrs)
-    if not ben.hasPayloadBundle(id):
-      # A repeated fcU with identical attributes reuses the in-flight or
-      # completed build. startPayloadBuild only enqueues the task; the fcU
-      # response is not blocked on assembly.
-      ben.startPayloadBuild(id, headHash, attrs)
+    # A repeated fcU with identical attributes schedules a rebuild so the
+    # payload includes transactions that arrived since the previous build.
+    # startPayloadBuild only enqueues the task; the fcU response is not
+    # blocked on assembly.
+    ben.startPayloadBuild(id, headHash, attrs)
 
-      info "Scheduled payload build for block proposal",
-        head = headHash.short,
-        id = id.toHex,
-        txPoolLen = ben.txPool.len,
-        attrs = attrs
+    info "Scheduled payload build for block proposal",
+      head = headHash.short,
+      id = id.toHex,
+      txPoolLen = ben.txPool.len,
+      attrs = attrs
 
     return validFCU(Opt.some(id), headHash)
 
