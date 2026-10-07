@@ -156,7 +156,7 @@ type
   FlatStorageRead = tuple[acct: int32, slot: UInt256]
   FlatBalanceChange = tuple[acct: int32, index: BlockAccessIndex, value: UInt256]
   FlatNonceChange = tuple[acct: int32, index: BlockAccessIndex, value: AccountNonce]
-  FlatCodeChange = tuple[acct: int32, index: BlockAccessIndex, value: seq[byte]]
+  FlatCodeChange = tuple[acct: int32, index: BlockAccessIndex, value: ptr SharedBytes]
 
   AccountIds = object
     ids: Table[Address, int32]
@@ -276,8 +276,9 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
       bFlat.add((accounts.idOf(b.address), balIndex, b.balance))
     for nc in d[].nonceChanges.items():
       nFlat.add((accounts.idOf(nc.address), balIndex, nc.nonce))
-    for cc in d[].codeChanges.items():
-      cFlat.add((accounts.idOf(cc.address), balIndex, cc.code.data()))
+    for j in 0 ..< d[].codeChanges.len:
+      let cc = addr d[].codeChanges[j]
+      cFlat.add((accounts.idOf(cc[].address), balIndex, addr cc[].code))
 
   let numAccounts = accounts.addresses.len
 
@@ -403,6 +404,6 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
       cHi = int(cOff[id + 1])
     acct.codeChanges = seqOfCap[CodeChange](cChanges.countDistinctIndices(cLo, cHi))
     collapseByIndex(cChanges, cLo, cHi):
-      acct.codeChanges.add((index, Bytecode(value)))
+      acct.codeChanges.add((index, Bytecode(value[].data())))
 
   blockAccessList
