@@ -24,7 +24,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[algorithm, tables],
+  std/[algorithm, math],
   eth/common/[block_access_lists, block_access_lists_rlp],
   stint,
   ../concurrency/shared_types
@@ -158,21 +158,104 @@ type
   FlatNonceChange = tuple[acct: int32, index: BlockAccessIndex, value: AccountNonce]
   FlatCodeChange = tuple[acct: int32, index: BlockAccessIndex, value: ptr SharedBytes]
 
+  # Open addressing table from address to dense id, with the addresses kept in
+  # id order.
   AccountIds = object
-    ids: Table[Address, int32]
+    buckets: seq[int32] ## power-of-two size; 0 is empty, otherwise id + 1
     addresses: seq[Address] ## address of each id, in first-seen order
 
-func idOf(accounts: var AccountIds, address: Address): int32 =
-  let next = int32(accounts.addresses.len)
-  result = accounts.ids.mgetOrPut(address, next)
-  if result == next:
-    accounts.addresses.add(address)
+  AccountOrder = tuple[address: Address, id: int32]
 
-func addrCmp(x, y: Address): int =
-  cmpMem(unsafeAddr x, unsafeAddr y, sizeof(Address))
+func addrHash(address: Address): uint64 =
+  uint64(hash(address))
+
+func init(T: type AccountIds, expected: int): AccountIds =
+  let size = nextPowerOfTwo(max(expected * 2, 64))
+  AccountIds(buckets: newSeq[int32](size), addresses: newSeqOfCap[Address](expected))
+
+func insert(buckets: var seq[int32], addresses: seq[Address], id: int32) =
+  let mask = uint64(buckets.len - 1)
+  var i = int(addrHash(addresses[id]) and mask)
+  while buckets[i] != 0:
+    i = int((uint64(i) + 1) and mask)
+  buckets[i] = id + 1
+
+func idOf(accounts: var AccountIds, address: Address): int32 =
+  if accounts.addresses.len * 2 >= accounts.buckets.len:
+    # Keep the load factor at or below one half.
+    var grown = newSeq[int32](accounts.buckets.len * 2)
+    for id in 0 ..< accounts.addresses.len:
+      grown.insert(accounts.addresses, int32(id))
+    accounts.buckets = grown
+
+  let mask = uint64(accounts.buckets.len - 1)
+  var i = int(addrHash(address) and mask)
+  while true:
+    let b = accounts.buckets[i]
+    if b == 0:
+      result = int32(accounts.addresses.len)
+      accounts.addresses.add(address)
+      accounts.buckets[i] = result + 1
+      return
+    if accounts.addresses[b - 1] == address:
+      return b - 1
+    i = int((uint64(i) + 1) and mask)
+
+func sortByAddress(order: var seq[AccountOrder], bits: static int) =
+  ## Stable LSD radix sort by address bytes, which is the lexicographic (big
+  ## endian numeric) order EIP-7928 requires, in `bits`-wide digits.
+  const
+    numBuckets = 1 shl bits
+    bytesPerDigit = bits div 8
+    numDigits = sizeof(Address) div bytesPerDigit
+  let n = order.len
+  var
+    tmp = newSeq[AccountOrder](n)
+    counts = newSeq[int32](numBuckets)
+    src = addr order
+    dst = addr tmp
+
+  template digitOf(e: AccountOrder, d: int): int =
+    when bits == 8:
+      int(e.address.data[d])
+    else:
+      (int(e.address.data[2 * d]) shl 8) or int(e.address.data[2 * d + 1])
+
+  for d in countdown(numDigits - 1, 0):
+    zeroMem(addr counts[0], numBuckets * sizeof(int32))
+    for e in src[]:
+      inc counts[digitOf(e, d)]
+    if int(counts[digitOf(src[][0], d)]) == n:
+      continue # every address shares this digit
+    var total = 0'i32
+    for b in 0 ..< numBuckets:
+      let c = counts[b]
+      counts[b] = total
+      total += c
+    for e in src[]:
+      let b = digitOf(e, d)
+      dst[][counts[b]] = e
+      inc counts[b]
+    swap(src, dst)
+
+  if src != addr order:
+    swap(order, tmp)
+
+func sortByAddress(order: var seq[AccountOrder]) =
+  if order.len <= 1:
+    return
+  if order.len >= 16384:
+    order.sortByAddress(16)
+  else:
+    order.sortByAddress(8)
 
 func slotCmp[T: FlatStorageChange | FlatStorageRead](x, y: T): int =
-  cmp(x.slot, y.slot)
+  # Most significant limb first with an early exit, unlike stint's `cmp` which
+  # always runs a full borrow chain.
+  for i in countdown(x.slot.limbs.len - 1, 0):
+    if x.slot.limbs[i] != y.slot.limbs[i]:
+      return (if x.slot.limbs[i] < y.slot.limbs[i]: -1 else: 1)
+  0
 
 func groupByAccount[T](
     entries: seq[T], numAccounts: int, grouped: var seq[T], offsets: var seq[int32]
@@ -193,7 +276,7 @@ func groupByAccount[T](
     grouped[cursor[acct]] = entries[i]
     inc cursor[acct]
 
-func sortBySlot[T](entries: var seq[T], lo, hi: int) =
+func sortBySlot[T](entries: var seq[T], lo, hi: int) {.noinline.} =
   ## Stable sort of `entries[lo ..< hi]` by slot. The range is already in block
   ## access index order so the result is ordered by (slot, index).
   if hi - lo > 1:
@@ -245,9 +328,10 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
   let blockAccessList = new BlockAccessList
 
   # Phase 1: reserve exact capacity, then flatten.
-  var totS, totR, totB, totN, totC = 0
+  var totT, totS, totR, totB, totN, totC = 0
   for idx in 0 ..< builder.perIndex.len:
     let d = addr builder.perIndex[idx]
+    totT += d[].touchedAccounts.len
     totS += d[].storageChanges.len
     totR += d[].storageReads.len
     totB += d[].balanceChanges.len
@@ -255,7 +339,9 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
     totC += d[].codeChanges.len
 
   var
-    accounts: AccountIds
+    # The touched account count bounds the distinct addresses for a tracker
+    # driven builder and is a fair size estimate otherwise.
+    accounts = AccountIds.init(totT)
     sFlat = newSeqOfCap[FlatStorageChange](totS)
     rFlat = newSeqOfCap[FlatStorageRead](totR)
     bFlat = newSeqOfCap[FlatBalanceChange](totB)
@@ -302,11 +388,10 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
     sChanges.sortBySlot(sOff[id], sOff[id + 1])
     sReads.sortBySlot(rOff[id], rOff[id + 1])
 
-  var order = newSeqOfCap[tuple[address: Address, id: int32]](numAccounts)
+  var order = newSeqOfCap[AccountOrder](numAccounts)
   for id in 0 ..< numAccounts:
     order.add((accounts.addresses[id], int32(id)))
-  sort(order) do(x, y: tuple[address: Address, id: int32]) -> int:
-    addrCmp(x.address, y.address)
+  order.sortByAddress()
 
   # Phase 3: emit per account. Every output seq is written in place through
   # the final BlockAccessList rather than built in a local and moved, since a
@@ -402,8 +487,13 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
     let
       cLo = int(cOff[id])
       cHi = int(cOff[id + 1])
-    acct.codeChanges = seqOfCap[CodeChange](cChanges.countDistinctIndices(cLo, cHi))
-    collapseByIndex(cChanges, cLo, cHi):
-      acct.codeChanges.add((index, Bytecode(value[].data())))
+    let numCodes = cChanges.countDistinctIndices(cLo, cHi)
+    if numCodes > 0:
+      acct.codeChanges.setLen(numCodes)
+      var ci = 0
+      collapseByIndex(cChanges, cLo, cHi):
+        acct.codeChanges[ci].blockAccessIndex = index
+        acct.codeChanges[ci].newCode = value[].data()
+        inc ci
 
   blockAccessList
