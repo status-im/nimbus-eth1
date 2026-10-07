@@ -195,19 +195,8 @@ func groupByAccount[T](
 
 func sortBySlot[T](entries: var seq[T], lo, hi: int) =
   ## Stable sort of `entries[lo ..< hi]` by slot. The range is already in block
-  ## access index order so the result is ordered by (slot, index). Small ranges,
-  ## which is most accounts, are insertion sorted to avoid the merge sort's
-  ## temporary buffer.
-  const insertionLimit = 24
-  if hi - lo <= 1:
-    return
-  if hi - lo <= insertionLimit:
-    for i in lo + 1 ..< hi:
-      var j = i
-      while j > lo and slotCmp(entries[j - 1], entries[j]) > 0:
-        swap(entries[j - 1], entries[j])
-        dec j
-  else:
+  ## access index order so the result is ordered by (slot, index).
+  if hi - lo > 1:
     sort(entries.toOpenArray(lo, hi - 1), slotCmp[T])
 
 func countDistinctIndices[T](src: seq[T], lo, hi: int): int =
