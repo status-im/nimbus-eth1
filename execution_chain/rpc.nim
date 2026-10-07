@@ -57,7 +57,6 @@ func installRPC(server: RpcServer,
   if RpcFlag.Testing in flags:
     setupTestingRpc(nimbus.beaconEngine, server)
 
-
 proc newRpcWebsocketHandler(): RpcWebSocketHandler =
   let rng = bearSslRng(HmacDrbgContext.new())
   RpcWebSocketHandler(

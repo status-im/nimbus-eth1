@@ -25,27 +25,29 @@ proc setupTestingRpc*(ben: BeaconEngineRef, server: RpcServer) =
         parentHash: Hash32,
         attrs: PayloadAttributes,
         transactions: Opt[seq[Web3Tx]],
-        extraData: Opt[Web3ExtraData]): JsonString {.raises: [CatchableError].} =
+        extraData: Opt[Web3ExtraData]): JsonString {.raises: [RlpError, ValueError].} =
       ## Builds a payload on `parentHash` from exactly `transactions`, or from
       ## the pool when null, without touching the canonical chain.
-      var txs = Opt.none(seq[TxItemRef])
-      if transactions.isSome:
-        var items: seq[TxItemRef]
-        for raw in transactions.get:
-          let
-            tx = ethTx(raw)
-            sender = tx.recoverSenderCached().valueOr:
-              raise newException(ValueError, "invalid transaction signature")
-          items.add TxItemRef.new(
-            PooledTransaction(tx: tx), tx.computeRlpHash, sender,
-            distinctBase(raw).len.uint64)
-        txs = Opt.some(items)
-
-      var extra = Opt.none(seq[byte])
-      if extraData.isSome:
-        extra = Opt.some(distinctBase(extraData.get))
-
       let
+        txs =
+          if transactions.isSome:
+            var items: seq[TxItemRef]
+            for raw in transactions.get:
+              let
+                tx = ethTx(raw)
+                sender = tx.recoverSenderCached().valueOr:
+                  raise newException(ValueError, "invalid transaction signature")
+              items.add TxItemRef.new(
+                PooledTransaction(tx: tx), tx.computeRlpHash, sender,
+                distinctBase(raw).len.uint64)
+            Opt.some(items)
+          else:
+            Opt.none(seq[TxItemRef])
+        extra =
+          if extraData.isSome:
+            Opt.some(distinctBase(extraData.get))
+          else:
+            Opt.none(seq[byte])
         bundle = ben.generateExecutionBundle(parentHash, attrs, txs, extra).valueOr:
           raise newException(ValueError, error)
         com = ben.com
