@@ -24,7 +24,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[algorithm],
+  std/[algorithm, math],
   eth/common/[block_access_lists, block_access_lists_rlp],
   stint,
   ../concurrency/shared_types
@@ -148,63 +148,170 @@ proc addCodeChange*(
   )
 
 type
+  # Flattened per-index writes, tagged with a dense account id instead of the
+  # address so that grouping by account is a counting sort rather than a
+  # comparison sort over 20-byte keys.
   FlatStorageChange =
-    tuple[address: Address, slot: UInt256, index: BlockAccessIndex, value: UInt256]
-  FlatStorageRead = tuple[address: Address, slot: UInt256]
-  FlatBalanceChange =
-    tuple[address: Address, index: BlockAccessIndex, value: UInt256]
-  FlatNonceChange =
-    tuple[address: Address, index: BlockAccessIndex, value: AccountNonce]
-  FlatCodeChange =
-    tuple[address: Address, index: BlockAccessIndex, value: seq[byte]]
+    tuple[acct: int32, index: BlockAccessIndex, slot: UInt256, value: UInt256]
+  FlatStorageRead = tuple[acct: int32, slot: UInt256]
+  FlatBalanceChange = tuple[acct: int32, index: BlockAccessIndex, value: UInt256]
+  FlatNonceChange = tuple[acct: int32, index: BlockAccessIndex, value: AccountNonce]
+  FlatCodeChange = tuple[acct: int32, index: BlockAccessIndex, value: ptr SharedBytes]
 
-func addrCmp(x, y: Address): int =
-  let
-    xd = x.data()
-    yd = y.data()
-  for i in 0 ..< xd.len:
-    if xd[i] != yd[i]:
-      return (if xd[i] < yd[i]: -1 else: 1)
+  # Open addressing table from address to dense id, with the addresses kept in
+  # id order.
+  AccountIds = object
+    buckets: seq[int32] ## power-of-two size; 0 is empty, otherwise id + 1
+    addresses: seq[Address] ## address of each id, in first-seen order
+
+  AccountOrder = tuple[address: Address, id: int32]
+
+func addrHash(address: Address): uint64 =
+  uint64(hash(address))
+
+func init(T: type AccountIds, expected: int): AccountIds =
+  let size = nextPowerOfTwo(max(expected * 2, 64))
+  AccountIds(buckets: newSeq[int32](size), addresses: newSeqOfCap[Address](expected))
+
+func insert(buckets: var seq[int32], addresses: seq[Address], id: int32) =
+  let mask = uint64(buckets.len - 1)
+  var i = int(addrHash(addresses[id]) and mask)
+  while buckets[i] != 0:
+    i = int((uint64(i) + 1) and mask)
+  buckets[i] = id + 1
+
+func idOf(accounts: var AccountIds, address: Address): int32 =
+  if accounts.addresses.len * 2 >= accounts.buckets.len:
+    # Keep the load factor at or below one half.
+    var grown = newSeq[int32](accounts.buckets.len * 2)
+    for id in 0 ..< accounts.addresses.len:
+      grown.insert(accounts.addresses, int32(id))
+    accounts.buckets = grown
+
+  let mask = uint64(accounts.buckets.len - 1)
+  var i = int(addrHash(address) and mask)
+  while true:
+    let b = accounts.buckets[i]
+    if b == 0:
+      result = int32(accounts.addresses.len)
+      accounts.addresses.add(address)
+      accounts.buckets[i] = result + 1
+      return
+    if accounts.addresses[b - 1] == address:
+      return b - 1
+    i = int((uint64(i) + 1) and mask)
+
+func sortByAddress(order: var seq[AccountOrder], bits: static int) =
+  ## Stable LSD radix sort by address bytes, which is the lexicographic (big
+  ## endian numeric) order EIP-7928 requires, in `bits`-wide digits.
+  const
+    numBuckets = 1 shl bits
+    bytesPerDigit = bits div 8
+    numDigits = sizeof(Address) div bytesPerDigit
+  let n = order.len
+  var
+    tmp = newSeq[AccountOrder](n)
+    counts = newSeq[int32](numBuckets)
+    src = addr order
+    dst = addr tmp
+
+  template digitOf(e: AccountOrder, d: int): int =
+    when bits == 8:
+      int(e.address.data[d])
+    else:
+      (int(e.address.data[2 * d]) shl 8) or int(e.address.data[2 * d + 1])
+
+  for d in countdown(numDigits - 1, 0):
+    zeroMem(addr counts[0], numBuckets * sizeof(int32))
+    for e in src[]:
+      inc counts[digitOf(e, d)]
+    if int(counts[digitOf(src[][0], d)]) == n:
+      continue # every address shares this digit
+    var total = 0'i32
+    for b in 0 ..< numBuckets:
+      let c = counts[b]
+      counts[b] = total
+      total += c
+    for e in src[]:
+      let b = digitOf(e, d)
+      dst[][counts[b]] = e
+      inc counts[b]
+    swap(src, dst)
+
+  if src != addr order:
+    swap(order, tmp)
+
+func sortByAddress(order: var seq[AccountOrder]) =
+  if order.len <= 1:
+    return
+  if order.len >= 16384:
+    order.sortByAddress(16)
+  else:
+    order.sortByAddress(8)
+
+func slotCmp[T: FlatStorageChange | FlatStorageRead](x, y: T): int =
+  # Most significant limb first with an early exit, unlike stint's `cmp` which
+  # always runs a full borrow chain.
+  for i in countdown(x.slot.limbs.len - 1, 0):
+    if x.slot.limbs[i] != y.slot.limbs[i]:
+      return (if x.slot.limbs[i] < y.slot.limbs[i]: -1 else: 1)
   0
 
-func flatStorageCmp(x, y: FlatStorageChange): int =
-  var c = addrCmp(x.address, y.address)
-  if c == 0:
-    c = cmp(x.slot, y.slot)
-  if c == 0:
-    c = cmp(x.index, y.index)
-  c
-
-func flatStorageReadCmp(x, y: FlatStorageRead): int =
-  var c = addrCmp(x.address, y.address)
-  if c == 0:
-    c = cmp(x.slot, y.slot)
-  c
-
-func flatIndexedCmp[T](
-    x, y: tuple[address: Address, index: BlockAccessIndex, value: T]
-): int =
-  var c = addrCmp(x.address, y.address)
-  if c == 0:
-    c = cmp(x.index, y.index)
-  c
-
-func headAddress[T](src: openArray[T], cursor: int): Opt[Address] {.inline.} =
-  # Address of the entry at `cursor`, or none once the cursor is exhausted.
-  if cursor < src.len: Opt.some(src[cursor].address) else: Opt.none(Address)
-
-template collapseByIndex[T](
-    src: openArray[T], cursor: var int, sameGroup, emit: untyped
+func groupByAccount[T](
+    entries: seq[T], numAccounts: int, grouped: var seq[T], offsets: var seq[int32]
 ) =
-  # `src` is sorted by index within each group. Consume the run for which
-  # `sameGroup` holds and run `emit` once per distinct block access `index` with
-  # the last `value` seen for that index injected - reproducing last-write-wins
-  # for the pre/post-execution indices, which are the only ones that can repeat.
-  while cursor < src.len and sameGroup:
+  ## Stable counting sort of `entries` by account id into `grouped`. The entries
+  ## of account `i` end up in `grouped[offsets[i] ..< offsets[i + 1]]`, keeping
+  ## their relative (block access index) order.
+  offsets = newSeq[int32](numAccounts + 1)
+  for e in entries:
+    inc offsets[e.acct + 1]
+  for i in 1 .. numAccounts:
+    offsets[i] += offsets[i - 1]
+
+  grouped = newSeq[T](entries.len)
+  var cursor = offsets
+  for i in 0 ..< entries.len:
+    let acct = entries[i].acct
+    grouped[cursor[acct]] = entries[i]
+    inc cursor[acct]
+
+func sortBySlot[T](entries: var seq[T], lo, hi: int) {.noinline.} =
+  ## Stable sort of `entries[lo ..< hi]` by slot. The range is already in block
+  ## access index order so the result is ordered by (slot, index).
+  if hi - lo > 1:
+    sort(entries.toOpenArray(lo, hi - 1), slotCmp[T])
+
+func countDistinctIndices[T](src: seq[T], lo, hi: int): int =
+  ## Number of distinct block access indices in `src[lo ..< hi]`, which is in
+  ## index order.
+  var i = lo
+  while i < hi:
+    let index = src[i].index
+    inc i
+    while i < hi and src[i].index == index:
+      inc i
+    inc result
+
+func seqOfCap[T](n: int): seq[T] =
+  ## Like newSeqOfCap but leaves an empty seq unallocated, which most of the
+  ## per-account output seqs are.
+  if n > 0:
+    newSeqOfCap[T](n)
+  else:
+    default(seq[T])
+
+template collapseByIndex[T](src: seq[T], lo, hi: int, emit: untyped) =
+  ## `src[lo ..< hi]` is in block access index order. Run `emit` once per distinct
+  ## `index` with the last `value` seen for that index injected, reproducing
+  ## last-write-wins for the pre/post-execution indices, which are the only ones
+  ## that can repeat.
+  var cursor = lo
+  while cursor < hi:
     let index {.inject.} = src[cursor].index
     var value {.inject.} = src[cursor].value
     inc cursor
-    while cursor < src.len and sameGroup and src[cursor].index == index:
+    while cursor < hi and src[cursor].index == index:
       value = src[cursor].value
       inc cursor
     emit
@@ -213,13 +320,15 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
   # Not thread safe: only call once all threads have finished writing.
   #
   # Rebuild is done in three phases:
-  #   1. flatten every per-index write into flat, address-tagged seqs,
-  #   2. sort each seq by (address, [slot,] index),
-  #   3. merge-walk the seqs by address, emitting one AccountChanges per address.
+  #   1. assign a dense id to every address and flatten every per-index write
+  #      into flat, id-tagged seqs (which are therefore in index order),
+  #   2. group each seq by account with a stable counting sort and sort each
+  #      account's storage entries by slot,
+  #   3. emit one AccountChanges per account in address order.
   let blockAccessList = new BlockAccessList
 
   # Phase 1: reserve exact capacity, then flatten.
-  var totS, totR, totB, totN, totC, totT = 0
+  var totT, totS, totR, totB, totN, totC = 0
   for idx in 0 ..< builder.perIndex.len:
     let d = addr builder.perIndex[idx]
     totT += d[].touchedAccounts.len
@@ -230,100 +339,161 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
     totC += d[].codeChanges.len
 
   var
-    touched = newSeqOfCap[Address](totT)
-    sChanges = newSeqOfCap[FlatStorageChange](totS)
-    sReads = newSeqOfCap[FlatStorageRead](totR)
-    bChanges = newSeqOfCap[FlatBalanceChange](totB)
-    nChanges = newSeqOfCap[FlatNonceChange](totN)
-    cChanges = newSeqOfCap[FlatCodeChange](totC)
+    # The touched account count bounds the distinct addresses for a tracker
+    # driven builder and is a fair size estimate otherwise.
+    accounts = AccountIds.init(totT)
+    sFlat = newSeqOfCap[FlatStorageChange](totS)
+    rFlat = newSeqOfCap[FlatStorageRead](totR)
+    bFlat = newSeqOfCap[FlatBalanceChange](totB)
+    nFlat = newSeqOfCap[FlatNonceChange](totN)
+    cFlat = newSeqOfCap[FlatCodeChange](totC)
 
   for idx in 0 ..< builder.perIndex.len:
     let
       balIndex = BlockAccessIndex(idx)
       d = addr builder.perIndex[idx]
     for a in d[].touchedAccounts.items():
-      touched.add(a)
+      discard accounts.idOf(a)
     for w in d[].storageChanges.items():
-      sChanges.add((w.address, w.slot, balIndex, w.value))
+      sFlat.add((accounts.idOf(w.address), balIndex, w.slot, w.value))
     for r in d[].storageReads.items():
-      sReads.add((r.address, r.slot))
+      rFlat.add((accounts.idOf(r.address), r.slot))
     for b in d[].balanceChanges.items():
-      bChanges.add((b.address, balIndex, b.balance))
+      bFlat.add((accounts.idOf(b.address), balIndex, b.balance))
     for nc in d[].nonceChanges.items():
-      nChanges.add((nc.address, balIndex, nc.nonce))
-    for cc in d[].codeChanges.items():
-      cChanges.add((cc.address, balIndex, cc.code.data()))
+      nFlat.add((accounts.idOf(nc.address), balIndex, nc.nonce))
+    for j in 0 ..< d[].codeChanges.len:
+      let cc = addr d[].codeChanges[j]
+      cFlat.add((accounts.idOf(cc[].address), balIndex, addr cc[].code))
 
-  # Phase 2: sort each field by (address, [slot,] index). The sort must be stable
-  # so that entries sharing a key keep their append order and Phase 3's collapse
-  # yields the last write per index. std/algorithm.sort is guaranteed stable.
-  sort(touched, addrCmp)
-  sort(sChanges, flatStorageCmp)
-  sort(sReads, flatStorageReadCmp)
-  sort(bChanges, flatIndexedCmp[UInt256])
-  sort(nChanges, flatIndexedCmp[AccountNonce])
-  sort(cChanges, flatIndexedCmp[seq[byte]])
+  let numAccounts = accounts.addresses.len
 
-  # Phase 3: merge-walk by address.
-  var si, ri, bi, ni, ci, ti = 0
-  while true:
-    # Smallest address still pending across all six cursors.
-    var nextAddr = Opt.none(Address)
-    for head in [
-        headAddress(sChanges, si), headAddress(sReads, ri), headAddress(bChanges, bi),
-        headAddress(nChanges, ni), headAddress(cChanges, ci),
-        (if ti < touched.len: Opt.some(touched[ti]) else: Opt.none(Address))]:
-      if head.isSome and (nextAddr.isNone or addrCmp(head.get, nextAddr.get) < 0):
-        nextAddr = head
-    if nextAddr.isNone:
-      break
-    let acc = nextAddr.get
+  # Phase 2: group by account, then order each account's storage entries by
+  # slot. Balance, nonce and code entries need no sorting: grouping is stable
+  # and the flat seqs are in index order.
+  var
+    sChanges: seq[FlatStorageChange]
+    sReads: seq[FlatStorageRead]
+    bChanges: seq[FlatBalanceChange]
+    nChanges: seq[FlatNonceChange]
+    cChanges: seq[FlatCodeChange]
+    sOff, rOff, bOff, nOff, cOff: seq[int32]
+  groupByAccount(sFlat, numAccounts, sChanges, sOff)
+  groupByAccount(rFlat, numAccounts, sReads, rOff)
+  groupByAccount(bFlat, numAccounts, bChanges, bOff)
+  groupByAccount(nFlat, numAccounts, nChanges, nOff)
+  groupByAccount(cFlat, numAccounts, cChanges, cOff)
+
+  for id in 0 ..< numAccounts:
+    sChanges.sortBySlot(sOff[id], sOff[id + 1])
+    sReads.sortBySlot(rOff[id], rOff[id + 1])
+
+  var order = newSeqOfCap[AccountOrder](numAccounts)
+  for id in 0 ..< numAccounts:
+    order.add((accounts.addresses[id], int32(id)))
+  order.sortByAddress()
+
+  # Phase 3: emit per account. Every output seq is written in place through
+  # the final BlockAccessList rather than built in a local and moved, since a
+  # seq move under refc is a deep copy.
+  blockAccessList[].setLen(numAccounts)
+  for k, (acc, id) in order:
+    template acct(): untyped =
+      blockAccessList[][k]
+
+    acct.address = acc
 
     # storageChanges: group by slot, then collapse each slot's writes by index.
-    var storageChanges: seq[SlotChanges]
-    while si < sChanges.len and sChanges[si].address == acc:
+    let
+      sLo = int(sOff[id])
+      sHi = int(sOff[id + 1])
+    var
+      numSlots = 0
+      si = sLo
+    while si < sHi:
       let slot = sChanges[si].slot
-      var slotChanges: seq[StorageChange]
-      collapseByIndex(sChanges, si,
-          sChanges[si].address == acc and sChanges[si].slot == slot):
-        slotChanges.add((index, StorageValue(value)))
-      storageChanges.add((StorageKey(slot), slotChanges))
+      inc si
+      while si < sHi and sChanges[si].slot == slot:
+        inc si
+      inc numSlots
 
-    # storageReads: unique read slots that were not also written. Both seqs are
-    # slot-sorted, so a single forward cursor (`written`) decides membership.
-    var storageReads: seq[StorageKey]
-    var written = 0
-    while ri < sReads.len and sReads[ri].address == acc:
+    if numSlots > 0:
+      acct.storageChanges.setLen(numSlots)
+    var slotIdx = 0
+    si = sLo
+    while si < sHi:
+      let slot = sChanges[si].slot
+      var slotHi = si
+      while slotHi < sHi and sChanges[slotHi].slot == slot:
+        inc slotHi
+      template slotChanges(): untyped =
+        acct.storageChanges[slotIdx]
+
+      slotChanges.slot = StorageKey(slot)
+      slotChanges.changes =
+        seqOfCap[StorageChange](sChanges.countDistinctIndices(si, slotHi))
+      collapseByIndex(sChanges, si, slotHi):
+        slotChanges.changes.add((index, StorageValue(value)))
+      inc slotIdx
+      si = slotHi
+
+    # storageReads: unique read slots that were not also written. Both ranges
+    # are slot-sorted, so a single forward cursor (`written`) decides membership.
+    let
+      rLo = int(rOff[id])
+      rHi = int(rOff[id + 1])
+    var
+      numReads = 0
+      written = 0
+      ri = rLo
+    while ri < rHi:
       let slot = sReads[ri].slot
       inc ri
-      while ri < sReads.len and sReads[ri].address == acc and sReads[ri].slot == slot:
+      while ri < rHi and sReads[ri].slot == slot:
         inc ri
-      while written < storageChanges.len and storageChanges[written].slot < slot:
+      while written < numSlots and acct.storageChanges[written].slot < slot:
         inc written
-      if written >= storageChanges.len or storageChanges[written].slot != slot:
-        storageReads.add(StorageKey(slot))
+      if written >= numSlots or acct.storageChanges[written].slot != slot:
+        inc numReads
 
-    var balanceChanges: seq[BalanceChange]
-    collapseByIndex(bChanges, bi, bChanges[bi].address == acc):
-      balanceChanges.add((index, Balance(value)))
+    acct.storageReads = seqOfCap[StorageKey](numReads)
+    written = 0
+    ri = rLo
+    while ri < rHi:
+      let slot = sReads[ri].slot
+      inc ri
+      while ri < rHi and sReads[ri].slot == slot:
+        inc ri
+      while written < numSlots and acct.storageChanges[written].slot < slot:
+        inc written
+      if written >= numSlots or acct.storageChanges[written].slot != slot:
+        acct.storageReads.add(StorageKey(slot))
 
-    var nonceChanges: seq[NonceChange]
-    collapseByIndex(nChanges, ni, nChanges[ni].address == acc):
-      nonceChanges.add((index, Nonce(value)))
+    let
+      bLo = int(bOff[id])
+      bHi = int(bOff[id + 1])
+    acct.balanceChanges =
+      seqOfCap[BalanceChange](bChanges.countDistinctIndices(bLo, bHi))
+    collapseByIndex(bChanges, bLo, bHi):
+      acct.balanceChanges.add((index, Balance(value)))
 
-    var codeChanges: seq[CodeChange]
-    collapseByIndex(cChanges, ci, cChanges[ci].address == acc):
-      codeChanges.add((index, Bytecode(value)))
+    let
+      nLo = int(nOff[id])
+      nHi = int(nOff[id + 1])
+    acct.nonceChanges = seqOfCap[NonceChange](nChanges.countDistinctIndices(nLo, nHi))
+    collapseByIndex(nChanges, nLo, nHi):
+      acct.nonceChanges.add((index, Nonce(value)))
 
-    while ti < touched.len and touched[ti] == acc:
-      inc ti
-
-    blockAccessList[].add(AccountChanges(
-      address: acc,
-      storageChanges: move(storageChanges),
-      storageReads: move(storageReads),
-      balanceChanges: move(balanceChanges),
-      nonceChanges: move(nonceChanges),
-      codeChanges: move(codeChanges)))
+    let
+      cLo = int(cOff[id])
+      cHi = int(cOff[id + 1])
+    let numCodes = cChanges.countDistinctIndices(cLo, cHi)
+    if numCodes > 0:
+      acct.codeChanges.setLen(numCodes)
+      var ci = 0
+      collapseByIndex(cChanges, cLo, cHi):
+        acct.codeChanges[ci].blockAccessIndex = index
+        acct.codeChanges[ci].newCode = value[].data()
+        inc ci
 
   blockAccessList
