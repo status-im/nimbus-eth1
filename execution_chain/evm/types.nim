@@ -62,7 +62,7 @@ type
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
     txLogs*           : seq[Log]
-    blockLogs*        : seq[Log] # EIP-6110
+    depositLogs*      : seq[Log] # EIP-6110
     refundCounter*    : int64    # Global refundCounter counter
     balTracker*       : BlockAccessListTrackerRef
 

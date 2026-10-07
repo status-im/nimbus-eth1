@@ -116,7 +116,7 @@ proc recoverAndPrefetchTask*(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.blockLogs.setLen(0)
+  vmState.depositLogs.setLen(0)
   vmState.refundCounter = 0
   vmState.balTracker = nil
 
@@ -398,7 +398,7 @@ proc processTxTask(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.blockLogs.setLen(0)
+  vmState.depositLogs.setLen(0)
   vmState.refundCounter = 0
   if not ctx[].sharedBuilder.isNil():
     vmState.balTracker =
@@ -466,6 +466,8 @@ proc processTransactionsParallel*(
       entries[i].logs.dispose()
       entries[i].error.dispose()
 
+  let depositContractAddress = vmState.com.depositContractAddress
+
   # Process each result as soon as its task completes so the main thread makes
   # progress while the remaining tasks keep running in the background.
   for i in 0 ..< n:
@@ -513,7 +515,7 @@ proc processTransactionsParallel*(
     else:
       vmState.txLogs.setLen(0)
     if collectLogs:
-      vmState.blockLogs.addDepositLogs(vmState.txLogs, vmState.com.depositContractAddress)
+      vmState.depositLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
 
     if not skipReceipts:
       vmState.receipts[i] =

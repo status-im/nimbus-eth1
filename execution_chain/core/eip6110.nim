@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -71,10 +71,10 @@ func depositLogToRequest(data: openArray[byte]): DepositRequest =
 # Public functions
 # -----------------------------------------------------------------------------
 
-func addDepositLogs*(blockLogs: var seq[Log], logs: openArray[Log], depositContractAddress: Address) =
+func addDepositLogs*(depositLogs: var seq[Log], logs: openArray[Log], depositContractAddress: Address) =
   for log in logs:
     if log.address == depositContractAddress:
-      blockLogs.add log
+      depositLogs.add log
 
 func parseDepositLogs*(logs: openArray[Log], depositContractAddress: Address): Result[seq[byte], string] =
   var res = newSeqOfCap[byte](logs.len*depositRequestSize)
