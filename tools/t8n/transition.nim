@@ -302,7 +302,7 @@ proc exec(ctx: TransContext,
       continue
 
     if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
-      vmState.depositLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
+      vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
 
     let rec = vmState.makeReceipt(tx.txType)
     vmState.receipts.add rec
@@ -404,7 +404,7 @@ proc exec(ctx: TransContext,
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     var
-      depositReqs = parseDepositLogs(vmState.depositLogs, depositContractAddress).valueOr:
+      depositReqs = parseDepositLogs(vmState.blockLogs).valueOr:
         return err(t8nerr(ErrorEVM, error))
       executionRequests: seq[seq[byte]]
 

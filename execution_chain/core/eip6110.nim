@@ -71,18 +71,16 @@ func depositLogToRequest(data: openArray[byte]): DepositRequest =
 # Public functions
 # -----------------------------------------------------------------------------
 
-func addDepositLogs*(depositLogs: var seq[Log], logs: openArray[Log], depositContractAddress: Address) =
+func addDepositLogs*(blockLogs: var seq[Log], logs: openArray[Log], depositContractAddress: Address) =
   for log in logs:
-    if log.address == depositContractAddress:
-      depositLogs.add log
-
-func parseDepositLogs*(logs: openArray[Log], depositContractAddress: Address): Result[seq[byte], string] =
-  var res = newSeqOfCap[byte](logs.len*depositRequestSize)
-  for i, log in logs:
     let isDepositEvent = log.topics.len > 0 and
                          log.topics[0] == DEPOSIT_EVENT_SIGNATURE_HASH
-    if not(log.address == depositContractAddress and isDepositEvent):
-      continue
+    if log.address == depositContractAddress and isDepositEvent:
+      blockLogs.add log
+
+func parseDepositLogs*(depositLogs: openArray[Log]): Result[seq[byte], string] =
+  var res = newSeqOfCap[byte](depositLogs.len*depositRequestSize)
+  for log in depositLogs:
     if log.data.len != 576:
       return err("deposit wrong length: want 576, have " & $log.data.len)
     res.add depositLogToRequest(log.data)
