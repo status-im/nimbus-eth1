@@ -733,6 +733,39 @@ proc rpcMain*() =
       let res = await client.eth_estimateGas(ec)
       check res == w3Qty(21000'u64)
 
+    test "eth_estimateGas at the requested block":
+      # The signer starts with exactly oneETH and spends some of it later, so
+      # only genesis can afford this transfer plus its 21000 gas.
+      let
+        gasPrice = 30_000_000_000'u64
+        value = oneETH - (21000'u64 * gasPrice).u256
+        args = %*{
+          "from": signer.to0xHex,
+          "to": extraAddress.to0xHex,
+          "gasPrice": "0x" & gasPrice.toHex,
+          "value": "0x" & value.toHex,
+        }
+      for blk in [%"earliest", %"0x0", %(env.com.genesisHash.to0xHex)]:
+        let res = await client.call("eth_estimateGas", %[args, blk], EthJson)
+        check EthJson.decode(res.string, Quantity) == w3Qty(21000'u64)
+
+      expect RpcResponseError:
+        discard await client.call("eth_estimateGas", %[args, %"latest"], EthJson)
+      expect RpcResponseError:
+        discard await client.call("eth_estimateGas", %[args], EthJson)
+
+    test "eth_call and eth_createAccessList default to latest":
+      let
+        args = %*{"to": contractAddress.to0xHex}
+        call = await client.call("eth_call", %[args], EthJson)
+        accessList = await client.call("eth_createAccessList", %[args], EthJson)
+        latestCall = await client.call("eth_call", %[args, %"latest"], EthJson)
+        latestAccessList =
+          await client.call("eth_createAccessList", %[args, %"latest"], EthJson)
+      check:
+        call.string == latestCall.string
+        accessList.string == latestAccessList.string
+
     test "eth_estimateGas includes EIP-7702 authorization intrinsic cost":
       let
         baseArgs = TransactionArgs(
