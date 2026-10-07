@@ -189,7 +189,7 @@ proc callFetchingState(
       # needed in the next iteration.
       var
         stateFetchDone = false
-        storageKeys: Table[Address, seq[UInt256]]
+        storageKeys: OrderedTable[Address, seq[UInt256]]
       for k, codeTouched in witnessKeys:
         let (adr, maybeSlot) = k
         if adr == default(Address):

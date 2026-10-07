@@ -76,16 +76,11 @@ proc getStorageFromProof(
     return err((VerificationError, proofResult.errorMsg, UNTAGGED))
 
 proc getStorageFromProof*(
-    stateRoot: Hash32,
+    account: Account,
     requestedSlot: UInt256,
     proof: ProofResponse,
     storageProofIndex = 0,
 ): EngineResult[UInt256] =
-  let account = ?getAccountFromProof(
-    stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-    proof.storageHash, proof.accountProof,
-  )
-
   if account.storageRoot == EMPTY_ROOT_HASH:
     # valid account with empty storage, in that case getStorageAt
     # return 0 value
@@ -115,6 +110,20 @@ proc getStorageFromProof*(
 
   getStorageFromProof(account, storageProof)
 
+proc getStorageFromProof*(
+    stateRoot: Hash32,
+    address: Address,
+    requestedSlot: UInt256,
+    proof: ProofResponse,
+    storageProofIndex = 0,
+): EngineResult[UInt256] =
+  let account = ?getAccountFromProof(
+    stateRoot, address, proof.balance, proof.nonce, proof.codeHash, proof.storageHash,
+    proof.accountProof,
+  )
+
+  getStorageFromProof(account, requestedSlot, proof, storageProofIndex)
+
 proc getAccount*(
     engine: RpcVerificationEngine,
     address: Address,
@@ -137,7 +146,7 @@ proc getAccount*(
 
     account = ?(
       getAccountFromProof(
-        stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+        stateRoot, address, proof.balance, proof.nonce, proof.codeHash,
         proof.storageHash, proof.accountProof,
       )
       .tagBackend(backendIdx)
@@ -217,9 +226,18 @@ proc getStorageAt*(
       ).tagBackend(backendIdx)
     )
 
+    account = ?(
+      getAccountFromProof(
+        stateRoot, address, proof.balance, proof.nonce, proof.codeHash,
+        proof.storageHash, proof.accountProof,
+      )
+      .tagBackend(backendIdx)
+    )
+
+  engine.accountsCache.put((stateRoot, address), account)
+
   for i, s in slotsToFetch:
-    let slotValue =
-      ?(getStorageFromProof(stateRoot, s, proof, i).tagBackend(backendIdx))
+    let slotValue = ?(getStorageFromProof(account, s, proof, i).tagBackend(backendIdx))
     engine.storageCache.put((stateRoot, address, s), slotValue)
     slotValues[slotsToFetchIdx[i]] = slotValue
 
@@ -253,7 +271,7 @@ proc populateCachesForAccountAndSlots(
 
       account = ?(
         getAccountFromProof(
-          stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+          stateRoot, address, proof.balance, proof.nonce, proof.codeHash,
           proof.storageHash, proof.accountProof,
         )
         .tagBackend(backendIdx)
@@ -263,8 +281,7 @@ proc populateCachesForAccountAndSlots(
 
     for i, s in slotsToFetch:
       let
-        slotValue =
-          ?(getStorageFromProof(stateRoot, s, proof, i).tagBackend(backendIdx))
+        slotValue = ?(getStorageFromProof(account, s, proof, i).tagBackend(backendIdx))
         storageCacheKey = (stateRoot, address, s)
 
       engine.storageCache.put(storageCacheKey, slotValue)

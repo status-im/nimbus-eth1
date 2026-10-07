@@ -422,7 +422,10 @@ proc verifyHeader(
 proc getBlockHash*(
     engine: RpcVerificationEngine, anchor: Header, number: base.BlockNumber
 ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
-  if number >= anchor.number:
+  if number == anchor.number:
+    return ok(anchor.computeBlockHash)
+
+  if number > anchor.number:
     return err(
       (
         InvalidDataError, "block hash requested for a block that is not in the past",
