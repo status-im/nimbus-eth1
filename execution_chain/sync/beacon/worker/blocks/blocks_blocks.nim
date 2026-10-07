@@ -71,7 +71,7 @@ template blocksFetchCheckImpl(
     blocks[0].header = ctx.hdrCache.get(iv.minPt).valueOr:
       # There is nothing one can do here
       chronicles.info "Block header missing (reorg triggered)", peer,
-        iv=($iv), n=0, nth=iv.minPt
+        `iv`=($iv), n=0, nth=iv.minPt
       ctx.subState.cancelRequest = true                    # So require reorg
       break body                                           # return err()
     request.blockHashes[^1] = blocks[^1].header.computeBlockHash
@@ -99,7 +99,7 @@ template blocksFetchCheckImpl(
           # Oops, cut off the rest
           blocks.setLen(n)                                 # curb off junk
           buddy.bdyFetchRegisterError()
-          trace info & ": Cut off junk blocks", peer, iv=($iv), n=n,
+          trace info & ": Cut off junk blocks", peer, `iv`=($iv), n=n,
             nTxs=bodies[n].transactions.len, nBodies,
             nErrors=buddy.nErrors.fetch.bdy
           break loop
@@ -139,12 +139,12 @@ template blocksFetchCheckImpl(
       # peer's soft response size limit.
       let raws = buddy.fetchBlockAccessListsAll(balRequest).valueOr:
         default(seq[RawBlockAccessList])
-      var nBals = 0
+      var nBals {.inject.} = 0
       for j in 0 ..< min(raws.len, blocks.len):
         bals[j] = decodeBlockAccessList(raws[j], blocks[j].header)
         if bals[j].isSome:
           inc nBals
-      trace info & ": fetched block access lists", peer, iv=($iv),
+      trace info & ": fetched block access lists", peer, `iv`=($iv),
         nReq=balRequest.blockHashes.len, nResp=raws.len, nBals
       # End `block balFetch`
 

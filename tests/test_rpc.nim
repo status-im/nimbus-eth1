@@ -26,6 +26,7 @@ import
   ../execution_chain/[common, rpc],
   ../execution_chain/rpc/[rpc_types, rpc_utils, common as rpc_common],
   ../execution_chain/beacon/web3_eth_conv,
+  ../execution_chain/core/gaslimit,
   ../execution_chain/networking/p2p,
   ../execution_chain/nimbus_desc,
    ./shared_data/eip8282data,
@@ -443,6 +444,11 @@ proc rpcMain*() =
         check progress.current == res.syncObject.currentBlock.uint64
         check progress.target == res.syncObject.highestBlock.uint64
 
+    test "eth_baseFee":
+      let res = await client.call("eth_baseFee", %[], EthJson)
+      check EthJson.decode(res.string, UInt256) ==
+        com.calcEip1599BaseFee(env.chain.latestHeader)
+
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()
       check res == w3Qty(30_000_000_100)  # Median of `unsignedTx1`, `unsignedTx2`, `tx3`
@@ -473,6 +479,20 @@ proc rpcMain*() =
     test "eth_getStorageAt":
       let res = await client.eth_getStorageAt(contractAccWithStorage, 1.u256, blockId(1'u64))
       check FixedBytes[32](2345.u256.toBytesBE) == res
+
+    test "eth_getStorageValues":
+      let r = await client.call("eth_getStorageValues",
+        %[%*{contractAccWithStorage.to0xHex: [0.u256.to(Bytes32).to0xHex, 1.u256.to(Bytes32).to0xHex]}, %"latest"], EthJson)
+      let res = EthJson.decode(r.string, StorageValuesResponse)
+      check res.list.len == 1
+      check res.list[0].data == @[Bytes32(1234.u256.toBytesBE), Bytes32(2345.u256.toBytesBE)]
+
+    test "eth_getStorageValues empty request is invalid params":
+      try:
+        discard await client.call("eth_getStorageValues", %[%*{}, %"latest"], EthJson)
+        check false
+      except RpcResponseError as exc:
+        check exc.code == -32602
 
     test "eth_getTransactionCount":
       let res = await client.eth_getTransactionCount(signer, blockId(1'u64))
@@ -515,6 +535,28 @@ proc rpcMain*() =
     test "eth_getCode":
       let res = await client.eth_getCode(contractAddress, blockId(1'u64))
       check res.len == contractCode.len
+
+    test "omitted block parameter defaults to latest":
+      let
+        balance = await client.call("eth_getBalance", %[%(signer.to0xHex)], EthJson)
+        code = await client.call("eth_getCode", %[%(contractAddress.to0xHex)], EthJson)
+        nonce = await client.call("eth_getTransactionCount", %[%(signer.to0xHex)], EthJson)
+        slot = await client.call("eth_getStorageAt",
+          %[%(contractAccWithStorage.to0xHex), %"0x1"], EthJson)
+        proof = await client.call("eth_getProof", %[%(regularAcc.to0xHex), %[]], EthJson)
+        values = await client.call("eth_getStorageValues",
+          %[%*{contractAccWithStorage.to0xHex: [1.u256.to(Bytes32).to0xHex]}], EthJson)
+        expectedBalance = await client.eth_getBalance(signer, blockId("latest"))
+        expectedNonce = await client.eth_getTransactionCount(signer, blockId("latest"))
+        expectedProof = await client.eth_getProof(regularAcc, @[], blockId("latest"))
+      check:
+        EthJson.decode(balance.string, UInt256) == expectedBalance
+        EthJson.decode(code.string, seq[byte]).len == contractCode.len
+        EthJson.decode(nonce.string, Quantity) == expectedNonce
+        EthJson.decode(slot.string, FixedBytes[32]) == FixedBytes[32](2345.u256.toBytesBE)
+        EthJson.decode(proof.string, ProofResponse).balance == expectedProof.balance
+        EthJson.decode(values.string, StorageValuesResponse).list[0].data[0] ==
+          FixedBytes[32](2345.u256.toBytesBE)
 
     test "eth_sign":
       let msg = "hello world"
@@ -719,6 +761,8 @@ proc rpcMain*() =
       let res = await client.eth_getBlockByNumber("latest", true)
       check res.isNil.not
       check res.hash == env.blockHash
+      let blk = env.chain.blockByHash(env.blockHash).expect("block exists")
+      check res.size == w3Qty(uint64(rlp.encode(blk).len))
 
       expect RpcResponseError:
         discard await client.eth_getBlockByNumber($1, true)
@@ -734,6 +778,21 @@ proc rpcMain*() =
       let contractTx = await client.eth_getTransactionByHash(env.contractTxHash)
       check contractTx.isNil.not
       check contractTx.to.isNone
+
+      # Mined EIP-155 legacy tx: chainId set, no yParity, gasPrice as paid.
+      check res.chainId == Opt.some(env.chainId)
+      check res.yParity.isNone
+      check res.gasPrice == w3Qty(30_000_000_000'u64)
+
+      # Pending typed tx: gasPrice is the max fee, yParity is set.
+      let pendingTx = env.makeBlobTx(6)
+      discard env.txPool.addTx(pendingTx) # no-op when an earlier test added it
+      let pending = await client.eth_getTransactionByHash(computeRlpHash(pendingTx.tx))
+      check pending.isNil.not
+      check pending.blockNumber.isNone
+      check pending.gasPrice == w3Qty(uint64(10 ^ 9))
+      check pending.yParity == Opt.some(w3Qty(uint64(pendingTx.tx.V)))
+      check pending.yParity.get.uint64 <= 1
 
     test "eth_getTransactionByBlockHashAndIndex":
       let res = await client.eth_getTransactionByBlockHashAndIndex(env.blockHash, w3Qty(0'u64))
@@ -842,6 +901,17 @@ proc rpcMain*() =
 
       let res2 = await client.eth_getUncleByBlockNumberAndIndex("latest", w3Qty(1'u64))
       check res2.isNil
+
+    test "eth_getLogs range beyond head is invalid params":
+      let head = await client.eth_blockNumber()
+      for filterOptions in [
+          FilterOptions(fromBlock: Opt.some(blockId(uint64(head) + 1))),
+          FilterOptions(toBlock: Opt.some(blockId(uint64(head) + 1)))]:
+        try:
+          discard await client.eth_getLogs(filterOptions)
+          check false
+        except RpcResponseError as exc:
+          check exc.code == -32602
 
     test "eth_getLogs by blockhash, no filters":
       let testHeader = getBlockHeader4514995()
