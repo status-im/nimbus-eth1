@@ -265,6 +265,7 @@ proc exec(ctx: TransContext,
   if vmState.balTrackerEnabled:
     vmState.balTracker.commitCallFrame()
 
+  let depositContractAddress = vmState.com.depositContractAddress
   for txIndex, txRes in ctx.txList:
     if txRes.isErr:
       rejected.add RejectedTx(
@@ -301,7 +302,7 @@ proc exec(ctx: TransContext,
       continue
 
     if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
-      vmState.blockLogs.add vmState.txLogs
+      vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
 
     let rec = vmState.makeReceipt(tx.txType)
     vmState.receipts.add rec
@@ -403,7 +404,7 @@ proc exec(ctx: TransContext,
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     var
-      depositReqs = parseDepositLogs(vmState.blockLogs, vmState.com.depositContractAddress).valueOr:
+      depositReqs = parseDepositLogs(vmState.blockLogs).valueOr:
         return err(t8nerr(ErrorEVM, error))
       executionRequests: seq[seq[byte]]
 

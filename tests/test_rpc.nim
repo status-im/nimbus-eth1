@@ -26,6 +26,7 @@ import
   ../execution_chain/[common, rpc],
   ../execution_chain/rpc/[rpc_types, rpc_utils, common as rpc_common],
   ../execution_chain/beacon/web3_eth_conv,
+  ../execution_chain/core/gaslimit,
   ../execution_chain/networking/p2p,
   ../execution_chain/nimbus_desc,
    ./shared_data/eip8282data,
@@ -62,6 +63,30 @@ const
     Push1 "0x04"        # RETURN LEN
     Push1 "0x1C"        # RETURN OFFSET at 28
     Return
+  blockNumberCode = evmByteCode:
+    Number
+    Push1 "0x00"
+    Mstore
+    Push1 "0x20"
+    Push1 "0x00"
+    Return
+  blockNumberAddress = address"0x00000000000000000000000000000000000000b1"
+  baseFeeCode = evmByteCode:
+    BaseFee
+    Push1 "0x00"
+    Mstore
+    Push1 "0x20"
+    Push1 "0x00"
+    Return
+  baseFeeAddress = address"0x00000000000000000000000000000000000000b2"
+  revertCode = evmByteCode:
+    Push4 "0xDEADBEEF"
+    Push1 "0x00"
+    Mstore
+    Push1 "0x04"
+    Push1 "0x1C"
+    Revert
+  revertAddress = address"0x000000000000000000000000000000000000beef"
   keyStore = "tests/keystore"
   signer = address"0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b"
   contractAddress = address"0xa3b2222afa5c987da6ef773fde8d01b9f23d481f"
@@ -183,6 +208,9 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     params = conf.computeNetworkParams()
 
   params.genesis.alloc[contractAddress] = GenesisAccount(code: contractCode)
+  params.genesis.alloc[blockNumberAddress] = GenesisAccount(code: blockNumberCode)
+  params.genesis.alloc[baseFeeAddress] = GenesisAccount(code: baseFeeCode)
+  params.genesis.alloc[revertAddress] = GenesisAccount(code: revertCode)
   params.genesis.alloc[signer] = GenesisAccount(balance: oneETH)
   params.genesis.alloc[create2Deployer] =
     GenesisAccount(code: create2DeployerCode, nonce: 1)
@@ -443,6 +471,11 @@ proc rpcMain*() =
         check progress.current == res.syncObject.currentBlock.uint64
         check progress.target == res.syncObject.highestBlock.uint64
 
+    test "eth_baseFee":
+      let res = await client.call("eth_baseFee", %[], EthJson)
+      check EthJson.decode(res.string, UInt256) ==
+        com.calcEip1599BaseFee(env.chain.latestHeader)
+
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()
       check res == w3Qty(30_000_000_100)  # Median of `unsignedTx1`, `unsignedTx2`, `tx3`
@@ -473,6 +506,20 @@ proc rpcMain*() =
     test "eth_getStorageAt":
       let res = await client.eth_getStorageAt(contractAccWithStorage, 1.u256, blockId(1'u64))
       check FixedBytes[32](2345.u256.toBytesBE) == res
+
+    test "eth_getStorageValues":
+      let r = await client.call("eth_getStorageValues",
+        %[%*{contractAccWithStorage.to0xHex: [0.u256.to(Bytes32).to0xHex, 1.u256.to(Bytes32).to0xHex]}, %"latest"], EthJson)
+      let res = EthJson.decode(r.string, StorageValuesResponse)
+      check res.list.len == 1
+      check res.list[0].data == @[Bytes32(1234.u256.toBytesBE), Bytes32(2345.u256.toBytesBE)]
+
+    test "eth_getStorageValues empty request is invalid params":
+      try:
+        discard await client.call("eth_getStorageValues", %[%*{}, %"latest"], EthJson)
+        check false
+      except RpcResponseError as exc:
+        check exc.code == -32602
 
     test "eth_getTransactionCount":
       let res = await client.eth_getTransactionCount(signer, blockId(1'u64))
@@ -515,6 +562,28 @@ proc rpcMain*() =
     test "eth_getCode":
       let res = await client.eth_getCode(contractAddress, blockId(1'u64))
       check res.len == contractCode.len
+
+    test "omitted block parameter defaults to latest":
+      let
+        balance = await client.call("eth_getBalance", %[%(signer.to0xHex)], EthJson)
+        code = await client.call("eth_getCode", %[%(contractAddress.to0xHex)], EthJson)
+        nonce = await client.call("eth_getTransactionCount", %[%(signer.to0xHex)], EthJson)
+        slot = await client.call("eth_getStorageAt",
+          %[%(contractAccWithStorage.to0xHex), %"0x1"], EthJson)
+        proof = await client.call("eth_getProof", %[%(regularAcc.to0xHex), %[]], EthJson)
+        values = await client.call("eth_getStorageValues",
+          %[%*{contractAccWithStorage.to0xHex: [1.u256.to(Bytes32).to0xHex]}], EthJson)
+        expectedBalance = await client.eth_getBalance(signer, blockId("latest"))
+        expectedNonce = await client.eth_getTransactionCount(signer, blockId("latest"))
+        expectedProof = await client.eth_getProof(regularAcc, @[], blockId("latest"))
+      check:
+        EthJson.decode(balance.string, UInt256) == expectedBalance
+        EthJson.decode(code.string, seq[byte]).len == contractCode.len
+        EthJson.decode(nonce.string, Quantity) == expectedNonce
+        EthJson.decode(slot.string, FixedBytes[32]) == FixedBytes[32](2345.u256.toBytesBE)
+        EthJson.decode(proof.string, ProofResponse).balance == expectedProof.balance
+        EthJson.decode(values.string, StorageValuesResponse).list[0].data[0] ==
+          FixedBytes[32](2345.u256.toBytesBE)
 
     test "eth_sign":
       let msg = "hello world"
@@ -587,6 +656,71 @@ proc rpcMain*() =
       let res = await client.eth_call(ec, "latest")
       check res == hexToSeqByte("deadbeef")
 
+    test "eth_call runs in the context of the requested block":
+      let ec = TransactionArgs(
+        to: Opt.some(blockNumberAddress),
+        gas: Opt.some(w3Qty(100000'u)))
+      let head = await client.eth_blockNumber()
+      check uint64(head) > 0
+      let res = await client.eth_call(ec, "latest")
+      check UInt256.fromBytesBE(res) == u256(uint64(head))
+      let genesis = await client.eth_call(ec, "earliest")
+      check UInt256.fromBytesBE(genesis) == 0.u256
+
+    test "eth_call base fee depends on the call fees":
+      let
+        latestBlock = await client.eth_getBlockByNumber("latest", false)
+        baseFee = latestBlock.baseFeePerGas.get(0.u256)
+      check baseFee > 0.u256
+
+      # Without fees the call sees a zero base fee.
+      var ec = TransactionArgs(to: Opt.some(baseFeeAddress))
+      let free = await client.eth_call(ec, "latest")
+      check UInt256.fromBytesBE(free) == 0.u256
+
+      # With a sufficient fee cap the call sees the block base fee.
+      ec.`from` = Opt.some(signer)
+      ec.maxFeePerGas = Opt.some(w3Qty(baseFee.truncate(uint64)))
+      let paid = await client.eth_call(ec, "latest")
+      check UInt256.fromBytesBE(paid) == baseFee
+
+      # A fee cap below the base fee is rejected.
+      ec.maxFeePerGas = Opt.some(w3Qty(1'u64))
+      expect RpcResponseError:
+        discard await client.eth_call(ec, "latest")
+
+    test "eth_estimateGas with zero EIP-1559 fees at a positive base fee":
+      let latestBlock = await client.eth_getBlockByNumber("latest", false)
+      check latestBlock.baseFeePerGas.get(0.u256) > 0.u256
+      let ec = TransactionArgs(
+        to: Opt.some(extraAddress),
+        maxFeePerGas: Opt.some(w3Qty(0'u64)),
+        maxPriorityFeePerGas: Opt.some(w3Qty(0'u64)),
+        value: Opt.some(100.u256))
+      let res = await client.eth_estimateGas(ec)
+      check res == w3Qty(21000'u64)
+    test "eth_call revert is error code 3 with revert data":
+      let ec = TransactionArgs(
+        to: Opt.some(revertAddress),
+        gas: Opt.some(w3Qty(100000'u)))
+      try:
+        discard await client.eth_call(ec, "latest")
+        check false
+      except RpcResponseError as exc:
+        check exc.code == 3
+        check exc.msg == "execution reverted"
+        check exc.data == JsonString("\"0xdeadbeef\"")
+
+    test "eth_call out of gas is an error":
+      let ec = TransactionArgs(
+        to: Opt.some(contractAddress),
+        gas: Opt.some(w3Qty(21_001'u)))
+      try:
+        discard await client.eth_call(ec, "latest")
+        check false
+      except RpcResponseError as exc:
+        check exc.code == -32000
+
     test "eth_estimateGas":
       let ec = TransactionArgs(
         `from`: Opt.some(signer),
@@ -598,6 +732,39 @@ proc rpcMain*() =
 
       let res = await client.eth_estimateGas(ec)
       check res == w3Qty(21000'u64)
+
+    test "eth_estimateGas at the requested block":
+      # The signer starts with exactly oneETH and spends some of it later, so
+      # only genesis can afford this transfer plus its 21000 gas.
+      let
+        gasPrice = 30_000_000_000'u64
+        value = oneETH - (21000'u64 * gasPrice).u256
+        args = %*{
+          "from": signer.to0xHex,
+          "to": extraAddress.to0xHex,
+          "gasPrice": "0x" & gasPrice.toHex,
+          "value": "0x" & value.toHex,
+        }
+      for blk in [%"earliest", %"0x0", %(env.com.genesisHash.to0xHex)]:
+        let res = await client.call("eth_estimateGas", %[args, blk], EthJson)
+        check EthJson.decode(res.string, Quantity) == w3Qty(21000'u64)
+
+      expect RpcResponseError:
+        discard await client.call("eth_estimateGas", %[args, %"latest"], EthJson)
+      expect RpcResponseError:
+        discard await client.call("eth_estimateGas", %[args], EthJson)
+
+    test "eth_call and eth_createAccessList default to latest":
+      let
+        args = %*{"to": contractAddress.to0xHex}
+        call = await client.call("eth_call", %[args], EthJson)
+        accessList = await client.call("eth_createAccessList", %[args], EthJson)
+        latestCall = await client.call("eth_call", %[args, %"latest"], EthJson)
+        latestAccessList =
+          await client.call("eth_createAccessList", %[args, %"latest"], EthJson)
+      check:
+        call.string == latestCall.string
+        accessList.string == latestAccessList.string
 
     test "eth_estimateGas includes EIP-7702 authorization intrinsic cost":
       let
@@ -674,7 +841,7 @@ proc rpcMain*() =
         `from`: Opt.some(signer),
         to: Opt.some(contractAddress),
         gas: Opt.some(w3Qty(100_000'u)),
-        gasPrice: Opt.some(w3Qty(6'u)),
+        gasPrice: Opt.some(w3Qty(8'u)),
         value: Opt.some(8.u256),
         input: Opt.some(hexToSeqByte("0001020304")),
       )
@@ -719,6 +886,8 @@ proc rpcMain*() =
       let res = await client.eth_getBlockByNumber("latest", true)
       check res.isNil.not
       check res.hash == env.blockHash
+      let blk = env.chain.blockByHash(env.blockHash).expect("block exists")
+      check res.size == w3Qty(uint64(rlp.encode(blk).len))
 
       expect RpcResponseError:
         discard await client.eth_getBlockByNumber($1, true)
@@ -734,6 +903,21 @@ proc rpcMain*() =
       let contractTx = await client.eth_getTransactionByHash(env.contractTxHash)
       check contractTx.isNil.not
       check contractTx.to.isNone
+
+      # Mined EIP-155 legacy tx: chainId set, no yParity, gasPrice as paid.
+      check res.chainId == Opt.some(env.chainId)
+      check res.yParity.isNone
+      check res.gasPrice == w3Qty(30_000_000_000'u64)
+
+      # Pending typed tx: gasPrice is the max fee, yParity is set.
+      let pendingTx = env.makeBlobTx(6)
+      discard env.txPool.addTx(pendingTx) # no-op when an earlier test added it
+      let pending = await client.eth_getTransactionByHash(computeRlpHash(pendingTx.tx))
+      check pending.isNil.not
+      check pending.blockNumber.isNone
+      check pending.gasPrice == w3Qty(uint64(10 ^ 9))
+      check pending.yParity == Opt.some(w3Qty(uint64(pendingTx.tx.V)))
+      check pending.yParity.get.uint64 <= 1
 
     test "eth_getTransactionByBlockHashAndIndex":
       let res = await client.eth_getTransactionByBlockHashAndIndex(env.blockHash, w3Qty(0'u64))
@@ -842,6 +1026,17 @@ proc rpcMain*() =
 
       let res2 = await client.eth_getUncleByBlockNumberAndIndex("latest", w3Qty(1'u64))
       check res2.isNil
+
+    test "eth_getLogs range beyond head is invalid params":
+      let head = await client.eth_blockNumber()
+      for filterOptions in [
+          FilterOptions(fromBlock: Opt.some(blockId(uint64(head) + 1))),
+          FilterOptions(toBlock: Opt.some(blockId(uint64(head) + 1)))]:
+        try:
+          discard await client.eth_getLogs(filterOptions)
+          check false
+        except RpcResponseError as exc:
+          check exc.code == -32602
 
     test "eth_getLogs by blockhash, no filters":
       let testHeader = getBlockHeader4514995()

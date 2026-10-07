@@ -23,28 +23,40 @@ import
 
 export call_common
 
+proc callVMState(
+    args: TransactionArgs,
+    header: Header,
+    com: CommonRef,
+    txFrame: CoreDbTxRef,
+): BaseVMState =
+  ## State after `header` with the block environment of `header`. Only the
+  ## parent block number is consumed, so no parent header lookup is needed.
+  # At genesis the parent number wraps to high(BlockNumber), so the block
+  # number (parent number + 1) is 0, as for any other block.
+  let vmState = BaseVMState.new(Header(number: header.number - 1), header, com, txFrame)
+
+  # A call without fees runs with a zero base fee, like geth with NoBaseFee.
+  if args.gasPrice.get(0.Quantity).uint64 == 0 and
+      args.maxFeePerGas.get(0.Quantity).uint64 == 0 and
+      args.maxPriorityFeePerGas.get(0.Quantity).uint64 == 0:
+    vmState.blockCtx.baseFeePerGas = 0
+
+  vmState
+
 proc rpcCallEvm*(
     args: TransactionArgs,
     header: Header,
-    headerHash: Hash32,
     com: CommonRef,
     parentFrame: CoreDbTxRef,
     globalGasCap = 0.GasInt,
 ): Result[CallResult, string] =
   # TODO: globalGasCap should configurable by user
 
-  let topHeader = Header(
-    parentHash: headerHash,
-    timestamp: EthTime.now(),
-    gasLimit: 0.GasInt, ## ???
-    baseFeePerGas: Opt.none UInt256, ## ???
-  )
-
   let txFrame = parentFrame.txFrameBegin()
   defer:
     txFrame.dispose() # always dispose state changes
 
-  let vmState = BaseVMState.new(header, topHeader, com, txFrame)
+  let vmState = callVMState(args, header, com, txFrame)
   defer:
     vmState.dispose()
 
@@ -179,24 +191,16 @@ proc rpcEstimateGas*(
 proc rpcEstimateGas*(
     args: TransactionArgs,
     header: Header,
-    headerHash: Hash32,
     com: CommonRef,
     parentFrame: CoreDbTxRef,
     gasCap: GasInt,
 ): Result[GasInt, OutputResult] =
   # Binary search the gas requirement, as it may be higher than the amount used
-  let topHeader = Header(
-    parentHash: headerHash,
-    timestamp: EthTime.now(),
-    gasLimit: 0.GasInt, ## ???
-    baseFeePerGas: Opt.none UInt256, ## ???
-  )
-
   let txFrame = parentFrame.txFrameBegin()
   defer:
     txFrame.dispose() # always dispose state changes
 
-  let vmState = BaseVMState.new(header, topHeader, com, txFrame)
+  let vmState = callVMState(args, header, com, txFrame)
   defer:
     vmState.dispose()
 

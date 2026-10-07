@@ -266,9 +266,11 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   # Update receipts sequence
   if vmState.receipts.len <= inx:
     vmState.receipts.setLen(inx + receiptsExtensionSize)
+    vmState.receiptBlooms.setLen(inx + receiptsExtensionSize)
 
-  vmState.blockLogs.add vmState.txLogs
+  vmState.blockLogs.addDepositLogs(vmState.txLogs, vmState.com.depositContractAddress)
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
+  vmState.receiptBlooms[inx] = calcLogsBloom(vmState.receipts[inx].logs)
 
   pst.packedTxs.add item
   pst.numBlobPerBlock += item.tx.versionedHashes.len
@@ -301,7 +303,7 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   if vmState.fork >= FkPrague:
     pst.withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     pst.consolidationReqs = ?processDequeueConsolidationRequests(vmState)
-    pst.depositReqs = ?parseDepositLogs(vmState.blockLogs, vmState.com.depositContractAddress)
+    pst.depositReqs = ?parseDepositLogs(vmState.blockLogs)
 
     if vmState.fork >= FkAmsterdam:
       # EIP-8282
@@ -314,9 +316,10 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 
   # Update flexi-array, set proper length
   vmState.receipts.setLen(pst.packedTxs.len)
+  vmState.receiptBlooms.setLen(pst.packedTxs.len)
 
-  pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
-  pst.logsBloom = vmState.receipts.createBloom
+  pst.receiptsRoot = calcReceiptsRoot(vmState.receipts, vmState.receiptBlooms)
+  createBloom(vmState.receiptBlooms, pst.logsBloom)
   pst.stateRoot = vmState.ledger.getStateRoot()
 
   # Commit block access list tracker changes for post‑execution system calls

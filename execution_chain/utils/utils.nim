@@ -12,7 +12,7 @@
 
 import
   std/math,
-  eth/[bloom, common/eth_types_rlp, trie/ordered_trie],
+  eth/[common/eth_types_rlp, trie/ordered_trie],
   stew/byteutils,
   stew/assign2,
   nimcrypto/sha2,
@@ -33,12 +33,29 @@ template calcTxRoot*(transactions: openArray[Transaction]): Root =
 template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Root =
   orderedTrieRoot(withdrawals)
 
-type NetworkFormatReceipt = distinct StoredReceipt
-  ## Encodes as the network `Receipt` wire format (bloom included) while
-  ## borrowing the stored receipt's logs instead of copying them
+func inclBloomBits(bloom: var Bloom, h: Hash32) {.inline.} =
+  for i in [0, 2, 4]:
+    let bit = ((h.data[i].int shl 8) or h.data[i + 1].int) and 2047
+    bloom.data[255 - (bit shr 3)] = bloom.data[255 - (bit shr 3)] or byte(1 shl (bit and 7))
 
-proc append(w: var RlpWriter, rec: NetworkFormatReceipt) =
-  template r(): StoredReceipt = StoredReceipt(rec)
+func accumLogsBloom*(bloom: var Bloom, logs: openArray[Log]) =
+  for log in logs:
+    bloom.inclBloomBits keccak256(log.address.data)
+    for topic in log.topics:
+      bloom.inclBloomBits keccak256(topic.data)
+
+func calcLogsBloom*(logs: openArray[Log]): Bloom =
+  if logs.len == 0:
+    return
+  result.accumLogsBloom(logs)
+
+func calcLogsBloom*(logs: openArray[Log], bloom: var Bloom) =
+  bloom.reset()
+  bloom.accumLogsBloom(logs)
+
+template appendNetworkReceipt(w: var RlpWriter, r, bloomExpr: untyped) =
+  ## Network `Receipt` wire format (bloom included) borrowing the stored
+  ## receipt's logs instead of copying them
   if r.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt}:
     w.appendDetached(r.receiptType.uint8)
   w.startList(4)
@@ -52,14 +69,23 @@ proc append(w: var RlpWriter, rec: NetworkFormatReceipt) =
     # The length pass only needs the encoded size, identical for any bloom
     w.append(default(Bloom))
   else:
-    var bloom: bloom.BloomFilter
-    for log in r.logs:
-      bloom.incl log.address
-      for topic in log.topics:
-        bloom.incl topic
-    w.append(bloom.value.to(Bloom))
+    w.append(bloomExpr)
 
   w.append(r.logs)
+
+type
+  NetworkFormatReceipt = distinct StoredReceipt
+
+  ReceiptWithBloom = object
+    rec: ptr StoredReceipt
+    bloom: ptr Bloom
+
+proc append(w: var RlpWriter, rec: NetworkFormatReceipt) =
+  template r(): StoredReceipt = StoredReceipt(rec)
+  w.appendNetworkReceipt(r, calcLogsBloom(r.logs))
+
+proc append(w: var RlpWriter, item: ReceiptWithBloom) =
+  w.appendNetworkReceipt(item.rec[], item.bloom[])
 
 func calcReceiptsRoot*(receipts: openArray[StoredReceipt]): Root =
   if receipts.len == 0:
@@ -67,6 +93,16 @@ func calcReceiptsRoot*(receipts: openArray[StoredReceipt]): Root =
   orderedTrieRoot(
     cast[ptr UncheckedArray[NetworkFormatReceipt]](addr receipts[0])
       .toOpenArray(0, receipts.high))
+
+func calcReceiptsRoot*(
+    receipts: openArray[StoredReceipt], blooms: openArray[Bloom]): Root =
+  doAssert receipts.len == blooms.len
+  if receipts.len == 0:
+    return EMPTY_ROOT_HASH
+  var items = newSeq[ReceiptWithBloom](receipts.len)
+  for i in 0 ..< receipts.len:
+    items[i] = ReceiptWithBloom(rec: addr receipts[i], bloom: addr blooms[i])
+  orderedTrieRoot(items)
 
 template calcReceiptsRoot*(receipts: openArray[Receipt]): Root =
   orderedTrieRoot(receipts)
