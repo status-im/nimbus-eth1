@@ -67,6 +67,7 @@ proc processTransactions*(
     collectLogs = false
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
+  vmState.receiptBlooms.setLen(vmState.receipts.len)
   vmState.cumulativeGasUsed = 0
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
@@ -78,6 +79,7 @@ proc processTransactions*(
       return processTransactionsParallel(
         vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
 
+  let depositContractAddress = vmState.com.depositContractAddress
   vmState.withSender(transactions, blockAccessList):
     if sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
@@ -90,10 +92,11 @@ proc processTransactions*(
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
 
     if collectLogs:
-      vmState.blockLogs.add vmState.txLogs
+      vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
 
     if not skipReceipts:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
+      vmState.receiptBlooms[txIndex] = calcLogsBloom(vmState.receipts[txIndex].logs)
 
   ok()
 
@@ -303,14 +306,15 @@ proc procBlkEpilogue(
           err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
 
     if not skipReceipts:
-      let bloom = createBloom(vmState.receipts)
+      var bloom {.noinit.}: Bloom
+      createBloom(vmState.receiptBlooms, bloom)
 
       if header.logsBloom != bloom:
         debug "wrong logsBloom in block",
           blockNumber = header.number, actual = bloom, expected = header.logsBloom
         return err("bloom mismatch")
 
-      let receiptsRoot = calcReceiptsRoot(vmState.receipts)
+      let receiptsRoot = calcReceiptsRoot(vmState.receipts, vmState.receiptBlooms)
       if header.receiptsRoot != receiptsRoot:
         # TODO replace logging with better error
         debug "wrong receiptRoot in block",
@@ -324,7 +328,7 @@ proc procBlkEpilogue(
     if header.requestsHash.isSome:
       let
         depositReqs =
-          ?parseDepositLogs(vmState.blockLogs, vmState.com.depositContractAddress)
+          ?parseDepositLogs(vmState.blockLogs)
         requestsHash = if vmState.com.isAmsterdamOrLater(header.timestamp):
             calcRequestsHash(
               [
