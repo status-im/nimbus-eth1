@@ -63,6 +63,14 @@ const
     Push1 "0x04"        # RETURN LEN
     Push1 "0x1C"        # RETURN OFFSET at 28
     Return
+  revertCode = evmByteCode:
+    Push4 "0xDEADBEEF"
+    Push1 "0x00"
+    Mstore
+    Push1 "0x04"
+    Push1 "0x1C"
+    Revert
+  revertAddress = address"0x000000000000000000000000000000000000beef"
   keyStore = "tests/keystore"
   signer = address"0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b"
   contractAddress = address"0xa3b2222afa5c987da6ef773fde8d01b9f23d481f"
@@ -184,6 +192,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     params = conf.computeNetworkParams()
 
   params.genesis.alloc[contractAddress] = GenesisAccount(code: contractCode)
+  params.genesis.alloc[revertAddress] = GenesisAccount(code: revertCode)
   params.genesis.alloc[signer] = GenesisAccount(balance: oneETH)
   params.genesis.alloc[create2Deployer] =
     GenesisAccount(code: create2DeployerCode, nonce: 1)
@@ -628,6 +637,28 @@ proc rpcMain*() =
 
       let res = await client.eth_call(ec, "latest")
       check res == hexToSeqByte("deadbeef")
+
+    test "eth_call revert is error code 3 with revert data":
+      let ec = TransactionArgs(
+        to: Opt.some(revertAddress),
+        gas: Opt.some(w3Qty(100000'u)))
+      try:
+        discard await client.eth_call(ec, "latest")
+        check false
+      except RpcResponseError as exc:
+        check exc.code == 3
+        check exc.msg == "execution reverted"
+        check exc.data == JsonString("\"0xdeadbeef\"")
+
+    test "eth_call out of gas is an error":
+      let ec = TransactionArgs(
+        to: Opt.some(contractAddress),
+        gas: Opt.some(w3Qty(21_001'u)))
+      try:
+        discard await client.eth_call(ec, "latest")
+        check false
+      except RpcResponseError as exc:
+        check exc.code == -32000
 
     test "eth_estimateGas":
       let ec = TransactionArgs(

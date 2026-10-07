@@ -367,7 +367,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       txHash
 
-    proc eth_call(args: TransactionArgs, blockTag: BlockTag): seq[byte] {.raises: [ValueError].} =
+    proc eth_call(args: TransactionArgs, blockTag: BlockTag): seq[byte] {.raises: [RpcResponseError, ValueError].} =
       ## Executes a new message call immediately without creating a transaction on the block chain.
       ##
       ## call: the transaction call object.
@@ -380,6 +380,14 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         txFrame = api.chain.txFrame(headerHash)
         res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
           raise newException(ValueError, "rpcCallEvm error: " & error)
+      if res.isError:
+        if res.status == StatusCode.Revert and res.output.len > 0:
+          raise (ref RpcResponseError)(
+            code: 3,
+            msg: res.error,
+            data: EthJson.encode(res.output.to0xHex()).JsonString,
+          )
+        raise newException(ValueError, res.error)
       res.output
 
     proc eth_getTransactionReceipt(data: Hash32): ReceiptObject =
