@@ -21,7 +21,22 @@ ExecutionPayload.useDefaultSerializationIn EthJson
 PayloadAttributes.useDefaultSerializationIn EthJson
 GetPayloadResponse.useDefaultSerializationIn EthJson
 ForkchoiceState.useDefaultSerializationIn EthJson
-PayloadStatus.useDefaultSerializationIn EthJson
+PayloadStatus.useDefaultReaderIn EthJson
 ForkchoiceUpdatedResponse.useDefaultSerializationIn EthJson
+
+proc writeValue*(w: var JsonWriter[EthJson], v: PayloadStatus)
+      {.gcsafe, raises: [IOError].} =
+  # `witness` (engine_newPayloadWithWitness*) and `inclusionListSatisfied`
+  # are extensions to PayloadStatusV1. They must be omitted, not written as
+  # `null`, when unset.
+  mixin writeValue
+  w.beginObject()
+  for k, val in fieldPairs(v):
+    when k in ["witness", "inclusionListSatisfied"]:
+      if val.isSome:
+        w.writeMember(k, val)
+    else:
+      w.writeMember(k, val)
+  w.endObject()
 
 {.pop.}
