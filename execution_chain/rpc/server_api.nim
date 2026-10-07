@@ -367,7 +367,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       txHash
 
-    proc eth_call(args: TransactionArgs, blockTag: Opt[BlockTag]): seq[byte] {.raises: [ValueError].} =
+    proc eth_call(args: TransactionArgs, blockTag: Opt[BlockTag]): seq[byte] {.raises: [RpcResponseError, ValueError].} =
       ## Executes a new message call immediately without creating a transaction on the block chain.
       ##
       ## call: the transaction call object.
@@ -380,6 +380,14 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         txFrame = api.chain.txFrame(headerHash)
         res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
           raise newException(ValueError, "rpcCallEvm error: " & error)
+      if res.isError:
+        if res.status == StatusCode.Revert and res.output.len > 0:
+          raise (ref RpcResponseError)(
+            code: 3,
+            msg: res.error,
+            data: EthJson.encode(res.output.to0xHex()).JsonString,
+          )
+        raise newException(ValueError, res.error)
       res.output
 
     proc eth_getTransactionReceipt(data: Hash32): ReceiptObject =
@@ -829,7 +837,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, error)
       w3Qty(maxPriorityFee.uint64)
 
-    proc eth_getStorageValues(request: StorageValuesRequest, blockTag: Opt[BlockTag]): StorageValuesResponse {.raises: [ValueError].} =
+    proc eth_getStorageValues(request: StorageValuesRequest, blockTag: Opt[BlockTag]): StorageValuesResponse {.raises: [RpcResponseError, ValueError].} =
+      if request.list.len == 0:
+        raise invalidParams("empty request")
       let
         txFrame = api.frameFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)

@@ -35,6 +35,7 @@ type
   # Standard call result.
   CallResult* = object of RootObj
     error*:           string            # Something if the call failed.
+    status*:          StatusCode        # EVM status code when the call failed.
     gasUsed*:         GasInt            # Gas used by the tx.
     contractAddress*: addresses.Address # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.

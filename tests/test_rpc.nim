@@ -63,6 +63,14 @@ const
     Push1 "0x04"        # RETURN LEN
     Push1 "0x1C"        # RETURN OFFSET at 28
     Return
+  revertCode = evmByteCode:
+    Push4 "0xDEADBEEF"
+    Push1 "0x00"
+    Mstore
+    Push1 "0x04"
+    Push1 "0x1C"
+    Revert
+  revertAddress = address"0x000000000000000000000000000000000000beef"
   keyStore = "tests/keystore"
   signer = address"0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b"
   contractAddress = address"0xa3b2222afa5c987da6ef773fde8d01b9f23d481f"
@@ -184,6 +192,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     params = conf.computeNetworkParams()
 
   params.genesis.alloc[contractAddress] = GenesisAccount(code: contractCode)
+  params.genesis.alloc[revertAddress] = GenesisAccount(code: revertCode)
   params.genesis.alloc[signer] = GenesisAccount(balance: oneETH)
   params.genesis.alloc[create2Deployer] =
     GenesisAccount(code: create2DeployerCode, nonce: 1)
@@ -480,6 +489,20 @@ proc rpcMain*() =
       let res = await client.eth_getStorageAt(contractAccWithStorage, 1.u256, blockId(1'u64))
       check FixedBytes[32](2345.u256.toBytesBE) == res
 
+    test "eth_getStorageValues":
+      let r = await client.call("eth_getStorageValues",
+        %[%*{contractAccWithStorage.to0xHex: [0.u256.to(Bytes32).to0xHex, 1.u256.to(Bytes32).to0xHex]}, %"latest"], EthJson)
+      let res = EthJson.decode(r.string, StorageValuesResponse)
+      check res.list.len == 1
+      check res.list[0].data == @[Bytes32(1234.u256.toBytesBE), Bytes32(2345.u256.toBytesBE)]
+
+    test "eth_getStorageValues empty request is invalid params":
+      try:
+        discard await client.call("eth_getStorageValues", %[%*{}, %"latest"], EthJson)
+        check false
+      except RpcResponseError as exc:
+        check exc.code == -32602
+
     test "eth_getTransactionCount":
       let res = await client.eth_getTransactionCount(signer, blockId(1'u64))
       check res == w3Qty(3'u64)
@@ -614,6 +637,28 @@ proc rpcMain*() =
 
       let res = await client.eth_call(ec, "latest")
       check res == hexToSeqByte("deadbeef")
+
+    test "eth_call revert is error code 3 with revert data":
+      let ec = TransactionArgs(
+        to: Opt.some(revertAddress),
+        gas: Opt.some(w3Qty(100000'u)))
+      try:
+        discard await client.eth_call(ec, "latest")
+        check false
+      except RpcResponseError as exc:
+        check exc.code == 3
+        check exc.msg == "execution reverted"
+        check exc.data == JsonString("\"0xdeadbeef\"")
+
+    test "eth_call out of gas is an error":
+      let ec = TransactionArgs(
+        to: Opt.some(contractAddress),
+        gas: Opt.some(w3Qty(21_001'u)))
+      try:
+        discard await client.eth_call(ec, "latest")
+        check false
+      except RpcResponseError as exc:
+        check exc.code == -32000
 
     test "eth_estimateGas":
       let ec = TransactionArgs(
