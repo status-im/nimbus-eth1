@@ -550,17 +550,20 @@ type
 
       snapSyncEnabled* {.
         hidden
-        desc: "Start syncer using snap/2 to be followed by beacon sync." &
-              " Otherwise, a full sync will be performed by starting beacon" &
-              " sync immediately"
+        desc: "Start syncing using the snap/2 protocol to be followed by" &
+              " beacon syncing using the eth/xx protocol. Without this" &
+              " option, a full sync will be performed by beacon syncing." &
+              "Note that this option requires, that the unerlying block" &
+              " chain supports the Amsterdam fork. If not reached yet, the" &
+              " syncer will wait until reached."
         defaultValue: false
         name: "debug-snap-sync" .}: bool
 
       snapSyncResume* {.
         hidden
-        desc: "Use the cached data from a previous session if there is any." &
-              " Otherwise, data from a previous snap session will be moved" &
-              " to a backup directory, the name ending with ~"
+        desc: "Experimental feature attempting to recover an interrupted" &
+              " snap/2 session. This procedure is ignored if there is no" &
+              " usable previous session."
         defaultValue: false
         name: "debug-snap-sync-resume" .}: bool
 
