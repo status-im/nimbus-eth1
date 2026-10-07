@@ -73,9 +73,8 @@ func depositLogToRequest(data: openArray[byte]): DepositRequest =
 
 func addDepositLogs*(blockLogs: var seq[Log], logs: openArray[Log], depositContractAddress: Address) =
   for log in logs:
-    let isDepositEvent = log.topics.len > 0 and
-                         log.topics[0] == DEPOSIT_EVENT_SIGNATURE_HASH
-    if log.address == depositContractAddress and isDepositEvent:
+    if log.address == depositContractAddress and
+        log.topics.len > 0 and log.topics[0] == DEPOSIT_EVENT_SIGNATURE_HASH:
       blockLogs.add log
 
 func parseDepositLogs*(depositLogs: openArray[Log]): Result[seq[byte], string] =
