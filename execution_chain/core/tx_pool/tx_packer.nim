@@ -356,6 +356,8 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
         let rc = pst.vmExecGrabItem(item)
         if rc == StopCollecting:
           break
+    # reset focil to nil
+    xp.focil = nil
   else:
     for item in xp.byPriceAndNonce:
       let rc = pst.vmExecGrabItem(item)
