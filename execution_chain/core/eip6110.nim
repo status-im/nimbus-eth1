@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2024-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -71,13 +71,15 @@ func depositLogToRequest(data: openArray[byte]): DepositRequest =
 # Public functions
 # -----------------------------------------------------------------------------
 
-func parseDepositLogs*(logs: openArray[Log], depositContractAddress: Address): Result[seq[byte], string] =
-  var res = newSeqOfCap[byte](logs.len*depositRequestSize)
-  for i, log in logs:
-    let isDepositEvent = log.topics.len > 0 and
-                         log.topics[0] == DEPOSIT_EVENT_SIGNATURE_HASH
-    if not(log.address == depositContractAddress and isDepositEvent):
-      continue
+func addDepositLogs*(blockLogs: var seq[Log], logs: openArray[Log], depositContractAddress: Address) =
+  for log in logs:
+    if log.address == depositContractAddress and
+        log.topics.len > 0 and log.topics[0] == DEPOSIT_EVENT_SIGNATURE_HASH:
+      blockLogs.add log
+
+func parseDepositLogs*(depositLogs: openArray[Log]): Result[seq[byte], string] =
+  var res = newSeqOfCap[byte](depositLogs.len*depositRequestSize)
+  for log in depositLogs:
     if log.data.len != 576:
       return err("deposit wrong length: want 576, have " & $log.data.len)
     res.add depositLogToRequest(log.data)

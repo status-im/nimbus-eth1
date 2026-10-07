@@ -63,6 +63,30 @@ const
     Push1 "0x04"        # RETURN LEN
     Push1 "0x1C"        # RETURN OFFSET at 28
     Return
+  blockNumberCode = evmByteCode:
+    Number
+    Push1 "0x00"
+    Mstore
+    Push1 "0x20"
+    Push1 "0x00"
+    Return
+  blockNumberAddress = address"0x00000000000000000000000000000000000000b1"
+  baseFeeCode = evmByteCode:
+    BaseFee
+    Push1 "0x00"
+    Mstore
+    Push1 "0x20"
+    Push1 "0x00"
+    Return
+  baseFeeAddress = address"0x00000000000000000000000000000000000000b2"
+  revertCode = evmByteCode:
+    Push4 "0xDEADBEEF"
+    Push1 "0x00"
+    Mstore
+    Push1 "0x04"
+    Push1 "0x1C"
+    Revert
+  revertAddress = address"0x000000000000000000000000000000000000beef"
   keyStore = "tests/keystore"
   signer = address"0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b"
   contractAddress = address"0xa3b2222afa5c987da6ef773fde8d01b9f23d481f"
@@ -184,6 +208,9 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     params = conf.computeNetworkParams()
 
   params.genesis.alloc[contractAddress] = GenesisAccount(code: contractCode)
+  params.genesis.alloc[blockNumberAddress] = GenesisAccount(code: blockNumberCode)
+  params.genesis.alloc[baseFeeAddress] = GenesisAccount(code: baseFeeCode)
+  params.genesis.alloc[revertAddress] = GenesisAccount(code: revertCode)
   params.genesis.alloc[signer] = GenesisAccount(balance: oneETH)
   params.genesis.alloc[create2Deployer] =
     GenesisAccount(code: create2DeployerCode, nonce: 1)
@@ -629,6 +656,71 @@ proc rpcMain*() =
       let res = await client.eth_call(ec, "latest")
       check res == hexToSeqByte("deadbeef")
 
+    test "eth_call runs in the context of the requested block":
+      let ec = TransactionArgs(
+        to: Opt.some(blockNumberAddress),
+        gas: Opt.some(w3Qty(100000'u)))
+      let head = await client.eth_blockNumber()
+      check uint64(head) > 0
+      let res = await client.eth_call(ec, "latest")
+      check UInt256.fromBytesBE(res) == u256(uint64(head))
+      let genesis = await client.eth_call(ec, "earliest")
+      check UInt256.fromBytesBE(genesis) == 0.u256
+
+    test "eth_call base fee depends on the call fees":
+      let
+        latestBlock = await client.eth_getBlockByNumber("latest", false)
+        baseFee = latestBlock.baseFeePerGas.get(0.u256)
+      check baseFee > 0.u256
+
+      # Without fees the call sees a zero base fee.
+      var ec = TransactionArgs(to: Opt.some(baseFeeAddress))
+      let free = await client.eth_call(ec, "latest")
+      check UInt256.fromBytesBE(free) == 0.u256
+
+      # With a sufficient fee cap the call sees the block base fee.
+      ec.`from` = Opt.some(signer)
+      ec.maxFeePerGas = Opt.some(w3Qty(baseFee.truncate(uint64)))
+      let paid = await client.eth_call(ec, "latest")
+      check UInt256.fromBytesBE(paid) == baseFee
+
+      # A fee cap below the base fee is rejected.
+      ec.maxFeePerGas = Opt.some(w3Qty(1'u64))
+      expect RpcResponseError:
+        discard await client.eth_call(ec, "latest")
+
+    test "eth_estimateGas with zero EIP-1559 fees at a positive base fee":
+      let latestBlock = await client.eth_getBlockByNumber("latest", false)
+      check latestBlock.baseFeePerGas.get(0.u256) > 0.u256
+      let ec = TransactionArgs(
+        to: Opt.some(extraAddress),
+        maxFeePerGas: Opt.some(w3Qty(0'u64)),
+        maxPriorityFeePerGas: Opt.some(w3Qty(0'u64)),
+        value: Opt.some(100.u256))
+      let res = await client.eth_estimateGas(ec)
+      check res == w3Qty(21000'u64)
+    test "eth_call revert is error code 3 with revert data":
+      let ec = TransactionArgs(
+        to: Opt.some(revertAddress),
+        gas: Opt.some(w3Qty(100000'u)))
+      try:
+        discard await client.eth_call(ec, "latest")
+        check false
+      except RpcResponseError as exc:
+        check exc.code == 3
+        check exc.msg == "execution reverted"
+        check exc.data == JsonString("\"0xdeadbeef\"")
+
+    test "eth_call out of gas is an error":
+      let ec = TransactionArgs(
+        to: Opt.some(contractAddress),
+        gas: Opt.some(w3Qty(21_001'u)))
+      try:
+        discard await client.eth_call(ec, "latest")
+        check false
+      except RpcResponseError as exc:
+        check exc.code == -32000
+
     test "eth_estimateGas":
       let ec = TransactionArgs(
         `from`: Opt.some(signer),
@@ -640,6 +732,39 @@ proc rpcMain*() =
 
       let res = await client.eth_estimateGas(ec)
       check res == w3Qty(21000'u64)
+
+    test "eth_estimateGas at the requested block":
+      # The signer starts with exactly oneETH and spends some of it later, so
+      # only genesis can afford this transfer plus its 21000 gas.
+      let
+        gasPrice = 30_000_000_000'u64
+        value = oneETH - (21000'u64 * gasPrice).u256
+        args = %*{
+          "from": signer.to0xHex,
+          "to": extraAddress.to0xHex,
+          "gasPrice": "0x" & gasPrice.toHex,
+          "value": "0x" & value.toHex,
+        }
+      for blk in [%"earliest", %"0x0", %(env.com.genesisHash.to0xHex)]:
+        let res = await client.call("eth_estimateGas", %[args, blk], EthJson)
+        check EthJson.decode(res.string, Quantity) == w3Qty(21000'u64)
+
+      expect RpcResponseError:
+        discard await client.call("eth_estimateGas", %[args, %"latest"], EthJson)
+      expect RpcResponseError:
+        discard await client.call("eth_estimateGas", %[args], EthJson)
+
+    test "eth_call and eth_createAccessList default to latest":
+      let
+        args = %*{"to": contractAddress.to0xHex}
+        call = await client.call("eth_call", %[args], EthJson)
+        accessList = await client.call("eth_createAccessList", %[args], EthJson)
+        latestCall = await client.call("eth_call", %[args, %"latest"], EthJson)
+        latestAccessList =
+          await client.call("eth_createAccessList", %[args, %"latest"], EthJson)
+      check:
+        call.string == latestCall.string
+        accessList.string == latestAccessList.string
 
     test "eth_estimateGas includes EIP-7702 authorization intrinsic cost":
       let
@@ -716,7 +841,7 @@ proc rpcMain*() =
         `from`: Opt.some(signer),
         to: Opt.some(contractAddress),
         gas: Opt.some(w3Qty(100_000'u)),
-        gasPrice: Opt.some(w3Qty(6'u)),
+        gasPrice: Opt.some(w3Qty(8'u)),
         value: Opt.some(8.u256),
         input: Opt.some(hexToSeqByte("0001020304")),
       )

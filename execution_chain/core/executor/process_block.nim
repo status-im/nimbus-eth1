@@ -79,6 +79,7 @@ proc processTransactions*(
       return processTransactionsParallel(
         vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
 
+  let depositContractAddress = vmState.com.depositContractAddress
   vmState.withSender(transactions, blockAccessList):
     if sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
@@ -91,7 +92,7 @@ proc processTransactions*(
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
 
     if collectLogs:
-      vmState.blockLogs.add vmState.txLogs
+      vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
 
     if not skipReceipts:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
@@ -327,7 +328,7 @@ proc procBlkEpilogue(
     if header.requestsHash.isSome:
       let
         depositReqs =
-          ?parseDepositLogs(vmState.blockLogs, vmState.com.depositContractAddress)
+          ?parseDepositLogs(vmState.blockLogs)
         requestsHash = if vmState.com.isAmsterdamOrLater(header.timestamp):
             calcRequestsHash(
               [
