@@ -22,6 +22,7 @@ import
   ../../evm/interpreter/gas_costs,
   ../../block_access_list/[bal_builder, bal_overlay, bal_tracker, bal_utils],
   ../../concurrency/[shared_types, utils],
+  ../eip6110,
   ../eip7691,
   ./process_transaction,
   ./executor_helpers,
@@ -465,6 +466,8 @@ proc processTransactionsParallel*(
       entries[i].logs.dispose()
       entries[i].error.dispose()
 
+  let depositContractAddress = vmState.com.depositContractAddress
+
   # Process each result as soon as its task completes so the main thread makes
   # progress while the remaining tasks keep running in the background.
   for i in 0 ..< n:
@@ -512,7 +515,7 @@ proc processTransactionsParallel*(
     else:
       vmState.txLogs.setLen(0)
     if collectLogs:
-      vmState.blockLogs.add vmState.txLogs
+      vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
 
     if not skipReceipts:
       vmState.receipts[i] =
