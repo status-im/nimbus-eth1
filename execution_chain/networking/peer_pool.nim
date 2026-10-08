@@ -226,7 +226,7 @@ proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
       p.updateTimer = sleepAsync(updateLoopSleep)
 
     let
-      res = await one(p.connectTimer, p.updateTimer)
+      res = await race(p.connectTimer, p.updateTimer)
 
     if res == p.connectTimer:
       await p.lookupPeers()
