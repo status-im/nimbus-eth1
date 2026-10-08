@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,10 +44,16 @@ func readData(name string) (json.RawMessage, error) {
 	return json.RawMessage(data), nil
 }
 
-func execTransport(_ string, method, _ string) (json.RawMessage, error) {
+const optimisticBlockHash = "0x5b34070154b4331237ca3975de14df77359f7269a65b95d01b0e81c626e3151d"
+
+func execTransport(_ string, method, params string) (json.RawMessage, error) {
 	switch method {
 	case "eth_getBlockByNumber", "eth_getBlockByHash":
-		data, err := readData("block_0x17a2d23.json")
+		file := "block_0x17a2d23.json"
+		if strings.Contains(params, "0x17a2d65") || strings.Contains(params, optimisticBlockHash) {
+			file = "block_0x17a2d65.json"
+		}
+		data, err := readData(file)
 		if err != nil {
 			return nil, err
 		}
@@ -104,7 +111,9 @@ func TestVerifProxy(t *testing.T) {
 		require.NotEmpty(t, result, method)
 	}
 
-	result, err := ctx.CallRpc("eth_getBlockByNumber", `["latest", false]`, callTimeout)
-	require.NoError(t, err)
-	require.NotEmpty(t, result)
+	for _, tag := range []string{"latest", "finalized"} {
+		result, err := ctx.CallRpc("eth_getBlockByNumber", `["`+tag+`", false]`, callTimeout)
+		require.NoError(t, err, tag)
+		require.NotEmpty(t, result, tag)
+	}
 }
