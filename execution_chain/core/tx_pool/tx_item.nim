@@ -45,6 +45,7 @@ type
     time  : Time               ## Time when added
     sender: Address            ## Sender account address
     price : GasInt
+    rlpSize: uint64            ## `rlp.getEncodedLength(tx)`, see EIP-7934
 
   TxGasPrice = object
     maxFee: GasInt
@@ -60,13 +61,15 @@ proc utcNow*(): Time =
 proc new*(T: type TxItemRef;
           ptx: PooledTransaction,
           id: Hash32,
-          sender: Address): T =
+          sender: Address,
+          rlpSize: uint64): T =
   ## Create item descriptor.
   T(
-    ptx   : ptx,
-    id    : id,
-    time  : utcNow(),
-    sender: sender,
+    ptx    : ptx,
+    id     : id,
+    time   : utcNow(),
+    sender : sender,
+    rlpSize: rlpSize,
   )
 
 # ------------------------------------------------------------------------------
@@ -121,6 +124,10 @@ template nonce*(item: TxItemRef): AccountNonce =
 template price*(item: TxItemRef): GasInt =
   ## Getter
   item.price
+
+template rlpSize*(item: TxItemRef): uint64 =
+  ## Getter
+  item.rlpSize
 
 func wrapperVersion*(item: TxItemRef): Opt[WrapperVersion] =
   ## Getter

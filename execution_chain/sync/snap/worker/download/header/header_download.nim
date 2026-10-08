@@ -34,10 +34,16 @@ proc storeCachedHeaders(
       ctx.pool.cacheDB.putHeader(header, info).isOkOr:
         return
       count.inc
+  # Set a flag when Amsterdam was reached
+  if not ctx.pool.balSupported:
+    ctx.pool.cacheDB.lastHeader(info).isErrOr:
+      if ctx.chain.com.isAmsterdamOrLater(value.timestamp):
+        ctx.pool.balSupported = true
   ctx.pool.lastConsNum = ctx.hdrCache.head.number
-  trace info & ": Registered headers", leastBn, topBn, count,
+  chronicles.info info & ": Registered headers", leastBn, topBn, count,
     lastConsHead=ctx.pool.lastConsNum,
-    consHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState)
+    consHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState),
+    balSupported=ctx.pool.balSupported
 
 proc stateNum(ctx: SnapCtxRef): BlockNumber =
   # Get block number from saved state (if any)

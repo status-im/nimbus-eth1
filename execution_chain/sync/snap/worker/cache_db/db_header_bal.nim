@@ -52,7 +52,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc hasHeader*(db: CacheDbRef, number = BlockNumber(0)): BoolResult =
+proc hasHeader*(db: CacheDbRef, number: BlockNumber): BoolResult =
   let data = db.get9(cHeader, number).valueOr:
     return err(error)
   ok(0 < data.len)
@@ -115,7 +115,7 @@ iterator walkHeader*(db: CacheDbRef): WalkHeader =
 
 # -------------
 
-proc hasBal*(db: CacheDbRef, bn = BlockNumber(0)): BoolResult =
+proc hasBal*(db: CacheDbRef, bn: BlockNumber): BoolResult =
   let data = db.get9(cBal, bn).valueOr:
     return err(error)
   ok(0 < data.len)

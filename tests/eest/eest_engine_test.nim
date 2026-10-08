@@ -15,14 +15,12 @@ import
   ./eest_runner,
   ./eest_engine
 
+from ./eest_shared_releases import eestReleases
+
 const
   baseFolder = "tests/fixtures"
   suiteName = "Engine Tests"
   eestType = "blockchain_tests_engine"
-  eestReleases = [
-    "eest_mainnet",
-    "eest_devnet",
-  ]
 
 const skipFiles = [
   "CALLBlake2f_MaxRounds.json", # Doesn't work in github CI

@@ -16,8 +16,8 @@ import
   results,
   unittest2,
   chronos,
-  ../hive_integration/tx_sender,
-  ../hive_integration/blobs,
+  ./transaction/tx_sender,
+  ./transaction/blobs,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
   ../execution_chain/core/chain,
@@ -1375,3 +1375,67 @@ suite "TxPool blob retention":
 
     # Old blob still served => the replaced item is still alive in blobTab.
     check xp.getBlobAndProofV1(oldHash).isNone
+
+suite "TxPool packing order":
+  test "a sender's next tx is only offered once the previous one is in":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      tc = BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: 75000,
+        recipient: Opt.some(recipient214),
+        amount: 1.u256,
+      )
+
+    for i in 0 ..< 2:
+      let acc = mx.getAccount(i)
+      for n in 0 ..< 3:
+        xp.checkAddTx(mx.makeTx(tc, acc, n.AccountNonce))
+
+    # Nothing gets executed here, so no account nonce moves: only the first tx
+    # of each sender is offered, the later ones could never be included
+    var offered: seq[AccountNonce]
+    for item in xp.byPriceAndNonce:
+      offered.add item.nonce
+    check offered == @[0'u64, 0]
+
+  test "nonce bumped by an EIP-7702 authorization moves on to the next tx":
+    let
+      env = initEnv(Prague)
+      xp = env.xp
+      mx = env.sender
+      accA = mx.getAccount(0)
+      accB = mx.getAccount(1)
+      tcA = BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: 75000,
+        gasTip: 1.gwei,
+        recipient: Opt.some(recipient214),
+        amount: 1.u256,
+      )
+      # Higher tip, so it is packed first. Its authorization is signed by A
+      # for A's current nonce, which bumps A's nonce to 1.
+      tcB = BaseTx(
+        txType: Opt.some(TxEip7702),
+        gasLimit: 75000,
+        gasTip: 10.gwei,
+        recipient: Opt.some(recipient214),
+        amount: 1.u256,
+        authorizationList: @[mx.makeAuth(accA, 0)],
+      )
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+
+    xp.checkAddTx(mx.makeTx(tcA, accA, 0))
+    xp.checkAddTx(mx.makeTx(tcA, accA, 1))
+    xp.checkAddTx(mx.makeTx(tcB, accB, 0))
+
+    # A's nonce-0 tx went stale when B's tx landed, A's nonce-1 tx did not
+    let bundle = xp.checkAssembleBlock(2)
+    check bundle.blk.transactions[0].txType == TxEip7702
+    check bundle.blk.transactions[1].nonce == 1
+    xp.checkImportBlock(bundle)

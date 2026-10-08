@@ -32,28 +32,21 @@ import
 when compileOption("threads"):
   import ./process_block_parallel
 
-# Senders are either recovered from each signature or supplied by the caller:
-# An EIP-8025 stateless input carries the verified transaction public keys.
-template withSenderSerial(
-    txs: openArray[Transaction], senders: Opt[seq[Address]], body: untyped) =
+template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
-    let sender {.inject.} =
-      if senders.isSome():
-        senders.value[txIndex]
-      else:
-        tx.recoverSenderCached().valueOr(default(Address))
+    let sender {.inject.} = tx.recoverSenderCached().valueOr(default(Address))
     body
 
 template withSender(
     vmState: BaseVMState, txs: openArray[Transaction],
-    bal: Opt[BlockAccessListRef], senders: Opt[seq[Address]], body: untyped) =
+    bal: Opt[BlockAccessListRef], body: untyped) =
   when compileOption("threads"):
-    if senders.isNone() and vmState.com.parallelSenderRecoveryEnabled():
+    if vmState.com.parallelSenderRecoveryEnabled():
       withSenderParallel(vmState, txs, bal, body)
     else:
-      withSenderSerial(txs, senders, body)
+      withSenderSerial(txs, body)
   else:
-    withSenderSerial(txs, senders, body)
+    withSenderSerial(txs, body)
 
 template withBalPrefetch(
     vmState: BaseVMState, bal: Opt[BlockAccessListRef], body: untyped) =
@@ -70,27 +63,24 @@ proc processTransactions*(
     header: Header,
     transactions: seq[Transaction],
     blockAccessList = Opt.none(BlockAccessListRef),
-    senders = Opt.none(seq[Address]),
     skipReceipts = false,
     collectLogs = false
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
+  vmState.receiptBlooms.setLen(vmState.receipts.len)
   vmState.cumulativeGasUsed = 0
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
   vmState.blockLogs.setLen(0)
 
-  if senders.isSome() and senders[].len != transactions.len:
-    return err("Transaction public key count does not match block transactions")
-
   when compileOption("threads"):
-    if senders.isNone() and
-        vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
+    if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
       return processTransactionsParallel(
         vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
 
-  vmState.withSender(transactions, blockAccessList, senders):
+  let depositContractAddress = vmState.com.depositContractAddress
+  vmState.withSender(transactions, blockAccessList):
     if sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
 
@@ -102,10 +92,11 @@ proc processTransactions*(
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
 
     if collectLogs:
-      vmState.blockLogs.add vmState.txLogs
+      vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
 
     if not skipReceipts:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
+      vmState.receiptBlooms[txIndex] = calcLogsBloom(vmState.receipts[txIndex].logs)
 
   ok()
 
@@ -113,7 +104,6 @@ proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    senders: Opt[seq[Address]],
     skipValidation, skipReceipts, skipUncles: bool
 ): Result[void, string] =
   template header(): Header =
@@ -177,8 +167,7 @@ proc procBlkPreamble(
 
     let collectLogs = header.requestsHash.isSome and not skipValidation
     ?processTransactions(
-      vmState, header, blk.transactions, blockAccessList, senders, skipReceipts,
-      collectLogs
+      vmState, header, blk.transactions, blockAccessList, skipReceipts, collectLogs
     )
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
@@ -317,14 +306,15 @@ proc procBlkEpilogue(
           err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
 
     if not skipReceipts:
-      let bloom = createBloom(vmState.receipts)
+      var bloom {.noinit.}: Bloom
+      createBloom(vmState.receiptBlooms, bloom)
 
       if header.logsBloom != bloom:
         debug "wrong logsBloom in block",
           blockNumber = header.number, actual = bloom, expected = header.logsBloom
         return err("bloom mismatch")
 
-      let receiptsRoot = calcReceiptsRoot(vmState.receipts)
+      let receiptsRoot = calcReceiptsRoot(vmState.receipts, vmState.receiptBlooms)
       if header.receiptsRoot != receiptsRoot:
         # TODO replace logging with better error
         debug "wrong receiptRoot in block",
@@ -338,7 +328,7 @@ proc procBlkEpilogue(
     if header.requestsHash.isSome:
       let
         depositReqs =
-          ?parseDepositLogs(vmState.blockLogs, vmState.com.depositContractAddress)
+          ?parseDepositLogs(vmState.blockLogs)
         requestsHash = if vmState.com.isAmsterdamOrLater(header.timestamp):
             calcRequestsHash(
               [
@@ -377,7 +367,6 @@ proc processBlock*(
     vmState: BaseVMState, ## Parent environment of header/body block
     blk: Block, ## Header/body block to add to the blockchain
     blockAccessList = Opt.none(BlockAccessListRef),
-    senders = Opt.none(seq[Address]),
     skipValidation = false,
     skipReceipts = false,
     skipUncles = false,
@@ -388,7 +377,7 @@ proc processBlock*(
 
   vmState.withBalPrefetch(blockAccessList):
     ?vmState.procBlkPreamble(
-      blk, blockAccessList, senders, skipValidation, skipReceipts, skipUncles
+      blk, blockAccessList, skipValidation, skipReceipts, skipUncles
     )
 
     # EIP-3675: no reward for miner in POA/POS

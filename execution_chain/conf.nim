@@ -184,7 +184,7 @@ type
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
-      desc: "Specifies one or more bootstrap nodes(ENR or enode URL) to use when connecting to the network. " &
+      desc: "Specifies one or more bootstrap nodes (ENR) to use when connecting to the network. " &
             "Alias = el-bootstrap-node"
       defaultValue: @[]
       defaultValueDesc: ""
@@ -199,7 +199,7 @@ type
       name: "el-bootstrap-node" .}: seq[string]
 
     bootstrapFile {.
-      desc: "Specifies a file of bootstrap Ethereum network addresses(ENR or enode URL). " &
+      desc: "Specifies a file of bootstrap Ethereum network addresses (ENR). " &
             "Both line delimited or YAML format are supported. Alias = el-bootstrap-file"
       defaultValue: ""
       name: "bootstrap-file" .}: InputFile
@@ -342,6 +342,18 @@ type
       hidden
       defaultValue: defaultRdbBranchCacheSize
       name: "debug-rdb-branch-cache-size".}: int
+
+    accLeafCacheSize {.
+      hidden
+      defaultValue: defaultAccLeafCacheSize
+      desc: "Number of entries in the account leaf cache"
+      name: "debug-acc-leaf-cache-size".}: int
+
+    stoLeafCacheSize {.
+      hidden
+      defaultValue: defaultStoLeafCacheSize
+      desc: "Number of entries in the storage leaf cache"
+      name: "debug-sto-leaf-cache-size".}: int
 
     rdbPrintStats {.
       hidden
@@ -538,17 +550,20 @@ type
 
       snapSyncEnabled* {.
         hidden
-        desc: "Start syncer using snap to be followed by beacon sync." &
-              " Otherwise, a full sync will be performed by starting beacon" &
-              " sync immediately"
+        desc: "Start syncing using the snap/2 protocol to be followed by" &
+              " beacon syncing using the eth/xx protocol. Without this" &
+              " option, a full sync will be performed by beacon syncing." &
+              "Note that this option requires, that the unerlying block" &
+              " chain supports the Amsterdam fork. If not reached yet, the" &
+              " syncer will wait until reached."
         defaultValue: false
         name: "debug-snap-sync" .}: bool
 
       snapSyncResume* {.
         hidden
-        desc: "Use the cached data from a previous session if there is any." &
-              " Otherwise, data from a previous snap session will be moved" &
-              " to a backup directory, the name ending with ~"
+        desc: "Experimental feature attempting to recover an interrupted" &
+              " snap/2 session. This procedure is ignored if there is no" &
+              " usable previous session."
         defaultValue: false
         name: "debug-snap-sync-resume" .}: bool
 
@@ -869,6 +884,8 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
       # The import command does not use the key cache - better give it to branch
       if noKeyCache: config.rdbKeyCacheSize + config.rdbBranchCacheSize
       else: config.rdbBranchCacheSize,
+    accLeafCacheSize = config.accLeafCacheSize,
+    stoLeafCacheSize = config.stoLeafCacheSize,
     rdbPrintStats = config.rdbPrintStats,
     maxSnapshots = config.aristoDbMaxSnapshots,
     parallelStateRootComputation = config.parallelStateRootComputation,

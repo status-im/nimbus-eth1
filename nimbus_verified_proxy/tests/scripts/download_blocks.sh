@@ -24,3 +24,11 @@ for (( i=end; i<=start; i++ )); do
 	curl -X POST https://mainnet.gateway.tenderly.co -H "Content-Type: application/json" -d '{"jsonrpc": "2.0","method": "eth_getBlockByNumber","params": ["'${blknum}'", true],"id": 1}' | jq '.result' > $filename;
 	echo "downloaded block $blknum as $filename";
 done
+
+lc_blocks=(0x17a2d23 0x17a2d65)
+
+for blknum in "${lc_blocks[@]}"; do
+	filename="$DOWNLOAD_FOLDER/block_${blknum}.json"
+	curl -X POST https://mainnet.gateway.tenderly.co -H "Content-Type: application/json" -d '{"jsonrpc": "2.0","method": "eth_getBlockByNumber","params": ["'${blknum}'", true],"id": 1}' | jq '.result' > $filename;
+	echo "downloaded block $blknum as $filename";
+done

@@ -74,10 +74,10 @@ const
   maxHeadersLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 
-  lockedBalsLogWaitInterval* = chronos.seconds(30)
+  beaconSyncIdleLogWaitInterval* = chronos.seconds(10)
     ## Reduce logging noise
 
-  beaconSyncIdleLogWaitInterval* = chronos.seconds(10)
+  noBalSupportLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 
   # ---------
@@ -86,9 +86,11 @@ const
     ## Something failed in `SnapClear` state, e.g. starting header
     ## download (just avoiding some extra polling.)
 
-  daemonWaitReadyFailInterval* = chronos.seconds(10)
-    ## Something failed in `SnapReady` state, e.g. starting header
-    ## download (just avoiding some extra polling.)
+  daemonWaitReadyDwnldFailInterval* = chronos.seconds(15)
+    ## Header download trigger failed
+
+  daemonWaitReadyInitFailInterval* = chronos.seconds(5)
+    ## Snap download init failed. System is not ready yet.
 
   daemonWaitDownloadInterval* = chronos.seconds(2)
     ## Poll waiting for peers downloading snap data. The polling cycle also
@@ -113,6 +115,13 @@ const
   peerWaitExhaustedInterval* = chronos.milliseconds(1200)
     ## Suspend peer until the download state has been forwarded. This timeout
     ## will be regularly polled for the updated state.
+
+  peerWaitBalsSnap1Interval* = chronos.milliseconds(300)
+    ## Suspend snap/1 peer for BALs download emulation when snap/2 peers
+    ## are available.
+
+  peerWaitBalsNoDataInterval* = chronos.milliseconds(300)
+    ## Suspend  peer for BALs download if there were no available.
 
   peerWaitBalsLockedInterval* = chronos.milliseconds(300)
     ## Only one peer can download BALs. This constatnt is the polling timr
@@ -219,6 +228,9 @@ const
   nFetchBalEthPeersMax* = 5
     ## Try at most this many `eth` peers for fetchinga block access lists.
 
+  nFetchBalSnapSizeMax* = 2 * 1024 * 1024
+    ## Maximal response size for a BAL request
+
   fetchBalRlpxTimeout* = chronos.seconds(50)
     ## Timeout cap for the `RLPx` handlers, either `snap` or `eth`
     ## when fetching block access lists.
@@ -242,6 +254,12 @@ const
 
   nProcBalDefaultBatchMax* = 1000
     ## Default maximum number of BALs for a single auto downloading session.
+
+  # -----------
+
+  nCoreDbImportPersistBatch* = 1024 * 1024
+    ## When importing accounts, storage, and contract codes the caches are
+    ## regularly saved to disk after this many items have benn processed.
 
 static:
   doAssert 0 < nConsHeadCachedDeltaMin

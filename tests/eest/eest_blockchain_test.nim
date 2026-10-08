@@ -13,14 +13,12 @@ import
   ./eest_runner,
   ./eest_blockchain
 
+from ./eest_shared_releases import eestReleases
+
 const
   baseFolder = "tests/fixtures"
   suiteName = "Block Chain Test"
   eestType = "blockchain_tests"
-  eestReleases = [
-    "eest_mainnet",
-    "eest_devnet",
-  ]
 
 const skipFiles = [
   "",

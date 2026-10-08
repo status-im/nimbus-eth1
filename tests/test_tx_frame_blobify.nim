@@ -25,7 +25,7 @@ import
   ../execution_chain/db/kvt/[kvt_desc],
   ../execution_chain/db/[storage_types, tx_frame_db, ledger],
   ../execution_chain/db/core_db/memory_only,
-  ../hive_integration/tx_sender,
+  ./transaction/tx_sender,
   unittest2
 
 proc buildTxFrameBlob(aBlob: openArray[byte]): seq[byte] =

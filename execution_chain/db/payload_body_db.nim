@@ -90,31 +90,33 @@ proc getExecutionPayloadBodyV2*(
   if (body.transactions.len == 0 and header.txRoot != emptyRoot):
     return err("No transactions found in db for txRoot " & $header.txRoot)
 
-  if header.withdrawalsRoot.isSome:
-    let withdrawalsRoot = header.withdrawalsRoot.value
-    if withdrawalsRoot == emptyRoot:
-      var wds: seq[WithdrawalV1]
-      body.withdrawals = Opt.some(wds)
-      return ok(move(body))
+  # If no withdrawals, check if we have BAL
+  block withdrawalsBlock:
+    if header.withdrawalsRoot.isSome:
+      let withdrawalsRoot = header.withdrawalsRoot.value
+      if withdrawalsRoot == emptyRoot:
+        var wds: seq[WithdrawalV1]
+        body.withdrawals = Opt.some(wds)
+        break withdrawalsBlock
 
-    wrapRlpException info:
-      let bytes = db.get(withdrawalsKey(withdrawalsRoot).toOpenArray).valueOr:
-        if error.error != KvtNotFound:
-          warn info, withdrawalsRoot, error=($$error)
-        else:
-          # Fallback to old withdrawals format
-          var wds: seq[WithdrawalV1]
-          for wd in db.getWithdrawals(WithdrawalV1, withdrawalsRoot):
-            wds.add(wd)
-          body.withdrawals = Opt.some(wds)
-        return ok(move(body))
+      wrapRlpException info:
+        let bytes = db.get(withdrawalsKey(withdrawalsRoot).toOpenArray).valueOr:
+          if error.error != KvtNotFound:
+            warn info, withdrawalsRoot, error=($$error)
+          else:
+            # Fallback to old withdrawals format
+            var wds: seq[WithdrawalV1]
+            for wd in db.getWithdrawals(WithdrawalV1, withdrawalsRoot):
+              wds.add(wd)
+            body.withdrawals = Opt.some(wds)
+          break withdrawalsBlock
 
-      var list = rlp.decode(bytes, seq[WithdrawalV1])
-      body.withdrawals = Opt.some(move(list))
-  
+        var list = rlp.decode(bytes, seq[WithdrawalV1])
+        body.withdrawals = Opt.some(move(list))
+
   if header.blockAccessListHash.isSome():
     let bal = ?db.getBlockAccessList(header.computeRlpHash())
-    body.blockAccessList = 
+    body.blockAccessList =
         if bal.isSome():
           Opt.some(bal.get()[].encode())
         else:

@@ -23,13 +23,30 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc suspend(buddy: SnapPeerRef) =
+proc suspendDownload(buddy: SnapPeerRef) =
   ## Keep a peer on hold but do not ask for data until the `pivot` has
   ## advanced to a newer block number.
   buddy.only.stateExhausted = buddy.ctx.pool.pivotNum
 
-func isSuspended(buddy: SnapPeerRef): bool =
+func isSuspendedDownload(buddy: SnapPeerRef): bool =
   buddy.ctx.pool.pivotNum <= buddy.only.stateExhausted
+
+proc suspendBal(buddy: SnapPeerRef) =
+  ## Similar to `suspendDownload()`
+  buddy.only.notAvailBal = buddy.ctx.pool.pivotNum
+
+func snap2PeersAvailable(buddy: SnapPeerRef): bool =
+  let nSnap2Peers = buddy.ctx.pool.nSnap2Peers
+  if nSnap2Peers == 0:
+    return false                                    # no peer is snap/2
+  if buddy.nSnapPeers() <= nSnap2Peers:
+    return true                                     # all peers are snap/2
+  let pivotNum = buddy.ctx.pool.pivotNum
+  for snapPeer in buddy.getSnapPeers():
+    if snapPeer.only.supportsBal and                # is snap/2?
+       snapPeer.only.notAvailBal < pivotNum:        # and not supended?
+      return true                                   # ok, snap/2 available
+  # false                                           # all snap/2 peers suspemded
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -57,17 +74,15 @@ proc start*(buddy: SnapPeerRef; info: static[string]): bool =
     debug info & ": Failed", peer
     return false
 
-  if SnapReady < ctx.pool.syncState:
-    debug info & ": New peer", peer, nSyncPeers=ctx.nSyncPeers(),
-      peerType=buddy.only.peerType, clientId=buddy.peer.clientId
+  debug info & ": New peer", peer, nSyncPeers=ctx.nSyncPeers(),
+    peerType=buddy.only.peerType, clientId=buddy.peer.clientId,
+    supportsBal=buddy.only.supportsBal, nSnap2Peers=ctx.pool.nSnap2Peers
   true
 
 proc stop*(buddy: SnapPeerRef; info: static[string]) =
   ## Clean up this peer
-  let ctx = buddy.ctx
-  if SnapReady < ctx.pool.syncState:
-    debug info & ": Release peer", peer=buddy.peer,
-      nSyncPeers=(ctx.nSyncPeers()-1), syncState=($buddy.syncState)
+  debug info & ": Release peer", peer=buddy.peer,
+    nSyncPeers=(buddy.ctx.nSyncPeers()-1), syncState=($buddy.syncState)
   buddy.stopSyncPeer()
 
 # ------------------------------------------------------------------------------
@@ -99,6 +114,9 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       discard                                       # currently placeholder only
 
     of SnapResume:
+      ctx.downloadResume(info).isOkOr:
+        ctx.pool.resetReq = true                    # not much else possible
+        break body
       discard ctx.downloadInit(info)                # init download if possible
 
     of SnapClear:
@@ -114,11 +132,11 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       # Start headers download on the beacon sync server to run
       # in quasi-parallel mode to the snap sync daemon & peers.
       ctx.headerDownloadTrigger(info).isOkOr:
-        bodyRc = daemonWaitReadyFailInterval        # take a nap
+        bodyRc = daemonWaitReadyDwnldFailInterval   # take a nap
         break body
 
       ctx.downloadInit(info).isOkOr:                # get ready
-        bodyRc = daemonWaitReadyFailInterval        # take a nap
+        bodyRc = daemonWaitReadyInitFailInterval    # take a nap
 
     of SnapDownload:
       # Download headers. The request will be silently ignored if the
@@ -233,16 +251,14 @@ template runPeer*(
 
     case ctx.pool.syncState:
     of SnapDownload:
-      if buddy.isSuspended():
-        #trace info & ": Suspended on current state", peer,
-        #  pivot=ctx.pool.pivotNum
+      if buddy.isSuspendedDownload():
         bodyRc = peerWaitExhaustedInterval
         break body
 
       # Download and cache accounts, storage slots, contracts
       buddy.downloadState(info).isOkOr:
         if error == ENoDataAvailable:
-          buddy.suspend()
+          buddy.suspendDownload()
           debug info & ": State downloading stopped", peer,
             pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
             nSyncPeers=ctx.nSyncPeers(), `error`=error
@@ -252,13 +268,21 @@ template runPeer*(
       bodyRc = peerWaitDownloadInterval
 
     of SnapBalsFetch:
+      # Prefer peers that support the snap/2 protocol
+      if not buddy.only.supportsBal and
+         buddy.snap2PeersAvailable():
+        bodyRc = peerWaitBalsSnap1Interval
+        break body
       buddy.downloadBals(info).isOkOr:
         if error == ELockError:
-          ctx.pool.lockedBalsLog.logCtrl(lockedBalsLogWaitInterval):
-            trace info & ": BALs downloading locked", peer,
-              pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
-              nSyncPeers=ctx.nSyncPeers()
           bodyRc = peerWaitBalsLockedInterval
+          break body
+
+        if error == ENoDataAvailable or
+           error == EAlreadyTriedAndFailed:
+          if buddy.only.supportsBal:                # applies to snap/2 only
+            buddy.suspendBal()
+          bodyRc = peerWaitBalsNoDataInterval
           break body
 
         if error == EHeadersMissing:

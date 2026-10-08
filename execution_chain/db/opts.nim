@@ -37,12 +37,18 @@ const
     ## re-reads from file.
     ##
     ## A bit of space on top of the filter is left for data block caching
-  defaultRdbVtxCacheSize* = 512 * 1024 * 1024
+  defaultRdbVtxCacheSize* = 653 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
   defaultRdbKeyCacheSize* = 1280 * 1024 * 1024
     ## Hashes of the above
-  defaultRdbBranchCacheSize* = 1252 * 1024 * 1024
+  defaultRdbBranchCacheSize* = 1331 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
+  defaultAccLeafCacheSize* = 1280 * 1024
+    ## Number of entries in the account leaf LRU cache, see `.accLeaves` field
+    ## of the main Aristo descriptor
+  defaultStoLeafCacheSize* = 1408 * 1024
+    ## Number of entries in the storage leaf LRU cache, see `.stoLeaves` field
+    ## of the main Aristo descriptor
   defaultMaxSnapshots* = 5
     ## The max number of snapshots to store in the aristo database.
   defaultBlockCacheType* = hyperClockCache
@@ -56,6 +62,8 @@ type DbOptions* = object # Options that are transported to the database layer
   rdbVtxCacheSize*: int
   rdbKeyCacheSize*: int
   rdbBranchCacheSize*: int
+  accLeafCacheSize*: int
+  stoLeafCacheSize*: int
   rdbPrintStats*: bool
   maxSnapshots*: int
   parallelStateRootComputation*: bool
@@ -71,6 +79,8 @@ func init*(
     rdbVtxCacheSize = defaultRdbVtxCacheSize,
     rdbKeyCacheSize = defaultRdbKeyCacheSize,
     rdbBranchCacheSize = defaultRdbBranchCacheSize,
+    accLeafCacheSize = defaultAccLeafCacheSize,
+    stoLeafCacheSize = defaultStoLeafCacheSize,
     rdbPrintStats = false,
     maxSnapshots = defaultMaxSnapshots,
     parallelStateRootComputation = true,
@@ -85,6 +95,8 @@ func init*(
     rdbVtxCacheSize: rdbVtxCacheSize,
     rdbKeyCacheSize: rdbKeyCacheSize,
     rdbBranchCacheSize: rdbBranchCacheSize,
+    accLeafCacheSize: accLeafCacheSize,
+    stoLeafCacheSize: stoLeafCacheSize,
     rdbPrintStats: rdbPrintStats,
     maxSnapshots: maxSnapshots,
     parallelStateRootComputation: parallelStateRootComputation,

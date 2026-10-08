@@ -95,6 +95,8 @@ endif
 	eest_tool_test \
 	eest_benchmark \
 	eest_benchmark_test \
+	eest_zkevm_benchmark \
+	eest_zkevm_benchmark_test \
 	t8n \
 	t8n_test \
 	evmstate \
@@ -236,6 +238,9 @@ eest:
 
 eest_benchmark:
 	scripts/eest_ci_cache.sh benchmark
+
+eest_zkevm_benchmark:
+	scripts/eest_ci_cache.sh zkevm_benchmark
 
 # builds and runs the nimbus test suite
 test: | build deps rocksdb eest
@@ -481,6 +486,13 @@ eest_stateless_execution_test: | build deps eest
 	build/$@
 
 eest_benchmark_test: | build deps eest_benchmark
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$@"
+	build/$@
+
+eest_zkevm_benchmark_test: | build deps eest_zkevm_benchmark
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
 		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \

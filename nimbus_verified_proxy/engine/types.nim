@@ -283,6 +283,12 @@ type
   EngineState* = object
     archive*: bool
 
+  AnchorHashes* = object
+    latest*: Opt[Hash32]
+    safe*: Opt[Hash32]
+    finalized*: Opt[Hash32]
+    earliest*: Opt[Hash32]
+
   RpcVerificationEngine* = ref object
     evm*: AsyncEvm
 
@@ -318,7 +324,6 @@ type
 
     # config items
     chainId*: UInt256
-    anchor*: BlockTag
     maxBlockWalk*: uint64
     maxWindowJumps*: uint64
     parallelBlockDownloads*: uint64

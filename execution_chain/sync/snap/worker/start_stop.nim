@@ -54,13 +54,19 @@ proc resetServices*(ctx: SnapCtxRef; info: static[string]): Opt[void] =
   ctx.pool.resetReq = false
   ctx.pool.newCoreDb[].reset
 
-  # Import and cache locally the Genesis header from `CoreDb` database
-  let
-    txFrame = ctx.chain.com.db.baseTxFrame()
-    gHdr = txFrame.getBlockHeader(BlockNumber 0).valueOr:
-      error info & ": Error fetching Genesis from CoreDb", `error`=error
+  # Import and cache locally the Genesis header from `CoreDb` database. It
+  # might be present alteady due to a continuation of the last session.
+  let haveGenesis = ctx.pool.cacheDB.hasHeader(BlockNumber 0).valueOr: false
+  if not haveGenesis:
+    let
+      txFrame = ctx.chain.com.db.baseTxFrame()
+      gHdr = txFrame.getBlockHeader(BlockNumber 0).valueOr:
+        error info & ": Error fetching Genesis from CoreDb", `error`=error
+        return err()
+    ctx.pool.cacheDB.putHeader(gHdr, info).isOkOr:
       return err()
-  ctx.pool.cacheDB.putHeader(gHdr, info)
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -102,6 +108,9 @@ proc startSyncPeer*(buddy: SnapPeerRef): bool =
   # Reset global register for fall-back peer
   ctx.pool.lastSlowPeer = Opt.none(Hash)
 
+  if buddy.only.supportsBal:
+    ctx.pool.nSnap2Peers.inc
+
   metrics.set(nec_snap_peers, nSnapPeers)
   true
 
@@ -113,6 +122,9 @@ proc stopSyncPeer*(buddy: SnapPeerRef) =
   if nSnapPeers < 1:
     ctx.pool.lastSlowPeer = Opt.none(Hash)
     ctx.setLastPeerSeen()
+    ctx.pool.nSnap2Peers = 0
+  elif buddy.only.supportsBal:
+    ctx.pool.nSnap2Peers.dec
 
   metrics.set(nec_snap_peers, nSnapPeers)
 
