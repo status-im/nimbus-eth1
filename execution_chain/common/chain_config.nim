@@ -326,6 +326,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       osakaTime:           Opt.some(1_761_677_592.EthTime), # Tuesday, 28 October 2025 18:53:12
       bpo1Time:            Opt.some(1_762_365_720.EthTime), # Wednesday, 5 November 2025 18:02:00
       bpo2Time:            Opt.some(1_762_955_544.EthTime), # Wednesday, 12 November 2025 13:52:24
+      amsterdamTime:       Opt.some(1_793_036_568.EthTime), # Monday, 26 October 2026 17:42:48
       depositContractAddress: Opt.some(HOODI_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )
