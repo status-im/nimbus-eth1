@@ -108,8 +108,6 @@ proc writeTransactionMappings*(c: ForkedChainRef, b: BlockRef) =
     db.put(transactionHashToBlockKey(hash).toOpenArray,
       rlp.encode(TransactionKey(blockNumber: b.number, index: index))).
       expect("restore transaction lookup")
-    if b.number > c.base.number:
-      c.txRecords[hash] = (b.hash, uint64(index))
     inc index
 
 proc writeCanonicalMappings*(c: ForkedChainRef, head: BlockRef) =
@@ -130,8 +128,6 @@ proc deleteBlockData*(c: ForkedChainRef, b: BlockRef) =
       location = db.getTransactionKey(hash).expect("read transaction lookup")
     if location.blockNumber == b.number and location.index == index:
       var keep = false
-      c.txRecords.withValue(hash, owner):
-        keep = owner[][0] != b.hash
       let canonical = db.getBlockHeader(b.number)
       if not keep and canonical.isOk and canonical.value.computeBlockHash != b.hash:
         let tx = db.getTransactionByIndex(canonical.value.txRoot, index.uint16)

@@ -29,12 +29,11 @@ proc writeBaggage*(
     txFrame: CoreDbTxRef,
     receipts: openArray[StoredReceipt],
     generatedBal: Opt[BlockAccessListRef],
-): seq[Hash32] =
+) =
   template header(): Header =
     blk.header
 
-  var txHashes =
-    txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
+  txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
   txFrame.persistReceipts(header.receiptsRoot, receipts)
   discard txFrame.persistUncles(blk.uncles)
 
@@ -54,8 +53,6 @@ proc writeBaggage*(
       blkHash,
       generatedBal.get(),
     )
-
-  move(txHashes)
 
 proc getVmState(
     c: ForkedChainRef,
@@ -104,7 +101,7 @@ proc processBlock*(
     blockAccessList: Opt[BlockAccessListRef],
     blkHash: Hash32,
     finalized: bool,
-): Result[seq[Hash32], string] =
+): Result[void, string] =
   template header(): Header =
     blk.header
 
@@ -186,7 +183,7 @@ proc processBlock*(
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory,
     numberToHash = false)
 
-  var txHashes = c.writeBaggage(
+  c.writeBaggage(
     blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
 
   vmState.receipts.setLen(0)
@@ -198,4 +195,4 @@ proc processBlock*(
   c.vmStateBlockHash = blkHash
   cached = true
 
-  ok(move(txHashes))
+  ok()

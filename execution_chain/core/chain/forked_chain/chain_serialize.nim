@@ -26,11 +26,6 @@ logScope:
   topics = "forked chain"
 
 type
-  TxRecord = object
-    txHash: Hash32
-    blockHash: Hash32
-    blockNumber: uint64
-
   StoredBlock = object
     header: Header
     hash: Hash32
@@ -43,7 +38,6 @@ type
     heads: seq[uint]
     pendingFCU: Hash32
     latestFinalized: FcuHashAndNumber
-    txRecords: seq[TxRecord]
     fcuHead: FcuHashAndNumber
     fcuSafe: FcuHashAndNumber
 
@@ -59,7 +53,6 @@ func read(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
   rlp.read(result.heads)
   rlp.read(result.pendingFCU)
   rlp.read(result.latestFinalized)
-  rlp.read(result.txRecords)
   rlp.read(result.fcuHead)
   rlp.read(result.fcuSafe)
 
@@ -159,9 +152,6 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
     fcuSafe: fc.fcuSafe)
   for h in fc.heads:
     state.heads.add slots.getOrDefault(h.hash)
-  for hash, record in fc.txRecords:
-    state.txRecords.add TxRecord(
-      txHash: hash, blockHash: record[0], blockNumber: record[1])
 
   # KVT writes are immediate. Invalidate the old manifest before replacing
   # its entries, then publish the new manifest only after every frame is saved.
@@ -194,8 +184,7 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
     latestHash=fc.latest.hash.short,
     heads=fc.heads.toString,
     numBlocks=blocks.len,
-    stateFrames=blocks.len - 1,
-    txRecords=state.txRecords.len
+    stateFrames=blocks.len - 1
 
   ok()
 
@@ -265,10 +254,6 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   restored.latestFinalized = state.latestFinalized
   restored.fcuHead = state.fcuHead
   restored.fcuSafe = state.fcuSafe
-  for tx in state.txRecords:
-    if not restored.hashToBlock.hasKey(tx.blockHash):
-      return err("corrupted FC: transaction refers to missing block")
-    restored.txRecords[tx.txHash] = (tx.blockHash, tx.blockNumber)
 
   ?restored.loadAllTxFrames()
   for b in blocks:
@@ -287,7 +272,6 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   fc.hashToBlock = move(restored.hashToBlock)
   fc.pendingFCU = restored.pendingFCU
   fc.latestFinalized = restored.latestFinalized
-  fc.txRecords = move(restored.txRecords)
   fc.fcuHead = restored.fcuHead
   fc.fcuSafe = restored.fcuSafe
   loaded = true
