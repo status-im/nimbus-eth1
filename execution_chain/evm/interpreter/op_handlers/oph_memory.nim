@@ -249,7 +249,7 @@ proc sstore8038Impl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasI
 
   if c.balTrackerEnabled:
     c.vmState.balTracker.trackStorageWrite(
-      c.msg.currentTarget, slot, newValue, currentValue
+      c.msg.currentTarget, slot, newValue, Opt.some(currentValue)
     )
   c.vmState.mutateLedger:
     ledger.setStorage(c.msg.currentTarget, slot, newValue)

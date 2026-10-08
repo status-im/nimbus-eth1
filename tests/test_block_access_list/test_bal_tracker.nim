@@ -11,12 +11,83 @@
 {.used.}
 
 import
+  std/importutils,
   stew/byteutils,
   unittest2,
   ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/core_db,
   ../../execution_chain/concurrency/shared_types,
-  ../../execution_chain/block_access_list/bal_tracker
+  ../../execution_chain/block_access_list/bal_tracker {.all.}
+
+# Inspection of the tracker's pending transaction through its private entries.
+
+privateAccess(BlockAccessListTrackerRef)
+privateAccess(AccountEntry)
+privateAccess(StorageEntry)
+privateAccess(PosTable)
+
+template frameDepth(tracker: BlockAccessListTrackerRef): int =
+  tracker.frames.len
+
+template entryOpt(idx: int32, entry, flag, value: untyped): untyped =
+  if idx >= 0 and entry[idx].flag:
+    Opt.some(entry[idx].value)
+  else:
+    Opt.none(typeof(entry[idx].value))
+
+proc capturePreBalance(tracker: BlockAccessListTrackerRef, address: Address) =
+  tracker.capturePreBalance(tracker.accountEntry(address))
+
+proc capturePreStorage(
+    tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
+) =
+  tracker.capturePreStorage(tracker.storageEntry((address, slot)))
+
+func preBalance(tracker: BlockAccessListTrackerRef, address: Address): Opt[UInt256] =
+  entryOpt(tracker.findAccount(address), tracker.accounts, preBalanceKnown, preBalance)
+
+func preStorage(
+    tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
+): Opt[UInt256] =
+  entryOpt(tracker.findStorage((address, slot)), tracker.storage, preKnown, pre)
+
+func getPreBalance(tracker: BlockAccessListTrackerRef, address: Address): UInt256 =
+  tracker.preBalance(address).valueOr(0.u256)
+
+func getPreStorage(
+    tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
+): UInt256 =
+  tracker.preStorage(address, slot).valueOr(0.u256)
+
+func isTouched(tracker: BlockAccessListTrackerRef, address: Address): bool =
+  let idx = tracker.findAccount(address)
+  idx >= 0 and tracker.accounts[idx].touched
+
+func hasStorageRead(
+    tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
+): bool =
+  let idx = tracker.findStorage((address, slot))
+  idx >= 0 and tracker.storage[idx].read
+
+func storageChange(
+    tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
+): Opt[UInt256] =
+  entryOpt(tracker.findStorage((address, slot)), tracker.storage, written, post)
+
+func balanceChange(tracker: BlockAccessListTrackerRef, address: Address): Opt[UInt256] =
+  entryOpt(tracker.findAccount(address), tracker.accounts, balanceWritten, postBalance)
+
+func nonceChange(
+    tracker: BlockAccessListTrackerRef, address: Address
+): Opt[AccountNonce] =
+  entryOpt(tracker.findAccount(address), tracker.accounts, nonceWritten, postNonce)
+
+func codeChange(tracker: BlockAccessListTrackerRef, address: Address): Opt[seq[byte]] =
+  let idx = tracker.findAccount(address)
+  if idx >= 0 and tracker.accounts[idx].codeWritten:
+    Opt.some(tracker.codeAt(tracker.accounts[idx].postCode))
+  else:
+    Opt.none(seq[byte])
 
 # The builder no longer exposes its internal storage, so these helpers assert
 # against the public BlockAccessList produced by buildBlockAccessList. Building

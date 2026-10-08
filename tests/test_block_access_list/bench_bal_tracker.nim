@@ -145,10 +145,7 @@ proc runTx(tracker: BlockAccessListTrackerRef, w: Workload, tx: int, ops: var in
         slot = u256(depth * 100 + k)
         current = tracker.ledger.getStorage(contract, slot)
         newValue = u256(tx * 31 + k + 1)
-      when compiles(tracker.trackStorageWrite(contract, slot, newValue, current)):
-        tracker.trackStorageWrite(contract, slot, newValue, current)
-      else:
-        tracker.trackStorageWrite(contract, slot, newValue)
+      tracker.trackStorageWrite(contract, slot, newValue, Opt.some(current))
     ops += w.accessesPerFrame + w.readsPerFrame + w.writesPerFrame
 
   frameBody(0)
