@@ -56,11 +56,15 @@ const firstTimeBasedFork* = Shanghai
 type
   MergeForkTransitionThreshold* = object
     number*: Opt[BlockNumber]
+      ## Block at which the PoS transition happened, when it is known without
+      ## having to evaluate the TTD.
     ttd*: Opt[DifficultyInt]
 
   ForkTransitionTable* = object
     blockNumberThresholds*: array[Frontier..GrayGlacier, Opt[BlockNumber]]
     mergeForkTransitionThreshold*: MergeForkTransitionThreshold
+    mergeNetsplitBlock*: Opt[BlockNumber]
+      ## The post-merge netsplit safety block, used solely for the ForkId calculation
     timeThresholds*: array[Shanghai..HardFork.high, Opt[EthTime]]
 
   # Starting with Shanghai, forking is based on timestamp
@@ -238,7 +242,11 @@ const
 
 func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThreshold =
   MergeForkTransitionThreshold(
-    number: conf.mergeNetsplitBlock,
+    # `posBlock` only overrides `mergeNetsplitBlock` when both are set, so
+    # MainNet (no `mergeNetsplitBlock`) keeps resolving the merge via the TTD.
+    number:
+      if conf.posBlock.isSome and conf.mergeNetsplitBlock.isSome: conf.posBlock
+      else: conf.mergeNetsplitBlock,
     ttd: conf.terminalTotalDifficulty,
   )
 
@@ -262,6 +270,7 @@ func toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   result.blockNumberThresholds[ArrowGlacier  ] = conf.arrowGlacierBlock
   result.blockNumberThresholds[GrayGlacier   ] = conf.grayGlacierBlock
   result.mergeForkTransitionThreshold          = conf.mergeForkTransitionThreshold
+  result.mergeNetsplitBlock                    = conf.mergeNetsplitBlock
   result.timeThresholds[Shanghai] = conf.shanghaiTime
   result.timeThresholds[Cancun] = conf.cancunTime
   result.timeThresholds[Prague] = conf.pragueTime
@@ -290,7 +299,7 @@ func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
   conf.arrowGlacierBlock   = t.blockNumberThresholds[HardFork.ArrowGlacier]
   conf.grayGlacierBlock    = t.blockNumberThresholds[HardFork.GrayGlacier]
 
-  conf.mergeNetsplitBlock      = t.mergeForkTransitionThreshold.number
+  conf.mergeNetsplitBlock      = t.mergeNetsplitBlock
   conf.terminalTotalDifficulty = t.mergeForkTransitionThreshold.ttd
 
   conf.shanghaiTime        = t.timeThresholds[HardFork.Shanghai]
@@ -384,9 +393,10 @@ func compatible*(calc: ForkIdCalculator, forkId: ForkId, number: uint64, time: u
       localForkPos = i
       break
 
-  # Based on position of local fork ID, determine if the head is block or time based
+  # Based on position of local fork ID, determine if the head is block or time based.
+  # Without any time based forks, the head past the last block fork stays block based.
   let head =
-    if localForkPos >= calc.byBlock.len():
+    if localForkPos >= calc.byBlock.len() and calc.byTime.len() > 0:
       time
     else:
       number
@@ -445,8 +455,11 @@ func init*(
       # Deduplicate fork identifiers applying multiple forks
       forksByBlock.add val64
 
-  if map.mergeForkTransitionThreshold.number.isSome:
-    let val64 = map.mergeForkTransitionThreshold.number.get
+  # Note that this must be the `mergeNetsplitBlock` and not the PoS transition
+  # block. These might be the same (PoS-from-genesis networks) or there might be
+  # no `mergeNetsplitBlock` (e.g. mainnet).
+  if map.mergeNetsplitBlock.isSome:
+    let val64 = map.mergeNetsplitBlock.get
     if forksByBlock.len == 0:
       forksByBlock.add val64
     elif forksByBlock[^1] != val64:

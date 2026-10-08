@@ -22,7 +22,7 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
-  ../../hive_integration/engine_client,
+  ../../execution_api/engine_client,
   ./eest_parser
 
 import ../../tools/common/helpers as chp except HardFork
@@ -40,6 +40,7 @@ type
     chain*: ForkedChainRef
     server*: Opt[RpcHttpServer]
     client*: Opt[RpcHttpClient]
+    beaconEngine*: BeaconEngineRef
     taskpool*: Taskpool
 
 proc setupClient*(port: Port): RpcHttpClient =
@@ -122,6 +123,7 @@ proc prepareEnv*(
 
       testEnv.client = Opt.some(client)
       testEnv.server = Opt.some(server)
+      testEnv.beaconEngine = beaconEngine
 
     return testEnv
   except ValueError as exc:
@@ -134,6 +136,8 @@ proc close*(env: TestEnv) =
       waitFor env.client.get().close()
     if env.server.isSome:
       waitFor env.server.get().closeWait()
+    if env.beaconEngine.isNil.not:
+      waitFor env.beaconEngine.stop()
     waitFor env.chain.stopProcessingQueue()
     env.chain.com.db.close()
     if env.taskpool != nil:

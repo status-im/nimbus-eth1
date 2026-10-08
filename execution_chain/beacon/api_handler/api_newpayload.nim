@@ -12,7 +12,7 @@ import
   chronicles,
   chronos,
   eth/common/hashes,
-  web3/[execution_types, primitives],
+  web3/primitives,
   json_rpc/errors,
   ../../core/tx_pool,
   ../web3_eth_conv,
@@ -162,7 +162,7 @@ template validatePayload(apiVersion, payload) =
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
 func validateExecutionRequest(
             requests: openArray[seq[byte]], apiVersion: Version):
-              Opt[PayloadStatusV1] {.raises: [RpcResponseError].} =
+              Opt[PayloadStatus] {.raises: [RpcResponseError].} =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
@@ -196,7 +196,7 @@ func validateExecutionRequest(
           "newPayload" & $apiVersion & ": Invalid execution request type" & $requestType))
 
     previousRequestType = requestType.int
-  Opt.none(PayloadStatusV1)
+  Opt.none(PayloadStatus)
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
@@ -205,7 +205,7 @@ proc newPayload*(ben: BeaconEngineRef,
                  beaconRoot = Opt.none(Hash32),
                  executionRequests = Opt.none(seq[seq[byte]]),
                  withWitness = false):
-                   Future[PayloadStatusV1] {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
+                   Future[PayloadStatus] {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
 
   trace "Engine API request received",
     meth = "newPayload",
@@ -322,8 +322,10 @@ proc newPayload*(ben: BeaconEngineRef,
   if not chain.haveBlockAndState(header.parentHash):
     chain.quarantine.addOrphan(blockHash, blk, blockAccessList)
     warn "State not available, ignoring new payload",
-      hash   = blockHash,
-      number = header.number
+      hash   = blockHash.short,
+      number = header.number,
+      parent = header.parentHash.short,
+      head   = chain.latestNumber
     let
       txFrame = chain.latestTxFrame()
       blockHash = latestValidHash(txFrame, parent, ttd)

@@ -282,6 +282,7 @@ type
     Existing
     IpLimitReached
     ReplacementAdded
+    ReplacementUpdated
     ReplacementExisting
     NoAddress
     Banned
@@ -318,6 +319,7 @@ func fromNodeStatus(T: type NodeAddResult, status: NodeStatus): T =
   of NodeStatus.Existing: T.Existing
   of NodeStatus.IpLimitReached: T.IpLimitReached
   of NodeStatus.ReplacementAdded: T.ReplacementAdded
+  of NodeStatus.ReplacementUpdated: T.ReplacementUpdated
   of NodeStatus.ReplacementExisting: T.ReplacementExisting
   of NodeStatus.NoAddress: T.NoAddress
   of NodeStatus.Banned: T.Banned
@@ -340,17 +342,10 @@ func getNode*(p: PortalProtocol, id: NodeId): Opt[Node] =
 func localNode*(p: PortalProtocol): Node =
   p.baseProtocol.localNode
 
-func distance(p: PortalProtocol, a, b: NodeId): UInt256 =
-  p.routingTable.distance(a, b)
-
-func logDistance(p: PortalProtocol, a, b: NodeId): uint16 =
-  p.routingTable.logDistance(a, b)
-
 func inRange(
     p: PortalProtocol, nodeId: NodeId, nodeRadius: UInt256, contentId: ContentId
 ): bool =
-  let distance = p.distance(nodeId, contentId)
-  distance <= nodeRadius
+  distance(nodeId, contentId) <= nodeRadius
 
 template inRange*(p: PortalProtocol, contentId: ContentId): bool =
   p.inRange(p.localNode.id, p.dataRadius(), contentId)
@@ -513,7 +508,7 @@ proc handleFindContent(
     # discv5 layer.
     return @[]
 
-  let logDistance = p.logDistance(contentId, p.localNode.id)
+  let logDistance = logDistance(contentId, p.localNode.id)
   portal_find_content_log_distance.observe(
     int64(logDistance), labelValues = [$p.protocolId]
   )
@@ -597,7 +592,7 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
     if contentIdResult.isOk():
       let contentId = contentIdResult.get()
 
-      let logDistance = p.logDistance(contentId, p.localNode.id)
+      let logDistance = logDistance(contentId, p.localNode.id)
       portal_offer_log_distance.observe(
         int64(logDistance), labelValues = [$p.protocolId]
       )
@@ -720,7 +715,6 @@ proc new*(
     dbRadius: DbRadiusHandler,
     stream: PortalStream,
     bootstrapRecords: openArray[Record] = [],
-    distanceCalculator: DistanceCalculator = XorDistanceCalculator,
     config: PortalProtocolConfig = defaultPortalProtocolConfig,
     pingExtensionCapabilities: set[uint16] = {CapabilitiesType},
 ): T =
@@ -729,8 +723,7 @@ proc new*(
     protocolId: protocolId,
     portalEnrField: portalEnrField,
     routingTable: RoutingTable.init(
-      baseProtocol.localNode, config.bitsPerHop, config.tableIpLimits, baseProtocol.rng,
-      distanceCalculator,
+      baseProtocol.localNode, config.bitsPerHop, config.tableIpLimits, baseProtocol.rng
     ),
     baseProtocol: baseProtocol,
     toContentId: toContentId,
@@ -1272,7 +1265,7 @@ proc lookup*(
           closestNodes.lowerBound(
             n,
             proc(x: Node, n: Node): int =
-              cmp(p.distance(x.id, target), p.distance(n.id, target)),
+              cmp(distance(x.id, target), distance(n.id, target)),
           ),
         )
 
@@ -1412,7 +1405,7 @@ proc contentLookup*(
               closestNodes.lowerBound(
                 n,
                 proc(x: Node, n: Node): int =
-                  cmp(p.distance(x.id, targetId), p.distance(n.id, targetId)),
+                  cmp(distance(x.id, targetId), distance(n.id, targetId)),
               ),
             )
 
@@ -1484,13 +1477,12 @@ proc traceContentLookup*(
   # Local node should be part of the responses
   responses["0x" & p.localNode.id.dumpHex()] =
     TraceResponse(durationMs: 0, respondedWith: seen.toSeq())
-  metadata["0x" & p.localNode.id.dumpHex()] = NodeMetadata(
-    enr: p.localNode.record, distance: p.distance(p.localNode.id, targetId)
-  )
+  metadata["0x" & p.localNode.id.dumpHex()] =
+    NodeMetadata(enr: p.localNode.record, distance: distance(p.localNode.id, targetId))
   # And metadata for all the nodes local node closestNodes
   for node in closestNodes:
     metadata["0x" & node.id.dumpHex()] =
-      NodeMetadata(enr: node.record, distance: p.distance(node.id, targetId))
+      NodeMetadata(enr: node.record, distance: distance(node.id, targetId))
 
   var pendingQueries = newSeqOfCap[
     Future[PortalResult[FoundContent]].Raising([CancelledError])
@@ -1551,7 +1543,7 @@ proc traceContentLookup*(
         var respondedWith = newSeq[NodeId]()
 
         for n in content.nodes:
-          let dist = p.distance(n.id, targetId)
+          let dist = distance(n.id, targetId)
 
           metadata["0x" & n.id.dumpHex()] = NodeMetadata(enr: n.record, distance: dist)
           respondedWith.add(n.id)
@@ -1564,14 +1556,14 @@ proc traceContentLookup*(
               closestNodes.lowerBound(
                 n,
                 proc(x: Node, n: Node): int =
-                  cmp(p.distance(x.id, targetId), dist),
+                  cmp(distance(x.id, targetId), dist),
               ),
             )
 
             if closestNodes.len > BUCKET_SIZE:
               closestNodes.del(closestNodes.high())
 
-        let distance = p.distance(content.src.id, targetId)
+        let distance = distance(content.src.id, targetId)
 
         responses["0x" & content.src.id.dumpHex()] =
           TraceResponse(durationMs: duration, respondedWith: respondedWith)
@@ -1588,7 +1580,7 @@ proc traceContentLookup*(
           requestAmount, labelValues = [$p.protocolId]
         )
 
-        let distance = p.distance(content.src.id, targetId)
+        let distance = distance(content.src.id, targetId)
 
         responses["0x" & content.src.id.dumpHex()] =
           TraceResponse(durationMs: duration, respondedWith: newSeq[NodeId]())
@@ -1601,7 +1593,7 @@ proc traceContentLookup*(
         for pn in pendingNodes:
           pendingNodeIds.add(pn.id)
           metadata["0x" & pn.id.dumpHex()] =
-            NodeMetadata(enr: pn.record, distance: p.distance(pn.id, targetId))
+            NodeMetadata(enr: pn.record, distance: distance(pn.id, targetId))
 
         return TraceContentLookupResult(
           content: Opt.some(content.content),

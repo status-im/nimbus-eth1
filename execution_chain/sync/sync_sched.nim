@@ -697,7 +697,8 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]; standBy = false): bool =
   ## Activate `PeerObserver` handlers and start syncing. This function also
   ## sets rum or stand-by mode according to argument `standBy`.
   ##
-  ## The function returns `true` if the run state was changed.
+  ## The function returns `true` if the run state could be set according
+  ## to the `standBy` flag.
   ##
   mixin runSetup
 
@@ -729,12 +730,12 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]; standBy = false): bool =
   of standByMode:
     if not standBy:
       dsc.runCtrl = allRunning
-      return true
+    return true
 
   of allRunning:
     if standBy:
       dsc.runCtrl = standByMode
-      return true
+    return true
 
   of shutdown, terminated:
     discard

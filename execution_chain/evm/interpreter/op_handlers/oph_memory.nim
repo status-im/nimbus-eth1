@@ -44,7 +44,7 @@ proc sstoreImpl(c: Computation, slot, newValue: UInt256): EvmResultVoid =
   c.gasMeter.refundGas(res.gasRefund)
 
   c.vmState.mutateLedger:
-    ledger.setStorage(c.msg.contractAddress, slot, newValue)
+    ledger.setStorage(c.msg.currentTarget, slot, newValue)
   ok()
 
 
@@ -55,7 +55,7 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
 
     gasParam = GasParamsSs(
       currentValue: currentValue,
-      originalValue: ledger.getCommittedStorage(c.msg.contractAddress, slot),
+      originalValue: ledger.getCommittedStorage(c.msg.currentTarget, slot),
       )
 
     res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
@@ -64,7 +64,7 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
   c.gasMeter.refundGas(res.gasRefund)
 
   c.vmState.mutateLedger:
-    ledger.setStorage(c.msg.contractAddress, slot, newValue)
+    ledger.setStorage(c.msg.currentTarget, slot, newValue)
   ok()
 
 func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
@@ -150,7 +150,7 @@ proc sloadOp(cpt: VmCpt): EvmResultVoid =
 proc sloadEIP2929Op(cpt: VmCpt): EvmResultVoid =
   ## 0x54, EIP2929: Load word from storage for Berlin and later
   template sloadEIP2929(top, slot, conv) =
-    let gasCost = cpt.gasEip2929AccountCheck(cpt.msg.contractAddress, slot)
+    let gasCost = cpt.gasEip2929AccountCheck(cpt.msg.currentTarget, slot)
     ? cpt.opcodeGasCost(Sload, gasCost, reason = "sloadEIP2929")
     conv(cpt.getStorage(slot), top)
   cpt.stack.unaryWithTop(sloadEIP2929)
@@ -216,8 +216,8 @@ proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   var coldAccessGas = 0.GasInt
   cpt.vmState.mutateLedger:
-    if not ledger.inAccessList(cpt.msg.contractAddress, slot):
-      ledger.accessList(cpt.msg.contractAddress, slot)
+    if not ledger.inAccessList(cpt.msg.currentTarget, slot):
+      ledger.accessList(cpt.msg.currentTarget, slot)
       coldAccessGas = COLD_STORAGE_ACCESS_2929
 
   sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccessGas)
@@ -229,7 +229,7 @@ proc sstore8038Impl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasI
 
     gasParam = GasParamsSs(
       currentValue: currentValue,
-      originalValue: ledger.getCommittedStorage(c.msg.contractAddress, slot),
+      originalValue: ledger.getCommittedStorage(c.msg.currentTarget, slot),
       )
 
     res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
@@ -248,9 +248,9 @@ proc sstore8038Impl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasI
   c.gasMeter.refundGas(res.gasRefund)
 
   if c.balTrackerEnabled:
-    c.vmState.balTracker.trackStorageWrite(c.msg.contractAddress, slot, newValue)
+    c.vmState.balTracker.trackStorageWrite(c.msg.currentTarget, slot, newValue)
   c.vmState.mutateLedger:
-    ledger.setStorage(c.msg.contractAddress, slot, newValue)
+    ledger.setStorage(c.msg.currentTarget, slot, newValue)
   ok()
 
 proc sstoreEIP8038Op(cpt: VmCpt): EvmResultVoid =
@@ -267,13 +267,13 @@ proc sstoreEIP8038Op(cpt: VmCpt): EvmResultVoid =
   const SentryGasEIP2200 = 2300
   let
     ledger = cpt.vmState.ledger
-    isColdAccess = not ledger.inAccessList(cpt.msg.contractAddress, slot)
+    isColdAccess = not ledger.inAccessList(cpt.msg.currentTarget, slot)
     coldAccessGas = if isColdAccess: COLD_STORAGE_ACCESS_8038
                     else: WARM_ACCESS
 
   ? cpt.gasMeter.checkGas(max(coldAccessGas, SentryGasEIP2200 + 1).GasInt)
   if isColdAccess:
-    ledger.accessList(cpt.msg.contractAddress, slot)
+    ledger.accessList(cpt.msg.currentTarget, slot)
 
   sstore8038Impl(cpt, slot, newValue, coldAccessGas.GasInt)
 

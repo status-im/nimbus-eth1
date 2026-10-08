@@ -28,7 +28,6 @@ import
   std/[strformat, strutils, times],
   unittest2,
   minilru,
-  eth/trie/nibbles,
   ../../execution_chain/db/aristo/aristo_desc/[desc_identifiers, desc_structural],
   ../../execution_chain/concurrency/lru
 
@@ -52,16 +51,16 @@ proc makeKeys(count: int): seq[Hash32] =
   keys
 
 proc slotValue(i: int): CachedStoLeaf =
-  CachedStoLeaf(pfx: NibblesBuf.nibble(byte(i and 15)), stoData: u256(i + 1))
+  CachedStoLeaf(stoData: u256(i + 1), pfxLen: 1)
 
 proc accountValue(i: int): CachedAccLeaf =
   CachedAccLeaf(
     empty: false,
-    pfx: NibblesBuf.nibble(byte(i and 15)),
     account: AristoAccount(
       nonce: uint64(i + 1), balance: u256(i + 1), codeHash: default(Hash32)
     ),
     stoID: (isValid: true, vid: VertexID(uint64(i + 1))),
+    pfxLen: 1,
   )
 
 template checksumOf(v: CachedStoLeaf): uint64 =

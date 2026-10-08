@@ -19,10 +19,10 @@ import
   web3/eth_api_types,
   web3/engine_api_types,
   web3/primitives,
-  web3/conversions,
-  web3/execution_types,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
+  ../../execution_api/conversions,
+  ../../execution_api/execution_types,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/beacon/beacon_engine,
@@ -30,7 +30,7 @@ import
   ../../execution_chain/stateless/stateless_execution,
   ../../execution_chain/stateless/stateless_guest,
   ../../execution_chain/stateless/stateless_host,
-  ../../hive_integration/engine_client,
+  ../../execution_api/engine_client,
   ./eest_helpers,
   ./bal_parser
 
@@ -124,10 +124,8 @@ const
   # executor. The generated witness legitimately differs from these, so the
   # comparison falls back to the subset check instead of the strict one.
   mutatedWitnessFiles = [
-    "validation_state_extra_unused_trie_node.json",
-    "validation_state_unsorted_but_complete.json",
-    "validation_codes_extra_unused_bytecode.json",
-    "validation_codes_unsorted_but_complete.json",
+    "validation_state_complete_witness_still_validates.json",
+    "validation_codes_complete_witness_still_validates.json",
     "witness_headers_extra_unused_older_ancestor.json",
   ]
 
@@ -281,8 +279,7 @@ proc runTest(
         # deliberately mutate the witness (see mutatedWitnessFiles), the
         # generated witness must only be a subset of the test vector witness.
         if input.new_payload_request != fixtureInput.new_payload_request or
-            input.chain_id != fixtureInput.chain_id or
-            input.public_keys != fixtureInput.public_keys:
+            input.chain_id != fixtureInput.chain_id:
           return err("Host-built stateless input does not match the test vector")
         ?compare(generatedWitness, fixtureInput.witness, strict = strictWitness)
 

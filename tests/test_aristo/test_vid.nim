@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -47,16 +47,16 @@ suite "Aristo VertexID":
     let txFrame = AristoTxRef()
 
     check:
-      txFrame.accVidFetch(buf) == STATE_ROOT_VID
+      txFrame.staticVidFetch(buf) == STATE_ROOT_VID
 
     buf = buf & NibblesBuf.nibble(byte 2)
 
     check:
-      txFrame.accVidFetch(buf) == STATE_ROOT_VID + 1 + 2
+      txFrame.staticVidFetch(buf) == STATE_ROOT_VID + 1 + 2
 
     while buf.len <= STATIC_VID_LEVELS:
       buf = buf & NibblesBuf.nibble(byte 2)
 
     check:
-      txFrame.accVidFetch(buf) == VertexID(FIRST_DYNAMIC_VID)
-      txFrame.accVidFetch(buf) == VertexID(FIRST_DYNAMIC_VID + 1)
+      txFrame.staticVidFetch(buf) == VertexID(FIRST_DYNAMIC_VID)
+      txFrame.staticVidFetch(buf) == VertexID(FIRST_DYNAMIC_VID + 1)

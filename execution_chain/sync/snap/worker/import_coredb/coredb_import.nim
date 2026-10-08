@@ -19,7 +19,7 @@
 
 import
   std/paths,
-  pkg/[chronicles, eth/common],
+  pkg/[chronicles, eth/common, stew/interval_set],
   ../../../../db/core_db,
   ../[helpers, cache_db, worker_desc],
   ./coredb_desc
@@ -31,7 +31,51 @@ logScope:
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc mergeAccountImpl(
+proc mergeGenesis(
+    tx2: CoreDbTxRef;
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[void] =
+  # Import Genesis
+  let
+    gHdr = ?db.getHeader(BlockNumber(0), info)
+    gHash = gHdr.computeBlockHash
+  tx2.persistHeader(gHash, gHdr).isOkOr:
+    error info & ": Error importing Genesis", `error`=error
+    return err()
+  ok()
+
+proc mergeCanonicalHead(
+    tx2: CoreDbTxRef;
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[BlockNumber] =
+  # Get state record with block number and missing account ranges.
+  let state = db.getAccMissingIntv(info).valueOr:
+    error info & ": Error reading accounts state"
+    return err()
+  if 0 < state.ranges.chunks():
+    error info & ": Missing account ranges"
+    return err()
+  var cNum = state.number
+
+  # Import canonical header and BAL
+  let
+    cHdr = ?db.getHeader(cNum, info)
+    cHash = ?db.getBlockHash(cNum, info)
+    cBal = ?db.getBal(cNum, info)
+    startOfHist = cHdr.parentHash
+  tx2.persistHeaderAndSetHead(cHash, cHdr, startOfHist).isOkOr:
+    error info & ": Error setting canonical head", header=cNum, `error`=error
+    return err()
+  tx2.setFirstBlockHash(cHash).isOkOr:
+    error info & ": Error setting first hash", header=cNum, `error`=error
+    return err()
+  tx2.persistBlockAccessList(cHash, cBal)
+
+  ok(move cNum)
+
+proc mergeAccount(
     tx2: CoreDbTxRef;
     accPath: Hash32;
     account: Account;
@@ -47,20 +91,23 @@ proc mergeAccountImpl(
     return err()
   ok()
 
-proc mergeAccAndStoImpl(
-    tx2: CoreDbTxRef;
+proc mergeAccAndSto(
+    db2: CoreDb2Ref;
     db: CacheDbRef;
     accPath: Hash32;
     account: Account;
+    count: var int;
     info: static[string];
       ): Opt[uint] =
+  let tx2 = db2.tx2
+
   # Save account so that the storage trie can be updated
-  ?tx2.mergeAccountImpl(accPath, account, info)
+  ?tx2.mergeAccount(accPath, account, info)
 
   # Clear storage trie
   tx2.clearStorage(accPath).isOkOr:
     error info & ": Failed clearing storage slots",
-      accPath=accPath.toStr, `error`=($$error  )
+      accPath=accPath.toStr, `error`=($$error)
     return err()
 
   var nSlots = 0u
@@ -73,20 +120,31 @@ proc mergeAccAndStoImpl(
       error info & ": Failed merging slot", accPath=accPath.toStr,
         nSlotsSoFar=nSlots, slotKey=w.slotKey.toStr, `error`=($$error)
       return err()
+
     nSlots.inc
+    count.inc
+
+    # Save regurlarly
+    if nCoreDbImportPersistBatch <= count:
+      tx2.checkpoint(0)
+      db2.db2.persist tx2
+      count = 0
+
+  # Verify storage sub-MPT if there is a storage root
+  if account.storageRoot != zeroHash32:
+    var stoRoot = tx2.fetchStorageRoot(accPath).valueOr:
+      error info & ": Failed computing storage root",
+        accPath=accPath.toStr, `error`=($$error)
+      return err()
+    if account.storageRoot != stoRoot:
+      error info & ": Mismatch with pre-set storage root",
+        accPath=accPath.toStr, stoRoot=stoRoot.toStr,
+        expected=account.storageRoot.toStr
+      return err()
 
   ok(nSlots)
 
-proc fetchStorageRootImpl(
-    tx2: CoreDbTxRef;
-    accPath: Hash32;
-    info: static[string];
-      ): Opt[Hash32] =
-  var stoRoot = tx2.fetchStorageRoot(accPath).valueOr:
-    error info & ": Failed computing storage root",
-      accPath=accPath.toStr, `error`=($$error)
-    return err()
-  ok(move stoRoot)
+# -------------------------
 
 proc fetchStateRootImpl(
     tx2: CoreDbTxRef;
@@ -97,14 +155,23 @@ proc fetchStateRootImpl(
     return err()
   ok(move root)
 
-# -------------------------
-
 proc importFlatImpl(
-    tx2: CoreDbTxRef;
+    db2: CoreDb2Ref;
     db: CacheDbRef;
     info: static[string];
       ): Opt[AristoImportStats] =
-  var u: AristoImportStats
+  let tx2 = db2.tx2
+
+  # Import Genesis
+  ?tx2.mergeGenesis(db, info)
+
+  # Import canonical head
+  let cNum = ?tx2.mergeCanonicalHead(db, info)
+
+  # Merge flat tables into CoreDb/Aristo.
+  var
+    u: AristoImportStats
+    count = 0
   for w in db.walkFlatAcc():
     if 0 < w.error.len:
       error info & ": Error walking accounts",
@@ -122,7 +189,7 @@ proc importFlatImpl(
     if w.data.account.codeHash == zeroHash32:
       nErrors.inc
     if 0 < nErrors:
-      error info & ": account record is incomplete",
+      error info & ": Account record is incomplete",
         accPath=w.accPath.toStr,
         dirtyStorage=w.data.dirtyStorage,
         dirtyCode=w.data.dirtyCode,
@@ -131,47 +198,41 @@ proc importFlatImpl(
 
     if w.data.account.storageRoot == EMPTY_ROOT_HASH:
       # Save account only
-      ?tx2.mergeAccountImpl(w.accPath, w.data.account, info)
+      ?tx2.mergeAccount(w.accPath, w.data.account, info)
     else:
-      u.nSlots += ?tx2.mergeAccAndStoImpl(db, w.accPath, w.data.account, info)
-    u.nAccounts.inc
+      u.nSlots += ?db2.mergeAccAndSto(db, w.accPath,w.data.account, count, info)
 
+    if w.data.account.codeHash != EMPTY_CODE_HASH:
+      let code = ?db.getFlatCode(w.accPath, info)
+      tx2.persistCodeByHash(w.data.account.codeHash, code).isOkOr:
+        error info & ": Failed storing contract code", accPath=w.accPath.toStr,
+          codeHash=w.data.account.codeHash.toStr, nCode=code.len, `error`=error
+        return ok((0,0))
+      count.inc
+
+    u.nAccounts.inc
+    count.inc
+
+    # Save regurlarly
+    if nCoreDbImportPersistBatch <= count:
+      tx2.checkpoint(0)
+      db2.db2.persist tx2
+      count = 0
+
+  tx2.checkpoint(cNum)
+  db2.db2.persist tx2
   ok(u)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc mergeAccount*(
-    db2: CoreDb2Ref;
-    accPath: Hash32;
-    account: Account;
-    info: static[string];
-      ): Opt[void] =
-  db2.tx2.mergeAccountImpl(accPath, account, info)
-
-proc mergeAccountAndStorage*(
-    db2: CoreDb2Ref;
-    cdb: CacheDbRef;
-    accPath: Hash32;
-    account: Account;
-    info: static[string];
-      ): Opt[(Hash32,uint)] =
-  db2.tx2.mergeAccAndStoImpl(cdb, accPath, account, info)
-
 proc importFlat*(
     db2: CoreDb2Ref;
     cdb: CacheDbRef;
     info: static[string];
       ): Opt[AristoImportStats] =
-  db2.tx2.importFlatImpl(cdb, info)
-
-proc fetchStorageRoot*(
-    db2: CoreDb2Ref;
-    accPath: Hash32;
-    info: static[string];
-      ): Opt[Hash32] =
-  db2.tx2.fetchStorageRootImpl(accPath, info)
+  db2.importFlatImpl(cdb, info)
 
 proc fetchStateRoot*(
     db2: CoreDb2Ref;

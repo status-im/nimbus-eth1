@@ -17,13 +17,11 @@ import
 
 # Borrow from eth71 and later
 from ../eth/eth_types import
-  BlockAccessListsRequest,
   RawBlockAccessList,
   BlockAccessListsPacket,
   append, read
 
 export
-  BlockAccessListsRequest,
   RawBlockAccessList,
   BlockAccessListsPacket,
   append, read
@@ -118,6 +116,10 @@ type
 
   TrieNodesPacket* = object
     nodes*: seq[NodeItem]
+
+  SnapBalRequest* = object
+    blockHashes*: seq[Hash32]
+    bytes*: uint64
 
 # ------------------------------------------------------------------------------
 # Private helpers

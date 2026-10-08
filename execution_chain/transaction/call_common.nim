@@ -65,8 +65,8 @@ proc setupComputation(params: CallParams, keepStack: bool, vmState: BaseVMState,
   if vmState.hardFork < Amsterdam:
     var
       code = if params.isCreate:
-              msg.contractAddress = generateContractAddress(vmState, params.sender)
-              CodeBytesRef.init(params.tx.payload)
+              msg.currentTarget = generateContractAddress(vmState, params.sender)
+              CodeBytesRef.initCopy(params.tx.payload)
             else:
               assign(msg.data, params.tx.payload)
               getRecipientCode(vmState, msg)
@@ -80,7 +80,7 @@ proc setupComputation(params: CallParams, keepStack: bool, vmState: BaseVMState,
 
   # Delay loading code until interpreter_dispatch.prepareDispatch
   if params.isCreate:
-    msg.contractAddress = generateContractAddress(vmState, params.sender)
+    msg.currentTarget = generateContractAddress(vmState, params.sender)
   newComputation(vmState, keepStack, msg)
 
 proc setupEVM(params: CallParams, keepStack: bool): Computation =
@@ -88,15 +88,15 @@ proc setupEVM(params: CallParams, keepStack: bool): Computation =
     vmState = params.vmState
     fork = vmState.hardFork
   vmState.txCtx = TxContext(
-    origin     : params.sender,
-    gasPrice   : params.gasPrice,
-    blobBaseFee: getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, fork),
-    tx         : params.tx,
+    origin           : params.sender,
+    effectiveGasPrice: params.effectiveGasPrice,
+    blobBaseFee      : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, fork),
+    tx               : params.tx,
   )
 
-  # reset global gasRefunded counter each time
+  # reset global refundCounter counter each time
   # EVM called for a new transaction
-  vmState.gasRefunded = 0
+  vmState.refundCounter = 0
 
   let
     # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
@@ -106,7 +106,7 @@ proc setupEVM(params: CallParams, keepStack: bool): Computation =
     tx = params.tx
     evmGas = if tx.gasLimit < params.intrinsic.execution: 0.GasInt
              else: tx.gasLimit - params.intrinsic.execution
-    executionGasBudget = TX_GAS_LIMIT - params.intrinsic.execution
+    executionGasBudget = TX_MAX_GAS_LIMIT - params.intrinsic.execution
 
   var
     executionGas = evmGas
@@ -126,7 +126,7 @@ proc setupEVM(params: CallParams, keepStack: bool): Computation =
                          else: CallKind.Call,
       gas:               executionGas,
       stateGasReservoir: stateGasReservoir,
-      contractAddress:   destination,
+      currentTarget:     destination,
       codeAddress:       destination,
       delegateTo:        destination,
       sender:            params.sender,
@@ -159,10 +159,10 @@ proc prepareToRunComputation(params: CallParams) =
       ledger.incNonce(params.sender)
 
     # Charge for gas.
-    var gasFee = tx.gasLimit.u256 * params.gasPrice.u256
+    var gasFee = tx.gasLimit.u256 * params.effectiveGasPrice.u256
     if fork >= Cancun:
       # EIP-4844
-      gasFee += calcDataFee(tx.versionedHashes.len,
+      gasFee += blobGasFee(tx.versionedHashes.len,
         vmState.blockCtx.excessBlobGas, vmState.com, fork)
 
     if vmState.balTrackerEnabled:
@@ -202,7 +202,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, params: CallParams): GasUsed 
   # Refund for unused gas.
   let txGasLeft = tx.gasLimit - txGasUsed
   if txGasLeft > 0:
-    let gasRefundAmount = txGasLeft.u256 * params.gasPrice.u256
+    let gasRefundAmount = txGasLeft.u256 * params.effectiveGasPrice.u256
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackAddBalanceChange(params.sender, gasRefundAmount)
     vmState.mutateLedger:
@@ -223,27 +223,29 @@ proc finishRunningComputation(
   # evm gas used without intrinsic gas
   c.vmState.captureEnd(c, c.output, gasUsed.evmGasUsed, c.errorOpt)
 
+  if c.isSuccess:
+    c.vmState.txLogs = move(c.logEntries)
+  else:
+    c.vmState.txLogs.setLen(0)
+
   when T is CallResult|DebugCallResult:
     # Collecting the result can be unnecessarily expensive when (re)-processing
     # transactions
     if c.isError:
       result.error = c.error.info
+      result.status = c.error.status
     result.gasUsed = gasUsed.txGasUsed
     result.output = system.move(c.output)
-    result.contractAddress = if params.isCreate: c.msg.contractAddress
+    result.contractAddress = if params.isCreate: c.msg.currentTarget
                              else: default(addresses.Address)
 
     when T is DebugCallResult:
       result.stack = move(c.finalStack)
       result.memory = move(c.memory)
-      if c.isSuccess:
-        result.logEntries = move(c.logEntries)
-  elif T is LogResult:
+  elif T is TxResult:
     result.gasUsed = gasUsed.txGasUsed
     result.blockExecutionGasUsed = gasUsed.blockExecutionGasUsed
     result.blockStateGasUsed = gasUsed.blockStateGasUsed
-    if c.isSuccess:
-      result.logEntries = move(c.logEntries)
   elif T is VoidResult:
     discard
   else:
@@ -256,16 +258,16 @@ proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
     tx = params.tx
 
   if vmState.balTrackerEnabled:
-    vmState.balTracker.trackAddressAccess(c.msg.contractAddress)
+    vmState.balTracker.trackAddressAccess(c.msg.currentTarget)
 
   var
     code =
       if params.isCreate:
-        if ledger.originalAccountEmpty(c.msg.contractAddress):
+        if ledger.originalAccountEmpty(c.msg.currentTarget):
           ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
-        CodeBytesRef.init(tx.payload)
+        CodeBytesRef.initCopy(tx.payload)
       else:
-        if tx.value.isZero.not and not ledger.isAccountAlive(c.msg.contractAddress):
+        if tx.value.isZero.not and not ledger.isAccountAlive(c.msg.currentTarget):
           ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
         assign(c.msg.data, tx.payload)
         getRecipientCode(vmState, c.msg)

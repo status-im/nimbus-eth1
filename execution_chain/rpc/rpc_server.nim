@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -57,6 +57,11 @@ type
   NimbusHttpServerRef* = ref NimbusHttpServer
 
 {.push gcsafe, raises: [].}
+
+func isRootPath*(request: HttpRequestRef): bool =
+  ## The JSON-RPC handler is not reachable under a path of its own, so it only
+  ## claims the server root. Any other path is left to the handlers after it.
+  request.uri.path.len == 0 or request.uri.path == "/"
 
 func defaultRpcHttpServerParams(): RpcHttpServerParams =
   RpcHttpServerParams(

@@ -8,8 +8,8 @@
 {.push raises: [], gcsafe.}
 
 import
-  ./[constants],
-  ./core/pooled_txs_rlp,
+  ./constants,
+  ./core/[pooled_txs_rlp, pubkey_recovery],
   eth/common/[addresses, keys, transactions, transactions_rlp, transaction_utils],
   results
 
@@ -26,9 +26,9 @@ when senderCacheEnabled:
   cache.init(CACHE_CAPACITY, threadSafe = true)
 
 func recoverSender(msgHash: Hash32, sig: Signature): Opt[Address] =
-  let pubkey = recover(sig, SkMessage(msgHash.data)).valueOr:
+  let pubkey = recoverPubkeyRaw(msgHash, sig).valueOr:
     return Opt.none(Address)
-  Opt.some(pubkey.to(Address))
+  Opt.some(keccak256(pubkey).to(Address))
 
 proc recoverSenderCached*(msgHash: Hash32, sig: Signature): Opt[Address] =
   when not senderCacheEnabled:

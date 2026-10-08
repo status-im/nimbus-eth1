@@ -1,5 +1,5 @@
 # nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,7 +12,7 @@ const
   # Some static noisy settings for `snap` debugging
   trSnapTraceGossipOk* = true
     ## `trace` log each sync network message.
-  trEthTraceHandlerOk* = true
+  trSnapTraceHandlerOk* = true
     ## `trace` application handler message.
 
 # End

@@ -21,7 +21,7 @@ import
   ../db/ledger,
   ../db/core_db/memory_only,
   ../evm/[types, state],
-  ../core/executor/process_block,
+  ../core/[validate, executor/process_block],
   ../block_access_list/bal_validation,
   ./[witness_types, witness_verification, stateless_types]
 
@@ -47,8 +47,8 @@ proc statelessProcessBlock*(
     witness: ExecutionWitness, com: CommonRef, blk: Block
 ): Result[void, string] =
   let
-    verifiedHeaders = ?witness.verifyHeaders(blk.header)
-    parent = verifiedHeaders[^1] # The last header is the parent
+    verified = ?witness.verifyHeaders(blk.header)
+    parent = verified.headers[^1] # The last header is the parent
     preStateRoot = parent.stateRoot
 
   # Convert the list of trie nodes into a table keyed by node hash.
@@ -75,11 +75,20 @@ proc statelessProcessBlock*(
     doAssert memoryTxFrame.persistCodeByHash(keccak256(c.asSeq()), c.asSeq()).isOk()
 
   # Load the block hashes into the database indexed by block number.
-  for h in verifiedHeaders:
-    try:
-      memoryTxFrame.addBlockNumberToHashLookup(h.number, h.computeRlpHash())
-    except RlpError as e:
-      raiseAssert e.msg
+  for i, h in verified.headers:
+    memoryTxFrame.addBlockNumberToHashLookup(h.number, verified.hashes[i])
+
+  # Validate the header against the parent taken from the witness:
+  # https://github.com/ethereum/execution-specs/blob/3ebcb5d02126918eb2aad599b3cf286200d4f458/src/ethereum/forks/amsterdam/fork.py#L308
+  # TODO: on the payload path this rebuilds the withdrawals trie that `toBlock`
+  # just built, and `processBlock` below rebuilds the transaction trie likewise.
+  ?com.validateHeader(
+    blk,
+    blockAccessList = Opt.none(BlockAccessListRef),
+    skipPreExecBalCheck = true,
+    parentHeader = parent,
+    txFrame = memoryTxFrame,
+  )
 
   # Create evm instance using the in memory database.
   let memoryVmState = BaseVMState()
@@ -203,6 +212,7 @@ func chainConfigForStateless(chainId: uint64): ChainConfig =
     transitions.blockNumberThresholds[f] = Opt.some(0.BlockNumber)
   transitions.mergeForkTransitionThreshold.number = Opt.some(0.BlockNumber)
   transitions.mergeForkTransitionThreshold.ttd = Opt.some(0.u256)
+  transitions.mergeNetsplitBlock = Opt.some(0.BlockNumber)
   for f in firstTimeBasedFork .. lastFork:
     transitions.timeThresholds[f] = Opt.some(0.EthTime)
 
@@ -292,6 +302,11 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
       networkId = NetworkId(input.chain_id.u256),
       initializeDb = false,
     )
+
+  # https://github.com/ethereum/execution-specs/blob/3ebcb5d02126918eb2aad599b3cf286200d4f458/src/ethereum/forks/amsterdam/execution_engine/new_payload.py#L27
+  if blk.header.computeRlpHash !=
+      Hash32(input.new_payload_request.executionPayload.block_hash.data):
+    return err("Invalid block hash")
 
   ?is_valid_versioned_hashes(input.new_payload_request.versionedHashes, blk)
 

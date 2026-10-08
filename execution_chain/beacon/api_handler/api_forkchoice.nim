@@ -12,7 +12,7 @@ import
   results,
   chronos,
   eth/common/[eth_types_json_serialization, headers, hashes, times],
-  web3/[conversions, execution_types],
+  web3/conversions,
   json_rpc/errors,
   chronicles,
   ../../core/tx_pool,
@@ -90,6 +90,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     chain = ben.chain
     headHash = update.headBlockHash
 
+  # For the periodic status log: detects a silent `CL`
+  chain.lastFcuTime = EthTime.now()
+
   if headHash == zeroHash32:
     warn "Forkchoice requested update to zero hash"
     return simpleFCU(PayloadExecutionStatus.invalid)
@@ -117,6 +120,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
         hash = headHash.short,
         finHash = update.finalizedBlockHash.short,
         safe = update.safeBlockHash.short,
+        head = chain.latestNumber,
         base = chain.baseNumber,
         pendingFCU = chain.pendingFCU.short
       com.headerTargetRequest(headHash, update.finalizedBlockHash)
@@ -126,6 +130,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     info "Forkchoice requested sync to new head",
       number = header.number,
       hash   = headHash.short,
+      head   = chain.latestNumber,
+      distance = int64(header.number) - int64(chain.latestNumber),
       base   = chain.baseNumber,
       finHash= update.finalizedBlockHash.short,
       safe   = update.safeBlockHash.short,
@@ -191,6 +197,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     notice "Ignoring beacon update to old head",
       headHash   = headHash.short,
       headNumber = header.number,
+      latest     = chain.latestNumber,
       base       = chain.baseNumber,
       pendingFCU = chain.pendingFCU.short,
       resolvedFinNum = chain.resolvedFinNumber,
@@ -225,19 +232,22 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     let attrs = attrsOpt.value
     validateVersion(attrs, com, apiVersion)
 
-    let bundle = ben.generateExecutionBundle(headHash, attrs).valueOr:
-      error "Failed to create sealing payload", err = error
-      raise invalidAttr(error)
+    # Engine API spec: invalid payload attributes must fail the fcU itself.
+    # This check is cheap, so it stays synchronous; the expensive block
+    # assembly is deferred to the background builder and any failure there
+    # surfaces as `unknownPayload` at getPayload time.
+    if ethTime(attrs.timestamp) <= header.timestamp:
+      raise invalidAttr("timestamp must be strictly later than parent")
 
     let id = computePayloadId(headHash, attrs)
-    ben.putPayloadBundle(id, bundle)
+    # A repeated fcU with identical attributes schedules a rebuild so the
+    # payload includes transactions that arrived since the previous build.
+    # startPayloadBuild only enqueues the task; the fcU response is not
+    # blocked on assembly.
+    ben.startPayloadBuild(id, headHash, attrs)
 
-    info "Created payload for block proposal",
-      number = bundle.payload.blockNumber,
-      hash = bundle.payload.blockHash.short,
-      txs = bundle.payload.transactions.len,
-      gasUsed = bundle.payload.gasUsed,
-      blobGasUsed = bundle.payload.blobGasUsed.get(Quantity(0)),
+    info "Scheduled payload build for block proposal",
+      head = headHash.short,
       id = id.toHex,
       txPoolLen = ben.txPool.len,
       attrs = attrs

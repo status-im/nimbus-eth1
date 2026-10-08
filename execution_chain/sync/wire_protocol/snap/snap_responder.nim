@@ -64,9 +64,9 @@ const
     trSnapRecvReceived & " trieNodes"
 
   trSnapSendSendingGetBals* =
-    trSnapSendSending & " getBlockAccessLists (0x06)" # same as `GetTrieNodes`
+    trSnapSendSending & " getBlockAccessLists (0x06)"
   trSnapSendReplyingBals* =
-    trSnapSendReplying & " blockAccessLists (0x07)"   # same as `trieNodes`
+    trSnapSendReplying & " blockAccessLists (0x07)"
   trSnapRecvReceivedBals* =
     trSnapRecvReceived & " blockAccessLists"
 
@@ -194,7 +194,7 @@ proc getTrieNodesUserHandler(
 
 proc getBlockAccessListsUserHandler[PROTO](
     response: Responder;
-    req: BlockAccessListsRequest;
+    req: SnapBalRequest;
       ) {.async: (raises: [CancelledError, EthP2PError]).} =
   let
     peer = response.peer
@@ -291,7 +291,7 @@ proc getBlockAccessListsThunk[PROTO](
       ) {.async: (raises: [CancelledError, EthP2PError]).} =
   PROTO.rlpxWithPacketResponder(seq[Hash32], peer, data):
     await getBlockAccessListsUserHandler[PROTO](response,
-      BlockAccessListsRequest(blockHashes: packet))
+      SnapBalRequest(blockHashes: packet))
 
 proc blockAccessListsThunk[PROTO](
     peer: Peer;
@@ -337,7 +337,7 @@ proc snap2Registration() =
   registerCommonThunk(protocol, snap2)
 
   registerMsg(protocol, GetBlockAccessListsMsg, "getBlockAccessLists",
-    getBlockAccessListsThunk[snap2], BlockAccessListsRequest)
+    getBlockAccessListsThunk[snap2], SnapBalRequest)
   registerMsg(protocol, BlockAccessListsMsg, "blockAccessLists",
     blockAccessListsThunk[snap2], BlockAccessListsPacket)
 

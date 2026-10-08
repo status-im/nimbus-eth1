@@ -13,7 +13,7 @@
 import
   std/bitops,
   pkg/[chronicles, chronos, stew/interval_set],
-  ./download/[account, bals, code, header, storage],
+  ./download/[account, bals, code, download_helpers, header, storage],
   ./[helpers, cache_db, worker_desc]
 
 logScope:
@@ -61,6 +61,46 @@ proc downloadReady(
   w.codeDone = not ?adb.hasMissingBlob(info) and not ?adb.hasCodeLock(info)
   ok(w)
 
+proc startDownloading(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Opt[void] =
+  let
+    adb = ctx.pool.cacheDB
+    number = ?adb.lastHeaderNumber(info)        # => err() unless headers
+    accRng = ItemKeyRangeSet.init ItemKeyRangeMax
+  ?adb.putAccMissingIntv(number, accRng, info)  # new state
+  ctx.accUnproc.init ItemKeyRangeMax
+  ctx.pool.pivotNum = number                    # set pivot
+  if 0 < ctx.pool.pivotNum:
+    debug info & ": Start downloading accounts",
+      pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
+  ok()
+
+proc verifyAmsterdamOrLater(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Opt[void] =
+  if ctx.pool.balSupported:
+    return ok()
+
+  ctx.pool.cacheDB.lastHeader().isErrOr:
+    if value.isSome():
+      let lastHdr = value.unsafeGet()
+      if ctx.chain.com.isAmsterdamOrLater(lastHdr.timestamp):
+        ctx.pool.balSupported = true
+        return ok()
+      # Not logging until the first headers batch was downloaded
+      if lastHdr.number == BlockNumber(0):
+        return err()
+    else:
+      # Not logging until the first headers batch was downloaded
+      return err()
+
+  ctx.pool.lastNoBalSupport.logCtrl(noBalSupportLogWaitInterval):
+    chronicles.info info & ": No BAL support yet (needs Amsterdam or later)"
+  err()
+
 # ------------------------------------------------------------------------------
 # Public function(s)
 # ------------------------------------------------------------------------------
@@ -70,6 +110,8 @@ proc downloadInit*(
     info: static[string];
       ): Opt[void] =
   if not ctx.accUnproc.synced():
+    ?ctx.verifyAmsterdamOrLater(info)
+
     # Update state number that can be advanced to
     ctx.pool.forwardNum = ctx.getLastBalNum()       # can forward to that state
 
@@ -78,20 +120,18 @@ proc downloadInit*(
       let accState = ?adb.getAccMissingIntv(info)
       ctx.accUnproc.unprocessed = accState.ranges   # copy reference (!)
       ctx.pool.pivotNum = accState.number           # set pivot
-      debug info & ": Continue downloading", pivotNum=ctx.pool.pivotNum,
-        forwardNum=ctx.pool.forwardNum
+      if 0 < ctx.pool.pivotNum:                     # ready ok?
+        debug info & ": Continue downloading accounts",
+          pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
     else:
-      let
-        number = ?adb.lastHeaderNumber(info)
-        accRng = ItemKeyRangeSet.init ItemKeyRangeMax
-      ?adb.putAccMissingIntv(number, accRng, info)  # new state
-      ctx.accUnproc.init ItemKeyRangeMax
-      ctx.pool.pivotNum = number                    # set pivot
-      debug info & ": Start downloading", pivotNum=ctx.pool.pivotNum,
-        forwardNum=ctx.pool.forwardNum
+      ?ctx.startDownloading(info)
 
     ctx.accUnproc.synced = true
-    ctx.accountDownloadMetricsUpdate()
+
+  elif ctx.pool.pivotNum == 0:                      # delayed intialisation?
+    ?ctx.startDownloading(info)
+
+  ctx.accountDownloadMetricsUpdate()
   ok()
 
 proc downloadCommit*(
@@ -224,10 +264,38 @@ template downloadBals*(
     ctx.pool.forwardNum = ctx.getLastBalNum()
     bodyRc = typeof(bodyRc).ok()
 
-    trace info & ": Imported BALs", pivotNum=ctx.pool.pivotNum,
+    chronicles.info info & ": Imported BALs", pivotNum=ctx.pool.pivotNum,
       forwardNum=ctx.pool.forwardNum, nBALs=rc.value
 
   bodyRc
+
+proc downloadResume*(ctx: SnapCtxRef; info: static[string]): Opt[void] =
+  ## Attempt to resume an interrupted download session
+  let adb = ctx.pool.cacheDB
+
+  # Cannot have lock entries
+  for _ in adb.walkStoLock:
+    return err()
+  for _ in adb.walkCodeLock:
+    return err()
+
+  # Clean up as best as possible
+  var accPaths: seq[Hash32]
+
+  # Collect paths for partial storage sub-MPTs and contract codes
+  for w in adb.walkStoMissingIntv:
+    if 0 < w.error.len:
+      error info & ": Error walking missing storage list", `error`=w.error
+      return err()
+    accPaths.add w.accPath
+  for key in adb.walkMissingBlob:
+    accPaths.add key
+
+  # Delete all accounts for partial sub-MPTs and contract codes.
+  for accPath in accPaths:
+    ctx.deleteAccount(accPath, info).isOkOr:
+      return err()
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

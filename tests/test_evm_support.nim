@@ -291,13 +291,13 @@ proc runGasMeterTests() =
     test "return refund works correctly":
       runTest:
         check(gasMeter.executionGasLeft == StartGas)
-        check(gasMeter.gasRefunded == 0)
+        check(gasMeter.refundCounter == 0)
         check gasMeter.consumeGas(5, "").isOk
         check(gasMeter.executionGasLeft == StartGas - 5)
         gasMeter.returnGas(5)
         check(gasMeter.executionGasLeft == StartGas)
         gasMeter.refundGas(5)
-        check(gasMeter.gasRefunded == 5)
+        check(gasMeter.refundCounter == 5)
 
 proc runMiscTests() =
   suite "Misc test suite":
@@ -419,7 +419,7 @@ proc runFactory(vm: BaseVMState, code, initcode: seq[byte], gas = 1_000_000.GasI
     kind: CallKind.Call,
     gas: gas,
     sender: factoryCaller,
-    contractAddress: factoryAddress,
+    currentTarget: factoryAddress,
     codeAddress: factoryAddress,
     data: initcode)
   result = newComputation(vm, keepStack = true, msg, CodeBytesRef.init(code))

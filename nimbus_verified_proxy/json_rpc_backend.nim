@@ -138,23 +138,13 @@ proc getExecutionApiBackend*(client: JsonRpcClient): ExecutionApiBackend =
         txHash: Hash32
     ): Future[EngineResult[TransactionObject]] {.async: (raises: [CancelledError]).} =
       rpcCall:
-        let res = await client.resolveClient().eth_getTransactionByHash(txHash)
-        if res.isNil():
-          return err(
-            (BackendFetchError, "Obtained nil response for the RPC request", UNTAGGED)
-          )
-        ok(res)
+        ok(await client.resolveClient().eth_getTransactionByHash(txHash))
 
     getTransactionReceiptProc = proc(
         txHash: Hash32
     ): Future[EngineResult[ReceiptObject]] {.async: (raises: [CancelledError]).} =
       rpcCall:
-        let res = await client.resolveClient().eth_getTransactionReceipt(txHash)
-        if res.isNil():
-          return err(
-            (BackendFetchError, "Obtained nil response for the RPC request", UNTAGGED)
-          )
-        ok(res)
+        ok(await client.resolveClient().eth_getTransactionReceipt(txHash))
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag

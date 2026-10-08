@@ -8,7 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strutils, sequtils],
+  std/strutils,
   stint,
   results,
   chronicles,
@@ -27,15 +27,7 @@ import
 logScope:
   topics = "vp_engine"
 
-const
-  HISTORY_SERVE_WINDOW = 8191'u64
-  WINDOW_JUMP = HISTORY_SERVE_WINDOW - 1
-
-func isInEIP2935VerifiableRange(
-    anchor: base.BlockNumber, latest: base.BlockNumber, target: base.BlockNumber
-): bool =
-  # relax the timing by one block
-  if target > anchor or target < latest - HISTORY_SERVE_WINDOW + 1: false else: true
+const HISTORY_SERVE_WINDOW = 8191'u64
 
 func convHeader*(blk: eth_api_types.BlockObject): Header =
   let nonce = blk.nonce.valueOr:
@@ -65,9 +57,26 @@ func convHeader*(blk: eth_api_types.BlockObject): Header =
     requestsHash: blk.requestsHash,
   )
 
+func isEIP2935Active(engine: RpcVerificationEngine, header: Header): bool =
+  engine.eip2935ForkTime.isSome() and header.timestamp >= engine.eip2935ForkTime.get()
+
+func inEIP2935Range(
+    engine: RpcVerificationEngine, anchor: Header, target: Header
+): bool =
+  if not (engine.isEIP2935Active(anchor) and engine.isEIP2935Active(target)):
+    return false
+
+  if target.number >= anchor.number:
+    return false
+
+  # because div floors we add one to ceil it to the next integer
+  let jumps = (anchor.number - target.number - 1) div HISTORY_SERVE_WINDOW + 1
+
+  jumps <= engine.maxWindowJumps
+
 proc getEIP2935Hash(
     engine: RpcVerificationEngine, anchor: Header, number: base.BlockNumber
-): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
+): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
   let slot = (number mod HISTORY_SERVE_WINDOW).u256
 
   let storedValue = (
@@ -76,77 +85,157 @@ proc getEIP2935Hash(
     )
   ).valueOr:
     error "Failed to fetch EIP-2935 storage proof",
-      anchorNumber = anchor.number, number, slot
-    return Opt.none(Hash32) # unservable/invalid proof
+      anchorNumber = anchor.number, number, slot, err = error.errMsg
+    return err(error)
 
   # storage value is zero only when the fork activated less than 8191 blocks before
   if storedValue.isZero():
     error "EIP-2935 storage slot is empty, fork activated too recently",
       anchorNumber = anchor.number, number, slot
-    return Opt.none(Hash32) # cannot be verified using EIP 2935
+    return err(
+      (
+        UnavailableDataError,
+        "the EIP-2935 history slot for the requested block is empty", UNTAGGED,
+      )
+    )
 
-  Opt.some(storedValue.toBytesBE().to(Hash32))
+  ok(storedValue.toBytesBE().to(Hash32))
+
+proc getTrustedHeader(
+    engine: RpcVerificationEngine, hash: Hash32, trust: HeaderTrust
+): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
+  let cached = engine.headerStore.get(hash, None)
+  if cached.isSome():
+    engine.headerStore.put(cached.get(), hash, trust)
+    return ok(cached.get())
+
+  let
+    (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByHash))
+    blk = ?((await backend.eth_getBlockByHash(hash, false)).tagBackend(backendIdx))
+    header = convHeader(blk)
+
+  if header.computeBlockHash != hash:
+    return err(
+      (
+        VerificationError, "the downloaded anchor header doesn't match the anchor hash",
+        backendIdx,
+      )
+    )
+
+  engine.headerStore.put(header, hash, trust)
+
+  ok(header)
+
+func verifyBlock(blk: BlockObject, fullTransactions: bool): EngineResult[void] =
+  # verify transactions
+  if fullTransactions:
+    ?verifyTransactions(blk.transactionsRoot, blk.transactions)
+
+  if blk.withdrawals.isSome() and blk.withdrawalsRoot.isSome():
+    if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get()):
+      # untagged(-1) so the relevant backend can be tagged
+      return err(
+        (
+          VerificationError,
+          "Withdrawals within the block do not yield the same withdrawals root",
+          UNTAGGED,
+        )
+      )
+
+  ok()
+
+proc getTrustedBlock(
+    engine: RpcVerificationEngine,
+    hash: Hash32,
+    trust: HeaderTrust,
+    fullTransactions: bool,
+): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+  let
+    (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByHash))
+    blk = ?(
+      (await backend.eth_getBlockByHash(hash, fullTransactions)).tagBackend(backendIdx)
+    )
+    header = convHeader(blk)
+
+  if header.computeBlockHash != hash:
+    return err(
+      (
+        VerificationError, "the downloaded anchor block doesn't match the anchor hash",
+        backendIdx,
+      )
+    )
+
+  ?(verifyBlock(blk, fullTransactions).tagBackend(backendIdx))
+
+  engine.headerStore.put(header, hash, trust)
+
+  ok(blk)
 
 proc verifyEIP2935Membership(
     engine: RpcVerificationEngine,
     anchor: Header,
-    targetNum: base.BlockNumber,
+    trust: HeaderTrust,
+    target: Header,
     targetHash: Hash32,
-): Future[EngineResult[bool]] {.async: (raises: [CancelledError]).} =
-  # the anchor's state can only prove blocks older than the anchor
-  if targetNum > anchor.number:
-    return ok(false)
-
-  if targetNum == anchor.number:
-    if anchor.computeBlockHash == targetHash:
-      return ok(true)
-    error "EIP-2935 verification failed, block is not part of the canonical chain",
-      anchorNumber = anchor.number, targetNum, targetHash
+): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
+  if not engine.inEIP2935Range(anchor, target):
+    # untagged(-1) because this doesn't link to any backend
     return err(
       (
-        VerificationError, "the requested block is not part of the canonical chain",
-        UNTAGGED,
+        UnavailableDataError,
+        "EIP-2935 cannot reach the requested block from the verified anchor", UNTAGGED,
       )
     )
 
-  let jumps = (anchor.number - targetNum - 1) div WINDOW_JUMP
-  if jumps > engine.maxWindowJumps:
-    debug "Window jumps needed to reach the target block exceed the limit",
-      jumps, maxWindowJumps = engine.maxWindowJumps, targetNum
-    return ok(false)
+  let targetNum = target.number
 
   var curAnchor = anchor
-  while curAnchor.number - targetNum > WINDOW_JUMP:
-    let
-      newAnchorNum = curAnchor.number - WINDOW_JUMP
-      storedHash = (await engine.getEIP2935Hash(curAnchor, newAnchorNum)).valueOr:
-        return ok(false)
-      (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByHash))
-      blk =
-        ?((await backend.eth_getBlockByHash(storedHash, false)).tagBackend(backendIdx))
-      header = convHeader(blk)
+  while curAnchor.number - targetNum > HISTORY_SERVE_WINDOW:
+    let newAnchorNum =
+      ((curAnchor.number - 1) div HISTORY_SERVE_WINDOW) * HISTORY_SERVE_WINDOW
 
-    if header.computeBlockHash != storedHash:
-      error "EIP-2935 window jump header doesn't match the stored hash",
+    # get cached header by number because hash will require getProof
+    let cachedJump = engine.headerStore.get(newAnchorNum, Finalized)
+    if cachedJump.isSome():
+      curAnchor = cachedJump.get()
+      continue
+
+    let storedHash = (await engine.getEIP2935Hash(curAnchor, newAnchorNum)).valueOr:
+      # we already checked if the target is in range of EIP2935 despite that the hash
+      # is unavailable so it translated to a verification error
+      if error.errType == UnavailableDataError:
+        return err((VerificationError, error.errMsg, error.backendIdx))
+      return err(error)
+
+    let header = (await engine.getTrustedHeader(storedHash, trust)).valueOr:
+      error "Couldn't fetch the EIP-2935 window jump header",
+        curAnchorNumber = curAnchor.number, newAnchorNum, storedHash, err = error.errMsg
+      return err(error)
+
+    if header.number != newAnchorNum:
+      error "EIP-2935 window jump header has an unexpected block number",
         curAnchorNumber = curAnchor.number,
         newAnchorNum,
         storedHash,
-        downloadedHash = header.computeBlockHash
+        downloadedNumber = header.number
       return err(
         (
           VerificationError,
-          "downloaded window jump header doesn't match the EIP-2935 stored hash",
-          backendIdx,
+          "the EIP-2935 stored hash resolves to a block of a different number", UNTAGGED,
         )
       )
 
     curAnchor = header
 
   let storedHash = (await engine.getEIP2935Hash(curAnchor, targetNum)).valueOr:
-    return ok(false)
+    # we already checked if the target is in range of EIP2935 despite that the hash
+    # is unavailable so it translated to a verification error
+    if error.errType == UnavailableDataError:
+      return err((VerificationError, error.errMsg, error.backendIdx))
+    return err(error)
 
   if storedHash == targetHash:
-    return ok(true)
+    return ok()
 
   error "EIP-2935 verification failed, block is not part of the canonical chain",
     curAnchorNumber = curAnchor.number, targetNum, targetHash, storedHash
@@ -157,65 +246,41 @@ proc verifyEIP2935Membership(
     )
   )
 
-func earliestServableBlock*(
-    engine: RpcVerificationEngine
-): EngineResult[base.BlockNumber] =
-  let latest = engine.headerStore.latest.valueOr:
-    return err((UnavailableDataError, "latest block is not available yet", UNTAGGED))
+func snapshotAnchors*(engine: RpcVerificationEngine): EngineResult[AnchorHashes] =
+  if engine.headerStore.getHash(Optimistic).isNone() and
+      engine.headerStore.getHash(Safe).isNone():
+    return err(
+      (
+        UnavailableDataError, "no verified anchor is available yet. Still syncing?",
+        UNTAGGED,
+      )
+    )
 
-  if engine.eip2935ForkTime.isNone or latest.timestamp < engine.eip2935ForkTime.get:
-    let earliest = engine.headerStore.earliest.valueOr:
-      return
-        err((UnavailableDataError, "earliest block is not available yet", UNTAGGED))
-    return ok(earliest.number)
+  ok(
+    AnchorHashes(
+      latest: engine.headerStore.getHash(Optimistic),
+      safe: engine.headerStore.getHash(Safe),
+      finalized: engine.headerStore.getHash(Finalized),
+      earliest: engine.headerStore.getEarliestHash(),
+    )
+  )
 
-  let jumps = if engine.state.archive: engine.maxWindowJumps else: 1'u64
-
-  ok(latest.number - min(latest.number, WINDOW_JUMP * jumps))
-
-proc resolveBlockTag*(
-    engine: RpcVerificationEngine, blockTag: BlockTag
-): EngineResult[BlockTag] =
-  if blockTag.kind == bidAlias:
-    let tag = blockTag.alias.toLowerAscii()
-    case tag
-    of "latest":
-      let hLatest = engine.headerStore.latest.valueOr:
-        # untagged(-1) so the relevant backend can be tagged
-        return err(
-          (
-            UnavailableDataError,
-            "Couldn't get the latest block number from header store", UNTAGGED,
-          )
-        )
-      ok(BlockTag(kind: bidNumber, number: Quantity(hLatest.number)))
-    of "finalized":
-      let hFinalized = engine.headerStore.finalized.valueOr:
-        # untagged(-1) so the relevant backend can be tagged
-        return err(
-          (
-            UnavailableDataError,
-            "Couldn't get the finalized block number from header store", UNTAGGED,
-          )
-        )
-      ok(BlockTag(kind: bidNumber, number: Quantity(hFinalized.number)))
-    of "earliest":
-      let earliestNum = ?engine.earliestServableBlock()
-      ok(BlockTag(kind: bidNumber, number: Quantity(earliestNum)))
-    else:
-      # untagged(-1) so the relevant backend can be tagged
-      err((InvalidDataError, "No support for block tag " & $blockTag, UNTAGGED))
-  else:
-    ok(blockTag)
-
-proc walkBlocks*(
+proc walkBlocks(
     engine: RpcVerificationEngine,
     sourceNum: base.BlockNumber,
     targetNum: base.BlockNumber,
     sourceHash: Hash32,
-    targetHash: Hash32,
-): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
-  debug "Starting block walk to verify requested block", blockHash = targetHash
+    trust: HeaderTrust,
+): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
+  debug "Starting block walk", sourceNum, targetNum
+
+  if targetNum >= sourceNum:
+    return err(
+      (
+        FrontendError, "the block walk target is not older than the walk source",
+        UNTAGGED,
+      )
+    )
 
   let numBlocks = sourceNum - targetNum
   if numBlocks > engine.maxBlockWalk:
@@ -235,18 +300,27 @@ proc walkBlocks*(
     futs: seq[Future[EngineResult[BlockObject]]]
 
   while nextNum > targetNum:
+    let cached = engine.headerStore.get(nextHash, None)
+    if cached.isSome():
+      engine.headerStore.put(cached.get(), nextHash, trust)
+      nextHash = cached.get().parentHash
+      nextNum -= 1
+      continue
+
     futs = @[]
     downloadedHeaders.clear()
 
     # select one backend for batch requests
     let (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByNumber))
 
-    while nextNum > targetNum and uint64(futs.len) < engine.parallelBlockDownloads:
-      if not engine.headerStore.contains(nextNum):
-        let tag = BlockTag(kind: bidNumber, number: Quantity(nextNum))
+    var fetchNum = nextNum
+    while fetchNum > targetNum and
+        uint64(futs.len) < max(1'u64, engine.parallelBlockDownloads):
+      # cached blocks don't consume the download budget
+      if engine.headerStore.getHash(fetchNum, Finalized).isNone():
+        let tag = BlockTag(kind: bidNumber, number: Quantity(fetchNum))
         futs.add(backend.eth_getBlockByNumber(tag, false))
-
-      nextNum -= 1
+      fetchNum -= 1
 
     await allFutures(futs)
 
@@ -259,10 +333,11 @@ proc walkBlocks*(
         h = convHeader(blk)
       downloadedHeaders[blk.hash] = h
 
-    for j in 0 ..< futs.len:
+    while nextNum > fetchNum:
+      let cachedLink = engine.headerStore.get(nextHash, None)
       let unverifiedHeader =
-        if engine.headerStore.contains(nextHash):
-          engine.headerStore.get(nextHash).get()
+        if cachedLink.isSome():
+          cachedLink.get()
         else:
           try:
             downloadedHeaders[nextHash]
@@ -274,7 +349,8 @@ proc walkBlocks*(
               )
             )
 
-      if unverifiedHeader.computeBlockHash != nextHash:
+      if unverifiedHeader.computeBlockHash != nextHash or
+          unverifiedHeader.number != nextNum:
         return err(
           (
             VerificationError,
@@ -282,22 +358,19 @@ proc walkBlocks*(
           )
         )
 
-      if unverifiedHeader.parentHash == targetHash:
-        return ok()
+      engine.headerStore.put(unverifiedHeader, nextHash, trust)
 
       nextHash = unverifiedHeader.parentHash
+      nextNum -= 1
 
-  # untagged(-1) so the relevant backend can be tagged. Since this is not the fault of the
-  # backends that were responsible for the block walk
-  err(
-    (
-      VerificationError, "the requested block is not part of the canonical chain",
-      UNTAGGED,
-    )
-  )
+  ok(nextHash)
 
 proc verifyHeader(
-    engine: RpcVerificationEngine, header: Header, hash: Hash32
+    engine: RpcVerificationEngine,
+    anchor: Header,
+    trust: HeaderTrust,
+    header: Header,
+    hash: Hash32,
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
   # verify calculated hash with the requested hash
   if header.computeBlockHash != hash:
@@ -310,76 +383,72 @@ proc verifyHeader(
     )
 
   # if the header is available in the store just use that (already verified)
-  if engine.headerStore.contains(hash):
+  if engine.headerStore.get(hash, trust).isSome():
     return ok()
-  # walk blocks backwards(time) from source to target
-  else:
-    let
-      earliest = engine.headerStore.earliest.valueOr:
-        # untagged(-1) because this doesn't link to any backend
-        return err(
-          (
-            UnavailableDataError, "earliest block is not available yet. Still syncing?",
-            UNTAGGED,
-          )
-        )
-      anchor =
-        if engine.anchor.kind == bidAlias and
-            engine.anchor.alias.toLowerAscii() == "safe":
-          engine.headerStore.latest.valueOr:
-            return err(
-              (
-                UnavailableDataError, "safe block is not available yet. Still syncing?",
-                UNTAGGED,
-              )
-            )
-        else:
-          engine.headerStore.finalized.valueOr:
-            return err(
-              (
-                UnavailableDataError,
-                "finalized block is not available yet. Still syncing?", UNTAGGED,
-              )
-            )
 
-    let eipVerified =
-      ?(await engine.verifyEIP2935Membership(anchor, header.number, hash))
-
-    if not eipVerified:
-      ?(
-        await engine.walkBlocks(
-          earliest.number, header.number, earliest.parentHash, hash
-        )
-      )
-
-  ok()
-
-proc verifyBlock(
-    engine: RpcVerificationEngine, blk: BlockObject, fullTransactions: bool
-): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
-  let header = convHeader(blk)
-
-  ?(await engine.verifyHeader(header, blk.hash))
-
-  # verify transactions
-  if fullTransactions:
-    ?verifyTransactions(header.transactionsRoot, blk.transactions)
-
-  if blk.withdrawals.isSome() and blk.withdrawalsRoot.isSome():
-    if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get()):
-      # untagged(-1) so the relevant backend can be tagged
+  if header.number == anchor.number:
+    if hash != anchor.computeBlockHash:
       return err(
         (
-          VerificationError,
-          "Withdrawals within the block do not yield the same withdrawals root",
+          VerificationError, "the requested block is not part of the canonical chain",
           UNTAGGED,
         )
       )
 
+    engine.headerStore.put(header, hash, trust)
+    return ok()
+
+  # EIP-2935 jumps read proofs at the anchor's state root, only an archive
+  # backend can serve those. without one we walk the chain instead
+  if engine.state.archive:
+    ?(await engine.verifyEIP2935Membership(anchor, trust, header, hash))
+  else:
+    let walkedHash =
+      ?(await engine.walkBlocks(anchor.number, header.number, anchor.parentHash, trust))
+
+    if walkedHash != hash:
+      return err(
+        (
+          VerificationError, "the requested block is not part of the canonical chain",
+          UNTAGGED,
+        )
+      )
+
+  engine.headerStore.put(header, hash, trust)
+
   ok()
 
+proc getBlockHash*(
+    engine: RpcVerificationEngine, anchor: Header, number: base.BlockNumber
+): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
+  if number >= anchor.number:
+    return err(
+      (
+        InvalidDataError, "block hash requested for a block that is not in the past",
+        UNTAGGED,
+      )
+    )
+
+  let cached = engine.headerStore.getHash(number, Finalized)
+  if cached.isSome():
+    return ok(cached.get())
+
+  if engine.isEIP2935Active(anchor) and anchor.number - number <= HISTORY_SERVE_WINDOW:
+    return await engine.getEIP2935Hash(anchor, number)
+
+  err(
+    (
+      UnavailableDataError,
+      "EIP-2935 cannot reach the requested block from the verified anchor", UNTAGGED,
+    )
+  )
+
 proc getBlock*(
-    engine: RpcVerificationEngine, blockHash: Hash32, fullTransactions: bool
+    engine: RpcVerificationEngine,
+    anchor: Header,
+    trust: HeaderTrust,
+    blockHash: Hash32,
+    fullTransactions: bool,
 ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
   # get the target block
   let
@@ -400,25 +469,38 @@ proc getBlock*(
     )
 
   # verify the block
-  ?((await engine.verifyBlock(blk, fullTransactions)).tagBackend(backendIdx))
+  ?(
+    (await engine.verifyHeader(anchor, trust, convHeader(blk), blk.hash)).tagBackend(
+      backendIdx
+    )
+  )
+
+  ?(verifyBlock(blk, fullTransactions).tagBackend(backendIdx))
 
   ok(blk)
 
 proc getBlock*(
-    engine: RpcVerificationEngine, blockTag: BlockTag, fullTransactions: bool
+    engine: RpcVerificationEngine,
+    anchor: Header,
+    trust: HeaderTrust,
+    blockTag: BlockTag,
+    fullTransactions: bool,
 ): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
-  let numberTag = ?engine.resolveBlockTag(blockTag)
+  if blockTag.kind != bidNumber:
+    # untagged(-1) so the relevant backend can be tagged
+    return
+      err((InvalidDataError, "a block number is required to fetch by number", UNTAGGED))
 
   # get the target block
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByNumber))
     blk = ?(
-      (await backend.eth_getBlockByNumber(numberTag, fullTransactions)).tagBackend(
+      (await backend.eth_getBlockByNumber(blockTag, fullTransactions)).tagBackend(
         backendIdx
       )
     )
 
-  if numberTag.number != blk.number:
+  if blockTag.number != blk.number:
     return err(
       (
         VerificationError,
@@ -428,14 +510,20 @@ proc getBlock*(
     )
 
   # verify the block
-  ?((await engine.verifyBlock(blk, fullTransactions)).tagBackend(backendIdx))
+  ?(
+    (await engine.verifyHeader(anchor, trust, convHeader(blk), blk.hash)).tagBackend(
+      backendIdx
+    )
+  )
+
+  ?(verifyBlock(blk, fullTransactions).tagBackend(backendIdx))
 
   ok(blk)
 
 proc getHeader*(
-    engine: RpcVerificationEngine, blockHash: Hash32
+    engine: RpcVerificationEngine, anchor: Header, trust: HeaderTrust, blockHash: Hash32
 ): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
-  let cachedHeader = engine.headerStore.get(blockHash)
+  let cachedHeader = engine.headerStore.get(blockHash, trust)
 
   if cachedHeader.isNone():
     debug "did not find the header in the cache", blockHash = blockHash
@@ -457,17 +545,26 @@ proc getHeader*(
       )
     )
 
-  ?((await engine.verifyHeader(header, blockHash)).tagBackend(backendIdx))
+  ?(
+    (await engine.verifyHeader(anchor, trust, header, blockHash)).tagBackend(backendIdx)
+  )
 
   ok(header)
 
 proc getHeader*(
-    engine: RpcVerificationEngine, blockTag: BlockTag
+    engine: RpcVerificationEngine,
+    anchor: Header,
+    trust: HeaderTrust,
+    blockTag: BlockTag,
 ): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
+  if blockTag.kind != bidNumber:
+    # untagged(-1) so the relevant backend can be tagged
+    return
+      err((InvalidDataError, "a block number is required to fetch by number", UNTAGGED))
+
   let
-    numberTag = ?engine.resolveBlockTag(blockTag)
-    n = distinctBase(numberTag.number)
-    cachedHeader = engine.headerStore.get(n)
+    n = distinctBase(blockTag.number)
+    cachedHeader = engine.headerStore.get(base.BlockNumber(n), trust)
 
   if cachedHeader.isNone():
     debug "did not find the header in the cache", blockTag = blockTag
@@ -478,7 +575,7 @@ proc getHeader*(
   let
     (backend, backendIdx) = ?(engine.executionBackendFor(GetBlockByNumber))
     blk =
-      ?((await backend.eth_getBlockByNumber(numberTag, false)).tagBackend(backendIdx))
+      ?((await backend.eth_getBlockByNumber(blockTag, false)).tagBackend(backendIdx))
 
   let header = convHeader(blk)
 
@@ -491,39 +588,136 @@ proc getHeader*(
       )
     )
 
-  ?((await engine.verifyHeader(header, blk.hash)).tagBackend(backendIdx))
+  ?((await engine.verifyHeader(anchor, trust, header, blk.hash)).tagBackend(backendIdx))
 
   ok(header)
 
-# NOTE: this function uses the "latest" tag as the anchor. Hence this
-# function should not be used anywhere else except where the trust 
-# assumption is "latest" and not "finalized"
-proc getBlockHash*(
-    engine: RpcVerificationEngine, number: base.BlockNumber
-): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
-  let cached = engine.headerStore.getHash(number)
-  if cached.isSome():
-    return ok(cached.get())
+# tags are strict, they resolve to the anchor of the trust level they name.
+# numbers and hashes get the best anchor that can verify them
+proc getVerified[T](
+    engine: RpcVerificationEngine,
+    blockTag: BlockTag,
+    fullTransactions: bool,
+    snapshot: Opt[AnchorHashes],
+): Future[EngineResult[T]] {.async: (raises: [CancelledError]).} =
+  # a caller that resolves more than one tag per request passes its own snapshot
+  # so that every tag resolves against the same anchors
+  let anchors =
+    if snapshot.isSome():
+      snapshot.get()
+    else:
+      ?engine.snapshotAnchors()
 
-  let latest = engine.headerStore.latest.valueOr:
-    return err(
-      (
-        UnavailableDataError, "latest block is not available yet. Still syncing?",
-        UNTAGGED,
-      )
-    )
+  case blockTag.kind
+  of bidAlias:
+    var
+      anchorHash: Opt[Hash32]
+      trust: HeaderTrust
 
-  if isInEIP2935VerifiableRange(latest.number, latest.number, number):
-    let
-      slot = (number mod HISTORY_SERVE_WINDOW).u256
-      storedValue = await engine.getStorageAt(
-        HISTORY_STORAGE_ADDRESS, slot, latest.number, latest.stateRoot
-      )
+    case blockTag.alias.toLowerAscii()
+    of "latest":
+      anchorHash = anchors.latest
+      trust = Optimistic
+    of "safe":
+      anchorHash = anchors.safe
+      trust = Safe
+    of "finalized":
+      anchorHash = anchors.finalized
+      trust = Finalized
+    of "earliest":
+      anchorHash = anchors.earliest
+      trust = Finalized
+    else:
+      # untagged(-1) so the relevant backend can be tagged
+      return err((InvalidDataError, "No support for block tag " & $blockTag, UNTAGGED))
 
-    if storedValue.isOk() and not storedValue.get().isZero():
-      return ok(storedValue.get().toBytesBE().to(Hash32))
+    let hash = anchorHash.valueOr:
+      return
+        err((UnavailableDataError, $blockTag & " block is not available yet", UNTAGGED))
 
-  let resolved =
-    ?(await engine.getHeader(BlockTag(kind: bidNumber, number: Quantity(number))))
+    # the anchor hash is the answer, trust is the label it is stored with
+    when T is Header:
+      return await engine.getTrustedHeader(hash, trust)
+    else:
+      return await engine.getTrustedBlock(hash, trust, fullTransactions)
+  of bidNumber, bidHash:
+    # without requireCanonical the hash pins the block, so it anchors itself
+    if blockTag.kind == bidHash and not blockTag.requireCanonical:
+      when T is Header:
+        return await engine.getTrustedHeader(blockTag.hash, None)
+      else:
+        return await engine.getTrustedBlock(blockTag.hash, None, fullTransactions)
 
-  ok(resolved.computeBlockHash)
+    let number =
+      if blockTag.kind == bidNumber:
+        base.BlockNumber(distinctBase(blockTag.number))
+      else:
+        (?(await engine.getTrustedHeader(blockTag.hash, None))).number
+
+    var
+      anchor: Header
+      trust = Optimistic
+
+    block pickAnchor:
+      if anchors.finalized.isSome():
+        let finalized =
+          ?(await engine.getTrustedHeader(anchors.finalized.get(), Finalized))
+        if number <= finalized.number:
+          anchor = finalized
+          trust = Finalized
+          break pickAnchor
+
+      if anchors.safe.isSome():
+        let safe = ?(await engine.getTrustedHeader(anchors.safe.get(), Safe))
+        if number <= safe.number:
+          anchor = safe
+          trust = Safe
+          break pickAnchor
+
+      let latestHash = anchors.latest.valueOr:
+        return err(
+          (
+            UnavailableDataError, "no verified anchor covers the requested block",
+            UNTAGGED,
+          )
+        )
+
+      anchor = ?(await engine.getTrustedHeader(latestHash, Optimistic))
+      if number > anchor.number:
+        return err(
+          (
+            UnavailableDataError,
+            "the requested block is newer than the latest verified block", UNTAGGED,
+          )
+        )
+
+    if blockTag.kind == bidNumber and number == anchor.number:
+      when T is Header:
+        return await engine.getTrustedHeader(anchor.computeBlockHash, trust)
+      else:
+        return
+          await engine.getTrustedBlock(anchor.computeBlockHash, trust, fullTransactions)
+
+    if blockTag.kind == bidHash:
+      when T is Header:
+        return await engine.getHeader(anchor, trust, blockTag.hash)
+      else:
+        return await engine.getBlock(anchor, trust, blockTag.hash, fullTransactions)
+
+    when T is Header:
+      return await engine.getHeader(anchor, trust, blockTag)
+    else:
+      return await engine.getBlock(anchor, trust, blockTag, fullTransactions)
+
+proc getVerifiedHeader*(
+    engine: RpcVerificationEngine, blockTag: BlockTag, snapshot = Opt.none(AnchorHashes)
+): Future[EngineResult[Header]] {.async: (raises: [CancelledError]).} =
+  await getVerified[Header](engine, blockTag, false, snapshot)
+
+proc getVerifiedBlock*(
+    engine: RpcVerificationEngine,
+    blockTag: BlockTag,
+    fullTransactions: bool,
+    snapshot = Opt.none(AnchorHashes),
+): Future[EngineResult[BlockObject]] {.async: (raises: [CancelledError]).} =
+  await getVerified[BlockObject](engine, blockTag, fullTransactions, snapshot)

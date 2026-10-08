@@ -134,17 +134,22 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
 
   nimbus.ethNode = newEthereumNode(
     keypair, extIp, extTcpPort, extUdpPort, params.networkId, config.agentString,
-    minPeers = config.maxPeers,
+    maxPeers = config.maxPeers,
     bootstrapNodes = bootstrapNodes,
     bindUdpPort = config.udpPort, bindTcpPort = config.tcpPort,
     bindIp = config.listenAddress,
     rng = nimbus.rng,
+    enableDiscV5 = config.discv5,
     forkIdProcs = forkIdProcs)
 
-  # Add peer service protocol capabilities.
-  let doSnapSync = config.snapSyncEnabled or config.snapServerEnabled
+  # Add eth peer service protocol capabilities.
   nimbus.ethWire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
-  if doSnapSync:
+
+  # Add snap sync service if enabled. This server is currently a dummy only
+  # and will never be fully functional. The costs of implementing the 128
+  # blocks sevice window is too expensive. What could be provided is a BAL
+  # download facility.
+  if config.snapSyncEnabled:
     nimbus.snapWire = nimbus.ethNode.addSnapHandlerCapability()
 
   # Connect directly to the static nodes
@@ -160,30 +165,25 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
 
   # Start Eth node
   if config.maxPeers > 0:
-    # The user-facing flag is --discv5, but discv4 is still enabled alongside
-    # it until the discv4 code is removed.
-    nimbus.ethNode.connectToNetwork(
-      enableDiscV4 = false,
-      enableDiscV5 = config.discv5,
-    )
+    nimbus.ethNode.connectToNetwork()
 
+  # Ignore any external configuration.
+  nimbus.beaconSyncRef = BeaconSyncRef(nil)
+  nimbus.snapSyncRef = SnapSyncRef(nil)
+
+  # Deactivating syncers if there is definitely no need to run it. This
+  # avoids polling (i.e. waiting for instructions) and some logging.
   # Initalise beacon sync descriptor.
-  var syncerShouldRun = (config.maxPeers > 0 or staticPeers.len > 0) and
-                        config.engineApiServerEnabled()
-
-  # The beacon sync descriptor might have been pre-allocated with additional
-  # features. So do not override.
-  if nimbus.beaconSyncRef.isNil:
-    nimbus.beaconSyncRef = BeaconSyncRef.init()
-  else:
-    syncerShouldRun = true
+  if (config.maxPeers == 0 and staticPeers.len == 0) or
+     not config.engineApiServerEnabled():
+    return
 
   # Configure beacon syncer.
+  nimbus.beaconSyncRef = BeaconSyncRef.init()
   nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
 
   # Optional for pre-setting the sync target (e.g. for debugging)
   if config.beaconSyncTarget.isSome():
-    syncerShouldRun = true
     let
       hex = config.beaconSyncTarget.unsafeGet
       isFinal = config.beaconSyncTargetIsFinal
@@ -198,25 +198,153 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
 
   # Configure snap sync if enabled. When done it will resume beacon sync.
   if config.snapSyncEnabled:
-    if nimbus.snapSyncRef.isNil:
-      nimbus.snapSyncRef = SnapSyncRef.init()
-    else:
-      syncerShouldRun = true
+    if not com.chainHasAmsterdam():
+      fatal "Current block chain does not support the" &
+            " Amsterdam fork needed for snap/2"
+      quit QuitFailure
 
     # Configure snap syncer.
-    nimbus.snapSyncRef.config(nimbus.ethNode, config.dataDir(params), config.maxPeers)
-
+    nimbus.snapSyncRef = SnapSyncRef.init()
+    nimbus.snapSyncRef.config(
+      nimbus.ethNode, config.dataDir(params), config.maxPeers)
     if config.snapSyncResume:
       nimbus.snapSyncRef.configResume()
+
+proc getCoreDbOpts(
+    config: ExecutionClientConf;
+    params: NetworkParams;
+    numThreads: int;
+      ): DbOptions =
+  let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
+
+  var dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
+  if disableParallelFeatures:
+    info "Not enough taskpool threads, disabling parallel features", numThreads
+    dbOpts.parallelStateRootComputation = false
+    dbOpts.threadSafeCaches = false
+
+  move dbOpts
+
+proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf, params: NetworkParams) =
+  if config.rewriteDatadirId:
+    return
+
+  let
+    storedHeader = db.baseTxFrame().getBlockHeader(0'u64).valueOr:
+      return
+    storedHash = storedHeader.computeBlockHash
+    expectedHash = params.genesisBlockHash()
+
+  if storedHash != expectedHash:
+    fatal "Data dir already initialized with other network configuration",
+      get=storedHash,
+      expected=expectedHash
+    quit(QuitFailure)
+
+proc setupPruning(
+    nimbus: NimbusNode;
+    config: ExecutionClientConf;
+    com: CommonRef;
+      ) =
+  if config.backgroundPruning:
+    nimbus.backgroundPruner = BackgroundPrunerRef.init(com)
+    nimbus.backgroundPruner.start()
   else:
-    # Disable any external setup unless explicitely activated
+    let state = com.db.kvt.loadPrunerStateBe()
+    if state.active:
+      fatal "Node was previously started with background pruning enabled " &
+        "(--prune). Historical block data may have been deleted, and might " &
+        "cause inconsistent DB restart with --prune=true or use a fresh " &
+        "data directory."
+      quit(QuitFailure)
+
+  if config.balPruning and com.activationTime(Amsterdam).isSome:
+    nimbus.balPruner = BalPrunerRef.init(com)
+    nimbus.balPruner.start()
+
+proc internalRestart(
+    config: ExecutionClientConf;
+    com: CommonRef;
+    params: NetworkParams;
+    nimbus: NimbusNode;
+      ) =
+  ## Update database and restart some services after snap sync.
+  let newDbPath = nimbus.snapSyncRef.sharedState().newDbPath
+
+  # Shut down currently unwanted modules. No async poller must be running.
+  QuitFailure.onException("Exception while reconfiguring"):
+    # Done with snap sync
+    waitFor nimbus.snapSyncRef.stop()
     nimbus.snapSyncRef = SnapSyncRef(nil)
 
-  # Deactivating syncer if there is definitely no need to run it. This
-  # avoids polling (i.e. waiting for instructions) and some logging.
-  if not syncerShouldRun:
+    if nimbus.snapWire.isNil.not and not config.snapSyncEnabled:
+      waitFor nimbus.snapWire.stop()
+
+    # Reaching here, all of the peers will have gone due to the long time
+    # it takes to import the database.
+    #
+    # Also, the beacon syncer depends on the header cache module which in
+    # turn uses sort of a hard KVT reference not managed by the `CoreDb`.
+    # So it must be released and re-assignd.
+    waitFor nimbus.beaconSyncRef.stop()
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
-    nimbus.snapSyncRef = SnapSyncRef(nil)
+
+    # Pruning needs to be stopped and restarted on the new upcoming fork.
+    if nimbus.backgroundPruner.isNil.not:
+      waitFor nimbus.backgroundPruner.stop()
+      nimbus.backgroundPruner = BackgroundPrunerRef(nil)
+    if nimbus.balPruner.isNil.not:
+      waitFor nimbus.balPruner.stop()
+      nimbus.balPruner = BalPrunerRef(nil)
+
+  # Update database
+  com.db.close()
+  let
+    params = config.computeNetworkParams()
+    dataDir = config.dataDir(params)
+  dataDir.ecdbDirSwap(newDbPath).isOkOr:
+    fatal "Cannot update database", dataDir, newDbPath, error
+    QuitFailure.onException("Exception while shutting down"):
+      waitFor nimbus.closeWait()
+    quit(QuitFailure)
+
+  # Reassign updated DB. This is managed transparently by the `CoreDb`
+  # wrapper, the sole exception being an unmanaged KVT table for the
+  # header cache. This is handled below (see `beaconSyncRef.refresh()`.)
+  when compileOption("threads"):
+    let
+      taskpool = setupTaskpool(config.numThreads)
+      dbOpts = config.getCoreDbOpts(params, taskpool.numThreads)
+    AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
+    com.taskpool = taskpool
+    com.db.mpt.taskpool = taskpool
+  else:
+    dbOpts = config.getCoreDbOpts(params, 0)
+    AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
+
+  # Force `com` and other modules to ajustment. History and forks have leapt
+  # forward. So modules must adjust accordingly.
+  com.refresh()
+  nimbus.fc.refresh()
+  QuitFailure.onException("Cannot initialise RPC client history"):
+    nimbus.fc.portal = HistoryExpiryRef.init(config, com)
+  nimbus.txPool.refresh()
+
+  # Reinitialise pruning as it depends og the current fork.
+  nimbus.setupPruning(config, com)
+
+  # Restart beacon syncer
+  nimbus.beaconSyncRef = BeaconSyncRef.init()
+  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
+  if config.beaconSyncTicker:
+    nimbus.beaconSyncRef.configTicker(enable=true)
+  if not nimbus.beaconSyncRef.start():
+    fatal "Cannot restart beacon syncer"
+    quit(QuitFailure)
+
+# -----------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
 
 proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, params: NetworkParams) =
   nimbus.accountsManager = new AccountsManager
@@ -236,48 +364,19 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, para
         if nimbus.beaconSyncRef.start():
           break startSyncer
       else:
-        # Start snap sync. When done it will resume beacon sync.
+        # Start snap sync which will use beacon sync in stand-by mode.
+        # When done, the system will resume full beacon sync.
         if nimbus.snapSyncRef.start(nimbus.beaconSyncRef):
           break startSyncer
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
 
-  if config.backgroundPruning:
-    nimbus.backgroundPruner = BackgroundPrunerRef.init(com)
-    nimbus.backgroundPruner.start()
-  else:
-    let state = com.db.kvt.loadPrunerStateBe()
-    if state.active:
-      fatal "Node was previously started with background pruning enabled (--prune). " &
-        "Historical block data may have been deleted, and might cause inconsistent DB " &
-        "Restart with --prune=true or use a fresh data directory."
-      quit(QuitFailure)
-
-  if config.balPruning and com.activationTime(Amsterdam).isSome:
-    nimbus.balPruner = BalPrunerRef.init(com)
-    nimbus.balPruner.start()
+  nimbus.setupPruning(config, com)
 
 proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef, params: NetworkParams): T =
   let nimbus = T()
   nimbus.init(config, com, params)
   nimbus
-
-proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf, params: NetworkParams) =
-  if config.rewriteDatadirId:
-    return
-
-  let
-    storedHeader = db.baseTxFrame().getBlockHeader(0'u64).valueOr:
-      return
-    storedHash = storedHeader.computeBlockHash
-    expectedHash = params.genesisBlockHash()
-
-  if storedHash != expectedHash:
-    fatal "Data dir already initialized with other network configuration",
-      get=storedHash,
-      expected=expectedHash
-    quit(QuitFailure)
-
 
 proc setupCommonRef*(
     config: ExecutionClientConf, params: NetworkParams, numThreads: int): (CommonRef, bool) =
@@ -291,12 +390,7 @@ proc setupCommonRef*(
 
   let disableParallelFeatures = numThreads <= 1 and config.parallelFeaturesEnabled()
 
-  var dbOpts = config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`)
-  if disableParallelFeatures:
-    info "Not enough taskpool threads, disabling parallel features", numThreads
-    dbOpts.parallelStateRootComputation = false
-    dbOpts.threadSafeCaches = false
-
+  var dbOpts = config.getCoreDbOpts(params, numThreads)
   let coreDB = AristoDbRocks.newCoreDbRef(config.dataDir(params), dbOpts)
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config, params)
@@ -376,7 +470,7 @@ proc runExeClient*(
     txFrame.checkpoint(fc.base.header.number, skipSnapshot = true)
     com.db.persist(txFrame)
 
- # Rlp import is there, first load the chain segment
+  # Rlp import is there, first load the chain segment
   if config.bootstrapBlocksFile.len > 0:
     try:
       waitFor importRlpBlocks(config, com, nimbus.fc)
@@ -388,14 +482,38 @@ proc runExeClient*(
 
   asyncSpawn runStopCheckLoop()
 
-  while true:
-    if (let reason = ProcessState.stopping(); reason.isSome()):
-      notice "Shutting down", reason = reason[]
-      break
-    if stopper != nil and stopper.finished():
-      break
+  block stopFrame:
+    # Check whether snap sync is enabled. This will cause an internal restart
+    # (unless aborted.)
+    if not nimbus.snapSyncRef.isNil:
+      let sharedState = nimbus.snapSyncRef.sharedState()
+      doAssert not sharedState.isNil
+      while true:
+        if (let reason = ProcessState.stopping(); reason.isSome()):
+          notice "Shutting down", reason = reason[]
+          break stopFrame                           # full shutdown
+        if stopper != nil and stopper.finished():
+          break stopFrame                           # full shutdown
+        if sharedState.snapSyncStop:
+          break                                     # internal reconfig/restart
+        chronos.poll()
 
-    chronos.poll()
+      # Internal reconfigure and restart. Network resources are kept running
+      # as far as possible. The async runner is currently suspended. Some
+      # modules need to be restarted after re-configuring the network.
+      config.internalRestart(com, params, nimbus)
+      notice "System has been reconfigured running updated database"
+      # End `if not nimbus.snapSyncRef.isNil`
+
+    # Real processing starts here
+    while true:
+      if (let reason = ProcessState.stopping(); reason.isSome()):
+        notice "Shutting down", reason = reason[]
+        break stopFrame
+      if stopper != nil and stopper.finished():
+        break stopFrame
+
+      chronos.poll()
 
   # Stop loop
   QuitFailure.onException("Exception while shutting down"):

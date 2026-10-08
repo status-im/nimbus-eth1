@@ -22,11 +22,15 @@
 {.push raises: [].}
 
 import
-  ../aristo,
-  ./backend/aristo_rocksdb,
-  ../opts, ./base_desc
+  ../[aristo, opts],
+  ../kvt/kvt_utils,
+  ./backend/[aristo_rocksdb, rocksdb_desc],
+  ./base_desc
 
-export base_desc
+export
+  DbOptions,
+  base_desc,
+  ecdbDirSwap
 
 proc newCoreDbRef*(
     dbType: static[CoreDbType];      # Database type symbol
@@ -41,6 +45,29 @@ proc newCoreDbRef*(
   ##
   when dbType == AristoDbRocks:
     newRocksDbCoreDbRef path, opts, wipe
+
+  else:
+    {.error: "Unsupported dbType for persistent newCoreDbRef()".}
+
+proc initCoreDbRef*(
+    dbType: static[CoreDbType];      # Database type symbol
+    importDb: CoreDbRef;             # Existing database descriptor
+    path: string;                    # Storage path for database
+    opts: DbOptions;
+    wipe: bool = false
+      ) =
+  ## Initailise/import persistent type DB for given `importDb` argument.
+  ##
+  ## The production database type is `AristoDbRocks` which uses a single
+  ## `RocksDb` backend for both, `Aristo` and `KVT`.
+  ##
+  when dbType == AristoDbRocks:
+    if not importDb.kvt.isNil:
+      importDb.kvt.close(false)
+      importDb.mpt.close(false)
+    let newDb = newRocksDbCoreDbRef(path, opts, wipe)
+    importDb.kvt = newDb.kvt
+    importDb.mpt = newDb.mpt
 
   else:
     {.error: "Unsupported dbType for persistent newCoreDbRef()".}

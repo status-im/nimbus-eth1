@@ -22,6 +22,7 @@ import
   ../../evm/interpreter/gas_costs,
   ../../block_access_list/[bal_builder, bal_overlay, bal_tracker, bal_utils],
   ../../concurrency/[shared_types, utils],
+  ../eip6110,
   ../eip7691,
   ./process_transaction,
   ./executor_helpers,
@@ -57,6 +58,7 @@ type
     blockCtx: BlockContext
     balPtr: ptr BlockAccessList
     sharedBuilder: ptr BlockAccessListBuilder
+    blooms: ptr UncheckedArray[Bloom]
     cancelled: Atomic[bool]
 
   BalParallelTxEntry = object
@@ -65,7 +67,6 @@ type
     gasUsed: GasInt
     blockExecutionGasUsed: GasInt
     blockStateGasUsed: GasInt
-    intrinsic: IntrinsicGas
     blobGasUsed: uint64
     status: bool
     logs: SharedBytes
@@ -110,12 +111,13 @@ proc recoverAndPrefetchTask*(
   vmState.gasCosts = vmState.fork.forkToSchedule
   vmState.tracer = nil
   vmState.receipts.setLen(0)
+  vmState.receiptBlooms.setLen(0)
   vmState.cumulativeGasUsed = 0
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.allLogs.setLen(0)
-  vmState.gasRefunded = 0
+  vmState.blockLogs.setLen(0)
+  vmState.refundCounter = 0
   vmState.balTracker = nil
 
   # Execute the transaction discarding the results in order to fill the in memory caches.
@@ -317,8 +319,8 @@ proc packLogs(logs: openArray[Log]): SharedBytes =
   for log in logs:
     put(unsafeAddr log.address, sizeof(Address))
     putLen(log.topics.len)
-    for topic in log.topics:
-      put(unsafeAddr topic, sizeof(Topic))
+    if log.topics.len > 0:
+      put(unsafeAddr log.topics[0], log.topics.len * sizeof(Topic))
     putLen(log.data.len)
     if log.data.len > 0:
       put(unsafeAddr log.data[0], log.data.len)
@@ -340,12 +342,14 @@ proc unpackLogs(buf: openArray[byte]): seq[Log] =
   var logs = newSeq[Log](getLen())
   for log in logs.mitems:
     get(addr log.address, sizeof(Address))
-    log.topics = newSeq[Topic](getLen())
-    for topic in log.topics.mitems:
-      get(addr topic, sizeof(Topic))
-    log.data = newSeq[byte](getLen())
-    if log.data.len > 0:
-      get(addr log.data[0], log.data.len)
+    let topicsLen = getLen()
+    if topicsLen > 0:
+      log.topics = newSeqUninit[Topic](topicsLen)
+      get(addr log.topics[0], topicsLen * sizeof(Topic))
+    let dataLen = getLen()
+    if dataLen > 0:
+      log.data = newSeqUninit[byte](dataLen)
+      get(addr log.data[0], dataLen)
 
   logs
 
@@ -389,30 +393,32 @@ proc processTxTask(
   vmState.gasCosts = vmState.fork.forkToSchedule
   vmState.tracer = nil
   vmState.receipts.setLen(0)
+  vmState.receiptBlooms.setLen(0)
   vmState.cumulativeGasUsed = 0
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.allLogs.setLen(0)
-  vmState.gasRefunded = 0
+  vmState.blockLogs.setLen(0)
+  vmState.refundCounter = 0
   if not ctx[].sharedBuilder.isNil():
     vmState.balTracker =
       BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
     vmState.balTracker.setBlockAccessIndex(e[].txIndex + 1)
 
-  let logResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
+  let txResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
     e[].error = SharedString.init(error)
     ctx[].cancelled.store(true, moRelease)
     return false
 
-  e[].gasUsed = logResult.gasUsed
+  e[].gasUsed = txResult.gasUsed
   e[].blockExecutionGasUsed = vmState.blockExecutionGasUsed
   e[].blockStateGasUsed = vmState.blockStateGasUsed
-  e[].intrinsic =
-    e[].tx[].intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
-  e[].logs = packLogs(logResult.logEntries)
+  if not ctx[].blooms.isNil():
+    calcLogsBloom(vmState.txLogs, ctx[].blooms[e[].txIndex])
+  if vmState.txLogs.len > 0:
+    e[].logs = packLogs(vmState.txLogs)
 
   true
 
@@ -439,6 +445,9 @@ proc processTransactionsParallel*(
   ctx.blockCtx = vmState.blockCtx
   ctx.balPtr = balRef[].addr
   ctx.sharedBuilder = if vmState.balTrackerEnabled: vmState.balTracker.builder else: nil
+  if not skipReceipts and n > 0:
+    doAssert vmState.receiptBlooms.len == n
+    ctx.blooms = cast[ptr UncheckedArray[Bloom]](vmState.receiptBlooms[0].addr)
 
   for i in 0 ..< n:
     entries[i].tx = transactions[i].addr
@@ -456,6 +465,8 @@ proc processTransactionsParallel*(
     for i in 0 ..< n:
       entries[i].logs.dispose()
       entries[i].error.dispose()
+
+  let depositContractAddress = vmState.com.depositContractAddress
 
   # Process each result as soon as its task completes so the main thread makes
   # progress while the remaining tasks keep running in the background.
@@ -499,16 +510,16 @@ proc processTransactionsParallel*(
           $vmState.blockExecutionGasUsed & ", stateGas=" & $vmState.blockStateGasUsed
       )
 
-    var logs = unpackLogs(entries[i].logs.data(asOpenArray = true))
-    if skipReceipts:
-      if collectLogs:
-        vmState.allLogs.add logs
+    if entries[i].logs.len > 0:
+      vmState.txLogs = unpackLogs(entries[i].logs.data(asOpenArray = true))
     else:
-      var callResult = LogResult(logEntries: move(logs))
+      vmState.txLogs.setLen(0)
+    if collectLogs:
+      vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
+
+    if not skipReceipts:
       vmState.receipts[i] =
-        vmState.makeReceipt(transactions[i].txType, callResult)
-      if collectLogs:
-        vmState.allLogs.add vmState.receipts[i].logs
+        vmState.makeReceipt(transactions[i].txType)
 
   let maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.hardFork)
   if vmState.blobGasUsed > maxBlobGasPerBlock:

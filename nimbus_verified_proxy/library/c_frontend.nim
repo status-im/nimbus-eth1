@@ -13,6 +13,8 @@ import
   beacon_chain/nimbus_binary_common,
   web3/[eth_api_types, conversions],
   ../engine/types,
+  ../engine/engine,
+  ../op/op_anchor,
   ../nimbus_verified_proxy_conf,
   ./types,
   ./utils
@@ -37,7 +39,10 @@ template callbackToC(
         if res.isErr():
           (RET_ERROR, $res.error.errType & ": " & res.error.errMsg)
         else:
-          (RET_SUCCESS, EthJson.encode(res.get()))
+          when typeof(res.get()) is void:
+            (RET_SUCCESS, "null")
+          else:
+            (RET_SUCCESS, EthJson.encode(res.get()))
 
     cb(ctx, status, alloc(response), userData)
 
@@ -69,6 +74,16 @@ proc eth_blockNumber(
 proc eth_syncing(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
   callbackToC(ctx, cb, userData):
     ctx.frontend.eth_syncing()
+
+proc nvp_eth_sync(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+  callbackToC(ctx, cb, userData):
+    ctx.engine.syncOnce()
+
+proc nvp_eth_syncInterval(
+    ctx: ptr Context, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  let intervalMs = uint64(ctx.engine.syncInterval().milliseconds)
+  cb(ctx, RET_SUCCESS, alloc(EthJson.encode(intervalMs)), userData)
 
 proc eth_getBalance(
     ctx: ptr Context,
@@ -444,6 +459,18 @@ proc op_blockNumber(
   requireOpFrontend(ctx, cb, userData)
   callbackToC(ctx, cb, userData):
     ctx.opFrontend.eth_blockNumber()
+
+proc nvp_op_sync(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  callbackToC(ctx, cb, userData):
+    ctx.opEngine.opSyncOnce(ctx.engine)
+
+proc nvp_op_syncInterval(
+    ctx: ptr Context, cb: CallBackProc, userData: pointer
+) {.exported.} =
+  requireOpFrontend(ctx, cb, userData)
+  let intervalMs = uint64(ctx.engine.syncInterval().milliseconds)
+  cb(ctx, RET_SUCCESS, alloc(EthJson.encode(intervalMs)), userData)
 
 proc op_getBalance(
     ctx: ptr Context,

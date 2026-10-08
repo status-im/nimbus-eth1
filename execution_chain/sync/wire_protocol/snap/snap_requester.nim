@@ -26,8 +26,8 @@ const
   GetTrieNodesMsg*        = 6'u64                   # snap1 only
   TrieNodesMsg*           = 7'u64                   # snap1 only
 
-  GetBlockAccessListsMsg* = 6'u64                   # overlays `GetTrieNodesMsg`
-  BlockAccessListsMsg*    = 7'u64                   # overlays `TrieNodesMsg`
+  GetBlockAccessListsMsg* = 8'u64                   # snap2 only
+  BlockAccessListsMsg*    = 9'u64                   # snap2 only
 
 
 defineProtocol(PROTO = snap1,
@@ -151,7 +151,7 @@ proc trieNodes*(
 
 proc getBlockAccessLists*(
     peer: Peer;
-    req: BlockAccessListsRequest;
+    req: SnapBalRequest;
     timeout = defaultTimeout;
       ): Future[Opt[BlockAccessListsPacket]]
       {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
@@ -159,7 +159,7 @@ proc getBlockAccessLists*(
     raiseAssert "'getBlockAccessLists' function not available for snap1"
   else:
     snap2.rlpxSendRequest(peer, timeout, GetBlockAccessListsMsg,
-      req.blockHashes)
+      req.blockHashes, req.bytes)
 
 proc blockAccessLists*(
     responder: Responder;

@@ -12,7 +12,7 @@
 
 import
   std/paths,
-  pkg/[chronicles, metrics],
+  pkg/[chronicles, metrics, stew/interval_set],
   ./[cache_db, worker_const, worker_desc]
 
 logScope:
@@ -27,12 +27,14 @@ declareGauge nec_snap_download_window, "" &
 
 proc allDownloaded(ctx: SnapCtxRef; info: static[string]): Opt[void] =
   let adb = ctx.pool.cacheDB
+
   if ctx.accUnproc.synced():                        # accounting cache active?
-    if 0 < ctx.accUnproc.chunks():
-      return err()
-  else:
-    if ?adb.hasAccMissingIntvRange(info):
-      return err()
+    if 0 < ctx.accUnproc.chunks():                  # are there data?
+      return err()                                  # .. yes
+  elif not ?adb.hasAccMissingIntv(info):            # currently not downloading
+    return err()                                    # record not allocated, yet
+  elif 0 < (?adb.getAccMissingIntv(info)).ranges.chunks:
+    return err()                                    # there are data
 
   # So, either the accounting cache is complete, od the cache DB.
   if not ?adb.hasStoMissingIntv(info) and           # storage left (or error)?
@@ -42,6 +44,12 @@ proc allDownloaded(ctx: SnapCtxRef; info: static[string]): Opt[void] =
     return ok()
   err()
 
+proc finHeadNum(ctx: SnapCtxRef; info: static[string]): BlockNumber =
+  ctx.pool.cacheDB.lastHeaderNumber(info).valueOr: 0
+
+template consHeadNum(ctx: SnapCtxRef): BlockNumber =
+  ctx.hdrCache.latestConsHeadNumber()
+
 # ------------------------------------------------------------------------------
 # Private FSA transition functions
 # ------------------------------------------------------------------------------
@@ -50,23 +58,28 @@ proc idleNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
   metrics.set(nec_snap_download_window, 0)          # initialise
   if ctx.pool.contPrevSession:
+    ctx.pool.contPrevSession = false
     return SnapResume
   SnapClear
 
 proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  let haveData = ctx.pool.cacheDB.hasAccMissingIntvRange(info).valueOr:
-    return SnapClear                                # DB problem, failure
-  if haveData and ctx.accUnproc.synced():
+  if ctx.pool.resetReq:
+    info info & ": Previous is unusable"
+    return SnapIdle
+  if ctx.accUnproc.synced() and 0 < ctx.pool.pivotNum:
     info info & ": Resuming previous session"
+    ctx.allDownloaded(info).isErrOr:
+      return SnapAssembleMpt
     return SnapBalsFetch
   info info & ": No previous session available"
-  SnapClear
+  SnapIdle
 
 proc clearNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   ## State transition handler
-  let haveData = ctx.pool.cacheDB.hasAccMissingIntvRange(info).valueOr:
-    return SnapStop                                 # DB problem, failure
+  ctx.pool.resetReq = false
+  let haveData = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr:
+    return SnapIdle                                 # DB problem, restart
   if haveData:
     return SnapClear
   SnapReady
@@ -79,6 +92,8 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   if not ctx.pool.headersSynced:
     return SnapReady
   if not ctx.accUnproc.synced():
+    return SnapReady
+  if ctx.pool.pivotNum == 0:
     return SnapReady
   SnapDownload
 
@@ -104,16 +119,16 @@ proc stateForwardNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   #
   # The supported download window range is
   # ::
-  #    consHeadNum - nConsHeadSupportWindowSize .. consHeadNum
+  #    finHeadNum - nFinHeadSupportWindowSize .. finHeadNum
   #
   # If the pivot is below the right end range the supported download window
   # range
   # ::
-  #    consHeadNum - nConsHeadSupportWindowTopMargin .. consHeadNum
+  #    finHeadNum - nFinHeadSupportWindowTopMargin .. finHeadNum
   #
   #    where
   #
-  #    nConsHeadSupportWindowTopMargin < nConsHeadSupportWindowSize
+  #    nFinHeadSupportWindowTopMargin < nFinHeadSupportWindowSize
   #
   # then more BAL data need to be fetched. This state transfers directly
   # to the `SnapBalsFetch` state so avoiding time to sync peers when
@@ -122,8 +137,8 @@ proc stateForwardNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   # Note that the `pivotNum` will be updated after the forward cycle has
   # successfully terminated.
   #
-  let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
-  if ctx.pool.pivotNum + nConsHeadSupportWindowTopMargin < consHeadNum:
+  let finHeadNum = ctx.finHeadNum info
+  if ctx.pool.pivotNum + nFinHeadSupportWindowTopMargin < finHeadNum:
     return SnapBalsFetch
   if ctx.pool.pivotNum < ctx.pool.forwardNum:       # state brought forward?
     return SnapStateForward
@@ -137,30 +152,30 @@ proc downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
     return SnapClear
 
   # Check whether one should BAL fetch and forward the downloaded partial
-  # state when the `consHead` has increased too far so that the `pivot` falls
-  # outside the download range
+  # state when the finalised head has increased too far so that the `pivot`
+  # falls outside the download range
   # ::
-  #    consHeadNum - nConsHeadSupportWindowSize .. consHeadNum
+  #    finHeadNum - nFinHeadSupportWindowSize .. finHeadNum
   #
   # i.e. the `pivotNum` is smaller than the left end of the above range.
   #
-  # This can be re-phrased as checking whether the ever increading `consHead`
+  # This can be re-phrased as checking whether the ever increading `finHead`
   # is still in the `pivot` window
   # ::
-  #    pivotNum .. pivotNum + nConsHeadSupportWindowSize
+  #    pivotNum .. pivotNum + nFinHeadSupportWindowSize
   #
-  # The constant `nConsHeadSupportWindowSize` is of size 128 and possibly
+  # The constant `nFinHeadSupportWindowSize` is of size 128 and possibly
   # some slack added.
   #
   let
-    consHeadNum = ctx.hdrCache.latestConsHeadNumber() 
-    pvTop = ctx.pool.pivotNum + nConsHeadSupportWindowSize
-  if pvTop < consHeadNum:                           # pivot window too far left?
+    finHeadNum = ctx.finHeadNum info
+    pvTop = ctx.pool.pivotNum + nFinHeadSupportWindowSize
+  if pvTop < finHeadNum:                            # pivot window too far left?
     ctx.poolMode = true
     return SnapDownloadFinish                       # => sync peers
 
-  if consHeadNum != 0:
-    let dw = (pvTop - consHeadNum).float / nConsHeadSupportWindowSize.float
+  if finHeadNum != 0:
+    let dw = (pvTop - finHeadNum).float / nFinHeadSupportWindowSize.float
     metrics.set(nec_snap_download_window, dw)
 
   ctx.allDownloaded(info).isErrOr:                  # download is complete?
@@ -173,8 +188,15 @@ proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   if ctx.poolMode:                                  # wait for peers to sync
     return SnapDownloadFinish
   metrics.set(nec_snap_download_window, 0)          # download window done
-  ctx.allDownloaded(info).isErrOr:                  # download is complete?
+
+  # Make sure that a BAL is available for the current pivot.
+  if ctx.pool.forwardNum == 0:
+    return SnapBalsFetch
+
+  # Check whether the download is complete
+  ctx.allDownloaded(info).isErrOr:
     return SnapAssembleMpt
+
   SnapBalsFetch
 
 # -------------------------
@@ -183,13 +205,11 @@ proc assembleMptNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.resetReq:                             # Oops, something failed
     return SnapClear
-  if 0 < ctx.pool.coreDb2Path.string.len:
-    return SnapStop                                 # FIXME, must change
+  if 0 < ctx.pool.newCoreDb.newDbPath.len:
+    return SnapStop
   # Reaching here would be quite unusual as this state is handled
   # by the deamon in the foreground.
   SnapAssembleMpt
-
-# TBD ..
 
 func stopNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   SnapStop
@@ -204,34 +224,31 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   #
   # State machine
   # ::
-  #                         idle --------------.
-  #                           |                |
-  #                           v                v
-  #                        resume -----+---> clear <---.
-  #                           |        |       |       |
-  #                           v        |       v       |
-  #                .----> balsFetch ---'     ready     |
-  #                |          |                |       |
-  #                |          v                |       |
-  #                |    balsFetchFinish        |       |
-  #                |          |                |       |
-  #                |          v                |       |
-  #                +---- stateForward          |       |
-  #                |          |                |       |
-  #                |          v                |       |
-  #                |       download <----------'       |
-  #                |          |                        |
-  #                |          v                        |
-  #                `--- downloadFinish                 |
-  #                           |                        |
-  #                           v                        |
-  #                       assembleMpt -----------------'
-  #                           |
-  #                           v
-  #                         [...]
-  #                           |
-  #                           v
-  #                         stop
+  #               .------------> idle ------------.
+  #               |                |              |
+  #                \               v              |
+  #                 +---------- resume            |
+  #                /               |              |
+  #               |                v              v
+  #               |    .--+--> balsFetch -----> clear <---.
+  #               |    |  |        |              |       |
+  #               |    |  |        v              V       |
+  #               |    |  |  balsFetchFinish    ready     |
+  #               |    |  |        |              |       |
+  #               |    |  |        v              |       |
+  #               |    |  `-- stateForward        |       |
+  #               |    |           |              |       |
+  #               |    |           v              |       |
+  #               |    |        download <--------'       |
+  #               |    |           |                      |
+  #               |    |           v                      |
+  #               |    `---- downloadFinish               |
+  #               |                |                      |
+  #               |                v                      |
+  #               `----------> assembleMpt ---------------'
+  #                                |
+  #                                v
+  #                              stop
   #
   let newState =
     case ctx.pool.syncState:
@@ -255,9 +272,6 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
       ctx.stateForwardNext info
     of SnapAssembleMpt:
       ctx.assembleMptNext info
-
-    # [..]
-
     of SnapStop:
       ctx.stopNext info
 
@@ -270,12 +284,13 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   case newState:
   of SnapReady, SnapDownload, SnapDownloadFinish, SnapAssembleMpt:
     chronicles.info info & ": State changed", prevState, newState,
-      pivot=ctx.pool.pivotNum, consHead=ctx.hdrCache.latestConsHeadNumber(),
-      nSyncPeers=ctx.nSyncPeers()
+      pivot=ctx.pool.pivotNum, finHead=ctx.finHeadNum(info),
+      consHead=ctx.consHeadNum(), nSyncPeers=ctx.nSyncPeers()
   of SnapBalsFetch, SnapBalsFetchFinish, SnapStateForward:
     chronicles.info info & ": State changed", prevState, newState,
       pivot=ctx.pool.pivotNum, forward=ctx.pool.forwardNum,
-      consHead=ctx.hdrCache.latestConsHeadNumber(), nSyncPeers=ctx.nSyncPeers()
+      finHead=ctx.finHeadNum(info), consHead=ctx.consHeadNum(),
+      nSyncPeers=ctx.nSyncPeers()
   of SnapIdle, SnapResume, SnapClear, SnapStop:
     chronicles.info info & ": State changed", prevState, newState,
       nSyncPeers=ctx.nSyncPeers()

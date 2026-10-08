@@ -13,6 +13,7 @@
 import
   ../evm/code_bytes,
   ../constants,
+  ./pubkey_recovery,
   results,
   stew/assign2,
   eth/common/eth_types,
@@ -41,13 +42,10 @@ func authority*(auth: Authorization): Opt[Address] =
   assign(bytes.toOpenArray(32, 63), auth.s.toBytesBE())
   bytes[64] = auth.yParity.byte
 
-  let sig = Signature.fromRaw(bytes).valueOr:
+  let pubkey = recoverPubkeyRaw(sigHash, bytes).valueOr:
     return Opt.none(Address)
 
-  let pubkey = recover(sig, SkMessage(sigHash.data)).valueOr:
-    return Opt.none(Address)
-
-  ok(pubkey.toCanonicalAddress())
+  ok(keccak256(pubkey).to(Address))
 
 func isDelegation*(code: openArray[byte]): bool =
   ## Returns true if `code` is a well-formed EIP-7702 delegation designator: the

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,14 +44,19 @@ func readData(name string) (json.RawMessage, error) {
 	return json.RawMessage(data), nil
 }
 
-func execTransport(_ string, method, _ string) (json.RawMessage, error) {
+const optimisticBlockHash = "0x5b34070154b4331237ca3975de14df77359f7269a65b95d01b0e81c626e3151d"
+
+func execTransport(_ string, method, params string) (json.RawMessage, error) {
 	switch method {
 	case "eth_getBlockByNumber", "eth_getBlockByHash":
-		data, err := readData("block_0x17a2d23.json")
+		file := "block_0x17a2d23.json"
+		if strings.Contains(params, "0x17a2d65") || strings.Contains(params, optimisticBlockHash) {
+			file = "block_0x17a2d65.json"
+		}
+		data, err := readData(file)
 		if err != nil {
 			return nil, err
 		}
-		// the library expects the JSON-RPC response envelope verbatim
 		return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":` + string(data) + `}`), nil
 	}
 	return nil, fmt.Errorf("exec: no mock for %s", method)
@@ -75,13 +81,39 @@ func TestVerifProxy(t *testing.T) {
 	require.NotNil(t, ctx)
 	defer ctx.Stop()
 
+	_, err = ctx.CallRpc("eth_blockNumber", "[]", callTimeout)
+	require.Error(t, err)
+
+	syncing, err := ctx.CallRpc("eth_syncing", "[]", callTimeout)
+	require.NoError(t, err)
+	require.NotEmpty(t, syncing)
+
+	interval, err := ctx.SyncInterval(callTimeout)
+	require.NoError(t, err)
+	require.Equal(t, 12*time.Second, interval)
+	require.NoError(t, ctx.Sync(callTimeout))
+
+	_, err = ctx.OpSyncInterval(callTimeout)
+	require.Error(t, err)
+	require.Error(t, ctx.OpSync(callTimeout))
+
+	blockNumber, err := ctx.CallRpc("eth_blockNumber", "[]", callTimeout)
+	require.NoError(t, err)
+	require.NotEmpty(t, blockNumber)
+
+	syncing, err = ctx.CallRpc("eth_syncing", "[]", callTimeout)
+	require.NoError(t, err)
+	require.NotEmpty(t, syncing)
+
 	for _, method := range []string{"eth_gasPrice", "eth_maxPriorityFeePerGas"} {
 		result, err := ctx.CallRpc(method, "[]", callTimeout)
 		require.NoError(t, err, method)
 		require.NotEmpty(t, result, method)
 	}
 
-	result, err := ctx.CallRpc("eth_getBlockByNumber", `["latest", false]`, callTimeout)
-	require.NoError(t, err)
-	require.NotEmpty(t, result)
+	for _, tag := range []string{"latest", "finalized"} {
+		result, err := ctx.CallRpc("eth_getBlockByNumber", `["`+tag+`", false]`, callTimeout)
+		require.NoError(t, err, tag)
+		require.NotEmpty(t, result, tag)
+	}
 }

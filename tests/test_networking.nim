@@ -10,11 +10,11 @@
 import
   ./networking/test_auth,
   ./networking/test_crypt,
-  ./networking/test_discoveryv4,
   ./networking/test_eth1_discovery,
   ./networking/test_ecies,
   ./networking/test_bootnodes,
   ./networking/test_rlpx_thunk,
   ./networking/test_rlpxtransport,
   ./networking/test_devp2p_eth71,
+  ./networking/test_peer_limits,
   ./networking/test_tx_broadcast

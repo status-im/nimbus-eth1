@@ -328,6 +328,7 @@ proc run*(
 
   engine.state = EngineState(archive: useArchive)
 
+  ctx.engine = engine
   ctx.frontend = engine.getExecutionApiFrontend()
 
   opParams.isErrOr:
@@ -346,7 +347,6 @@ proc run*(
       accountCacheLen = config.accountCacheLen,
       codeCacheLen = config.codeCacheLen,
       storageCacheLen = config.storageCacheLen,
-      anchor = blockId("safe"),
     ).valueOr:
       raise newException(ProxyError, "Couldn't initialize OP verification engine")
 
@@ -371,7 +371,8 @@ proc run*(
         )
         info "Connected to L2 execution backend", url
 
-    ctx.opFrontend = getExecutionApiFrontend(l2Engine, engine)
+    ctx.opEngine = l2Engine
+    ctx.opFrontend = getOpExecutionApiFrontend(l2Engine, engine)
 
 proc startVerifProxy(
     configJson: cstring,

@@ -17,7 +17,7 @@ import
   ../networking/p2p,
   ./beacon/worker/headers/headers_target,
   ./beacon/[beacon_desc, worker],
-  ./beacon/worker/[classify, update],
+  ./beacon/worker/[classify, start_stop, update],
   ./[sync_sched, wire_protocol]
 
 export
@@ -151,21 +151,14 @@ proc configTicker*(desc: BeaconSyncRef, enable: bool) =
 # -----------------
 
 proc start*(desc: BeaconSyncRef; standBy = false): bool =
-  ## This function returns `true` exactly if the run state could be changed.
-  ## The following expressions are equivalent:
-  ## * desc.start(true)
-  ## * desc.start(false) and desc.start(true)
+  ## This function returns `true` if the current stand-by mode is available.
+  ## Once started, this mode cannot be changed.
   ##
   doAssert not desc.ctx.isNil
-  let save = desc.ctx.pool.standByMode
-  desc.ctx.pool.standByMode = standBy
-  # The `resetSync()` directive prevents from accidential re-initialising
-  # after shut down (e.g. via `singleRun()`.)  This has no effect on the
-  # first `startSync()` directive.
-  discard desc.resetSync()
-  if desc.startSync(standBy):
-    return true
-  desc.ctx.pool.standByMode = save
+  if desc.ctx.pool.hdrCache.isNil:
+    if desc.startSync(standBy):
+      desc.ctx.pool.standByMode = standBy
+      return true
   # false
 
 proc singleRun*(

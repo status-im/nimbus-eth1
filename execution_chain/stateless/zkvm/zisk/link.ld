@@ -49,19 +49,19 @@ MEMORY
   ram (rw)  : ORIGIN = 0xa0030000, LENGTH = 0x1ffc0000
 }
 
-/* The standard's only hard rule here is W^X: no segment both writable and
- * executable. Read-only data is allowed to share the executable segment
- * (PF_X|PF_R), so the separate rodata segment below is not required. But it
- * is cleaner as it leaves .rodata out of executable memory, which some zkVM
- * might demand anyway.
+/* The standard builds the loaded image from the program headers rather than
+ * the section headers, and requires W^X. An executable segment is then either
+ * PF_X or PF_X|PF_R, and a zkVM takes only one of the two. ZisK takes PF_X,
+ * warning "execute-and-not-read" on anything else, since it initialises every
+ * readable ROM word into the memory trace: a readable `.text` pays for the
+ * whole image as data that is never loaded.
  *
- * ZisK ignores this block: its loader (`core/src/elf_extraction.rs`) builds the
- * memory image from section flags, which the standard forbids. So the PHDRS are
- * for conformance only, here the section flags decide.
+ * So `.text` must hold instructions and nothing the program reads, which the
+ * standard asks be confirmed post-link. Done for this build.
  */
 PHDRS
 {
-  text   PT_LOAD FLAGS(5); /* r-x */
+  text   PT_LOAD FLAGS(1); /* --x */
   rodata PT_LOAD FLAGS(4); /* r-- */
   data   PT_LOAD FLAGS(6); /* rw- */
   bss    PT_LOAD FLAGS(6); /* rw- */
