@@ -97,6 +97,15 @@ type
   FrameMark = object
     journalLen: int32
 
+  # Entries in insertion order with an open addressing index over them, so
+  # that an entry can be referred to by its position. Keys live in the entries;
+  # a bucket holds a position + 1, 0 being empty. Entries are only ever removed
+  # from the end, which keeps every older entry's probe sequence intact under
+  # linear probing.
+  PosTable[K, E] = object
+    entries: seq[E]
+    buckets: seq[int32]
+
   # Tracks state changes during transaction execution for block access list
   # construction. This tracker coordinates with the BlockAccessListBuilder to
   # record all state changes made during block execution. It ensures that only
@@ -108,10 +117,8 @@ type
     currentBlockAccessIndex*: int
       ## The current block access index (0 for pre-execution,
       ## 1..n for transactions, n+1 for post-execution).
-    accounts: seq[AccountEntry]
-    accountBuckets: seq[int32] ## account index: position + 1, 0 is empty
-    storage: seq[StorageEntry]
-    storageBuckets: seq[int32] ## storage index: position + 1, 0 is empty
+    accounts: PosTable[Address, AccountEntry]
+    storage: PosTable[StorageKey, StorageEntry]
     journal: seq[JournalEntry]
     codes: seq[seq[byte]] ## code bytes referred to by the account entries
     lastAccount: int32 ## entry of the most recently resolved address, or -1
@@ -122,157 +129,134 @@ type
 const
   initialBuckets = 64
 
-func addrHash(address: Address): uint64 =
-  uint64(hash(address))
+func indexHash(address: Address): uint64 =
+  cast[uint64](hash(address))
 
-func storageHash(key: StorageKey): uint64 =
+func indexHash(key: StorageKey): uint64 =
   # The slot bytes hashed with the address hash as the seed, so that the pair
   # costs one hash call and inherits whatever seeding the address hash has.
-  rapidhashNano(cast[ptr array[32, byte]](unsafeAddr key.slot)[], addrHash(key.address))
+  rapidhashNano(cast[ptr array[32, byte]](unsafeAddr key.slot)[], indexHash(key.address))
+
+template indexKey(e: AccountEntry): Address =
+  e.address
+
+template indexKey(e: StorageEntry): StorageKey =
+  e.key
+
+func init(T: type AccountEntry, address: Address, bucket: int32): T =
+  AccountEntry(
+    address: address, bucket: bucket, preCode: -1, postCode: -1, lastBalanceJournal: -1
+  )
+
+func init(T: type StorageEntry, key: StorageKey, bucket: int32): T =
+  StorageEntry(key: key, bucket: bucket, lastJournal: -1)
 
 template dataPtr[T](s: seq[T]): ptr UncheckedArray[T] =
   cast[ptr UncheckedArray[T]](unsafeAddr s[0])
 
 # ------------------------------------------------------------------------------
-# Account and storage entry lookup
+# Position table
 # ------------------------------------------------------------------------------
 
-proc rehashAccounts(tracker: BlockAccessListTrackerRef, size: int) =
-  tracker.accountBuckets = newSeq[int32](size)
+template len(t: PosTable): int =
+  t.entries.len
+
+template `[]`(t: PosTable, pos: SomeInteger): untyped =
+  t.entries[pos]
+
+iterator items[K, E](t: PosTable[K, E]): lent E =
+  for i in 0 ..< t.entries.len:
+    yield t.entries[i]
+
+proc rehash[K, E](t: var PosTable[K, E], size: int) =
+  t.buckets = newSeq[int32](size)
   let
     mask = uint64(size - 1)
-    bk = tracker.accountBuckets.dataPtr()
-  for i in 0 ..< tracker.accounts.len:
-    var b = int(addrHash(tracker.accounts[i].address) and mask)
+    bk = t.buckets.dataPtr()
+  for i in 0 ..< t.entries.len:
+    var b = int(indexHash(t.entries[i].indexKey) and mask)
     while bk[b] != 0:
       b = int((uint64(b) + 1) and mask)
     bk[b] = int32(i + 1)
-    tracker.accounts[i].bucket = int32(b)
+    t.entries[i].bucket = int32(b)
+
+proc getOrAdd[K, E](t: var PosTable[K, E], key: K): tuple[pos: int32, added: bool] {.inline.} =
+  ## Position of the key's entry, adding a fresh one if there is none. The
+  ## load stays below one half.
+  mixin init
+  if t.buckets.len == 0:
+    t.buckets = newSeq[int32](initialBuckets)
+  elif (t.entries.len + 1) * 2 > t.buckets.len:
+    t.rehash(t.buckets.len * 2)
+
+  let
+    mask = uint64(t.buckets.len - 1)
+    bk = t.buckets.dataPtr()
+  var b = int(indexHash(key) and mask)
+  while true:
+    let e = bk[b]
+    if e == 0:
+      let pos = int32(t.entries.len)
+      t.entries.add(E.init(key, int32(b)))
+      bk[b] = pos + 1
+      return (pos, true)
+    if t.entries[e - 1].indexKey == key:
+      return (e - 1, false)
+    b = int((uint64(b) + 1) and mask)
+
+proc find[K, E](t: PosTable[K, E], key: K): int32 {.inline.} =
+  ## Position of the key's entry, or -1.
+  if t.buckets.len == 0:
+    return -1
+  let
+    mask = uint64(t.buckets.len - 1)
+    bk = t.buckets.dataPtr()
+  var b = int(indexHash(key) and mask)
+  while true:
+    let e = bk[b]
+    if e == 0:
+      return -1
+    if t.entries[e - 1].indexKey == key:
+      return e - 1
+    b = int((uint64(b) + 1) and mask)
+
+proc truncate[K, E](t: var PosTable[K, E], len: int) =
+  ## Drop the entries after the first `len`, clearing their buckets.
+  for i in len ..< t.entries.len:
+    t.buckets[t.entries[i].bucket] = 0
+  t.entries.setLen(len)
+
+# ------------------------------------------------------------------------------
+# Account and storage entry lookup
+# ------------------------------------------------------------------------------
 
 proc accountEntry(tracker: BlockAccessListTrackerRef, address: Address): int32 =
   ## Position of the account's entry, creating an untouched one if new.
   # Accesses cluster on one account, the current target of the call frame.
   if tracker.lastAccount >= 0 and tracker.accounts[tracker.lastAccount].address == address:
     return tracker.lastAccount
-
-  if tracker.accountBuckets.len == 0:
-    tracker.accountBuckets = newSeq[int32](initialBuckets)
-  elif (tracker.accounts.len + 1) * 2 > tracker.accountBuckets.len:
-    tracker.rehashAccounts(tracker.accountBuckets.len * 2)
-
-  let
-    mask = uint64(tracker.accountBuckets.len - 1)
-    bk = tracker.accountBuckets.dataPtr()
-  var b = int(addrHash(address) and mask)
-  while true:
-    let e = bk[b]
-    if e == 0:
-      result = int32(tracker.accounts.len)
-      tracker.accounts.add(
-        AccountEntry(
-          address: address,
-          bucket: int32(b),
-          preCode: -1,
-          postCode: -1,
-          lastBalanceJournal: -1,
-        )
-      )
-      bk[b] = result + 1
-      tracker.lastAccount = result
-      return
-    if tracker.accounts[e - 1].address == address:
-      tracker.lastAccount = e - 1
-      return e - 1
-    b = int((uint64(b) + 1) and mask)
+  result = tracker.accounts.getOrAdd(address).pos
+  tracker.lastAccount = result
 
 proc findAccount(tracker: BlockAccessListTrackerRef, address: Address): int32 =
-  ## Position of the account's entry, or -1.
-  if tracker.accountBuckets.len == 0:
-    return -1
-  let
-    mask = uint64(tracker.accountBuckets.len - 1)
-    bk = tracker.accountBuckets.dataPtr()
-  var b = int(addrHash(address) and mask)
-  while true:
-    let e = bk[b]
-    if e == 0:
-      return -1
-    if tracker.accounts[e - 1].address == address:
-      return e - 1
-    b = int((uint64(b) + 1) and mask)
-
-proc rehashStorage(tracker: BlockAccessListTrackerRef, size: int) =
-  tracker.storageBuckets = newSeq[int32](size)
-  let
-    mask = uint64(size - 1)
-    bk = tracker.storageBuckets.dataPtr()
-  for i in 0 ..< tracker.storage.len:
-    var b = int(storageHash(tracker.storage[i].key) and mask)
-    while bk[b] != 0:
-      b = int((uint64(b) + 1) and mask)
-    bk[b] = int32(i + 1)
-    tracker.storage[i].bucket = int32(b)
+  tracker.accounts.find(address)
 
 proc storageEntry(tracker: BlockAccessListTrackerRef, key: StorageKey): int32 =
   ## Position of the slot's entry, creating one that is neither read nor
   ## written if new.
-  if tracker.storageBuckets.len == 0:
-    tracker.storageBuckets = newSeq[int32](initialBuckets)
-  elif (tracker.storage.len + 1) * 2 > tracker.storageBuckets.len:
-    tracker.rehashStorage(tracker.storageBuckets.len * 2)
-
-  let
-    mask = uint64(tracker.storageBuckets.len - 1)
-    bk = tracker.storageBuckets.dataPtr()
-  var b = int(storageHash(key) and mask)
-  while true:
-    let e = bk[b]
-    if e == 0:
-      result = int32(tracker.storage.len)
-      let account = tracker.accountEntry(key.address)
-      tracker.storage.add(
-        StorageEntry(key: key, bucket: int32(b), account: account, lastJournal: -1)
-      )
-      bk[b] = result + 1
-      return
-    if tracker.storage[e - 1].key == key:
-      return e - 1
-    b = int((uint64(b) + 1) and mask)
+  let (pos, added) = tracker.storage.getOrAdd(key)
+  if added:
+    let account = tracker.accountEntry(key.address)
+    tracker.storage[pos].account = account
+  pos
 
 proc findStorage(tracker: BlockAccessListTrackerRef, key: StorageKey): int32 =
-  ## Position of the slot's entry, or -1.
-  if tracker.storageBuckets.len == 0:
-    return -1
-  let
-    mask = uint64(tracker.storageBuckets.len - 1)
-    bk = tracker.storageBuckets.dataPtr()
-  var b = int(storageHash(key) and mask)
-  while true:
-    let e = bk[b]
-    if e == 0:
-      return -1
-    if tracker.storage[e - 1].key == key:
-      return e - 1
-    b = int((uint64(b) + 1) and mask)
-
-proc truncateAccounts(tracker: BlockAccessListTrackerRef, len: int) =
-  ## Drop the account entries created after the first `len`. Entries are only
-  ## ever removed from the end, which keeps every older entry's probe sequence
-  ## intact under linear probing.
-  for i in len ..< tracker.accounts.len:
-    tracker.accountBuckets[tracker.accounts[i].bucket] = 0
-  tracker.accounts.setLen(len)
-  if tracker.lastAccount >= len:
-    tracker.lastAccount = -1
-
-proc truncateStorage(tracker: BlockAccessListTrackerRef, len: int) =
-  for i in len ..< tracker.storage.len:
-    tracker.storageBuckets[tracker.storage[i].bucket] = 0
-  tracker.storage.setLen(len)
+  tracker.storage.find(key)
 
 proc clearTransaction(tracker: BlockAccessListTrackerRef) =
-  tracker.truncateAccounts(0)
-  tracker.truncateStorage(0)
+  tracker.accounts.truncate(0)
+  tracker.lastAccount = -1
+  tracker.storage.truncate(0)
   tracker.journal.setLen(0)
   tracker.codes.setLen(0)
   tracker.frames.setLen(0)
