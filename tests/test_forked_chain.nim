@@ -22,7 +22,7 @@ import
   ../execution_chain/utils/utils,
   ../execution_chain/core/chain/forked_chain,
   ../execution_chain/core/tx_pool,
-  ../hive_integration/tx_sender,
+  ./transaction/tx_sender,
   ../execution_chain/core/chain/forked_chain/chain_desc,
   ../execution_chain/core/chain/forked_chain/chain_serialize,
   ../execution_chain/core/chain/forked_chain/chain_branch,
