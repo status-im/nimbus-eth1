@@ -386,9 +386,8 @@ suite "TxFrame blobify round-trip":
     check db.getTransactionByIndex(exclusive.header.txRoot, 0).isErr
     check not db.hasKey(transactionHashToBlockKey(
       exclusive.transactions[0].computeRlpHash).toOpenArray)
-    check db.hasKey(transactionHashToBlockKey(
-      canonical.transactions[0].computeRlpHash).toOpenArray)
-    check chain.memoryTransaction(canonical.transactions[0].computeRlpHash).isSome
+    check chain.txDetailsByTxHash(canonical.transactions[0].computeRlpHash).
+      get == (hash, 0'u64)
     check not db.hasKey(genericHashKey(shared.header.computeBlockHash).toOpenArray)
     check not db.hasKey(genericHashKey(exclusive.header.computeBlockHash).toOpenArray)
 
@@ -417,8 +416,10 @@ suite "TxFrame blobify round-trip":
     check (waitFor chain.forkChoice(canonicalHash, canonicalHash)).isOk
 
     let hash = survivor.transactions[0].computeRlpHash
-    check chain.baseTxFrame.getTransactionKey(hash).get.blockNumber == 2
-    check chain.memoryTransaction(hash).get[1] == 2
+    # Above base, the tx lookup is in memory only
+    check chain.baseTxFrame.getTransactionKey(hash).get.blockNumber == 0
+    check chain.txDetailsByTxHash(hash).get ==
+      (survivor.header.computeBlockHash, 0'u64)
     check chain.baseTxFrame.getEthBlock(survivor.header.computeBlockHash).
       get.transactions == survivor.transactions
     check chain.baseTxFrame.getBlockHeader(dead.header.computeBlockHash).isErr

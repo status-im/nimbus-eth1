@@ -21,6 +21,10 @@ type
     hash*    : Hash32
     parent*  : BlockRef
 
+    txHashes*: seq[Hash32]
+      # In block order. The tx lookup on disk covers base and below only,
+      # this is the lookup for blocks above base.
+
     isFinalized*: bool
 
 template number*(b: BlockRef): BlockNumber =

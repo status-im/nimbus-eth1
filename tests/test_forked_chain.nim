@@ -121,24 +121,16 @@ proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block, extraD
   blk
 
 template checkHeadHash(chain: ForkedChainRef, hashParam: Hash32) =
-  let
-    headHash = hashParam
-    txFrame = chain.txFrame(headHash)
-    res = txFrame.getCanonicalHeaderHash()
-
+  # The head is FC state, the canonical head on disk is the base
+  let headHash = hashParam
+  check chain.fcuHead.hash == headHash
+  check chain.headerByHash(headHash).isOk
+  let res = chain.baseTxFrame.getCanonicalHeaderHash()
   check res.isOk
   if res.isErr:
     debugEcho "Canonical head hash should exists: ", res.error
   else:
-    let canonicalHeadHash = res.get
-    check headHash == canonicalHeadHash
-
-  # also check if the header actually exists
-  check txFrame.getCanonicalHead().isOk
-  let rc = txFrame.fcuHead()
-  check rc.isOk
-  if rc.isErr:
-    debugEcho "FCU HEAD: ", rc.error
+    check res.get == chain.baseHash
 
 func blockHash(x: Block): Hash32 =
   x.header.computeBlockHash
@@ -518,11 +510,8 @@ suite "ForkedChainRef tests":
     # head - baseDistance must been persisted
     checkPersisted(chain, blk3)
 
-    # It is FC module who is responsible for saving
-    # finalized hash on a correct txFrame.
-    let txFrame = chain.txFrame(blk6.blockHash)
-    let savedFinalized = txFrame.fcuFinalized().expect("OK")
-    check blk6.blockHash == savedFinalized.hash
+    # Finalized is FC state, carried by the blocks' finalized markers
+    check checkFinalizedMarkers(chain, blk6.blockHash)
 
     # make sure aristo not wipe out baggage
     check chain.wdWritten(blk3) == 3
@@ -1330,9 +1319,9 @@ suite "ForkedChainRef tests":
     for b in [B4, B5, B6]:
       check db.put(blockHashToWitnessKey(b.blockHash).toOpenArray, [1'u8]).isOk
       check db.put(blockHashToBlockAccessListKey(b.blockHash).toOpenArray, [1'u8]).isOk
-    # Only the head's lineage owns the number index, make the fork the head
+    # Make the fork the head before finality prunes it
     checkForkChoice(chain, B6, blk3)
-    check db.getBlockHash(4).expect("warm block hash cache") == B4.blockHash
+    check db.getBlockHash(4).isErr # above base, looked up in memory
 
     checkForkChoice(chain, blk4, blk4)
     check chain.heads.len == 1
@@ -1344,7 +1333,9 @@ suite "ForkedChainRef tests":
         check not db.hasKey(key.toOpenArray)
     check not db.hasKey(withdrawalsKey(B5.header.withdrawalsRoot.get).toOpenArray)
     check not db.hasKey(withdrawalsKey(B6.header.withdrawalsRoot.get).toOpenArray)
-    check db.getBlockHash(4).expect("canonical block") == blk4.blockHash
+    check chain.headerByNumber(4).expect("canonical block").computeBlockHash ==
+      blk4.blockHash
+    check db.getBlockHash(4).isErr
     check db.getBlockHash(5).isErr
     check db.getBlockHash(6).isErr
     check chain.wdWritten(blk4) == 4 # B4 used exactly the same withdrawals
@@ -1562,6 +1553,27 @@ suite "ForkedChainRef tests":
     check not db.hasKey(fcStateKey(1).toOpenArray)
     check db.hasKey(hashIndexKey(root, 0))
 
+  test "head markers are FC state, a restart without a snapshot starts at base":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7]:
+      checkImportBlock(chain, blk)
+    check (waitFor chain.forkChoice(
+      blk7.blockHash, blk5.blockHash, blk6.blockHash)).isOk
+    check chain.baseHash == blk4.blockHash
+    check chain.fcuHead.hash == blk7.blockHash
+    check chain.fcuSafe.hash == blk6.blockHash
+    # The canonical head on disk follows base, the head lives in memory
+    check chain.baseTxFrame.getCanonicalHeaderHash().expect("on disk") ==
+      blk4.blockHash
+
+    # Restart without a snapshot, as after a crash
+    let restarted = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    check restarted.baseHash == blk4.blockHash
+    check restarted.fcuHead.hash == blk4.blockHash
+    check restarted.fcuSafe.hash == blk4.blockHash
+
   test "fcu with empty fin":
     const info = "setHead finalized"
     let com = env.newCom()
@@ -1707,13 +1719,15 @@ type
     xp   : TxPoolRef
     mx   : TxSender
 
-proc setupFcTxEnv(): FcTxEnv =
+proc setupFcTxEnv(baseDistance = 128'u64, persistBatchSize = 4'u64): FcTxEnv =
   ## `ForkedChain` + a real tx pool, so assembled blocks carry real txs.
+  ## The defaults are the ones of `ForkedChainRef.init`.
   let
     params = setupEnv().params
     mx     = TxSender.new(params, 5)   # funds its accounts in `params` - first!
     com    = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
-    chain  = ForkedChainRef.init(com)
+    chain  = ForkedChainRef.init(com,
+      baseDistance = baseDistance, persistBatchSize = persistBatchSize)
     xp     = TxPoolRef.new(chain)
 
   xp.feeRecipient = address"0000000000000000000000000000000000000212"
@@ -1803,8 +1817,7 @@ suite "ForkedChain transactions shared between branches":
     check chain.txDetailsByTxHash(bOnly).isErr
 
   test "tx index of an in-memory block survives a serialize round trip":
-    # The index used to ride in the serialized FC state; now it rides in the
-    # per-block txFrame blob.
+    # The tx hashes of in-memory blocks are recomputed from their bodies
     let
       env   = setupFcTxEnv()
       chain = env.chain
@@ -1833,3 +1846,56 @@ suite "ForkedChain transactions shared between branches":
       debugEcho "TX NOT FOUND AFTER RESTART: ", res.error
 
     check fc.memoryTxHashesForBlock(blk2.blockHash) == Opt.some(@[txHash])
+
+  test "disk number and tx indexes cover only base and below":
+    # Blocks above base are looked up in memory. Fork choice must not write
+    # their number or tx lookups to disk, moving the base writes them once.
+    let
+      env   = setupFcTxEnv(baseDistance = 1, persistBatchSize = 1)
+      chain = env.chain
+
+    template diskHash(n: uint64): Result[Hash32, string] =
+      # A fresh frame has no branch resolver, it reads the disk index only
+      env.com.db.baseTxFrame().getBlockHash(BlockNumber n)
+    template diskTxNumber(txHash: Hash32): BlockNumber =
+      env.com.db.baseTxFrame().getTransactionKey(txHash).
+        expect("tx lookup").blockNumber
+
+    # genesis - blk1 -+- A2(shared) - A3
+    #                 |
+    #                 +- B2(shared, bOnly) - B3
+    let blk1 = env.assemble(chain.latestHash, 1)
+    checkImportBlock(chain, blk1)
+    let shared = env.addTx(3)
+    let A2 = env.assemble(blk1.blockHash, 2)
+    checkImportBlock(chain, A2)
+    let bOnly = env.addTx(4)
+    let B2 = env.assemble(blk1.blockHash, 3)
+    checkImportBlock(chain, B2)
+    env.xp.removeNewBlockTxs(B2)
+    let A3 = env.assemble(A2.blockHash, 4)
+    checkImportBlock(chain, A3)
+    let B3 = env.assemble(B2.blockHash, 5)
+    checkImportBlock(chain, B3)
+    check B2.transactions.len == 2
+
+    # Head on B, base moves to blk1
+    checkForkChoice(chain, B3, blk1)
+    check chain.baseNumber == 1
+    check diskHash(1).expect("base on disk") == blk1.blockHash
+    check diskHash(2).isErr
+    check diskHash(3).isErr
+    check diskTxNumber(shared) == 0
+    check diskTxNumber(bOnly) == 0
+    check chain.headerByNumber(2).expect("in memory").computeBlockHash == B2.blockHash
+    check chain.txDetailsByTxHash(bOnly).expect("in memory")[0] == B2.blockHash
+
+    # Head and finality on A prune B, base moves to A2
+    checkForkChoice(chain, A3, A2)
+    check chain.baseNumber == 2
+    check diskHash(2).expect("base on disk") == A2.blockHash
+    check diskHash(3).isErr
+    check diskTxNumber(shared) == 2
+    check diskTxNumber(bOnly) == 0
+    check chain.txDetailsByTxHash(shared).expect("on disk")[0] == A2.blockHash
+    check chain.txDetailsByTxHash(bOnly).isErr

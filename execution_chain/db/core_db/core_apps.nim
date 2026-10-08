@@ -263,6 +263,7 @@ proc persistTransactions*(
     blockNumber: BlockNumber;
     txRoot: Hash32;
     transactions: openArray[Transaction];
+    txHashToBlock = true;
       ): seq[Hash32] {.discardable.} =
   const
     info = "persistTransactions()"
@@ -273,8 +274,6 @@ proc persistTransactions*(
     var encodedTx = rlp.encode(tx)
     let
       txHash = keccak256(encodedTx)
-      blockKey = transactionHashToBlockKey(txHash)
-      txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
       key = hashIndexKey(txRoot, idx.uint16)
 
     txHashes.add txHash
@@ -282,9 +281,13 @@ proc persistTransactions*(
     db.putMove(key, encodedTx).isOkOr:
       raiseAssert info & ": " & $$error
 
-    var encodedTxKey = rlp.encode(txKey)
-    db.putMove(blockKey.toOpenArray, encodedTxKey).isOkOr:
-      raiseAssert info & ": " & $$error
+    if txHashToBlock:
+      let
+        blockKey = transactionHashToBlockKey(txHash)
+        txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
+      var encodedTxKey = rlp.encode(txKey)
+      db.putMove(blockKey.toOpenArray, encodedTxKey).isOkOr:
+        raiseAssert info & ": " & $$error
 
   move(txHashes)
 

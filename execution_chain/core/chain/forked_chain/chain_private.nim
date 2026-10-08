@@ -29,11 +29,12 @@ proc writeBaggage*(
     txFrame: CoreDbTxRef,
     receipts: openArray[StoredReceipt],
     generatedBal: Opt[BlockAccessListRef],
-) =
+): seq[Hash32] =
   template header(): Header =
     blk.header
 
-  txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
+  var txHashes = txFrame.persistTransactions(
+    header.number, header.txRoot, blk.transactions, txHashToBlock = false)
   txFrame.persistReceipts(header.receiptsRoot, receipts)
   discard txFrame.persistUncles(blk.uncles)
 
@@ -53,6 +54,8 @@ proc writeBaggage*(
       blkHash,
       generatedBal.get(),
     )
+
+  move(txHashes)
 
 proc getVmState(
     c: ForkedChainRef,
@@ -101,7 +104,7 @@ proc processBlock*(
     blockAccessList: Opt[BlockAccessListRef],
     blkHash: Hash32,
     finalized: bool,
-): Result[void, string] =
+): Result[seq[Hash32], string] =
   template header(): Header =
     blk.header
 
@@ -178,12 +181,12 @@ proc processBlock*(
   c.prepareDbMutation().expect(
     "Cannot import block: failed to invalidate saved fork-choice snapshot")
   txFrame.writeBlockOwnershipData(header, blkHash)
-  # The number to hash index is shared by all branches, it only follows the
-  # chosen head (`writeCanonicalMappings`)
+  # Lookups by number and by tx hash on disk cover the persisted chain only,
+  # they are written when the block becomes base (`writeCanonicalMappings`)
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory,
     numberToHash = false)
 
-  c.writeBaggage(
+  var txHashes = c.writeBaggage(
     blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
 
   vmState.receipts.setLen(0)
@@ -195,4 +198,4 @@ proc processBlock*(
   c.vmStateBlockHash = blkHash
   cached = true
 
-  ok()
+  ok(move(txHashes))

@@ -262,6 +262,15 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     if b != restored.base and b.txFrame.aTx.blockNumber != Opt.some(b.number):
       return err("corrupted FC: frame block number mismatch")
 
+  # Blocks above base have no tx lookup on disk, rebuild it from their bodies
+  for b in blocks:
+    if b == restored.base:
+      continue
+    for encodedTx in b.txFrame.getBlockTransactionData(b.header.txRoot):
+      b.txHashes.add keccak256(encodedTx)
+    if b.txHashes.len == 0 and b.header.txRoot != EMPTY_ROOT_HASH:
+      return err("corrupted FC: block transactions not found")
+
   restored.hashToBlock.withValue(restored.latestFinalized.hash, val):
     for it in loopNotFinalized(val[]):
       it.finalize()

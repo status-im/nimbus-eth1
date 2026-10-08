@@ -23,7 +23,7 @@ import
   ../execution_chain/core/pooled_txs,
   ../execution_chain/db/ledger,
   ../execution_chain/db/core_db/memory_only,
-  ../hive_integration/tx_sender
+  ./transaction/tx_sender
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"

@@ -100,50 +100,27 @@ proc releaseBlockOwnershipData(db: CoreDbTxRef, header: Header, hash: Hash32) =
       else:
         db.del(data.key).expect("delete block payload")
 
-proc writeTransactionMappings*(c: ForkedChainRef, b: BlockRef) =
+proc writeCanonicalMappings*(c: ForkedChainRef, base: BlockRef) =
+  ## Write the number and tx lookups of the blocks that become base, and make
+  ## base the canonical head. On disk these cover the persisted chain only,
+  ## which never reorgs, so they are never deleted. Blocks above base are
+  ## looked up in memory.
   let db = c.baseTxFrame
-  var index = 0'u
-  for encodedTx in db.getBlockTransactionData(b.header.txRoot):
-    let hash = keccak256(encodedTx)
-    db.put(transactionHashToBlockKey(hash).toOpenArray,
-      rlp.encode(TransactionKey(blockNumber: b.number, index: index))).
-      expect("restore transaction lookup")
-    inc index
-
-proc writeCanonicalMappings*(c: ForkedChainRef, head: BlockRef) =
-  # Frame switching no longer switches KVT indexes. Explicitly restore the
-  # chosen branch's number and transaction lookups, including the base.
-  for b in ancestors(head):
-    c.baseTxFrame.addBlockNumberToHashLookup(b.number, b.hash)
-    c.writeTransactionMappings(b)
+  for b in ancestors(base):
+    if b == c.base:
+      break
+    db.addBlockNumberToHashLookup(b.number, b.hash)
+    for index, hash in b.txHashes:
+      db.put(transactionHashToBlockKey(hash).toOpenArray,
+        rlp.encode(TransactionKey(blockNumber: b.number, index: uint index))).
+        expect("write transaction lookup")
+  db.setHead(base.hash).expect("write canonical head")
 
 proc deleteBlockData*(c: ForkedChainRef, b: BlockRef) =
+  # Blocks above base have no number or tx lookups on disk to delete
   let db = c.baseTxFrame
-  # Delete transaction lookups only if they still name the discarded
-  # location and the selected block doesn't contain that same transaction.
-  var index = 0'u
-  for encodedTx in db.getBlockTransactionData(b.header.txRoot):
-    let
-      hash = keccak256(encodedTx)
-      location = db.getTransactionKey(hash).expect("read transaction lookup")
-    if location.blockNumber == b.number and location.index == index:
-      var keep = false
-      let canonical = db.getBlockHeader(b.number)
-      if not keep and canonical.isOk and canonical.value.computeBlockHash != b.hash:
-        let tx = db.getTransactionByIndex(canonical.value.txRoot, index.uint16)
-        keep = tx.isOk and tx.value.computeRlpHash == hash
-      if not keep:
-        db.del(transactionHashToBlockKey(hash).toOpenArray).
-          expect("delete transaction lookup")
-    inc index
-
   db.releaseBlockOwnershipData(b.header, b.hash)
   for key in [genericHashKey(b.hash), blockHashToScoreKey(b.hash),
               blockHashToBlockAccessListKey(b.hash), blockHashToWitnessKey(b.hash),
               txFrameKey(b.hash)]:
     db.del(key.toOpenArray).expect("delete dead block record")
-
-  if db.getBlockHash(b.number).valueOr(zeroHash32) == b.hash:
-    db.del(blockNumberToHashKey(b.number).toOpenArray).expect("delete block lookup")
-    when compileOption("threads"):
-      db.kvt.blockHashes.del(b.number)
