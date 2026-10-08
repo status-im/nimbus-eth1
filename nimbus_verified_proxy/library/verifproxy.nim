@@ -150,7 +150,7 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
     maxWindowJumps = jsonNode.getOrDefault("maxWindowJumps").getBiggestInt(500)
     prllBlkDwnlds = jsonNode.getOrDefault("parallelBlockDownloads").getBiggestInt(10)
     maxLcUpdates = jsonNode.getOrDefault("maxLightClientUpdates").getBiggestInt(128)
-    headerStoreLen = jsonNode.getOrDefault("headerStoreLen").getInt(256)
+    headerStoreLen = jsonNode.getOrDefault("headerStoreLen").getInt(1024)
     storageCacheLen = jsonNode.getOrDefault("storageCacheLen").getInt(256)
     codeCacheLen = jsonNode.getOrDefault("codeCacheLen").getInt(64)
     accountCacheLen = jsonNode.getOrDefault("accountCacheLen").getInt(128)

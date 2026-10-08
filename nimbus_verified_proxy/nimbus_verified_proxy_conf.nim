@@ -72,7 +72,7 @@ type VerifiedProxyConf* = object
   headerStoreLen* {.
     hidden,
     desc: "Length of the header store maintained in memory",
-    defaultValue: 256,
+    defaultValue: 1024,
     name: "debug-header-store-len"
   .}: int
 
