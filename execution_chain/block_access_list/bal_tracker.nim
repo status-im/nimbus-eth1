@@ -34,6 +34,7 @@
 import
   eth/common/addresses,
   eth/keccak/rapidhash,
+  stew/ptrops,
   stint,
   ../db/ledger,
   ./bal_builder
@@ -64,6 +65,8 @@ type
     postCode: int32 ## latest code written
     selfDestructed: bool ## created and self-destructed in this transaction
     lastBalanceJournal: int32 ## journal position of the latest balance record
+    lastNonceJournal: int32 ## journal position of the latest nonce record
+    lastCodeJournal: int32 ## journal position of the latest code record
 
   StorageEntry = object
     key: StorageKey
@@ -120,6 +123,7 @@ type
     journal: seq[JournalEntry]
     codes: seq[seq[byte]] ## code bytes referred to by the account entries
     lastAccount: int32 ## entry of the most recently resolved address, or -1
+    lastStorage: int32 ## entry of the most recently resolved slot, or -1
     frames: seq[FrameMark]
     blockAccessList: Opt[BlockAccessListRef]
       ## Created by the builder and cached for reuse.
@@ -143,14 +147,17 @@ template indexKey(e: StorageEntry): StorageKey =
 
 func init(T: type AccountEntry, address: Address, bucket: int32): T =
   AccountEntry(
-    address: address, bucket: bucket, preCode: -1, postCode: -1, lastBalanceJournal: -1
+    address: address,
+    bucket: bucket,
+    preCode: -1,
+    postCode: -1,
+    lastBalanceJournal: -1,
+    lastNonceJournal: -1,
+    lastCodeJournal: -1,
   )
 
 func init(T: type StorageEntry, key: StorageKey, bucket: int32): T =
   StorageEntry(key: key, bucket: bucket, lastJournal: -1)
-
-template dataPtr[T](s: seq[T]): ptr UncheckedArray[T] =
-  cast[ptr UncheckedArray[T]](unsafeAddr s[0])
 
 # ------------------------------------------------------------------------------
 # Position table
@@ -170,7 +177,7 @@ proc rehash[K, E](t: var PosTable[K, E], size: int) =
   t.buckets = newSeq[int32](size)
   let
     mask = uint64(size - 1)
-    bk = t.buckets.dataPtr()
+    bk = makeUncheckedArray(baseAddr(t.buckets))
   for i in 0 ..< t.entries.len:
     var b = int(indexHash(t.entries[i].indexKey) and mask)
     while bk[b] != 0:
@@ -189,7 +196,7 @@ proc getOrAdd[K, E](t: var PosTable[K, E], key: K): tuple[pos: int32, added: boo
 
   let
     mask = uint64(t.buckets.len - 1)
-    bk = t.buckets.dataPtr()
+    bk = makeUncheckedArray(baseAddr(t.buckets))
   var b = int(indexHash(key) and mask)
   while true:
     let e = bk[b]
@@ -200,22 +207,6 @@ proc getOrAdd[K, E](t: var PosTable[K, E], key: K): tuple[pos: int32, added: boo
       return (pos, true)
     if t.entries[e - 1].indexKey == key:
       return (e - 1, false)
-    b = int((uint64(b) + 1) and mask)
-
-proc find[K, E](t: PosTable[K, E], key: K): int32 {.inline.} =
-  ## Position of the key's entry, or -1.
-  if t.buckets.len == 0:
-    return -1
-  let
-    mask = uint64(t.buckets.len - 1)
-    bk = t.buckets.dataPtr()
-  var b = int(indexHash(key) and mask)
-  while true:
-    let e = bk[b]
-    if e == 0:
-      return -1
-    if t.entries[e - 1].indexKey == key:
-      return e - 1
     b = int((uint64(b) + 1) and mask)
 
 proc truncate[K, E](t: var PosTable[K, E], len: int) =
@@ -236,25 +227,24 @@ proc accountEntry(tracker: BlockAccessListTrackerRef, address: Address): int32 =
   result = tracker.accounts.getOrAdd(address).pos
   tracker.lastAccount = result
 
-proc findAccount(tracker: BlockAccessListTrackerRef, address: Address): int32 =
-  tracker.accounts.find(address)
-
 proc storageEntry(tracker: BlockAccessListTrackerRef, key: StorageKey): int32 =
   ## Position of the slot's entry, creating one that is neither read nor
   ## written if new.
+  # SSTORE resolves its slot twice, for the gas calculation and for the write.
+  if tracker.lastStorage >= 0 and tracker.storage[tracker.lastStorage].key == key:
+    return tracker.lastStorage
   let (pos, added) = tracker.storage.getOrAdd(key)
   if added:
     let account = tracker.accountEntry(key.address)
     tracker.storage[pos].account = account
+  tracker.lastStorage = pos
   pos
-
-proc findStorage(tracker: BlockAccessListTrackerRef, key: StorageKey): int32 =
-  tracker.storage.find(key)
 
 proc clearTransaction(tracker: BlockAccessListTrackerRef) =
   tracker.accounts.truncate(0)
   tracker.lastAccount = -1
   tracker.storage.truncate(0)
+  tracker.lastStorage = -1
   tracker.journal.setLen(0)
   tracker.codes.setLen(0)
   tracker.frames.setLen(0)
@@ -268,7 +258,7 @@ proc init*(
     ledger: ReadOnlyLedger,
     builder: ptr BlockAccessListBuilder = nil,
 ): T =
-  result = T(ledger: ledger, builder: builder, lastAccount: -1)
+  result = T(ledger: ledger, builder: builder, lastAccount: -1, lastStorage: -1)
   if builder.isNil():
     result.builder = BlockAccessListBuilder.newShared()
     result.builderOwner = true
@@ -300,8 +290,8 @@ template hasParentCallFrame(tracker: BlockAccessListTrackerRef): bool =
 
 proc beginCallFrame*(tracker: BlockAccessListTrackerRef) =
   ## Begin a new call frame for tracking reverts. Records where the frame
-  ## begins in the journal and entry lists so that a revert can undo exactly
-  ## the frame's changes, as EIP-7928 requires.
+  ## begins in the journal so that a revert can undo exactly the frame's
+  ## changes, as EIP-7928 requires.
   tracker.frames.add(FrameMark(journalLen: int32(tracker.journal.len)))
 
 # ------------------------------------------------------------------------------
@@ -369,15 +359,11 @@ proc trackStorageRead*(
 proc recordOnce(
     tracker: BlockAccessListTrackerRef, last: var int32, entry: JournalEntry
 ) {.inline.} =
-  ## Append the undo record `entry` unless `last` is a live record of the same
-  ## change within the current frame: the first record of a frame already
-  ## holds the value to restore. An undo puts back the position a record
-  ## replaced, so `last` never points past the current frame's records.
-  let
-    mark = tracker.frames[^1].journalLen
-    live = last >= mark and last < int32(tracker.journal.len)
-  if live and tracker.journal[last].kind == entry.kind and
-      tracker.journal[last].idx == entry.idx:
+  ## Append the undo record `entry` unless `last`, the position of the entry's
+  ## latest record of the same kind, lies within the current frame: the first
+  ## record of a frame already holds the value to restore. An undo puts back
+  ## the position a record replaced, so `last` always refers to a live record.
+  if last >= tracker.frames[^1].journalLen:
     return
   tracker.journal.add(entry)
   tracker.journal[^1].prevLast = last
@@ -470,10 +456,11 @@ proc trackNonceChange*(
 
   tracker.touch(idx)
   capturePre(e.preNonceKnown, e.preNonce, current, tracker.capturePreNonce(idx))
-  tracker.journal.add(
+  tracker.recordOnce(
+    e.lastNonceJournal,
     JournalEntry(
       kind: jNonce, idx: idx, prevWritten: e.nonceWritten, prevNonce: e.postNonce
-    )
+    ),
   )
   e.postNonce = newNonce
   e.nonceWritten = true
@@ -495,8 +482,9 @@ proc trackCodeChange*(
 
   tracker.touch(idx)
   tracker.capturePreCode(idx)
-  tracker.journal.add(
-    JournalEntry(kind: jCode, idx: idx, prevWritten: e.codeWritten, prevCode: e.postCode)
+  tracker.recordOnce(
+    e.lastCodeJournal,
+    JournalEntry(kind: jCode, idx: idx, prevWritten: e.codeWritten, prevCode: e.postCode),
   )
   e.postCode = tracker.addCode(newCode)
   e.codeWritten = true
@@ -535,6 +523,13 @@ proc normalizeChanges(tracker: BlockAccessListTrackerRef) =
       e.postCode = tracker.addCode(newSeq[byte]())
       e.codeWritten = true
 
+    if e.balanceWritten and e.preBalance == e.postBalance:
+      e.balanceWritten = false
+    if e.nonceWritten and e.preNonce == e.postNonce:
+      e.nonceWritten = false
+    if e.codeWritten and tracker.codeAt(e.preCode) == tracker.codeAt(e.postCode):
+      e.codeWritten = false
+
   for idx in 0 ..< tracker.storage.len:
     template e(): untyped =
       tracker.storage[idx]
@@ -542,17 +537,6 @@ proc normalizeChanges(tracker: BlockAccessListTrackerRef) =
     if e.written and (e.pre == e.post or tracker.accounts[e.account].selfDestructed):
       e.written = false
       e.read = true
-
-  for idx in 0 ..< tracker.accounts.len:
-    template e(): untyped =
-      tracker.accounts[idx]
-
-    if e.balanceWritten and e.preBalance == e.postBalance:
-      e.balanceWritten = false
-    if e.nonceWritten and e.preNonce == e.postNonce:
-      e.nonceWritten = false
-    if e.codeWritten and tracker.codeAt(e.preCode) == tracker.codeAt(e.postCode):
-      e.codeWritten = false
 
 proc recordTransaction(tracker: BlockAccessListTrackerRef) =
   ## Hand the transaction's accesses and changes to the builder.
@@ -605,28 +589,27 @@ proc undoJournal(tracker: BlockAccessListTrackerRef, mark: FrameMark) =
     of jNonce:
       tracker.accounts[entry.idx].postNonce = entry.prevNonce
       tracker.accounts[entry.idx].nonceWritten = entry.prevWritten
+      tracker.accounts[entry.idx].lastNonceJournal = entry.prevLast
     of jCode:
       tracker.accounts[entry.idx].postCode = entry.prevCode
       tracker.accounts[entry.idx].codeWritten = entry.prevWritten
+      tracker.accounts[entry.idx].lastCodeJournal = entry.prevLast
     of jSelfDestruct:
       tracker.accounts[entry.idx].selfDestructed = false
   tracker.journal.setLen(int(mark.journalLen))
 
-proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef, rollbackReads = false) =
+proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef) =
   ## Revert the current call frame. As specified in EIP-7928 the frame's
-  ## storage writes become reads and its touched addresses remain. With
-  ## `rollbackReads`, which is only meaningful for the transaction frame of a
-  ## transaction that is dropped altogether, the transaction leaves no trace.
+  ## storage writes become reads and its touched addresses remain. Reverting
+  ## the transaction's own frame drops a transaction the block cannot take, so
+  ## the transaction leaves no trace.
   doAssert tracker.hasPendingCallFrame()
 
-  if rollbackReads:
-    doAssert not tracker.hasParentCallFrame(),
-      "reads can only be rolled back for the transaction frame"
+  if tracker.hasParentCallFrame():
+    tracker.undoJournal(tracker.frames[^1])
+    tracker.frames.setLen(tracker.frames.len - 1)
+  else:
     tracker.clearTransaction()
-    return
-
-  tracker.undoJournal(tracker.frames[^1])
-  tracker.frames.setLen(tracker.frames.len - 1)
 
 proc getBlockAccessList*(
     tracker: BlockAccessListTrackerRef, rebuild = false

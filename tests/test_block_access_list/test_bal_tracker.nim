@@ -29,6 +29,20 @@ privateAccess(PosTable)
 template frameDepth(tracker: BlockAccessListTrackerRef): int =
   tracker.frames.len
 
+func findAccount(tracker: BlockAccessListTrackerRef, address: Address): int32 =
+  for i, e in tracker.accounts.entries:
+    if e.address == address:
+      return int32(i)
+  -1
+
+func findStorage(
+    tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
+): int32 =
+  for i, e in tracker.storage.entries:
+    if e.key.address == address and e.key.slot == slot:
+      return int32(i)
+  -1
+
 template entryOpt(idx: int32, entry, flag, value: untyped): untyped =
   if idx >= 0 and entry[idx].flag:
     Opt.some(entry[idx].value)
@@ -49,7 +63,7 @@ func preBalance(tracker: BlockAccessListTrackerRef, address: Address): Opt[UInt2
 func preStorage(
     tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
 ): Opt[UInt256] =
-  entryOpt(tracker.findStorage((address, slot)), tracker.storage, preKnown, pre)
+  entryOpt(tracker.findStorage(address, slot), tracker.storage, preKnown, pre)
 
 func getPreBalance(tracker: BlockAccessListTrackerRef, address: Address): UInt256 =
   tracker.preBalance(address).valueOr(0.u256)
@@ -66,13 +80,13 @@ func isTouched(tracker: BlockAccessListTrackerRef, address: Address): bool =
 func hasStorageRead(
     tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
 ): bool =
-  let idx = tracker.findStorage((address, slot))
+  let idx = tracker.findStorage(address, slot)
   idx >= 0 and tracker.storage[idx].read
 
 func storageChange(
     tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
 ): Opt[UInt256] =
-  entryOpt(tracker.findStorage((address, slot)), tracker.storage, written, post)
+  entryOpt(tracker.findStorage(address, slot), tracker.storage, written, post)
 
 func balanceChange(tracker: BlockAccessListTrackerRef, address: Address): Opt[UInt256] =
   entryOpt(tracker.findAccount(address), tracker.accounts, balanceWritten, postBalance)
@@ -539,18 +553,41 @@ suite "Block access list tracker":
       acc.hasStorageRead(slot2)
       acc.nonceAt(1).isNone()
 
-  test "Rollback of the transaction frame with rollbackReads leaves nothing":
+  test "Rollback of the transaction frame leaves nothing":
     tracker.setBlockAccessIndex(2)
     tracker.beginCallFrame()
     tracker.trackStorageWrite(address1, slot1, 5.u256)
+    tracker.trackStorageRead(address1, slot2)
     tracker.trackAddressAccess(address2)
     tracker.trackInTransactionSelfDestruct(address1)
-    tracker.rollbackCallFrame(rollbackReads = true)
+    tracker.rollbackCallFrame()
     check:
       tracker.frameDepth == 0
       not tracker.isTouched(address1)
       not tracker.isTouched(address2)
+      not tracker.hasStorageRead(address1, slot2)
       tracker.buildBal().len() == 0
+
+  test "Nonce and code changes keep one undo record per frame":
+    tracker.setBlockAccessIndex(1)
+    tracker.beginCallFrame()
+    tracker.trackNonceChange(address1, nonce1 + 1)
+    tracker.trackCodeChange(address1, code2)
+    tracker.beginCallFrame()
+    let mark = tracker.journal.len
+    for i in 2 .. 4:
+      tracker.trackNonceChange(address1, nonce1 + AccountNonce(i))
+      tracker.trackCodeChange(address1, @[byte(i)])
+    check tracker.journal.len == mark + 2
+    tracker.rollbackCallFrame()
+    tracker.beginCallFrame()
+    tracker.trackNonceChange(address1, nonce1 + 5)
+    tracker.trackCodeChange(address1, @[5.byte])
+    tracker.rollbackCallFrame()
+    check:
+      tracker.nonceChange(address1) == Opt.some(nonce1 + 1)
+      tracker.codeChange(address1) == Opt.some(code2)
+    tracker.commitCallFrame()
 
   test "Self-destruct in a reverted frame is discarded":
     tracker.setBlockAccessIndex(1)

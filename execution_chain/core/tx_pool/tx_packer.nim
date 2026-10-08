@@ -254,7 +254,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
     vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
 
   # Find out what to do next: accepting this tx or trying the next account
-  var rc = processTransaction(vmState, item.tx, item.sender, rollbackReads = true)
+  var rc = processTransaction(vmState, item.tx, item.sender)
   if rc.isErr:
     if vmState.classifyPackedNext():
       return ContinueWithNextAccount

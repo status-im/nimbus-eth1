@@ -237,7 +237,7 @@ proc incrementNonce*(c: Computation): bool =
       )
       return false
     if c.balTrackerEnabled:
-      c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
+      c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1, Opt.some(nonce))
     ledger.setNonce(c.msg.sender, nonce + 1)
 
   true

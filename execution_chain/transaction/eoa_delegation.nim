@@ -129,6 +129,6 @@ proc setDelegation*(params: CallParams, c: Computation): EvmResultVoid =
     ledger.setCode(authority, authCode)
 
     if vmState.balTrackerEnabled:
-      vmState.balTracker.trackNonceChange(authority, auth.nonce + 1)
+      vmState.balTracker.trackNonceChange(authority, auth.nonce + 1, Opt.some(auth.nonce))
     ledger.setNonce(authority, auth.nonce + 1)
   ok()
