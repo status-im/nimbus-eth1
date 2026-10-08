@@ -379,14 +379,13 @@ suite "Block access list tracker":
       tracker.nonceChange(address1).isSome()
       tracker.codeChange(address1).isSome()
 
-    tracker.handleInTransactionSelfDestruct(address1)
+    tracker.trackInTransactionSelfDestruct(address1)
+    tracker.trackInTransactionSelfDestruct(address1)
 
+    # resolved at the end of the transaction, not when recorded
     check:
-      tracker.storageChange(address1, slot1).isNone()
-      tracker.hasStorageRead(address1, slot1)
-      tracker.balanceChange(address1).isSome()
-      tracker.nonceChange(address1) == Opt.some(0.AccountNonce)
-      tracker.codeChange(address1) == Opt.some(newSeq[byte]())
+      tracker.storageChange(address1, slot1).isSome()
+      tracker.nonceChange(address1) == Opt.some(200.AccountNonce)
 
     tracker.commitCallFrame()
 

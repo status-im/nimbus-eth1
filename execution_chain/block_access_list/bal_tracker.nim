@@ -17,17 +17,25 @@
 # frames do not get structures of their own: a frame records how long the
 # journal was when it began, every change appends an undo record to the
 # journal, and a revert replays the journal back to the frame's mark, turning
-# the frame's storage writes into reads as the EIP requires. Reads and touched
+# the frame's storage writes into reads as the EIP requires. A value changed
+# several times within one frame gets a single undo record, the one taken
+# before the first change, so the journal grows with the distinct values a
+# frame touches rather than with its instruction count. Reads and touched
 # accounts survive a revert and are therefore not journaled; the one rollback
 # that discards them too, a transaction the block cannot take, happens at the
 # transaction frame and simply clears everything. Committing a frame therefore
 # costs nothing, reverting costs the frame's own changes, and the lists are
 # reused from one transaction to the next without allocating.
+#
+# An account created and self-destructed in the same transaction is flagged on
+# its entry and resolved once at the end of the transaction, when its storage
+# writes become reads and its nonce and code changes are dropped.
 
 {.push raises: [], gcsafe.}
 
 import
   eth/common/addresses,
+  eth/keccak/rapidhash,
   stint,
   ../db/ledger,
   ./bal_builder
@@ -56,6 +64,8 @@ type
     postNonce: AccountNonce
     preCode: int32 ## code before the transaction, -1 while unknown
     postCode: int32 ## latest code written
+    selfDestructed: bool ## created and self-destructed in this transaction
+    lastBalanceJournal: int32 ## journal position of the latest balance record
 
   StorageEntry = object
     key: StorageKey
@@ -66,24 +76,26 @@ type
     preKnown: bool
     pre: UInt256 ## value before the transaction, see `preKnown`
     post: UInt256 ## latest value written
+    lastJournal: int32 ## journal position of the latest write record
 
   JournalKind = enum
     jStorageWrite ## a storage entry's post value and written flag changed
     jBalance
     jNonce
     jCode
+    jSelfDestruct ## the account's self-destructed flag was set
 
   JournalEntry = object
-    kind: JournalKind
     idx: int32 ## entry position in the account or storage list
-    prevWritten: bool
     prevCode: int32 ## previous post code position for code changes
+    prevLast: int32 ## the entry's previous record position, see `lastJournal`
+    kind: JournalKind
+    prevWritten: bool
     prev: UInt256 ## previous post value for storage and balance changes
     prevNonce: AccountNonce
 
   FrameMark = object
     journalLen: int32
-    selfDestructsLen: int32
 
   # Tracks state changes during transaction execution for block access list
   # construction. This tracker coordinates with the BlockAccessListBuilder to
@@ -104,9 +116,6 @@ type
     codes: seq[seq[byte]] ## code bytes referred to by the account entries
     lastAccount: int32 ## entry of the most recently resolved address, or -1
     frames: seq[FrameMark]
-    selfDestructs: seq[Address]
-      ## Addresses self-destructed in the transaction, in order; a frame mark
-      ## records where its own begin.
     blockAccessList: Opt[BlockAccessListRef]
       ## Created by the builder and cached for reuse.
 
@@ -114,24 +123,12 @@ const
   initialBuckets = 64
 
 func addrHash(address: Address): uint64 =
-  # Addresses are hash outputs so a cheap fold of their bytes spreads well, and
-  # every byte takes part so that vanity addresses sharing a prefix still spread.
-  var
-    w0, w1: uint64
-    w2: uint32
-  copyMem(addr w0, unsafeAddr address.data[0], sizeof(w0))
-  copyMem(addr w1, unsafeAddr address.data[8], sizeof(w1))
-  copyMem(addr w2, unsafeAddr address.data[16], sizeof(w2))
-  let h =
-    w0 * 0x9E3779B97F4A7C15'u64 + w1 * 0xC2B2AE3D27D4EB4F'u64 +
-    uint64(w2) * 0x165667B19E3779F9'u64
-  h xor (h shr 29)
+  uint64(hash(address))
 
 func storageHash(key: StorageKey): uint64 =
-  var h = addrHash(key.address)
-  for limb in key.slot.limbs:
-    h = (h xor limb) * 0x9E3779B97F4A7C15'u64
-  h xor (h shr 29)
+  # The slot bytes hashed with the address hash as the seed, so that the pair
+  # costs one hash call and inherits whatever seeding the address hash has.
+  rapidhashNano(cast[ptr array[32, byte]](unsafeAddr key.slot)[], addrHash(key.address))
 
 template dataPtr[T](s: seq[T]): ptr UncheckedArray[T] =
   cast[ptr UncheckedArray[T]](unsafeAddr s[0])
@@ -172,7 +169,13 @@ proc accountEntry(tracker: BlockAccessListTrackerRef, address: Address): int32 =
     if e == 0:
       result = int32(tracker.accounts.len)
       tracker.accounts.add(
-        AccountEntry(address: address, bucket: int32(b), preCode: -1, postCode: -1)
+        AccountEntry(
+          address: address,
+          bucket: int32(b),
+          preCode: -1,
+          postCode: -1,
+          lastBalanceJournal: -1,
+        )
       )
       bk[b] = result + 1
       tracker.lastAccount = result
@@ -227,7 +230,9 @@ proc storageEntry(tracker: BlockAccessListTrackerRef, key: StorageKey): int32 =
     if e == 0:
       result = int32(tracker.storage.len)
       let account = tracker.accountEntry(key.address)
-      tracker.storage.add(StorageEntry(key: key, bucket: int32(b), account: account))
+      tracker.storage.add(
+        StorageEntry(key: key, bucket: int32(b), account: account, lastJournal: -1)
+      )
       bk[b] = result + 1
       return
     if tracker.storage[e - 1].key == key:
@@ -271,7 +276,6 @@ proc clearTransaction(tracker: BlockAccessListTrackerRef) =
   tracker.journal.setLen(0)
   tracker.codes.setLen(0)
   tracker.frames.setLen(0)
-  tracker.selfDestructs.setLen(0)
 
 # ------------------------------------------------------------------------------
 # Lifecycle
@@ -326,12 +330,7 @@ proc beginCallFrame*(tracker: BlockAccessListTrackerRef) =
   ## Begin a new call frame for tracking reverts. Records where the frame
   ## begins in the journal and entry lists so that a revert can undo exactly
   ## the frame's changes, as EIP-7928 requires.
-  tracker.frames.add(
-    FrameMark(
-      journalLen: int32(tracker.journal.len),
-      selfDestructsLen: int32(tracker.selfDestructs.len),
-    )
-  )
+  tracker.frames.add(FrameMark(journalLen: int32(tracker.journal.len)))
 
 # ------------------------------------------------------------------------------
 # Pre-transaction values
@@ -447,6 +446,15 @@ proc trackStorageRead*(
   tracker.touch(tracker.storage[idx].account)
   tracker.storage[idx].read = true
 
+func journaled(
+    tracker: BlockAccessListTrackerRef, pos: int32, kind: JournalKind, idx: int32
+): bool =
+  ## Whether `pos` is a live record of `kind` for `idx` within the current
+  ## frame. An undo restores the position the undone record replaced, so the
+  ## check also fails when the entry's latest record lies in an enclosing frame.
+  pos >= tracker.frames[^1].journalLen and pos < int32(tracker.journal.len) and
+    tracker.journal[pos].kind == kind and tracker.journal[pos].idx == idx
+
 # The pre-transaction value of a slot, balance or nonce is captured on its
 # first write as whatever the ledger holds at that moment. A caller that has
 # just read that value itself, as the SSTORE handler does for its gas
@@ -468,9 +476,17 @@ proc trackStorageWriteAt(
       e.preKnown = true
     else:
       tracker.capturePreStorage(idx)
-  tracker.journal.add(
-    JournalEntry(kind: jStorageWrite, idx: idx, prevWritten: e.written, prev: e.post)
-  )
+  if not tracker.journaled(e.lastJournal, jStorageWrite, idx):
+    tracker.journal.add(
+      JournalEntry(
+        kind: jStorageWrite,
+        idx: idx,
+        prevWritten: e.written,
+        prev: e.post,
+        prevLast: e.lastJournal,
+      )
+    )
+    e.lastJournal = int32(tracker.journal.len - 1)
   e.post = newValue
   e.written = true
 
@@ -517,11 +533,17 @@ proc trackBalanceChangeAt(
       e.preBalanceKnown = true
     else:
       tracker.capturePreBalance(idx)
-  tracker.journal.add(
-    JournalEntry(
-      kind: jBalance, idx: idx, prevWritten: e.balanceWritten, prev: e.postBalance
+  if not tracker.journaled(e.lastBalanceJournal, jBalance, idx):
+    tracker.journal.add(
+      JournalEntry(
+        kind: jBalance,
+        idx: idx,
+        prevWritten: e.balanceWritten,
+        prev: e.postBalance,
+        prevLast: e.lastBalanceJournal,
+      )
     )
-  )
+    e.lastBalanceJournal = int32(tracker.journal.len - 1)
   e.postBalance = newBalance
   e.balanceWritten = true
 
@@ -627,77 +649,42 @@ proc trackSelfDestruct*(tracker: BlockAccessListTrackerRef, address: Address) =
 proc trackInTransactionSelfDestruct*(
     tracker: BlockAccessListTrackerRef, address: Address
 ) =
+  ## Flag an account created and self-destructed in this transaction. The flag
+  ## is resolved at the end of the transaction and undone if the frame reverts.
   assert tracker.hasPendingCallFrame()
-  tracker.selfDestructs.add(address)
-
-proc handleInTransactionSelfDestruct*(
-    tracker: BlockAccessListTrackerRef, address: Address
-) =
-  ## An account created and self-destructed in the same transaction leaves no
-  ## storage changes behind (its writes count as reads) and ends with a zero
-  ## nonce and empty code.
-  assert tracker.hasPendingCallFrame()
-
-  for idx in 0 ..< tracker.storage.len:
-    template e(): untyped =
-      tracker.storage[idx]
-
-    if e.key.address == address and e.written:
-      tracker.journal.add(
-        JournalEntry(
-          kind: jStorageWrite, idx: int32(idx), prevWritten: true, prev: e.post
-        )
-      )
-      e.written = false
-      e.read = true
-
   let idx = tracker.accountEntry(address)
   tracker.touch(idx)
-  tracker.capturePreNonce(idx)
-  tracker.journal.add(
-    JournalEntry(
-      kind: jNonce,
-      idx: idx,
-      prevWritten: tracker.accounts[idx].nonceWritten,
-      prevNonce: tracker.accounts[idx].postNonce,
-    )
-  )
-  tracker.accounts[idx].postNonce = 0
-  tracker.accounts[idx].nonceWritten = true
-
-  tracker.capturePreCode(idx)
-  tracker.journal.add(
-    JournalEntry(
-      kind: jCode,
-      idx: idx,
-      prevWritten: tracker.accounts[idx].codeWritten,
-      prevCode: tracker.accounts[idx].postCode,
-    )
-  )
-  tracker.accounts[idx].postCode = tracker.addCode(newSeq[byte]())
-  tracker.accounts[idx].codeWritten = true
+  if not tracker.accounts[idx].selfDestructed:
+    tracker.accounts[idx].selfDestructed = true
+    tracker.journal.add(JournalEntry(kind: jSelfDestruct, idx: idx))
 
 # ------------------------------------------------------------------------------
 # Call frames
 # ------------------------------------------------------------------------------
 
-proc handleSelfDestructs(tracker: BlockAccessListTrackerRef, mark: FrameMark) =
-  ## Apply the self-destructs recorded since `mark`. They stay recorded so that
-  ## every enclosing frame applies them again on commit, which covers writes to
-  ## the account made in between.
-  var i = int(mark.selfDestructsLen)
-  while i < tracker.selfDestructs.len:
-    tracker.handleInTransactionSelfDestruct(tracker.selfDestructs[i])
-    inc i
-
 proc normalizeChanges(tracker: BlockAccessListTrackerRef) =
-  ## Drop changes that leave a value as it was before the transaction; such a
-  ## storage write still counts as a read.
+  ## Resolve the accounts that self-destructed in the transaction they were
+  ## created in: their storage writes count as reads and they end with a zero
+  ## nonce and empty code. Then drop changes that leave a value as it was
+  ## before the transaction; such a storage write still counts as a read.
+  for idx in 0 ..< tracker.accounts.len:
+    template e(): untyped =
+      tracker.accounts[idx]
+
+    if e.selfDestructed:
+      tracker.touch(int32(idx))
+      tracker.capturePreNonce(int32(idx))
+      e.postNonce = 0
+      e.nonceWritten = true
+      tracker.capturePreCode(int32(idx))
+      e.postCode = tracker.addCode(newSeq[byte]())
+      e.codeWritten = true
+
   for idx in 0 ..< tracker.storage.len:
     template e(): untyped =
       tracker.storage[idx]
 
-    if e.written and e.pre == e.post:
+    if e.written and (e.pre == e.post or tracker.accounts[e.account].selfDestructed):
       e.written = false
       e.read = true
 
@@ -711,9 +698,6 @@ proc normalizeChanges(tracker: BlockAccessListTrackerRef) =
       e.nonceWritten = false
     if e.codeWritten and tracker.codeAt(e.preCode) == tracker.codeAt(e.postCode):
       e.codeWritten = false
-
-proc normalizePendingCallFrameChanges*(tracker: BlockAccessListTrackerRef) =
-  tracker.normalizeChanges()
 
 proc recordTransaction(tracker: BlockAccessListTrackerRef) =
   ## Hand the transaction's accesses and changes to the builder.
@@ -739,9 +723,6 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
   ## transaction's own frame records the transaction with the builder.
   doAssert tracker.hasPendingCallFrame()
 
-  let mark = tracker.frames[^1]
-  tracker.handleSelfDestructs(mark)
-
   if tracker.hasParentCallFrame():
     tracker.frames.setLen(tracker.frames.len - 1)
   else:
@@ -761,15 +742,19 @@ proc undoJournal(tracker: BlockAccessListTrackerRef, mark: FrameMark) =
       tracker.storage[entry.idx].post = entry.prev
       tracker.storage[entry.idx].written = entry.prevWritten
       tracker.storage[entry.idx].read = true
+      tracker.storage[entry.idx].lastJournal = entry.prevLast
     of jBalance:
       tracker.accounts[entry.idx].postBalance = entry.prev
       tracker.accounts[entry.idx].balanceWritten = entry.prevWritten
+      tracker.accounts[entry.idx].lastBalanceJournal = entry.prevLast
     of jNonce:
       tracker.accounts[entry.idx].postNonce = entry.prevNonce
       tracker.accounts[entry.idx].nonceWritten = entry.prevWritten
     of jCode:
       tracker.accounts[entry.idx].postCode = entry.prevCode
       tracker.accounts[entry.idx].codeWritten = entry.prevWritten
+    of jSelfDestruct:
+      tracker.accounts[entry.idx].selfDestructed = false
   tracker.journal.setLen(int(mark.journalLen))
 
 proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef, rollbackReads = false) =
@@ -785,9 +770,7 @@ proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef, rollbackReads = fals
     tracker.clearTransaction()
     return
 
-  let mark = tracker.frames[^1]
-  tracker.undoJournal(mark)
-  tracker.selfDestructs.setLen(int(mark.selfDestructsLen))
+  tracker.undoJournal(tracker.frames[^1])
   tracker.frames.setLen(tracker.frames.len - 1)
 
 # ------------------------------------------------------------------------------
