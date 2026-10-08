@@ -222,7 +222,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   # without this one.
   template doesNotFit(_: untyped) =
     return ContinueWithNextAccount
-  check2dGasInclusion(vmState, item.tx.gasLimit, doesNotFit)
+  checkBlockGasCapacity(vmState, item.tx, doesNotFit)
 
   # EIP-4844
   if item.tx.txType == TxEip4844:
