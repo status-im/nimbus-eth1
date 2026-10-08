@@ -293,7 +293,7 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   if vmState.fork >= FkShanghai:
     if vmState.balTrackerEnabled:
       for withdrawal in xp.withdrawals:
-        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
+        vmState.balTracker.trackAddressAccess(withdrawal.address)
         ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
     else:
       for withdrawal in xp.withdrawals:

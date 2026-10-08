@@ -182,13 +182,9 @@ func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
 proc beginSavePoint*(c: Computation) =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.beginCallFrame()
   c.savePoint = c.vmState.ledger.beginSavePoint()
 
 proc commit*(c: Computation) =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.commitCallFrame()
   c.vmState.ledger.commit(c.savePoint)
   c.savePoint = nil
 
@@ -205,8 +201,6 @@ proc dispose*(c: Computation) =
     c.stack = nil
 
 proc rollback*(c: Computation) =
-  if c.balTrackerEnabled:
-    c.vmState.balTracker.rollbackCallFrame()
   c.vmState.ledger.rollback(c.savePoint)
   c.savePoint = nil
 
@@ -237,7 +231,7 @@ proc incrementNonce*(c: Computation): bool =
       )
       return false
     if c.balTrackerEnabled:
-      c.vmState.balTracker.trackNonceChange(c.msg.sender, nonce + 1)
+      c.vmState.balTracker.trackAddressAccess(c.msg.sender)
     ledger.setNonce(c.msg.sender, nonce + 1)
 
   true
@@ -324,7 +318,7 @@ proc writeContract*(c: Computation) =
 
     c.vmState.mutateLedger:
       if c.balTrackerEnabled:
-        c.vmState.balTracker.trackCodeChange(c.msg.currentTarget, c.output)
+        c.vmState.balTracker.trackAddressAccess(c.msg.currentTarget)
       ledger.setCode(c.msg.currentTarget, c.output)
     withExtra trace, "Writing new contract code"
     return
@@ -360,21 +354,19 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
     # Register the account to be deleted
     if c.fork >= FkCancun:
       # Zeroing contract balance except beneficiary is the same address
-      if c.balTrackerEnabled:
-        c.vmState.balTracker.trackSubBalanceChange(c.msg.currentTarget, localBalance)
+      if c.balTrackerEnabled and not localBalance.isZero:
+        c.vmState.balTracker.trackAddressAccess(c.msg.currentTarget)
       ledger.subBalance(c.msg.currentTarget, localBalance)
 
       # Transfer to beneficiary
       if c.balTrackerEnabled:
-        c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
+        c.vmState.balTracker.trackAddressAccess(beneficiary)
       ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
 
       newContract = if c.fork >= FkAmsterdam:
                       ledger.selfDestruct8246(c.msg.currentTarget)
                     else:
                       ledger.selfDestruct6780(c.msg.currentTarget)
-      if c.balTrackerEnabled and newContract:
-        c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.currentTarget)
 
       if c.fork >= FkAmsterdam:
         c.emitSelfDestructLog(beneficiary, localBalance, newContract)

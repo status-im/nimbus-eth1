@@ -10,500 +10,224 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, sets],
+  std/bitops,
   eth/common/addresses,
   stint,
   ../db/ledger,
-  ./bal_builder
+  ./[bal_builder, bal_changes]
 
 export addresses, bal_builder, ledger, stint
 
 type
-  # Snapshot of block access list state for a single call frame.
-  # Used to track changes within a call frame to enable proper handling
-  # of reverts as specified in EIP-7928.
-  CallFrameSnapshot* = object
-    touchedAddresses*: HashSet[Address] ## Addresses read during this call frame.
-    storageReads*: HashSet[(Address, UInt256)]
-      ## Storage reads made during this call frame.
-    storageChanges*: Table[(Address, UInt256), UInt256]
-      ## Storage writes made during this call frame.
-      ## Maps (address, storage key) -> storage value.
-    balanceChanges*: Table[Address, UInt256]
-      ## Balance changes made during this call frame.
-      ## Set of (address, block access index, balance)
-      ## Maps address -> balance.
-    nonceChanges*: Table[Address, AccountNonce]
-      ## Nonce changes made during this call frame.
-      ## Maps address -> nonce.
-    codeChanges*: Table[Address, seq[byte]]
-      ## Code changes made during this call frame.
-      ## Maps address -> bytecode.
-    inTransactionSelfDestructs*: HashSet[Address]
-      ## Set of addresses which need to have writes removed (and in some cases
-      ## also converted to reads) when commiting a call frame.
+  TouchSet[K] = object
+    keys: seq[K]
+    buckets: seq[uint64]
+    epoch: uint64
+    shift: int
 
-  # Tracks state changes during transaction execution for block access list
-  # construction. This tracker maintains a cache of pre-state values and
-  # coordinates with the BlockAccessListBuilder to record all state changes
-  # made during block execution. It ensures that only actual changes (not no-op
-  # writes) are recorded in the access list.
   BlockAccessListTrackerRef* = ref object
-    ledger*: ReadOnlyLedger ## Used to fetch the pre-transaction values from the state.
+    ledger: LedgerRef
     builder*: ptr BlockAccessListBuilder
     builderOwner*: bool
-    preStorageCache*: Table[(Address, UInt256), UInt256]
-      ## Cache of pre-transaction storage values, keyed by (address, slot) tuples.
-      ## This cache is cleared at the start of each transaction to track values
-      ## from the beginning of the current transaction.
-    preBalanceCache*: Table[Address, UInt256]
-      ## Cache of pre-transaction balance values, keyed by address.
-      ## This cache is cleared at the start of each transaction and used by
-      ## normalize_balance_changes to filter out balance changes where
-      ## the final balance equals the initial balance.
-    preNonceCache*: Table[Address, AccountNonce]
-      ## Cache of pre-transaction nonce values, keyed by address.
-      ## This cache is cleared at the start of each transaction to track values
-      ## from the beginning of the current transaction.
-    preCodeCache*: Table[Address, seq[byte]]
-      ## Cache of pre-transaction code, keyed by address.
-      ## This cache is cleared at the start of each transaction to track values
-      ## from the beginning of the current transaction.
     currentBlockAccessIndex*: int
-      ## The current block access index (0 for pre-execution,
-      ## 1..n for transactions, n+1 for post-execution).
-    callFrameSnapshots*: seq[CallFrameSnapshot]
-      ## Stack of snapshots for nested call frames to handle reverts properly.
+    windowOpen: bool
+    accounts: TouchSet[Address]
+    slots: TouchSet[AccessedSlot]
+    writeOf: seq[int32]
+    changes: BalChangesRef
     blockAccessList: Opt[BlockAccessListRef]
-      ## Created by the builder and cached for reuse.
 
-template init(T: type CallFrameSnapshot): T =
-  CallFrameSnapshot()
+const
+  epochStep = 1'u64 shl 32
+  indexMask = epochStep - 1
+  epochMask = not indexMask
 
-# Disallow copying of CallFrameSnapshot
-proc `=copy`(
-    dest: var CallFrameSnapshot, src: CallFrameSnapshot
-) {.error: "Copying CallFrameSnapshot is forbidden".} =
-  discard
+func hashKey(a: Address): uint64 {.inline.} =
+  let p = cast[ptr UncheckedArray[byte]](unsafeAddr a)
+  var
+    x, y: uint64
+    z: uint32
+  copyMem(addr x, addr p[0], 8)
+  copyMem(addr y, addr p[8], 8)
+  copyMem(addr z, addr p[16], 4)
+  let h =
+    x xor (y * 0x9E3779B97F4A7C15'u64) xor (uint64(z) * 0xC2B2AE3D27D4EB4F'u64)
+  (h xor (h shr 31)) * 0x94D049BB133111EB'u64
+
+func hashKey(k: AccessedSlot): uint64 {.inline.} =
+  let
+    l = k.slot.limbs
+    s =
+      (l[0] * 0x9E3779B97F4A7C15'u64) xor (l[1] * 0xC2B2AE3D27D4EB4F'u64) xor
+      (l[2] * 0x165667B19E3779F9'u64) xor (l[3] * 0xD6E8FEB86659FD93'u64)
+    h = hashKey(k.address) xor s
+  (h xor (h shr 29)) * 0xBF58476D1CE4E5B9'u64
+
+func grow[K](s: var TouchSet[K]) {.noinline.} =
+  let size = max(32, s.buckets.len * 2)
+  s.buckets = newSeq[uint64](size)
+  s.shift = 64 - fastLog2(size)
+  if s.epoch == 0:
+    s.epoch = epochStep
+  let mask = size - 1
+  for idx in 0 ..< s.keys.len:
+    var i = int(hashKey(s.keys[idx]) shr s.shift)
+    while (s.buckets[i] and epochMask) == s.epoch:
+      i = (i + 1) and mask
+    s.buckets[i] = s.epoch or uint64(idx + 1)
+
+func reset[K](s: var TouchSet[K]) =
+  s.keys.setLen(0)
+  s.epoch += epochStep
+  if s.epoch == 0:
+    s.epoch = epochStep
+    if s.buckets.len > 0:
+      zeroMem(addr s.buckets[0], s.buckets.len * sizeof(uint64))
+
+func incl[K](s: var TouchSet[K], key: K) {.inline.} =
+  if s.keys.len * 2 >= s.buckets.len:
+    s.grow()
+  let
+    mask = s.buckets.len - 1
+    buckets = cast[ptr UncheckedArray[uint64]](addr s.buckets[0])
+  var i = int(hashKey(key) shr s.shift)
+  while true:
+    let b = buckets[i]
+    if (b and epochMask) != s.epoch:
+      buckets[i] = s.epoch or uint64(s.keys.len + 1)
+      s.keys.add key
+      return
+    if s.keys[int(b and indexMask) - 1] == key:
+      return
+    i = (i + 1) and mask
+
+func find[K](s: TouchSet[K], key: K): int =
+  if s.buckets.len == 0:
+    return -1
+  let mask = s.buckets.len - 1
+  var i = int(hashKey(key) shr s.shift)
+  while true:
+    let b = s.buckets[i]
+    if (b and epochMask) != s.epoch:
+      return -1
+    let idx = int(b and indexMask) - 1
+    if s.keys[idx] == key:
+      return idx
+    i = (i + 1) and mask
 
 proc init*(
     T: type BlockAccessListTrackerRef,
     ledger: ReadOnlyLedger,
     builder: ptr BlockAccessListBuilder = nil,
 ): T =
-  if builder.isNil():
-    BlockAccessListTrackerRef(
-      ledger: ledger,
-      builder: BlockAccessListBuilder.newShared(),
-      builderOwner: true,
-    )
-  else:
-    BlockAccessListTrackerRef(ledger: ledger, builder: builder, builderOwner: false)
+  let owned = builder.isNil()
+  T(
+    ledger: LedgerRef(ledger),
+    builder: if owned: BlockAccessListBuilder.newShared() else: builder,
+    builderOwner: owned,
+    changes: BalChangesRef(),
+  )
+
+proc closeWindow(tracker: BlockAccessListTrackerRef) =
+  if tracker.windowOpen:
+    if tracker.ledger.balChanges == tracker.changes:
+      tracker.ledger.balChanges = nil
+    tracker.windowOpen = false
+  tracker.changes[].clear()
+  tracker.accounts.reset()
+  tracker.slots.reset()
 
 proc dispose*(tracker: BlockAccessListTrackerRef) =
+  tracker.closeWindow()
   if tracker.builderOwner:
     assert not tracker.builder.isNil()
     tracker.builder.dispose()
     tracker.builder = nil
     tracker.builderOwner = false
 
-proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: int) =
-  ## Must be called before processing each transaction/system contract
-  ## to ensure changes are associated with the correct block access index.
-  ## Note: Block access indices differ from transaction indices:
-  ##   - 0: Pre-execution (system contracts like beacon roots, block hashes)
-  ##   - 1..n: Transactions (tx at index i gets block_access_index i+1)
-  ##   - n+1: Post-execution (withdrawals, requests)
-  tracker.preStorageCache.clear()
-  tracker.preBalanceCache.clear()
-  tracker.preNonceCache.clear()
-  tracker.preCodeCache.clear()
-  tracker.currentBlockAccessIndex = blockAccessIndex
+proc reinit*(tracker: BlockAccessListTrackerRef, ledger: ReadOnlyLedger) =
+  tracker.closeWindow()
+  tracker.ledger = LedgerRef(ledger)
+  tracker.currentBlockAccessIndex = 0
+  tracker.blockAccessList = Opt.none(BlockAccessListRef)
+  if tracker.builderOwner:
+    tracker.builder[].clear()
 
+proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: int) =
+  tracker.closeWindow()
+  tracker.currentBlockAccessIndex = blockAccessIndex
   tracker.builder[].ensureIndexCount(blockAccessIndex + 1)
 
-template hasPendingCallFrame*(tracker: BlockAccessListTrackerRef): bool =
-  tracker.callFrameSnapshots.len() > 0
+proc beginCallFrame*(tracker: BlockAccessListTrackerRef) =
+  doAssert not tracker.windowOpen
+  doAssert tracker.ledger.isTopLevelClean()
+  tracker.windowOpen = true
+  tracker.ledger.balChanges = tracker.changes
 
-template hasParentCallFrame*(tracker: BlockAccessListTrackerRef): bool =
-  tracker.callFrameSnapshots.len() > 1
-
-template pendingCallFrame*(tracker: BlockAccessListTrackerRef): CallFrameSnapshot =
-  tracker.callFrameSnapshots[tracker.callFrameSnapshots.high]
-
-template parentCallFrame*(tracker: BlockAccessListTrackerRef): CallFrameSnapshot =
-  tracker.callFrameSnapshots[tracker.callFrameSnapshots.high - 1]
-
-template beginCallFrame*(tracker: BlockAccessListTrackerRef) =
-  ## Begin a new call frame for tracking reverts.
-  ## Creates a new snapshot to track changes within this call frame.
-  ## This allows proper handling of reverts as specified in EIP-7928.
-  tracker.callFrameSnapshots.add(CallFrameSnapshot.init())
-
-template popCallFrame(tracker: BlockAccessListTrackerRef) =
-  tracker.callFrameSnapshots.setLen(tracker.callFrameSnapshots.len() - 1)
-
-proc handleInTransactionSelfDestruct*(
-  tracker: BlockAccessListTrackerRef, address: Address
-)
-
-proc normalizePendingCallFrameChanges*(tracker: BlockAccessListTrackerRef)
+proc emit(tracker: BlockAccessListTrackerRef) =
+  let
+    index = tracker.currentBlockAccessIndex
+    builder = tracker.builder
+    changes = tracker.changes
+  for e in changes.balances:
+    if e.pre != e.post:
+      builder[].addBalanceChange(index, e.address, e.post)
+  for e in changes.nonces:
+    if e.pre != e.post:
+      builder[].addNonceChange(index, e.address, e.post)
+  for i, e in changes.codeDiffs:
+    if e.pre != e.post:
+      let code = changes.codes[i]
+      if code.isNil():
+        builder[].addCodeChange(index, e.address, [])
+      else:
+        builder[].addCodeChange(index, e.address, code.bytes())
+  builder[].addTouchedAccounts(index, tracker.accounts.keys)
+  if changes.slots.len == 0:
+    builder[].addStorageReads(index, tracker.slots.keys)
+    return
+  tracker.writeOf.setLen(0)
+  tracker.writeOf.setLen(tracker.slots.keys.len)
+  for ci in 0 ..< changes.slots.len:
+    template e(): untyped =
+      changes.slots[ci]
+    if e.pre != e.post:
+      let i = tracker.slots.find((e.address, e.slot))
+      if i >= 0:
+        tracker.writeOf[i] = int32(ci + 1)
+      else:
+        builder[].addStorageWrite(index, e.address, e.slot, e.post)
+  for i in 0 ..< tracker.slots.keys.len:
+    let
+      k = tracker.slots.keys[i]
+      w = tracker.writeOf[i]
+    if w == 0:
+      builder[].addStorageRead(index, k.address, k.slot)
+    else:
+      builder[].addStorageWrite(index, k.address, k.slot, changes.slots[w - 1].post)
 
 proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
-  # Commit changes from the current call frame.
-  # Removes the current call frame snapshot without rolling back changes.
-  # Called when a call completes successfully.
-  doAssert tracker.hasPendingCallFrame()
-
-  if tracker.hasParentCallFrame():
-    # Merge the pending call frame writes into the parent
-
-    for address in tracker.pendingCallFrame.inTransactionSelfDestructs:
-      tracker.handleInTransactionSelfDestruct(address)
-      tracker.parentCallFrame.inTransactionSelfDestructs.incl(address)
-
-    for storageKey, newValue in tracker.pendingCallFrame.storageChanges:
-      tracker.parentCallFrame.storageChanges[storageKey] = newValue
-
-    for address, newBalance in tracker.pendingCallFrame.balanceChanges:
-      tracker.parentCallFrame.balanceChanges[address] = newBalance
-
-    for address, newNonce in tracker.pendingCallFrame.nonceChanges:
-      tracker.parentCallFrame.nonceChanges[address] = newNonce
-
-    for address, newCode in tracker.pendingCallFrame.codeChanges.mpairs:
-      swap(
-        tracker.parentCallFrame.codeChanges.mgetOrPut(address, default(seq[byte])),
-        newCode,
-      )
-
-    # Merge the pending call frame reads into the parent
-    tracker.parentCallFrame.touchedAddresses.incl(
-      tracker.pendingCallFrame.touchedAddresses
-    )
-    tracker.parentCallFrame.storageReads.incl(tracker.pendingCallFrame.storageReads)
-  else:
-    # Merge the pending call frame writes into the builder
-
-    for address in tracker.pendingCallFrame.inTransactionSelfDestructs:
-      tracker.handleInTransactionSelfDestruct(address)
-
-    tracker.normalizePendingCallFrameChanges()
-
-    let currentIndex = tracker.currentBlockAccessIndex
-
-    for storageKey, newValue in tracker.pendingCallFrame.storageChanges:
-      let (address, slot) = storageKey
-      tracker.builder[].addStorageWrite(currentIndex, address, slot, newValue)
-
-    for address, newBalance in tracker.pendingCallFrame.balanceChanges:
-      tracker.builder[].addBalanceChange(currentIndex, address, newBalance)
-
-    for address, newNonce in tracker.pendingCallFrame.nonceChanges:
-      tracker.builder[].addNonceChange(currentIndex, address, newNonce)
-
-    for address, newCode in tracker.pendingCallFrame.codeChanges:
-      tracker.builder[].addCodeChange(currentIndex, address, newCode)
-
-    # Merge the pending call frame reads into the builder
-    for address in tracker.pendingCallFrame.touchedAddresses:
-      tracker.builder[].addTouchedAccount(currentIndex, address)
-    for storageKey in tracker.pendingCallFrame.storageReads:
-      tracker.builder[].addStorageRead(currentIndex, storageKey[0], storageKey[1])
-
-  tracker.popCallFrame()
+  doAssert tracker.windowOpen
+  if not tracker.ledger.isTopLevelClean():
+    tracker.ledger.collectBalChanges()
+  tracker.emit()
+  tracker.closeWindow()
 
 proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef, rollbackReads = false) =
-  ## Rollback changes from the current call frame.
-  ## When a call reverts, this function:
-  ## - Converts storage writes to reads
-  ## - Preserves touched addresses
-  ## This implements EIP-7928 revert handling where reverted writes
-  ## become reads and addresses remain in the access list.
-  doAssert tracker.hasPendingCallFrame()
+  doAssert tracker.windowOpen
+  if not rollbackReads:
+    tracker.emit()
+  tracker.closeWindow()
 
-  if rollbackReads:
-    tracker.popCallFrame()
-    return # discard all changes
-
-  if tracker.hasParentCallFrame():
-    # Merge the pending call frame reads into the parent
-    tracker.parentCallFrame.touchedAddresses.incl(
-      tracker.pendingCallFrame.touchedAddresses
-    )
-    tracker.parentCallFrame.storageReads.incl(tracker.pendingCallFrame.storageReads)
-
-    # Convert storage writes to reads
-    for storageKey in tracker.pendingCallFrame.storageChanges.keys():
-      tracker.parentCallFrame.storageReads.incl(storageKey)
-  else:
-    let currentIndex = tracker.currentBlockAccessIndex
-
-    # Merge the pending call frame reads into the builder
-    for address in tracker.pendingCallFrame.touchedAddresses:
-      tracker.builder[].addTouchedAccount(currentIndex, address)
-    for storageKey in tracker.pendingCallFrame.storageReads:
-      tracker.builder[].addStorageRead(currentIndex, storageKey[0], storageKey[1])
-
-    # Convert storage writes to reads
-    for storageKey in tracker.pendingCallFrame.storageChanges.keys():
-      tracker.builder[].addStorageRead(currentIndex, storageKey[0], storageKey[1])
-
-  tracker.popCallFrame()
-
-proc capturePreBalance*(tracker: BlockAccessListTrackerRef, address: Address) =
-  ## Capture and cache the pre-transaction balance for an account.
-  ## This function caches the balance on first access for each address during
-  ## a transaction. It must be called before any balance modifications are made
-  ## to ensure we capture the pre-transaction balance correctly. The cache is
-  ## cleared at the beginning of each transaction.
-  ## This is used by normalize_balance_changes to determine which balance
-  ## changes should be filtered out.
-  if address notin tracker.preBalanceCache:
-    tracker.preBalanceCache[address] = tracker.ledger.getBalance(address)
-
-template getPreBalance*(tracker: BlockAccessListTrackerRef, address: Address): UInt256 =
-  tracker.preBalanceCache.getOrDefault(address)
-
-proc capturePreNonce*(tracker: BlockAccessListTrackerRef, address: Address) =
-  if address notin tracker.preNonceCache:
-    tracker.preNonceCache[address] = tracker.ledger.getNonce(address)
-
-template getPreNonce*(
-    tracker: BlockAccessListTrackerRef, address: Address
-): AccountNonce =
-  tracker.preNonceCache.getOrDefault(address)
-
-proc capturePreCode*(tracker: BlockAccessListTrackerRef, address: Address) =
-  if address notin tracker.preCodeCache:
-    tracker.preCodeCache[address] = tracker.ledger.getCode(address).bytes
-
-template getPreCode*(tracker: BlockAccessListTrackerRef, address: Address): seq[byte] =
-  tracker.preCodeCache.getOrDefault(address)
-
-proc capturePreStorage*(
-    tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
-) =
-  ## Capture and cache the pre-transaction value for a storage location.
-  ## Retrieves the storage value from the beginning of the current transaction.
-  ## The value is cached within the transaction to avoid repeated lookups and
-  ## to maintain consistency across multiple accesses within the same
-  ## transaction.
-  let storageKey = (address, slot)
-
-  if storageKey notin tracker.preStorageCache:
-    tracker.preStorageCache[storageKey] = tracker.ledger.getStorage(address, slot)
-
-template getPreStorage*(
-    tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
-): UInt256 =
-  tracker.preStorageCache.getOrDefault((address, slot))
-
-template trackAddressAccess*(tracker: BlockAccessListTrackerRef, address: Address) =
-  ## Track that an address was accessed.
-  ## Records account access even when no state changes occur. This is
-  ## important for operations that read account data without modifying it.
-  assert tracker.hasPendingCallFrame()
-  tracker.pendingCallFrame.touchedAddresses.incl(address)
+proc trackAddressAccess*(tracker: BlockAccessListTrackerRef, address: Address) {.inline.} =
+  assert tracker.windowOpen
+  tracker.accounts.incl(address)
 
 proc trackStorageRead*(
     tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
-) =
-  ## Track a storage read operation.
-  ## Records that a storage slot was read and captures its pre-state value.
-  ## The slot will only appear in the final access list if it wasn't also
-  ## written to during block execution.
-  assert tracker.hasPendingCallFrame()
-  tracker.pendingCallFrame.touchedAddresses.incl(address)
-  tracker.pendingCallFrame.storageReads.incl((address, slot))
-
-proc trackStorageWrite*(
-    tracker: BlockAccessListTrackerRef,
-    address: Address,
-    slot: UInt256,
-    newValue: UInt256,
-) =
-  ## Track a storage write operation.
-  ## Records storage modifications, but only if the new value differs from
-  ## the pre-state value. No-op writes (where the value doesn't change) are
-  ## tracked as reads instead, as specified in [EIP-7928].
-  assert tracker.hasPendingCallFrame()
-
-  let storageKey = (address, slot)
-  tracker.pendingCallFrame.storageChanges.withValue(storageKey, value):
-    if newValue == value[]:
-      return # nothing to do because we have already tracked this value
-
-  tracker.trackAddressAccess(address)
-  tracker.capturePreStorage(address, slot)
-  tracker.pendingCallFrame.storageChanges[storageKey] = newValue
-
-proc trackBalanceChange*(
-    tracker: BlockAccessListTrackerRef, address: Address, newBalance: UInt256
-) =
-  ## Track a balance change for an account.
-  ## Records the new balance after any balance-affecting operation, including
-  ## transfers, gas payments, block rewards, and withdrawals.
-  assert tracker.hasPendingCallFrame()
-
-  tracker.pendingCallFrame.balanceChanges.withValue(address, balance):
-    if newBalance == balance[]:
-      return # nothing to do because we have already tracked this value
-
-  tracker.trackAddressAccess(address)
-  tracker.capturePreBalance(address)
-  tracker.pendingCallFrame.balanceChanges[address] = newBalance
-
-proc trackAddBalanceChange*(
-    tracker: BlockAccessListTrackerRef, address: Address, delta: UInt256
-) =
-  if delta.isZero:
-    tracker.trackAddressAccess(address)
-    return
-
-  tracker.trackBalanceChange(address, tracker.ledger.getBalance(address) + delta)
-
-proc trackSubBalanceChange*(
-    tracker: BlockAccessListTrackerRef, address: Address, delta: UInt256
-) =
-  if delta.isZero:
-    # In this case we don't call trackAddressAccess because the account isn't read
-    # due to early return as defined in EIP-4788
-    return
-
-  tracker.trackBalanceChange(address, tracker.ledger.getBalance(address) - delta)
-
-proc trackNonceChange*(
-    tracker: BlockAccessListTrackerRef, address: Address, newNonce: AccountNonce
-) =
-  ## Track a nonce change for an account.
-  ## Records nonce increments for both EOAs (when sending transactions) and
-  ## contracts (when performing [`CREATE`] or [`CREATE2`] operations). Deployed
-  ## contracts also have their initial nonce tracked.
-  assert tracker.hasPendingCallFrame()
-
-  tracker.pendingCallFrame.nonceChanges.withValue(address, nonce):
-    if newNonce == nonce[]:
-      return # nothing to do because we have already tracked this value
-
-  tracker.trackAddressAccess(address)
-  tracker.capturePreNonce(address)
-  tracker.pendingCallFrame.nonceChanges[address] = newNonce
-
-template trackIncNonceChange*(tracker: BlockAccessListTrackerRef, address: Address) =
-  tracker.trackNonceChange(address, tracker.ledger.getNonce(address) + 1)
-
-proc trackCodeChange*(
-    tracker: BlockAccessListTrackerRef, address: Address, newCode: seq[byte]
-) =
-  ## Track a code change for contract deployment.
-  ## Records new contract code deployments via [`CREATE`], [`CREATE2`], or
-  ## [`SETCODE`] operations. This function is called when contract bytecode
-  ## is deployed to an address.
-  assert tracker.hasPendingCallFrame()
-
-  tracker.pendingCallFrame.codeChanges.withValue(address, code):
-    if newCode == code[]:
-      return # nothing to do because we have already tracked this value
-
-  tracker.trackAddressAccess(address)
-  tracker.capturePreCode(address)
-  tracker.pendingCallFrame.codeChanges[address] = newCode
-
-proc trackSelfDestruct*(tracker: BlockAccessListTrackerRef, address: Address) =
-  tracker.trackBalanceChange(address, 0.u256)
-
-proc trackInTransactionSelfDestruct*(
-    tracker: BlockAccessListTrackerRef, address: Address
-) =
-  assert tracker.hasPendingCallFrame()
-  tracker.pendingCallFrame.inTransactionSelfDestructs.incl(address)
-
-proc handleInTransactionSelfDestruct*(
-    tracker: BlockAccessListTrackerRef, address: Address
-) =
-  ## Handle an account that self-destructed in the same transaction it was
-  ## created.
-  ## Per EIP-7928, accounts destroyed within their creation transaction must be
-  ## included as read-only with storage writes converted to reads. Nonce and
-  ## code changes from the current transaction are also removed.
-  assert tracker.hasPendingCallFrame()
-
-  var slotsToConvert: seq[UInt256]
-  for storageKey in tracker.pendingCallFrame.storageChanges.keys():
-    let (adr, slot) = storageKey
-    if adr == address:
-      slotsToConvert.add(slot)
-
-  for slot in slotsToConvert:
-    let storageKey = (address, slot)
-    tracker.pendingCallFrame.storageReads.incl(storageKey)
-    tracker.pendingCallFrame.storageChanges.del(storageKey)
-
-  tracker.pendingCallFrame.nonceChanges.del(address)
-  tracker.pendingCallFrame.codeChanges.del(address)
-
-  tracker.trackNonceChange(address, 0)
-  tracker.trackCodeChange(address, @[])
-
-proc normalizePendingCallFrameChanges*(tracker: BlockAccessListTrackerRef) =
-  ## Normalize balance, nonce, code and storage changes for the current
-  ## block access index.
-  ## This method filters out spurious balance and storage changes by removing all
-  ## changes for addresses and slots where the post-execution balance/value equals
-  ## the pre-execution/value balance.
-  ## This is crucial for handling cases like:
-  ## - In-transaction self-destructs where an account with 0 balance is created
-  ##   and destroyed, resulting in no net balance change
-  ## - Round-trip transfers where an account receives and sends equal amounts
-  ## - Zero-amount withdrawals where the balance doesn't actually change
-  ## - Storage no-op writes
-  ## This should be called at the end of any operation that tracks balance
-  ## changes (transactions, withdrawals, etc.). Only actual state changes are
-  ## recorded in the Block Access List.
-  assert tracker.hasPendingCallFrame()
-
-  var slotsToRemove: seq[(Address, UInt256)]
-  for storageKey, postValue in tracker.pendingCallFrame.storageChanges:
-    let
-      (address, slot) = storageKey
-      preValue = tracker.getPreStorage(address, slot)
-    if preValue == postValue:
-      slotsToRemove.add(storageKey)
-
-  for storageKey in slotsToRemove:
-    tracker.pendingCallFrame.storageReads.incl(storageKey)
-    tracker.pendingCallFrame.storageChanges.del(storageKey)
-
-  block:
-    var addressesToRemove: seq[Address]
-    for address, postBalance in tracker.pendingCallFrame.balanceChanges:
-      let preBalance = tracker.getPreBalance(address)
-      if preBalance == postBalance:
-        addressesToRemove.add(address)
-
-    for address in addressesToRemove:
-      tracker.pendingCallFrame.balanceChanges.del(address)
-
-  block:
-    var addressesToRemove: seq[Address]
-    for address, newNonce in tracker.pendingCallFrame.nonceChanges:
-      let preNonce = tracker.getPreNonce(address)
-      if preNonce == newNonce:
-        addressesToRemove.add(address)
-
-    for address in addressesToRemove:
-      tracker.pendingCallFrame.nonceChanges.del(address)
-
-  block:
-    var addressesToRemove: seq[Address]
-    for address, newCode in tracker.pendingCallFrame.codeChanges:
-      let preCode = tracker.getPreCode(address)
-      if preCode == newCode:
-        addressesToRemove.add(address)
-
-    for address in addressesToRemove:
-      tracker.pendingCallFrame.codeChanges.del(address)
+) {.inline.} =
+  assert tracker.windowOpen
+  tracker.slots.incl((address, slot))
 
 proc getBlockAccessList*(
     tracker: BlockAccessListTrackerRef, rebuild = false

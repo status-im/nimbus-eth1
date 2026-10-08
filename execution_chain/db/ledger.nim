@@ -19,7 +19,7 @@ import
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
   ../constants,
-  ../block_access_list/bal_overlay,
+  ../block_access_list/[bal_changes, bal_overlay],
   ./[access_list as ac_access_list, core_db, storage_types],
   ./aristo/[aristo_blobify, aristo_desc, aristo_get]
 
@@ -133,6 +133,8 @@ type
       ## that the values will be returned from the ledger caches. The intention
       ## is that a separate ledger instance is used for each transaction each having
       ## its own overlay instance for the given BAL index.
+
+    balChanges*: BalChangesRef
 
   ReadOnlyLedger* = distinct LedgerRef
 
@@ -389,7 +391,9 @@ template abortOnFatalError*(ledger: LedgerRef) =
     else:
       raiseAssert ledger.fatalError.get()
 
-proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
+proc persistStorage(
+    acc: AccountRef, ledger: LedgerRef, address: Address, changes: BalChangesRef
+): Result[void, string] =
   const info = "persistStorage(): "
 
   if acc.overlayStorage.len == 0:
@@ -406,9 +410,16 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   # Save `overlayStorage[]` on database
   let original = acc.original
   for slot, value in acc.overlayStorage:
-    original.storage.withValue(slot, v):
+    original.storage.withValue(slot, v) do:
       if v[] == value:
         continue # Avoid writing A-B-A updates
+      if not changes.isNil:
+        changes[].recordSlot(address, slot, v[], value)
+    do:
+      if not changes.isNil:
+        let pre = acc.originalStorageValue(address, slot, ledger)
+        if pre != value:
+          changes[].recordSlot(address, slot, pre, value)
 
     var cached = true
     let slotKey = ledger.slots.get(slot).valueOr:
@@ -561,6 +572,7 @@ proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   ledger.ripemdSpecial = false
   ledger.fatalError = Opt.none(string)
   ledger.balOverlay = Opt.none(BlockAccessListOverlay)
+  ledger.balChanges = nil
   ledger.witnessKeys.clear()
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
@@ -903,6 +915,37 @@ proc clearEmptyAccounts(ledger: LedgerRef) =
 
     ledger.ripemdSpecial = false
 
+proc recordBalChanges(
+    changes: BalChangesRef, address: Address, acc: AccountRef, destroyed: bool
+) =
+  let
+    pre = acc.original.statement
+    postNonce = if destroyed: 0.AccountNonce else: acc.statement.nonce
+    postCodeHash = if destroyed: EMPTY_CODE_HASH else: acc.statement.codeHash
+  if pre.balance != acc.statement.balance:
+    changes[].recordBalance(address, pre.balance, acc.statement.balance)
+  if pre.nonce != postNonce:
+    changes[].recordNonce(address, pre.nonce, postNonce)
+  if pre.codeHash != postCodeHash:
+    changes[].recordCode(
+      address, pre.codeHash, postCodeHash,
+      if destroyed: CodeBytesRef(nil) else: acc.code)
+
+proc collectBalChanges*(ledger: LedgerRef) =
+  let changes = ledger.balChanges
+  if changes.isNil:
+    return
+  doAssert ledger.savePoint.parentSavePoint.isNil
+  let anyDestroyed = ledger.savePoint.selfDestruct.len > 0
+  for address, acc in ledger.savePoint.dirty:
+    let destroyed = anyDestroyed and address in ledger.savePoint.selfDestruct
+    changes.recordBalChanges(address, acc, destroyed)
+    if not destroyed and StorageChanged in acc.flags:
+      for slot, value in acc.overlayStorage:
+        let pre = acc.originalStorageValue(address, slot, ledger)
+        if pre != value:
+          changes[].recordSlot(address, slot, pre, value)
+
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
@@ -969,7 +1012,10 @@ proc persist*(ledger: LedgerRef,
   if clearEmptyAccount:
     ledger.clearEmptyAccounts()
 
+  let changes = ledger.balChanges
   for (address, acc) in ledger.savePoint.dirty.pairs(): # This is a hotspot in block processing
+    if not changes.isNil:
+      changes.recordBalChanges(address, acc, false)
     case acc.persistMode()
     of Update:
       if CodeChanged in acc.flags:
@@ -983,7 +1029,7 @@ proc persist*(ledger: LedgerRef,
         ledger.txFrame.clearStorage(acc.accPath).expect("can clear storage of account")
 
       if StorageChanged in acc.flags:
-        acc.persistStorage(ledger).isOkOr:
+        acc.persistStorage(ledger, address, changes).isOkOr:
           ledger.setFatalErrorOrAssert(error)
       else:
         # This one is only necessary unless `persistStorage()` is run which needs
@@ -1020,6 +1066,8 @@ proc persist*(ledger: LedgerRef,
   ledger.savePoint.accessList.clear() # EIP2929
 
   ledger.isDirty = false
+  if not changes.isNil:
+    changes.merging = true
 
   if clearWitness:
     ledger.clearWitnessKeys()

@@ -529,4 +529,5 @@ proc processTransactionsParallel*(
     )
 
   applyBlockAccessListState(vmState.ledger, balRef[], n)
+  vmState.ledger.persist(clearEmptyAccount = true)
   ok()

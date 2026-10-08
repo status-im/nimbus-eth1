@@ -34,6 +34,7 @@ export block_access_lists
 type
   StorageWrite = tuple[address: Address, slot: UInt256, value: UInt256]
   StorageReadEntry = tuple[address: Address, slot: UInt256]
+  AccessedSlot* = tuple[address: Address, slot: UInt256]
   BalanceWrite = tuple[address: Address, balance: UInt256]
   NonceWrite = tuple[address: Address, nonce: AccountNonce]
   CodeWrite = tuple[address: Address, code: SharedBytes]
@@ -93,11 +94,44 @@ proc ensureIndexCount*(builder: var BlockAccessListBuilder, n: int, exact = fals
   if n > builder.perIndex.len:
     builder.perIndex.setLen(n, zeroed = true, exact)
 
+proc clear*(builder: var BlockAccessListBuilder) =
+  for d in builder.perIndex.mitems():
+    d.touchedAccounts.setLen(0)
+    d.storageChanges.setLen(0)
+    d.storageReads.setLen(0)
+    d.balanceChanges.setLen(0)
+    d.nonceChanges.setLen(0)
+    for code in d.codeChanges.mitems():
+      code.code.dispose()
+    d.codeChanges.setLen(0)
+
+template appendAll[E](s: var SharedSeq[E], values: openArray[E]) =
+  if values.len > 0:
+    let n = s.len
+    s.setLen(n + values.len, zeroed = false)
+    copyMem(addr s[n], unsafeAddr values[0], values.len * sizeof(E))
+
 proc addTouchedAccount*(
     builder: var BlockAccessListBuilder, blockAccessIndex: int, address: Address
 ) =
   assert blockAccessIndex < builder.perIndex.len
   builder.perIndex[blockAccessIndex].touchedAccounts.add(address)
+
+proc addTouchedAccounts*(
+    builder: var BlockAccessListBuilder,
+    blockAccessIndex: int,
+    addresses: openArray[Address],
+) =
+  assert blockAccessIndex < builder.perIndex.len
+  builder.perIndex[blockAccessIndex].touchedAccounts.appendAll(addresses)
+
+proc addStorageReads*(
+    builder: var BlockAccessListBuilder,
+    blockAccessIndex: int,
+    reads: openArray[AccessedSlot],
+) =
+  assert blockAccessIndex < builder.perIndex.len
+  builder.perIndex[blockAccessIndex].storageReads.appendAll(reads)
 
 proc addStorageWrite*(
     builder: var BlockAccessListBuilder,

@@ -185,7 +185,7 @@ proc procBlkPreamble(
 
     if vmState.balTrackerEnabled:
       for withdrawal in blk.withdrawals.get:
-        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
+        vmState.balTracker.trackAddressAccess(withdrawal.address)
         vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
     else:
       for withdrawal in blk.withdrawals.get:

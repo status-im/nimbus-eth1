@@ -339,7 +339,7 @@ proc exec(ctx: TransContext,
   if ctx.env.withdrawals.isSome:
     if vmState.balTrackerEnabled:
       for withdrawal in ctx.env.withdrawals.get:
-        vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
+        vmState.balTracker.trackAddressAccess(withdrawal.address)
         vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
     else:
       for withdrawal in ctx.env.withdrawals.get:

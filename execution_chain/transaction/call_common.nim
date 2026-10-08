@@ -155,7 +155,7 @@ proc prepareToRunComputation(params: CallParams) =
   vmState.mutateLedger:
     if not params.isCreate:
       if vmState.balTrackerEnabled:
-        vmState.balTracker.trackIncNonceChange(params.sender)
+        vmState.balTracker.trackAddressAccess(params.sender)
       ledger.incNonce(params.sender)
 
     # Charge for gas.
@@ -165,8 +165,8 @@ proc prepareToRunComputation(params: CallParams) =
       gasFee += blobGasFee(tx.versionedHashes.len,
         vmState.blockCtx.excessBlobGas, vmState.com, fork)
 
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackSubBalanceChange(params.sender, gasFee)
+    if vmState.balTrackerEnabled and not gasFee.isZero:
+      vmState.balTracker.trackAddressAccess(params.sender)
     ledger.subBalance(params.sender, gasFee)
 
 proc calculateAndPossiblyRefundGas(c: Computation, params: CallParams): GasUsed =
@@ -204,7 +204,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, params: CallParams): GasUsed 
   if txGasLeft > 0:
     let gasRefundAmount = txGasLeft.u256 * params.effectiveGasPrice.u256
     if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddBalanceChange(params.sender, gasRefundAmount)
+      vmState.balTracker.trackAddressAccess(params.sender)
     vmState.mutateLedger:
       ledger.addBalance(params.sender, gasRefundAmount, checkEmptyAccount = fork < FkParis)
 

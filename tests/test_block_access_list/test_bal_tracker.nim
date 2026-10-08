@@ -11,17 +11,19 @@
 {.used.}
 
 import
-  std/[tables, sets],
   stew/byteutils,
   unittest2,
+  eth/common/[hashes, headers],
   ../../execution_chain/db/core_db/memory_only,
   ../../execution_chain/db/core_db,
   ../../execution_chain/concurrency/shared_types,
+  ../../execution_chain/common/[common, evmforks],
+  ../../execution_chain/constants,
+  ../../execution_chain/evm/[state, types],
+  ../../execution_chain/core/executor/process_transaction,
   ../../execution_chain/block_access_list/bal_tracker
 
-# The builder no longer exposes its internal storage, so these helpers assert
-# against the public BlockAccessList produced by buildBlockAccessList. Building
-# is non-consuming, so it can be called repeatedly within a test.
+from ../../tools/common/helpers import getChainConfig
 
 proc buildBal(tracker: BlockAccessListTrackerRef): BlockAccessList =
   tracker.builder[].buildBlockAccessList()[]
@@ -73,6 +75,27 @@ func hasStorageRead(acc: AccountChanges, slot: UInt256): bool =
       return true
   false
 
+func noChanges(acc: AccountChanges): bool =
+  acc.balanceChanges.len == 0 and acc.nonceChanges.len == 0 and
+    acc.codeChanges.len == 0 and acc.storageChanges.len == 0
+
+template inTx(
+    tracker: BlockAccessListTrackerRef,
+    ledger: LedgerRef,
+    balIndex: int,
+    doPersist: bool,
+    body: untyped,
+) =
+  tracker.setBlockAccessIndex(balIndex)
+  tracker.beginCallFrame()
+  block:
+    let sp = ledger.beginSavePoint()
+    body
+    ledger.commit(sp)
+  if doPersist:
+    ledger.persist(clearEmptyAccount = true)
+  tracker.commitCallFrame()
+
 suite "Block access list tracker":
   let
     address1 = address"0x10007bc31cedb7bfb8a345f31e668033056b2728"
@@ -100,9 +123,6 @@ suite "Block access list tracker":
       ledger = LedgerRef.init(coreDb.baseTxFrame())
       tracker = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
 
-    # Setup in test data in db
-
-    # address 1
     ledger.setBalance(address1, balance1)
     ledger.setNonce(address1, nonce1)
     ledger.setCode(address1, code1)
@@ -110,309 +130,225 @@ suite "Block access list tracker":
     ledger.setStorage(address1, slot2, slotValue2)
     ledger.setStorage(address1, slot3, slotValue3)
 
-    # address 2
     ledger.setBalance(address2, balance2)
     ledger.setNonce(address2, nonce2)
     ledger.setCode(address2, code2)
 
-    # address 3
     ledger.setBalance(address3, balance3)
     ledger.setNonce(address3, nonce3)
+
+    ledger.persist()
 
   teardown:
     tracker.dispose()
 
   test "Set valid block access index":
-    let balIndexes = [
-      uint16.low.int,
-      1,
-      10,
-      uint16.high.int - 1,
-      uint16.high.int
-    ]
+    let balIndexes = [uint16.low.int, 1, 10, uint16.high.int - 1, uint16.high.int]
 
+    var expected = balance1
     for balIndex in balIndexes:
-      tracker.setBlockAccessIndex(balIndex)
-      tracker.beginCallFrame()
-      tracker.trackBalanceChange(address1, balance1 + 1.u256)
-      tracker.commitCallFrame()
+      expected = expected + 1.u256
+      tracker.inTx(ledger, balIndex, true):
+        tracker.trackAddressAccess(address1)
+        ledger.setBalance(address1, expected)
 
       let acc = tracker.buildBal().findAcc(address1)
       check acc.isSome()
-      check acc.get().balanceAt(balIndex).isSome()
-
-  test "Capture pre balance - stores in preBalanceCache and returns":
-    block:
-      let cacheKey = address1
-      check cacheKey notin tracker.preBalanceCache
-
-      tracker.capturePreBalance(address1)
-
-      check:
-        tracker.getPreBalance(address1) == balance1
-        cacheKey in tracker.preBalanceCache
-
-    block:
-      let cacheKey = address4 # has no balance
-      check cacheKey notin tracker.preBalanceCache
-
-      tracker.capturePreBalance(address4)
-
-      check:
-        tracker.getPreBalance(address4) == 0.u256
-        cacheKey in tracker.preBalanceCache
-
-  test "Capture pre storage - stores in preStorageCache":
-    block:
-      let cacheKey = (address1, slot1)
-      check cacheKey notin tracker.preStorageCache
-
-      tracker.capturePreStorage(address1, slot1)
-
-      check:
-        tracker.getPreStorage(address1, slot1) == slotValue1
-        cacheKey in tracker.preStorageCache
-
-    block:
-      let cacheKey = (address1, slot2)
-      check cacheKey notin tracker.preStorageCache
-
-      tracker.capturePreStorage(address1, slot2)
-
-      check:
-        tracker.getPreStorage(address1, slot2) == slotValue2
-        cacheKey in tracker.preStorageCache
-
-    block:
-      let cacheKey = (address2, slot1) # slot doesn't exist
-      check cacheKey notin tracker.preStorageCache
-
-      tracker.capturePreStorage(address2, slot1)
-
-      check:
-        tracker.getPreStorage(address2, slot1) == 0.u256
-        cacheKey in tracker.preStorageCache
+      check acc.get().balanceAt(balIndex) == Opt.some(expected)
 
   test "Track address access":
-    tracker.setBlockAccessIndex(0)
+    tracker.inTx(ledger, 0, true):
+      tracker.trackAddressAccess(address1)
+      tracker.trackAddressAccess(address2)
+      tracker.trackAddressAccess(address4)
+      tracker.trackAddressAccess(address1)
 
-    block:
+    let bal = tracker.buildBal()
+    check:
+      bal.len == 3
+      bal.findAcc(address1).get().noChanges()
+      bal.findAcc(address2).get().noChanges()
+      bal.findAcc(address4).get().noChanges()
+      not bal.hasAccount(address3)
+
+  test "Balance, nonce and code changes":
+    let newCode = @[0x4.byte, 0x5, 0x6]
+    tracker.inTx(ledger, 5, true):
+      tracker.trackAddressAccess(address2)
+      ledger.setBalance(address2, 3000.u256)
+      ledger.setNonce(address2, nonce2 + 1)
+      ledger.setCode(address2, newCode)
+
+    let acc = tracker.buildBal().findAcc(address2)
+    check:
+      acc.isSome()
+      acc.get().balanceAt(5) == Opt.some(3000.u256)
+      acc.get().nonceAt(5) == Opt.some(nonce2 + 1)
+      acc.get().codeAt(5) == Opt.some(newCode)
+
+  test "Unchanged values are only touched":
+    tracker.inTx(ledger, 2, true):
+      tracker.trackAddressAccess(address2)
+      tracker.trackAddressAccess(address3)
+      ledger.setBalance(address2, 1.u256)
+      ledger.setBalance(address2, balance2)
+      ledger.setCode(address2, code2)
+      ledger.addBalance(address3, 0.u256, checkEmptyAccount = false)
+
+    let bal = tracker.buildBal()
+    check:
+      bal.findAcc(address2).get().noChanges()
+      bal.findAcc(address3).get().noChanges()
+
+  test "Storage reads and writes":
+    let newValue = 100_000.u256
+    tracker.inTx(ledger, 1, true):
+      tracker.trackStorageRead(address1, slot1)
+      ledger.setStorage(address1, slot1, newValue)
+      tracker.trackStorageRead(address2, slot2)
+      discard ledger.getStorage(address2, slot2)
+
+    let bal = tracker.buildBal()
+    check:
+      bal.findAcc(address1).get().storageAt(slot1, 1) == Opt.some(newValue)
+      not bal.findAcc(address1).get().hasStorageRead(slot1)
+      bal.findAcc(address2).get().hasStorageRead(slot2)
+      not bal.findAcc(address2).get().hasStorageChange(slot2)
+
+  test "No-op and round trip storage writes become reads":
+    tracker.inTx(ledger, 3, true):
+      tracker.trackStorageRead(address1, slot2)
+      ledger.setStorage(address1, slot2, slotValue2)
+      tracker.trackStorageRead(address1, slot3)
+      ledger.setStorage(address1, slot3, 1.u256)
+      ledger.setStorage(address1, slot3, slotValue3)
+
+    let acc = tracker.buildBal().findAcc(address1).get()
+    check:
+      not acc.hasStorageChange(slot2)
+      not acc.hasStorageChange(slot3)
+      acc.hasStorageRead(slot2)
+      acc.hasStorageRead(slot3)
+
+  test "Reverted writes become reads and touches are kept":
+    tracker.inTx(ledger, 4, true):
+      tracker.trackAddressAccess(address3)
+      ledger.setBalance(address3, balance3 + 1.u256)
+      let inner = ledger.beginSavePoint()
+      tracker.trackStorageRead(address1, slot1)
+      ledger.setStorage(address1, slot1, 5.u256)
+      tracker.trackAddressAccess(address2)
+      ledger.setBalance(address2, 1.u256)
+      tracker.trackAddressAccess(address4)
+      ledger.setBalance(address4, 7.u256)
+      ledger.rollback(inner)
+
+    let bal = tracker.buildBal()
+    check:
+      bal.findAcc(address3).get().balanceAt(4) == Opt.some(balance3 + 1.u256)
+      not bal.findAcc(address1).get().hasStorageChange(slot1)
+      bal.findAcc(address1).get().hasStorageRead(slot1)
+      bal.findAcc(address2).get().noChanges()
+      bal.findAcc(address4).get().noChanges()
+
+  test "Rollback at the top level":
+    tracker.setBlockAccessIndex(1)
+    tracker.beginCallFrame()
+    var sp = ledger.beginSavePoint()
+    tracker.trackAddressAccess(address2)
+    tracker.trackStorageRead(address1, slot1)
+    ledger.setBalance(address2, 1.u256)
+    tracker.rollbackCallFrame(rollbackReads = true)
+    ledger.rollback(sp)
+    ledger.persist()
+
+    check tracker.buildBal().len == 0
+
+    tracker.setBlockAccessIndex(1)
+    tracker.beginCallFrame()
+    sp = ledger.beginSavePoint()
+    tracker.trackAddressAccess(address2)
+    tracker.trackStorageRead(address1, slot1)
+    ledger.setBalance(address2, 1.u256)
+    tracker.rollbackCallFrame(rollbackReads = false)
+    ledger.rollback(sp)
+    ledger.persist()
+
+    let bal = tracker.buildBal()
+    check:
+      bal.findAcc(address2).get().noChanges()
+      bal.findAcc(address1).get().hasStorageRead(slot1)
+
+  for persist in [true, false]:
+    test "In transaction self destruct, persist = " & $persist:
+      let value = 1000.u256
+      tracker.inTx(ledger, 10, persist):
+        tracker.trackAddressAccess(address4)
+        ledger.clearStorage(address4)
+        ledger.setNonce(address4, 1)
+        ledger.setCode(address4, @[0x60.byte, 0x00])
+        ledger.addBalance(address4, value)
+        tracker.trackStorageRead(address4, slot1)
+        ledger.setStorage(address4, slot1, 9.u256)
+        tracker.trackAddressAccess(address3)
+        ledger.subBalance(address4, value)
+        ledger.addBalance(address3, value)
+        check ledger.selfDestruct8246(address4)
+
       let bal = tracker.buildBal()
       check:
-        not bal.hasAccount(address1)
-        not bal.hasAccount(address2)
-        not bal.hasAccount(address4)
+        bal.findAcc(address4).get().noChanges()
+        bal.findAcc(address4).get().hasStorageRead(slot1)
+        bal.findAcc(address3).get().balanceAt(10) == Opt.some(balance3 + value)
 
+  test "Changes are merged across persists in one window":
+    tracker.setBlockAccessIndex(0)
     tracker.beginCallFrame()
-    tracker.trackAddressAccess(address1)
+    tracker.trackStorageRead(address1, slot1)
     tracker.trackAddressAccess(address2)
-    tracker.trackAddressAccess(address4)
+    ledger.setStorage(address1, slot1, 5.u256)
+    ledger.setBalance(address2, 1.u256)
+    ledger.setNonce(address3, 99)
+    ledger.persist()
+    ledger.setStorage(address1, slot1, slotValue1)
+    ledger.setBalance(address2, 2.u256)
+    ledger.persist()
+    ledger.setStorage(address1, slot2, 6.u256)
+    ledger.persist()
     tracker.commitCallFrame()
 
     let bal = tracker.buildBal()
     check:
-      bal.hasAccount(address1)
-      bal.hasAccount(address2)
-      bal.hasAccount(address4)
+      not bal.findAcc(address1).get().hasStorageChange(slot1)
+      bal.findAcc(address1).get().hasStorageRead(slot1)
+      bal.findAcc(address1).get().storageAt(slot2, 0) == Opt.some(6.u256)
+      bal.findAcc(address2).get().balanceAt(0) == Opt.some(2.u256)
+      bal.findAcc(address2).get().balanceChanges.len == 1
+      bal.findAcc(address3).get().nonceAt(0) == Opt.some(99.AccountNonce)
 
-  test "Begin, commit and rollback call frame":
-    check tracker.callFrameSnapshots.len() == 0
-    tracker.beginCallFrame()
-    check tracker.callFrameSnapshots.len() == 1
-    tracker.commitCallFrame()
-    check tracker.callFrameSnapshots.len() == 0
-    tracker.beginCallFrame()
-    tracker.beginCallFrame()
-    check tracker.callFrameSnapshots.len() == 2
-    tracker.rollbackCallFrame()
-    check tracker.callFrameSnapshots.len() == 1
+  test "Touch sets grow and reset per index":
+    tracker.inTx(ledger, 1, true):
+      for i in 0 ..< 1000:
+        tracker.trackAddressAccess(Address.copyFrom(i.u256.toBytesBE, 12))
+        tracker.trackStorageRead(address1, i.u256)
+    tracker.inTx(ledger, 2, true):
+      for i in 0 ..< 1000:
+        tracker.trackAddressAccess(Address.copyFrom(i.u256.toBytesBE, 12))
 
-  test "Track balance change":
-    let
-      balIndex = 5
-      newBalance = 3000.u256
-
-    tracker.setBlockAccessIndex(balIndex)
-    tracker.beginCallFrame()
-    check tracker.callFrameSnapshots.len() == 1
-
-    check not tracker.buildBal().hasAccount(address2)
-    tracker.trackBalanceChange(address2, newBalance)
-
+    let bal = tracker.buildBal()
     check:
-      tracker.pendingCallFrame().balanceChanges.contains(address2)
-      tracker.pendingCallFrame().balanceChanges.getOrDefault(address2) == newBalance
+      bal.len == 1001
+      bal.findAcc(address1).get().storageReads.len == 1000
 
-    tracker.commitCallFrame()
-
-    let acc = tracker.buildBal().findAcc(address2)
-    check acc.isSome()
-    check acc.get().balanceAt(balIndex) == Opt.some(newBalance)
-
-  test "Track nonce change":
-    let
-      balIndex = 2
-      newNonce = 3.AccountNonce
-
-    tracker.setBlockAccessIndex(balIndex)
-    tracker.beginCallFrame()
-    check tracker.callFrameSnapshots.len() == 1
-
-    check not tracker.buildBal().hasAccount(address2)
-    tracker.trackNonceChange(address2, newNonce)
-
+  test "Reinit keeps the owned builder and clears it":
+    tracker.inTx(ledger, 1, true):
+      tracker.trackAddressAccess(address1)
+    check tracker.buildBal().len == 1
+    let builder = tracker.builder
+    tracker.reinit(ledger.ReadOnlyLedger)
     check:
-      tracker.pendingCallFrame().nonceChanges.contains(address2)
-      tracker.pendingCallFrame().nonceChanges.getOrDefault(address2) == newNonce
-
-    tracker.commitCallFrame()
-
-    let acc = tracker.buildBal().findAcc(address2)
-    check acc.isSome()
-    check acc.get().nonceAt(balIndex) == Opt.some(newNonce)
-
-  test "Track code change":
-    let
-      balIndex = 10
-      newCode = @[0x4.byte, 0x5, 0x6]
-
-    tracker.setBlockAccessIndex(balIndex)
-    tracker.beginCallFrame()
-    check tracker.callFrameSnapshots.len() == 1
-
-    check not tracker.buildBal().hasAccount(address2)
-    tracker.trackCodeChange(address2, newCode)
-
-    check:
-      tracker.pendingCallFrame().codeChanges.contains(address2)
-      tracker.pendingCallFrame().codeChanges.getOrDefault(address2) == newCode
-
-    tracker.commitCallFrame()
-
-    let acc = tracker.buildBal().findAcc(address2)
-    check acc.isSome()
-    check acc.get().codeAt(balIndex) == Opt.some(newCode)
-
-  test "Track storage read":
-    tracker.setBlockAccessIndex(0)
-
-    block:
-      check not tracker.buildBal().hasAccount(address1)
-
-      tracker.beginCallFrame()
-      tracker.trackStorageRead(address1, slot1)
-      tracker.commitCallFrame()
-
-      let acc = tracker.buildBal().findAcc(address1)
-      check acc.isSome()
-      check acc.get().hasStorageRead(slot1)
-
-    block:
-      check not tracker.buildBal().hasAccount(address2)
-
-      tracker.beginCallFrame()
-      tracker.trackStorageRead(address2, slot2)
-      tracker.commitCallFrame()
-
-      let acc = tracker.buildBal().findAcc(address2)
-      check acc.isSome()
-      check acc.get().hasStorageRead(slot2)
-
-  test "Track storage write - pre-state value not equal to post state value":
-    let
-      balIndex = 1
-      preStateValue = slotValue1
-      postStateValue = 100_000.u256
-
-    check:
-      not tracker.buildBal().hasAccount(address1)
-      (address1, slot1) notin tracker.preStorageCache
-
-    tracker.setBlockAccessIndex(balIndex)
-    tracker.beginCallFrame()
-    tracker.trackStorageWrite(address1, slot1, postStateValue)
-
-    check:
-      tracker.pendingCallFrame().storageChanges.contains((address1, slot1))
-      tracker.pendingCallFrame().storageChanges.getOrDefault((address1, slot1)) == postStateValue
-
-    tracker.commitCallFrame()
-
-    check:
-      tracker.buildBal().hasAccount(address1)
-      (address1, slot1) in tracker.preStorageCache
-      tracker.preStorageCache.getOrDefault((address1, slot1)) == preStateValue
-
-    let acc = tracker.buildBal().findAcc(address1)
-    check acc.isSome()
-    check acc.get().storageAt(slot1, balIndex) == Opt.some(postStateValue)
-
-  test "Track storage write - pre-state value is equal to post state value":
-    let
-      balIndex = 5
-      preStateValue = 0.u256
-      postStateValue = 0.u256
-
-    check:
-      not tracker.buildBal().hasAccount(address2)
-      (address2, slot2) notin tracker.preStorageCache
-
-    tracker.setBlockAccessIndex(balIndex)
-    tracker.beginCallFrame()
-    tracker.trackStorageWrite(address2, slot2, postStateValue)
-
-    check tracker.pendingCallFrame().storageChanges.contains((address2, slot2))
-
-    tracker.commitCallFrame()
-
-    check:
-      tracker.buildBal().hasAccount(address2)
-      (address2, slot2) in tracker.preStorageCache
-      tracker.preStorageCache.getOrDefault((address2, slot2)) == preStateValue
-
-    let acc = tracker.buildBal().findAcc(address2)
-    check acc.isSome()
-    check:
-      not acc.get().hasStorageChange(slot2)
-      acc.get().hasStorageRead(slot2)
-
-  test "Handle in transaction self destruct":
-    let balIndex = 10
-
-    check not tracker.buildBal().hasAccount(address1)
-
-    tracker.setBlockAccessIndex(balIndex)
-    tracker.beginCallFrame()
-    tracker.trackStorageWrite(address1, slot1, 200_000.u256)
-    tracker.trackBalanceChange(address1, balance1 + 2.u256)
-    tracker.trackNonceChange(address1, 200.AccountNonce)
-    tracker.trackCodeChange(address1, @[0x123.byte])
-
-    check:
-      tracker.pendingCallFrame().storageChanges.contains((address1, slot1))
-      tracker.pendingCallFrame().balanceChanges.contains(address1)
-      tracker.pendingCallFrame().nonceChanges.contains(address1)
-      tracker.pendingCallFrame().codeChanges.contains(address1)
-
-    tracker.handleInTransactionSelfDestruct(address1)
-
-    check:
-      not tracker.pendingCallFrame().storageChanges.contains((address1, slot1))
-      tracker.pendingCallFrame().balanceChanges.contains(address1)
-      tracker.pendingCallFrame().nonceChanges.contains(address1)
-      tracker.pendingCallFrame().codeChanges.contains(address1)
-
-    tracker.commitCallFrame()
-
-    let acc = tracker.buildBal().findAcc(address1)
-    check acc.isSome()
-    check:
-      not acc.get().hasStorageChange(slot1)
-      acc.get().hasStorageRead(slot1)
-      acc.get().balanceAt(balIndex).isSome()
-      acc.get().nonceAt(balIndex).isSome()
-      acc.get().codeAt(balIndex).isSome()
-      acc.get().balanceAt(balIndex) == Opt.some(balance1 + 2.u256)
+      tracker.builder == builder
+      tracker.buildBal().len == 0
 
   test "tracker owns and frees a builder it allocated":
     let before = getOccupiedSharedMem()
@@ -439,8 +375,6 @@ suite "Block access list tracker":
       t1.builder == shared
       t2.builder == shared
 
-    # Not concurrent: both writes happen on this thread, so a single index
-    # partition with one writer at a time is sufficient.
     shared[].ensureIndexCount(1)
     t1.builder[].addTouchedAccount(0, address1)
     t2.builder[].addTouchedAccount(0, address2)
@@ -456,3 +390,77 @@ suite "Block access list tracker":
 
     shared.dispose()
     check getOccupiedSharedMem() == before
+
+suite "Block access list tracker system calls":
+  let
+    writeInputCode = hexToSeqByte("0x60003560015560025450" & "00")
+    writeConstCode = hexToSeqByte("0x600760015500")
+    recipient = address"0x30007bc31cedb7bfb8a345f31e668033056b2728"
+    prevHash = hash32"0x1111111111111111111111111111111111111111111111111111111111111111"
+    beaconRoot = hash32"0x2222222222222222222222222222222222222222222222222222222222222222"
+
+  setup:
+    let
+      config = getChainConfig("Amsterdam").expect("Amsterdam config")
+      db = newCoreDbRef(DefaultDbMemory)
+      com = CommonRef.new(db, config)
+      parent = Header(number: 0, timestamp: EthTime(0), gasLimit: 30_000_000.GasInt)
+      header = Header(
+        number: 1,
+        timestamp: EthTime(12),
+        gasLimit: 30_000_000.GasInt,
+        baseFeePerGas: Opt.some(7.u256),
+        excessBlobGas: Opt.some(0'u64),
+        slotNumber: Opt.some(1'u64),
+      )
+      vmState = BaseVMState.new(
+        parent, header, com, db.baseTxFrame().txFrameBegin(), enableBalTracker = true)
+      tracker = vmState.balTracker
+
+    vmState.ledger.setCode(HISTORY_STORAGE_ADDRESS, writeInputCode)
+    vmState.ledger.setCode(BEACON_ROOTS_ADDRESS, writeInputCode)
+    vmState.ledger.setCode(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, writeConstCode)
+    vmState.ledger.persist()
+    tracker.builder[].ensureIndexCount(3, exact = true)
+
+  teardown:
+    vmState.dispose()
+
+  test "Pre-execution system calls":
+    check vmState.fork >= FkAmsterdam
+    tracker.setBlockAccessIndex(0)
+    tracker.beginCallFrame()
+    vmState.processParentBlockHash(prevHash)
+    vmState.processBeaconBlockRoot(beaconRoot)
+    tracker.commitCallFrame()
+
+    let bal = tracker.buildBal()
+    check:
+      bal.findAcc(HISTORY_STORAGE_ADDRESS).get().storageAt(1.u256, 0) ==
+        Opt.some(UInt256.fromBytesBE(prevHash.data))
+      bal.findAcc(BEACON_ROOTS_ADDRESS).get().storageAt(1.u256, 0) ==
+        Opt.some(UInt256.fromBytesBE(beaconRoot.data))
+      bal.findAcc(HISTORY_STORAGE_ADDRESS).get().hasStorageRead(2.u256)
+      not bal.hasAccount(SYSTEM_ADDRESS)
+
+  test "Post-execution withdrawals and system calls":
+    let amount = 5.u256
+    tracker.setBlockAccessIndex(2)
+    tracker.beginCallFrame()
+    tracker.trackAddressAccess(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS)
+    vmState.ledger.addBalance(
+      WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS, amount, checkEmptyAccount = false)
+    tracker.trackAddressAccess(recipient)
+    vmState.ledger.addBalance(recipient, 0.u256, checkEmptyAccount = false)
+    vmState.ledger.persist(clearEmptyAccount = true)
+    check vmState.processDequeueWithdrawalRequests().isOk()
+    tracker.commitCallFrame()
+
+    let
+      bal = tracker.buildBal()
+      requests = bal.findAcc(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS).get()
+    check:
+      requests.balanceAt(2) == Opt.some(amount)
+      requests.storageAt(1.u256, 2) == Opt.some(7.u256)
+      bal.findAcc(recipient).get().noChanges()
+      not bal.hasAccount(SYSTEM_ADDRESS)
