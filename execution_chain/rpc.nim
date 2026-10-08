@@ -70,6 +70,12 @@ func addHandler(handlers: var seq[RpcHandlerProc],
 
   proc handlerProc(request: HttpRequestRef):
         Future[RpcHandlerResult] {.async: (raises: []).} =
+    # Without this the JSON-RPC handler answers every path, so an unregistered
+    # one gets a 200 carrying a parse error instead of falling through to the
+    # unhandled-request 404.
+    if not request.isRootPath:
+      return RpcHandlerResult(status: RpcHandlerStatus.Skip)
+
     try:
       let res = await server.serveHTTP(request)
       if res.isNil:

@@ -113,6 +113,14 @@ proc setupComboServer(hooks: sink seq[RpcAuthHook]): HttpResult[NimbusHttpServer
 createRpcSigsFromNim(RpcClient, EthJson):
   proc rpc_echo(input: int): string
 
+proc getStatus(url: string, headers: openArray[(string, string)]): int =
+  ## Raw GET, so that the status of a non JSON-RPC request can be inspected.
+  let session = chronoshttpclient.HttpSessionRef.new()
+  defer: waitFor session.closeWait()
+  let req = chronoshttpclient.HttpClientRequestRef.new(
+    session, url, headers = headers).value
+  (waitFor req.fetch()).status
+
 # ------------------------------------------------------------------------------
 # Test Runners
 # ------------------------------------------------------------------------------
@@ -273,6 +281,19 @@ proc runJwtAuth(noisy = defined(debug); keyFile = jwtKeyFile) =
 
       let res2 = waitFor client.rpc_echo(145)
       check res2 == "hello: 145"
+
+    test "unknown path with auth is not found":
+      # A path the server does not serve must 404, not answer 200 with a
+      # JSON-RPC parse error, so a consensus client can tell that this
+      # execution client does not expose it.
+      check getStatus("http://" & $server.localAddress & "/engine/v1/capabilities",
+                      req.toList) == 404
+
+    test "unknown path without auth is still forbidden":
+      # Auth runs before routing, so an unauthenticated caller learns nothing
+      # about which paths exist.
+      check getStatus("http://" & $server.localAddress & "/engine/v1/capabilities",
+                      []) == 403
 
     waitFor server.closeWait()
 
