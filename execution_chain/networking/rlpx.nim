@@ -37,7 +37,7 @@ import
   ./devp2p_wire,
   ./p2p_metrics,
   ./rlpx/[auth, rlpxcrypt],
-  ./discoveryv4/kademlia
+  ./p2p_node
 
 const
   maxMsgSize = 1024 * 1024 * 16

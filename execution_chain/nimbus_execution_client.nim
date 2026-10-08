@@ -139,6 +139,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
     bindUdpPort = config.udpPort, bindTcpPort = config.tcpPort,
     bindIp = config.listenAddress,
     rng = nimbus.rng,
+    enableDiscV5 = config.discv5,
     forkIdProcs = forkIdProcs)
 
   # Add eth peer service protocol capabilities.
@@ -164,30 +165,25 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
 
   # Start Eth node
   if config.maxPeers > 0:
-    # The user-facing flag is --discv5, but discv4 is still enabled alongside
-    # it until the discv4 code is removed.
-    nimbus.ethNode.connectToNetwork(
-      enableDiscV4 = false,
-      enableDiscV5 = config.discv5,
-    )
+    nimbus.ethNode.connectToNetwork()
 
+  # Ignore any external configuration.
+  nimbus.beaconSyncRef = BeaconSyncRef(nil)
+  nimbus.snapSyncRef = SnapSyncRef(nil)
+
+  # Deactivating syncers if there is definitely no need to run it. This
+  # avoids polling (i.e. waiting for instructions) and some logging.
   # Initalise beacon sync descriptor.
-  var syncerShouldRun = (config.maxPeers > 0 or staticPeers.len > 0) and
-                        config.engineApiServerEnabled()
-
-  # The beacon sync descriptor might have been pre-allocated with additional
-  # features. So do not override.
-  if nimbus.beaconSyncRef.isNil:
-    nimbus.beaconSyncRef = BeaconSyncRef.init()
-  else:
-    syncerShouldRun = true
+  if (config.maxPeers == 0 and staticPeers.len == 0) or
+     not config.engineApiServerEnabled():
+    return
 
   # Configure beacon syncer.
+  nimbus.beaconSyncRef = BeaconSyncRef.init()
   nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
 
   # Optional for pre-setting the sync target (e.g. for debugging)
   if config.beaconSyncTarget.isSome():
-    syncerShouldRun = true
     let
       hex = config.beaconSyncTarget.unsafeGet
       isFinal = config.beaconSyncTargetIsFinal
@@ -202,25 +198,17 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
 
   # Configure snap sync if enabled. When done it will resume beacon sync.
   if config.snapSyncEnabled:
-    if nimbus.snapSyncRef.isNil:
-      nimbus.snapSyncRef = SnapSyncRef.init()
-    else:
-      syncerShouldRun = true
+    if not com.chainHasAmsterdam():
+      fatal "Current block chain does not support the" &
+            " Amsterdam fork needed for snap/2"
+      quit QuitFailure
 
     # Configure snap syncer.
+    nimbus.snapSyncRef = SnapSyncRef.init()
     nimbus.snapSyncRef.config(
       nimbus.ethNode, config.dataDir(params), config.maxPeers)
     if config.snapSyncResume:
       nimbus.snapSyncRef.configResume()
-  else:
-    # Disable any external setup unless explicitely activated
-    nimbus.snapSyncRef = SnapSyncRef(nil)
-
-  # Deactivating syncer if there is definitely no need to run it. This
-  # avoids polling (i.e. waiting for instructions) and some logging.
-  if not syncerShouldRun:
-    nimbus.beaconSyncRef = BeaconSyncRef(nil)
-    nimbus.snapSyncRef = SnapSyncRef(nil)
 
 proc getCoreDbOpts(
     config: ExecutionClientConf;
