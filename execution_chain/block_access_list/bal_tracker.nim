@@ -32,7 +32,7 @@
 # writes become reads and its nonce and code changes are dropped.
 
 import
-  eth/common/addresses,
+  eth/common/[accounts, addresses],
   eth/keccak/rapidhash,
   stew/ptrops,
   stint,
@@ -42,12 +42,14 @@ import
 export addresses, bal_builder, ledger, stint
 
 type
-  StorageKey = tuple[address: Address, slot: UInt256]
+  SlotKey = tuple[address: Address, slot: UInt256]
 
   # Plain data on purpose: an entry with a seq field would make every append
   # and truncation of the entry list a generic assignment under refc rather
-  # than a copy. Code bytes therefore live in the tracker's `codes` list and
-  # are referred to by position, with -1 for none.
+  # than a copy. Code is never copied: the hash of the code before the
+  # transaction lives in the tracker's `codeHashes` list, referred to by
+  # position with -1 for none, and the new code is read from the ledger when
+  # the transaction is recorded.
   AccountEntry = object
     address: Address
     bucket: int32 ## position in the account index, for clearing
@@ -61,15 +63,14 @@ type
     postBalance: UInt256 ## latest balance written
     preNonce: AccountNonce
     postNonce: AccountNonce
-    preCode: int32 ## code before the transaction, -1 while unknown
-    postCode: int32 ## latest code written
+    preCode: int32 ## position of the code hash before the transaction, -1 while unknown
     selfDestructed: bool ## created and self-destructed in this transaction
     lastBalanceJournal: int32 ## journal position of the latest balance record
     lastNonceJournal: int32 ## journal position of the latest nonce record
     lastCodeJournal: int32 ## journal position of the latest code record
 
   StorageEntry = object
-    key: StorageKey
+    key: SlotKey
     bucket: int32 ## position in the storage index, for clearing
     account: int32 ## position of the owning account entry
     read: bool
@@ -88,7 +89,6 @@ type
 
   JournalEntry = object
     idx: int32 ## entry position in the account or storage list
-    prevCode: int32 ## previous post code position for code changes
     prevLast: int32 ## the entry's previous record position, see `lastJournal`
     kind: JournalKind
     prevWritten: bool
@@ -116,9 +116,9 @@ type
       ## The current block access index (0 for pre-execution,
       ## 1..n for transactions, n+1 for post-execution).
     accounts: PosTable[Address, AccountEntry]
-    storage: PosTable[StorageKey, StorageEntry]
+    storage: PosTable[SlotKey, StorageEntry]
     journal: seq[JournalEntry]
-    codes: seq[seq[byte]] ## code bytes referred to by the account entries
+    codeHashes: seq[Hash32] ## code hashes referred to by the account entries
     lastAccount: int32 ## entry of the most recently resolved address, or -1
     lastStorage: int32 ## entry of the most recently resolved slot, or -1
     frames: seq[int32] ## journal length at the start of each open frame
@@ -131,13 +131,13 @@ const
 func indexHash(address: Address): uint64 =
   cast[uint64](hash(address))
 
-func indexHash(key: StorageKey): uint64 =
+func indexHash(key: SlotKey): uint64 =
   rapidhashNano(cast[ptr array[32, byte]](unsafeAddr key.slot)[], indexHash(key.address))
 
 template indexKey(e: AccountEntry): Address =
   e.address
 
-template indexKey(e: StorageEntry): StorageKey =
+template indexKey(e: StorageEntry): SlotKey =
   e.key
 
 func init(T: type AccountEntry, address: Address, bucket: int32): T =
@@ -145,13 +145,12 @@ func init(T: type AccountEntry, address: Address, bucket: int32): T =
     address: address,
     bucket: bucket,
     preCode: -1,
-    postCode: -1,
     lastBalanceJournal: -1,
     lastNonceJournal: -1,
     lastCodeJournal: -1,
   )
 
-func init(T: type StorageEntry, key: StorageKey, bucket: int32): T =
+func init(T: type StorageEntry, key: SlotKey, bucket: int32): T =
   StorageEntry(key: key, bucket: bucket, lastJournal: -1)
 
 # ------------------------------------------------------------------------------
@@ -206,6 +205,7 @@ proc getOrAdd[K, E](t: var PosTable[K, E], key: K): tuple[pos: int32, added: boo
 
 proc truncate[K, E](t: var PosTable[K, E], len: int) =
   ## Drop the entries after the first `len`, clearing their buckets.
+  assert len in 0 .. t.entries.len
   for i in len ..< t.entries.len:
     t.buckets[t.entries[i].bucket] = 0
   t.entries.setLen(len)
@@ -222,7 +222,7 @@ proc accountEntry(tracker: BlockAccessListTrackerRef, address: Address): int32 =
   result = tracker.accounts.getOrAdd(address).pos
   tracker.lastAccount = result
 
-proc storageEntry(tracker: BlockAccessListTrackerRef, key: StorageKey): int32 =
+proc storageEntry(tracker: BlockAccessListTrackerRef, key: SlotKey): int32 =
   ## Position of the slot's entry, creating one that is neither read nor
   ## written if new.
   # SSTORE resolves its slot twice, for the gas calculation and for the write.
@@ -241,7 +241,7 @@ proc clearTransaction(tracker: BlockAccessListTrackerRef) =
   tracker.storage.truncate(0)
   tracker.lastStorage = -1
   tracker.journal.setLen(0)
-  tracker.codes.setLen(0)
+  tracker.codeHashes.setLen(0)
   tracker.frames.setLen(0)
 
 # ------------------------------------------------------------------------------
@@ -303,17 +303,18 @@ proc capturePreNonce(tracker: BlockAccessListTrackerRef, idx: int32) =
     tracker.accounts[idx].preNonce = tracker.ledger.getNonce(tracker.accounts[idx].address)
     tracker.accounts[idx].preNonceKnown = true
 
-proc addCode(tracker: BlockAccessListTrackerRef, code: seq[byte]): int32 =
-  result = int32(tracker.codes.len)
-  tracker.codes.add(code)
-
-template codeAt(tracker: BlockAccessListTrackerRef, pos: int32): seq[byte] =
-  tracker.codes[pos]
-
 proc capturePreCode(tracker: BlockAccessListTrackerRef, idx: int32) =
   if tracker.accounts[idx].preCode < 0:
-    tracker.accounts[idx].preCode =
-      tracker.addCode(tracker.ledger.getCode(tracker.accounts[idx].address).bytes)
+    tracker.accounts[idx].preCode = int32(tracker.codeHashes.len)
+    tracker.codeHashes.add(tracker.ledger.getCodeHash(tracker.accounts[idx].address))
+
+proc postCodeHash(tracker: BlockAccessListTrackerRef, idx: int32): Hash32 =
+  ## The account's code hash at the end of the transaction. A self-destructed
+  ## account ends without code although the ledger only clears it on persist.
+  if tracker.accounts[idx].selfDestructed:
+    EMPTY_CODE_HASH
+  else:
+    tracker.ledger.getCodeHash(tracker.accounts[idx].address)
 
 proc capturePreStorage(tracker: BlockAccessListTrackerRef, idx: int32) =
   if not tracker.storage[idx].preKnown:
@@ -475,21 +476,18 @@ proc trackIncNonceChange*(tracker: BlockAccessListTrackerRef, address: Address) 
 proc trackCodeChange*(
     tracker: BlockAccessListTrackerRef, address: Address, newCode: seq[byte]
 ) =
+  ## Record that the account's code changes. Only the fact is kept: the code
+  ## is read from the ledger when the transaction is recorded.
   assert tracker.hasPendingCallFrame()
   let idx = tracker.accountEntry(address)
   template e(): untyped =
     tracker.accounts[idx]
 
-  if e.codeWritten and tracker.codeAt(e.postCode) == newCode:
-    return
-
   tracker.touch(idx)
   tracker.capturePreCode(idx)
   tracker.recordOnce(
-    e.lastCodeJournal,
-    JournalEntry(kind: jCode, idx: idx, prevWritten: e.codeWritten, prevCode: e.postCode),
+    e.lastCodeJournal, JournalEntry(kind: jCode, idx: idx, prevWritten: e.codeWritten)
   )
-  e.postCode = tracker.addCode(newCode)
   e.codeWritten = true
 
 proc trackInTransactionSelfDestruct*(
@@ -522,14 +520,14 @@ proc normalizeChanges(tracker: BlockAccessListTrackerRef) =
       e.postNonce = 0
       e.nonceWritten = true
       tracker.capturePreCode(int32(idx))
-      e.postCode = tracker.addCode(newSeq[byte]())
       e.codeWritten = true
 
     if e.balanceWritten and e.preBalance == e.postBalance:
       e.balanceWritten = false
     if e.nonceWritten and e.preNonce == e.postNonce:
       e.nonceWritten = false
-    if e.codeWritten and tracker.codeAt(e.preCode) == tracker.codeAt(e.postCode):
+    if e.codeWritten and
+        tracker.codeHashes[e.preCode] == tracker.postCodeHash(int32(idx)):
       e.codeWritten = false
 
   for idx in 0 ..< tracker.storage.len:
@@ -551,7 +549,12 @@ proc recordTransaction(tracker: BlockAccessListTrackerRef) =
     if e.nonceWritten:
       tracker.builder[].addNonceChange(index, e.address, e.postNonce)
     if e.codeWritten:
-      tracker.builder[].addCodeChange(index, e.address, tracker.codeAt(e.postCode))
+      if e.selfDestructed:
+        tracker.builder[].addCodeChange(index, e.address, newSeq[byte]())
+      else:
+        tracker.builder[].addCodeChange(
+          index, e.address, tracker.ledger.getCode(e.address).bytes
+        )
 
   for e in tracker.storage:
     if e.written:
@@ -593,7 +596,6 @@ proc undoJournal(tracker: BlockAccessListTrackerRef, journalLen: int32) =
       tracker.accounts[entry.idx].nonceWritten = entry.prevWritten
       tracker.accounts[entry.idx].lastNonceJournal = entry.prevLast
     of jCode:
-      tracker.accounts[entry.idx].postCode = entry.prevCode
       tracker.accounts[entry.idx].codeWritten = entry.prevWritten
       tracker.accounts[entry.idx].lastCodeJournal = entry.prevLast
     of jSelfDestruct:

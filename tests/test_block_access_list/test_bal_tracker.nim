@@ -96,10 +96,10 @@ func nonceChange(
 ): Opt[AccountNonce] =
   entryOpt(tracker.findAccount(address), tracker.accounts, nonceWritten, postNonce)
 
-func codeChange(tracker: BlockAccessListTrackerRef, address: Address): Opt[seq[byte]] =
+proc codeChange(tracker: BlockAccessListTrackerRef, address: Address): Opt[seq[byte]] =
   let idx = tracker.findAccount(address)
   if idx >= 0 and tracker.accounts[idx].codeWritten:
-    Opt.some(tracker.codeAt(tracker.accounts[idx].postCode))
+    Opt.some(tracker.ledger.getCode(address).bytes)
   else:
     Opt.none(seq[byte])
 
@@ -358,6 +358,7 @@ suite "Block access list tracker":
 
     check not tracker.buildBal().hasAccount(address2)
     tracker.trackCodeChange(address2, newCode)
+    ledger.setCode(address2, newCode)
 
     check tracker.codeChange(address2) == Opt.some(newCode)
 
@@ -457,6 +458,7 @@ suite "Block access list tracker":
     tracker.trackBalanceChange(address1, balance1 + 2.u256)
     tracker.trackNonceChange(address1, 200.AccountNonce)
     tracker.trackCodeChange(address1, @[0x123.byte])
+    ledger.setCode(address1, @[0x123.byte])
 
     check:
       tracker.storageChange(address1, slot1).isSome()
@@ -573,21 +575,45 @@ suite "Block access list tracker":
     tracker.beginCallFrame()
     tracker.trackNonceChange(address1, nonce1 + 1)
     tracker.trackCodeChange(address1, code2)
+    ledger.setCode(address1, code2)
     tracker.beginCallFrame()
+    var sp = ledger.beginSavePoint()
     let mark = tracker.journal.len
     for i in 2 .. 4:
       tracker.trackNonceChange(address1, nonce1 + AccountNonce(i))
       tracker.trackCodeChange(address1, @[byte(i)])
+      ledger.setCode(address1, @[byte(i)])
     check tracker.journal.len == mark + 2
     tracker.rollbackCallFrame()
+    ledger.rollback(sp)
     tracker.beginCallFrame()
+    sp = ledger.beginSavePoint()
     tracker.trackNonceChange(address1, nonce1 + 5)
     tracker.trackCodeChange(address1, @[5.byte])
+    ledger.setCode(address1, @[5.byte])
     tracker.rollbackCallFrame()
+    ledger.rollback(sp)
     check:
       tracker.nonceChange(address1) == Opt.some(nonce1 + 1)
       tracker.codeChange(address1) == Opt.some(code2)
     tracker.commitCallFrame()
+
+    let acc = tracker.buildBal().findAcc(address1).get()
+    check acc.codeAt(1) == Opt.some(code2)
+
+  test "Code restored to its value before the transaction is not a change":
+    tracker.setBlockAccessIndex(1)
+    tracker.beginCallFrame()
+    tracker.trackCodeChange(address2, @[0x7.byte])
+    ledger.setCode(address2, @[0x7.byte])
+    tracker.trackCodeChange(address2, code2)
+    ledger.setCode(address2, code2)
+    tracker.commitCallFrame()
+
+    let acc = tracker.buildBal().findAcc(address2)
+    check:
+      acc.isSome()
+      acc.get().codeAt(1).isNone()
 
   test "Self-destruct in a reverted frame is discarded":
     tracker.setBlockAccessIndex(1)
