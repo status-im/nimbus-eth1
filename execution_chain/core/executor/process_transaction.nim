@@ -88,6 +88,7 @@ proc commitOrRollbackDependingOnGasUsed(
 template checkBlockGasCapacity*(
     vmState: BaseVMState;
     tx: Transaction;
+    intrinsic: IntrinsicGas;
     fail: untyped) =
   let
     txGasLimit = tx.gasLimit
@@ -115,7 +116,7 @@ template validateForInclusion(
     sender: Address;
     skipNonceCheck: bool;
     buildError: static bool;
-    intrinsicVar: untyped) =
+    intrinsic: IntrinsicGas) =
 
   template fail(msg: untyped): untyped =
     when buildError:
@@ -123,14 +124,9 @@ template validateForInclusion(
     else:
       return
 
-  let
-    com = vmState.com
-    fork = vmState.hardFork
-    intrinsicVar = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit, sender)
+  checkBlockGasCapacity(vmState, tx, intrinsic, fail)
 
-  checkBlockGasCapacity(vmState, tx, fail)
-
-  validateTxBasic(com, tx, intrinsicVar, fork).isOkOr:
+  validateTxBasic(vmState.com, tx, intrinsic, vmState.hardFork).isOkOr:
     fail(error)
   vmState.validateTransaction(tx, sender, skipNonceCheck).isOkOr:
     fail(error)
@@ -142,12 +138,19 @@ template validateForInclusion(
 proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
-    sender:  Address;  ## tx.recoverSender
+    sender:  Address;     ## tx.recoverSender
+    intrinsic = Opt.none(IntrinsicGas); ## Precalculated intrinsic or use internal intrinsic
     rollbackReads: bool = false;
     persist = true;
       ): Result[TxResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framework for EIP1559.
+
+  let
+    intrinsic = if intrinsic.isNone:
+                  tx.intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
+                else:
+                  intrinsic.value
 
   validateForInclusion(vmState, tx, sender, false, true, intrinsic)
 
@@ -183,7 +186,8 @@ proc prefetchTransaction*(
     tx:      Transaction; ## Transaction to speculatively execute
     sender:  Address;     ## Pre-recovered sender
       ) =
-
+  let
+    intrinsic = tx.intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
   validateForInclusion(vmState, tx, sender, true, false, intrinsic)
 
   let savePoint = vmState.ledger.beginSavePoint()

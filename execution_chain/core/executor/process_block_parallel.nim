@@ -31,6 +31,8 @@ import
   results,
   stew/assign2
 
+from ../../transaction/call_types import intrinsicGas, IntrinsicGas
+
 type
   OptimisticPrefetchCtx* = object
     com: CommonRef
@@ -64,6 +66,7 @@ type
   BalParallelTxEntry = object
     tx: ptr Transaction
     txIndex: int
+    intrinsic: IntrinsicGas
     gasUsed: GasInt
     blockExecutionGasUsed: GasInt
     blockStateGasUsed: GasInt
@@ -405,11 +408,14 @@ proc processTxTask(
       BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
     vmState.balTracker.setBlockAccessIndex(e[].txIndex + 1)
 
-  let txResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
+  let intrinsic = e[].tx[].intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
+  let txResult = vmState.processTransaction(e[].tx[], sender,
+                   intrinsic = Opt.some(intrinsic), persist = false).valueOr:
     e[].error = SharedString.init(error)
     ctx[].cancelled.store(true, moRelease)
     return false
 
+  e[].intrinsic = intrinsic
   e[].gasUsed = txResult.gasUsed
   e[].blockExecutionGasUsed = vmState.blockExecutionGasUsed
   e[].blockStateGasUsed = vmState.blockStateGasUsed
@@ -490,7 +496,7 @@ proc processTransactionsParallel*(
         ctx.cancelled.store(true, moRelease)
         return err("Error processing tx with index " & $i & ":" & msg)
 
-      checkBlockGasCapacity(vmState, transactions[i], fail)
+      checkBlockGasCapacity(vmState, transactions[i], entries[i].intrinsic, fail)
 
     vmState.cumulativeGasUsed += entries[i].gasUsed
     vmState.blockExecutionGasUsed += entries[i].blockExecutionGasUsed
