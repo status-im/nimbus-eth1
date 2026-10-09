@@ -451,7 +451,7 @@ suite "TxFrame blobify round-trip":
     let base = coreDb.baseTxFrame
     let rc = loadTxFrameAsChild(base, base, h)
     check rc.isErr
-    check "aristo region truncated" in rc.error.ctx
+    check "invalid aristo region length" in rc.error.ctx
 
   test "loadTxFrameAsChild: trailing bytes return Err":
     let coreDb = newCoreDbRef(AristoDbMemory)

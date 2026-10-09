@@ -67,9 +67,6 @@ proc loadTxFrameAsChild*(
   let
     blobLen = uint64(blob.len)
     aLen    = uint64(uint32.fromBytesBE(blob.toOpenArray(0, 3)))
-  if blobLen < 4'u64 + aLen:
-    return err(DataInvalid.toError("aristo region truncated"))
-
   if aLen == 0 or blobLen != 4'u64 + aLen:
     return err(DataInvalid.toError("invalid aristo region length"))
 
