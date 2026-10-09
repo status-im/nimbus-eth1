@@ -132,10 +132,6 @@ type
                                 # it's own column family
                                 # isolated from ordinary headers storage.
 const
-  MaxDeleteBatch = 100 * 1024
-    ## Insert `persist()` statements in bulk action every `MaxDeleteBatch`
-    ## `del()` directives.
-
   MsgPfx = "Header Cache: "
     ## Message prefix used when logging or raising an exception
 
@@ -234,22 +230,17 @@ proc delHeader(db: KvtDbRef; bn: BlockNumber) =
 # ----------------------
 
 proc persistInfo(hc: HeaderChainRef) =
-  ## Persist info record (and whatever was in the kvt cache)
+  ## Persist info record
   hc.kvt.putInfo HccDbInfo(
     least: hc.session.ante.number,
     last:  hc.session.head.number)
-  #hc.kvt.persist()
 
 proc persistClear(hc: HeaderChainRef) =
   ## Clear persistent database
   let w = hc.kvt.getInfo.valueOr: return
   for bn in w.least .. w.last:
     hc.kvt.delHeader(bn)
-    # Occasionally flush the current data
-    #if (bn - w.least) mod MaxDeleteBatch == 0:
-      #hc.kvt.persist()
   hc.kvt.delInfo()
-  #hc.kvt.persist()
 
 # ------------------------------------------------------------------------------
 # Private functions
