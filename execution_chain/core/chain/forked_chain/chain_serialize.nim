@@ -256,8 +256,28 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
         return err("corrupted FC: inconsistent parent")
       b.parent = parent
 
+  # Heads are the leaves of the tree, each listed once
+  var isParent = newSeq[bool](blocks.len)
+  for parentIndex in parentIndices:
+    if parentIndex > 0:
+      isParent[parentIndex - 1] = true
+  var isHead = newSeq[bool](blocks.len)
   for h in state.heads:
+    if isHead[h]:
+      return err("corrupted FC: duplicate head")
+    if isParent[h]:
+      return err("corrupted FC: head has a child")
+    isHead[h] = true
     restored.heads.add blocks[h]
+
+  # A marker outside the tree can be valid, the finalized block may be known
+  # before it is imported. Inside the tree it must carry its block's number.
+  for (name, marker) in [("finalized", state.latestFinalized),
+                         ("head", state.fcuHead), ("safe", state.fcuSafe)]:
+    let b = restored.hashToBlock.getOrDefault(marker.hash)
+    if b.isNil.not and b.number != marker.number:
+      return err("corrupted FC: " & name & " number mismatch")
+
   restored.pendingFCU = state.pendingFCU
   restored.latestFinalized = state.latestFinalized
   restored.fcuHead = state.fcuHead

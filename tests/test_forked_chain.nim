@@ -178,6 +178,14 @@ proc patchParentIndex(txFrame: CoreDbTxRef, numBlocks: int, badIndex: uint): boo
 
   false
 
+proc snapshotRejected(com: CommonRef, chain: ForkedChainRef): bool =
+  ## Save `chain` as it is, then check that a restart refuses the snapshot
+  ## and stays at base
+  if chain.serialize(chain.baseTxFrame).isErr:
+    return false
+  let fc = ForkedChainRef.init(com)
+  fc.deserialize().isErr and fc.hashToBlock.len == 1 and fc.latest == fc.base
+
 func checkFinalizedMarkers(fc: ForkedChainRef, finalizedHash: Hash32): bool =
   let finBlk =
     try:
@@ -1172,6 +1180,54 @@ suite "ForkedChainRef tests":
     check fc.base == fc.latest
     check fc.heads.len == 1
     check fc.validate info & " (2)"
+
+  test "deserialize rejects duplicate heads":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    chain.heads.add chain.heads[0]
+    check snapshotRejected(com, chain)
+
+  test "deserialize rejects a head that has a child":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    chain.heads.add chain.hashToBlock.getOrDefault(blk1.blockHash)
+    check snapshotRejected(com, chain)
+
+  test "deserialize rejects a finalized number that is not its block's":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    # Outside the tree it is valid: the finalized block can be known
+    # before it is imported
+    chain.latestFinalized = FcuHashAndNumber(hash: blk4.blockHash, number: 4)
+    check chain.serialize(chain.baseTxFrame).isOk
+    check ForkedChainRef.init(com).deserialize().isOk
+
+    chain.latestFinalized = FcuHashAndNumber(hash: blk2.blockHash, number: 3)
+    check snapshotRejected(com, chain)
+
+  test "deserialize rejects a head or safe number that is not its block's":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkForkChoice(chain, blk2, blk1)
+    chain.fcuHead = FcuHashAndNumber(hash: blk2.blockHash, number: 1)
+    check snapshotRejected(com, chain)
+
+    chain.fcuHead = FcuHashAndNumber(hash: blk2.blockHash, number: 2)
+    chain.fcuSafe = FcuHashAndNumber(hash: blk1.blockHash, number: 2)
+    check snapshotRejected(com, chain)
 
   test "startup drops the snapshot, imports never look for it":
     let
