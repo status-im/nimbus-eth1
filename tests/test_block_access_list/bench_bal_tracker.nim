@@ -139,13 +139,7 @@ proc runTx(tracker: BlockAccessListTrackerRef, w: Workload, tx: int, ops: var in
     for k in 0 ..< w.readsPerFrame:
       tracker.trackStorageRead(contract, u256(depth * 100 + k))
     for k in 0 ..< w.writesPerFrame:
-      # The SSTORE handler reads the current value for its gas calculation
-      # before tracking the write, and passes it on when the tracker takes it.
-      let
-        slot = u256(depth * 100 + k)
-        current = tracker.ledger.getStorage(contract, slot)
-        newValue = u256(tx * 31 + k + 1)
-      tracker.trackStorageWrite(contract, slot, newValue, Opt.some(current))
+      tracker.trackStorageWrite(contract, u256(depth * 100 + k), u256(tx * 31 + k + 1))
     ops += w.accessesPerFrame + w.readsPerFrame + w.writesPerFrame
 
   frameBody(0)
