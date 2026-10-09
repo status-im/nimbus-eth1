@@ -44,7 +44,7 @@ proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testSta
     com    = CommonRef.new(memDB, config)
     fork   = nameToFork[forkName]
     sender = tx.recoverSender().expect("valid signature")
-    intrinsic = tx.intrinsicGas(fork, 10_000_000, sender)
+    intrinsic = tx.intrinsicGas(fork, sender)
 
   validateTxBasic(com, tx, intrinsic, fork).isOkOr:
     return

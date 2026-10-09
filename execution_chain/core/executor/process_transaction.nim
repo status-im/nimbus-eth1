@@ -148,7 +148,7 @@ proc processTransaction*(
 
   let
     intrinsic = if intrinsic.isNone:
-                  tx.intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
+                  tx.intrinsicGas(vmState.hardFork, sender)
                 else:
                   intrinsic.value
 
@@ -187,7 +187,7 @@ proc prefetchTransaction*(
     sender:  Address;     ## Pre-recovered sender
       ) =
   let
-    intrinsic = tx.intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
+    intrinsic = tx.intrinsicGas(vmState.hardFork, sender)
   validateForInclusion(vmState, tx, sender, true, false, intrinsic)
 
   let savePoint = vmState.ledger.beginSavePoint()
