@@ -178,8 +178,6 @@ proc processBlock*(
 
   # We still need to write header to database
   # because validateUncles still need it
-  c.prepareDbMutation().expect(
-    "Cannot import block: failed to invalidate saved fork-choice snapshot")
   txFrame.writeBlockOwnershipData(header, blkHash)
   # Lookups by number and by tx hash on disk cover the persisted chain only,
   # they are written when the block becomes base (`writeCanonicalMappings`)

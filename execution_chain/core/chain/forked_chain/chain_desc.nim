@@ -81,10 +81,6 @@ type
       # Frame that skips all in-memory state that ForkedChain holds - used to
       # lookup items straight from the database
 
-    snapshotMayExist*: bool
-      # Check for a saved snapshot before the next database mutation.
-      # Cleared only after successful invalidation; set again after saving.
-
     baseDistance*: uint64
       # Minimum number of blocks and its state stored in memory.
       # User can query for block state while it is still in memory.

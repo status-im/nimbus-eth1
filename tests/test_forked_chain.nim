@@ -24,7 +24,6 @@ import
   ../execution_chain/core/tx_pool,
   ./transaction/tx_sender,
   ../execution_chain/core/chain/forked_chain/chain_desc,
-  ../execution_chain/core/chain/forked_chain/chain_db,
   ../execution_chain/core/chain/forked_chain/chain_serialize,
   ../execution_chain/core/chain/forked_chain/chain_branch,
   ../execution_chain/db/ledger,
@@ -1174,12 +1173,11 @@ suite "ForkedChainRef tests":
     check fc.heads.len == 1
     check fc.validate info & " (2)"
 
-  test "imports check for a snapshot only once after startup or saving":
+  test "startup drops the snapshot, imports never look for it":
     let
       com = env.newCom()
       chain = ForkedChainRef.init(com)
       db = chain.baseTxFrame
-      backendGet = db.kvt.getKvpFn
       backendDel = db.kvt.delKvpFn
     var invalidations = 0
     db.kvt.delKvpFn = proc(key: openArray[byte]): Result[void, KvtError] =
@@ -1190,24 +1188,22 @@ suite "ForkedChainRef tests":
 
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
-    check invalidations == 1
     check chain.serialize(db).isOk
-    check chain.snapshotMayExist
-    let invalidationsAfterSave = invalidations
-    checkImportBlock(chain, blk3)
-    checkImportBlock(chain, blk4)
-    check invalidations == invalidationsAfterSave + 1
-    check backendGet(fcStateKey(0).toOpenArray).isErr
 
-    check chain.serialize(db).isOk
-    let restored = ForkedChainRef.init(com)
+    # Startup as `basicServices` does it: load the snapshot, then drop it
+    let restored = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
     require restored.deserialize().isOk
-    let invalidationsAfterRestore = invalidations
-    checkImportBlock(restored, blk5)
-    checkImportBlock(restored, blk6)
-    check invalidations == invalidationsAfterRestore + 1
-    check not restored.snapshotMayExist
-    check backendGet(fcStateKey(0).toOpenArray).isErr
+    check db.invalidateFcSnapshot().isOk
+    check not db.hasKey(fcStateKey(0).toOpenArray)
+    check not db.hasKey(fcStateKey(1).toOpenArray)
+
+    # Import, finalize and move base without touching the snapshot keys
+    let invalidationsAfterStartup = invalidations
+    checkImportBlock(restored, blk3)
+    checkImportBlock(restored, blk4)
+    checkForkChoice(restored, blk4, blk3)
+    check restored.baseNumber == 3'u64
+    check invalidations == invalidationsAfterStartup
 
   test "snapshot invalidation failures can be retried":
     let
@@ -1224,23 +1220,19 @@ suite "ForkedChainRef tests":
 
     db.kvt.getKvpFn = proc(key: openArray[byte]): Result[seq[byte], KvtError] =
       err(RdbBeDriverGetError)
-    check chain.prepareDbMutation().isErr
-    check chain.snapshotMayExist
+    check db.invalidateFcSnapshot().isErr
     # The manifest is gone, the block entries are left for the retry
     check backendGet(fcStateKey(1).toOpenArray).isOk
     db.kvt.getKvpFn = backendGet
 
     db.kvt.delKvpFn = proc(key: openArray[byte]): Result[void, KvtError] =
       err(RdbBeDriverDelError)
-    check chain.prepareDbMutation().isErr
-    check chain.snapshotMayExist
+    check db.invalidateFcSnapshot().isErr
     check db.get(fcStateKey(1).toOpenArray).isOk
     check chain.serialize(db).isErr
-    check chain.snapshotMayExist
     db.kvt.delKvpFn = backendDel
 
-    check chain.prepareDbMutation().isOk
-    check not chain.snapshotMayExist
+    check db.invalidateFcSnapshot().isOk
     check db.get(fcStateKey(0).toOpenArray).isErr
     check db.get(fcStateKey(1).toOpenArray).isErr
 
@@ -1260,11 +1252,9 @@ suite "ForkedChainRef tests":
       backendPut(key, value)
     check chain.serialize(db).isErr
     db.kvt.putKvpFn = backendPut
-    check not chain.snapshotMayExist
     check not db.hasKey(fcStateKey(0).toOpenArray)
     check checkFinalizedMarkers(chain, blk1.blockHash)
     check chain.serialize(db).isOk
-    check chain.snapshotMayExist
     let restored = ForkedChainRef.init(com)
     check restored.deserialize().isOk
     check restored.latestHash == blk2.blockHash
@@ -1340,7 +1330,6 @@ suite "ForkedChainRef tests":
     check db.getBlockHash(6).isErr
     check chain.wdWritten(blk4) == 4 # B4 used exactly the same withdrawals
     check db.getBlockHeader(blk1.blockHash).isOk
-    check not db.hasKey(fcStateKey(0).toOpenArray) # old DAG is now invalid
 
     check chain.serialize(db).isOk
     let restored = ForkedChainRef.init(com)

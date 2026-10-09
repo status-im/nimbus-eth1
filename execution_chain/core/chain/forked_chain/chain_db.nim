@@ -16,25 +16,6 @@ import
   ./chain_branch,
   ./chain_desc
 
-proc invalidateFcSnapshot*(db: CoreDbTxRef): CoreDbRc[void] =
-  # Indexed DAG entries are valid only as a complete snapshot. Once the
-  # shared database changes, a restart must not load the old manifest.
-  # Delete key by key: tx and receipt entries (`hashIndexKey`) carry no kind
-  # prefix, so a range over the `fcState` kind byte would delete them too.
-  # The manifest goes first, the block entries are numbered from 1 up.
-  ?db.del(fcStateKey(0).toOpenArray)
-  var i = 1'u64
-  while ?db.hasKeyRc(fcStateKey(i).toOpenArray):
-    ?db.del(fcStateKey(i).toOpenArray)
-    inc i
-  ok()
-
-proc prepareDbMutation*(c: ForkedChainRef): CoreDbRc[void] =
-  if c.snapshotMayExist:
-    ?c.baseTxFrame.invalidateFcSnapshot()
-    c.snapshotMayExist = false
-  ok()
-
 type BodyData = object
   key: seq[byte]
   root: Hash32

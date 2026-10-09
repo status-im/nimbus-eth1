@@ -19,7 +19,6 @@ import
   ../../../db/fcu_db,
   ../../../db/storage_types,
   ../../../db/tx_frame_db,
-  ./chain_db,
   ../../../utils/utils
 
 logScope:
@@ -134,6 +133,19 @@ func toString(list: openArray[BlockRef]): string =
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc invalidateFcSnapshot*(db: CoreDbTxRef): CoreDbRc[void] =
+  # Indexed DAG entries are valid only as a complete snapshot. Once the
+  # shared database changes, a restart must not load the old manifest.
+  # Delete key by key: tx and receipt entries (`hashIndexKey`) carry no kind
+  # prefix, so a range over the `fcState` kind byte would delete them too.
+  # The manifest goes first, the block entries are numbered from 1 up.
+  ?db.del(fcStateKey(0).toOpenArray)
+  var i = 1'u64
+  while ?db.hasKeyRc(fcStateKey(i).toOpenArray):
+    ?db.del(fcStateKey(i).toOpenArray)
+    inc i
+  ok()
+
 proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbError] =
   # Keep serialization slots separate from the running chain's finalized flags.
   var slots = initTable[Hash32, uint]()
@@ -155,9 +167,7 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
 
   # KVT writes are immediate. Invalidate the old manifest before replacing
   # its entries, then publish the new manifest only after every frame is saved.
-  fc.snapshotMayExist = true
   ?txFrame.invalidateFcSnapshot()
-  fc.snapshotMayExist = false
   for i, b in blocks:
     let parentIndex = if b.parent.isNil: 0'u
                       else: slots.getOrDefault(b.parent.hash) + 1'u
@@ -169,7 +179,6 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
 
   var encodedState = rlp.encode(state)
   ?txFrame.putMove(FcStateKey.toOpenArray, encodedState)
-  fc.snapshotMayExist = true
 
   # Block data is in the shared KVT already, the snapshot adds the DAG layout
   # and the in-memory state frames of the blocks above base
@@ -191,7 +200,6 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
 proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   let state = fc.baseTxFrame.getState().valueOr:
     return err("Cannot find previous FC state in database")
-  fc.snapshotMayExist = true
 
   if state.numBlocks == 0 or state.latest >= state.numBlocks or
       state.base >= state.numBlocks or state.heads.len == 0:

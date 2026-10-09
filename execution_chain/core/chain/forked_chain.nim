@@ -238,8 +238,6 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
   # 'C' will be removed
 
   let txFrame = finalized.txFrame
-  c.prepareDbMutation().expect(
-    "Cannot advance finalization: failed to invalidate saved fork-choice snapshot")
 
   # Pin canonical payloads before releasing references from dead forks.
   for it in loopNotFinalized(finalized):
@@ -338,8 +336,6 @@ something else needs attention! Shutting down to preserve the database - restart
 with --debug-eager-state-root."""
 
   base.txFrame.checkpoint(base.number, skipSnapshot = true)
-  c.prepareDbMutation().expect(
-    "Cannot persist chain base: failed to invalidate saved fork-choice snapshot")
   # Before the state: a restart reads the base hash back by number. Lookups
   # written ahead of a crash are on the finalized chain, so they stay valid.
   c.writeCanonicalMappings(base)
@@ -700,7 +696,6 @@ proc init*(
       heads:            @[baseBlock],
       hashToBlock:      {baseHash: baseBlock}.toTable,
       baseTxFrame:      baseTxFrame,
-      snapshotMayExist: true,
       baseDistance:     baseDistance,
       persistBatchSize: persistBatchSize,
       dynamicBatchSize: dynamicBatchSize,
