@@ -32,7 +32,7 @@ proc installPortalCommonApiHandlers*(
   const networkStr = network.symbolName()
 
   rpc("portal_" & networkStr & "NodeInfo") do() -> NodeInfo:
-    return p.routingTable.getNodeInfo()
+    return p.baseProtocol.localNode.getNodeInfo()
 
   rpc("portal_" & networkStr & "RoutingTableInfo") do() -> RoutingTableInfo:
     return getRoutingTableInfo(p.routingTable)

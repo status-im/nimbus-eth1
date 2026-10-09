@@ -129,8 +129,8 @@ EthJson.automaticSerialization(string, true)
 EthJson.automaticSerialization(bool, true)
 EthJson.automaticSerialization(JsonString, true)
 
-func getNodeInfo*(r: RoutingTable): NodeInfo =
-  NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)
+func getNodeInfo*(ln: LocalDiscoveryNode): NodeInfo =
+  NodeInfo(enr: ln.record, nodeId: ln.id)
 
 func getRoutingTableInfo*(r: RoutingTable): RoutingTableInfo =
   var info: RoutingTableInfo
@@ -141,7 +141,7 @@ func getRoutingTableInfo*(r: RoutingTable): RoutingTableInfo =
 
     info.buckets.add(bucket)
 
-  info.localNodeId = r.localNode.id
+  info.localNodeId = r.localId
 
   info
 

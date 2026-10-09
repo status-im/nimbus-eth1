@@ -29,7 +29,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
 
   rpcServer.rpc(EthJson):
     proc discv5_nodeInfo(): NodeInfo =
-      return d.routingTable.getNodeInfo()
+      return d.localNode.getNodeInfo()
 
     proc discv5_updateNodeInfo(
         kvPairs: seq[(string, string)]
@@ -44,7 +44,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
       if updated.isErr():
         raise newException(ValueError, $updated.error)
 
-      return d.routingTable.getNodeInfo()
+      return d.localNode.getNodeInfo()
 
     proc discv5_routingTableInfo(): RoutingTableInfo =
       return getRoutingTableInfo(d.routingTable)
