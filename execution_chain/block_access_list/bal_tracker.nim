@@ -185,16 +185,22 @@ proc getOrAdd[K, E](t: var PosTable[K, E], key: K): tuple[pos: int32, added: boo
   mixin init
   if t.buckets.len == 0:
     t.buckets = newSeq[int32](initialBuckets)
-  elif (t.entries.len + 1) * 2 > t.buckets.len:
-    t.rehash(t.buckets.len * 2)
 
-  let
+  let h = indexHash(key)
+  var
     mask = uint64(t.buckets.len - 1)
     bk = makeUncheckedArray(baseAddr(t.buckets))
-  var b = int(indexHash(key) and mask)
+    b = int(h and mask)
   while true:
     let e = bk[b]
     if e == 0:
+      if (t.entries.len + 1) * 2 > t.buckets.len:
+        t.rehash(t.buckets.len * 2)
+        mask = uint64(t.buckets.len - 1)
+        bk = makeUncheckedArray(baseAddr(t.buckets))
+        b = int(h and mask)
+        while bk[b] != 0:
+          b = int((uint64(b) + 1) and mask)
       let pos = int32(t.entries.len)
       t.entries.add(E.init(key, int32(b)))
       bk[b] = pos + 1
@@ -277,7 +283,7 @@ proc setBlockAccessIndex*(tracker: BlockAccessListTrackerRef, blockAccessIndex: 
 
   tracker.builder[].ensureIndexCount(blockAccessIndex + 1)
 
-template hasPendingCallFrame*(tracker: BlockAccessListTrackerRef): bool =
+template hasPendingCallFrame(tracker: BlockAccessListTrackerRef): bool =
   tracker.frames.len() > 0
 
 template hasParentCallFrame(tracker: BlockAccessListTrackerRef): bool =
@@ -293,45 +299,16 @@ proc beginCallFrame*(tracker: BlockAccessListTrackerRef) =
 # Pre-transaction values
 # ------------------------------------------------------------------------------
 
-proc capturePreBalance(tracker: BlockAccessListTrackerRef, idx: int32) =
-  if not tracker.accounts[idx].preBalanceKnown:
-    tracker.accounts[idx].preBalance = tracker.ledger.getBalance(tracker.accounts[idx].address)
-    tracker.accounts[idx].preBalanceKnown = true
-
-proc capturePreNonce(tracker: BlockAccessListTrackerRef, idx: int32) =
-  if not tracker.accounts[idx].preNonceKnown:
-    tracker.accounts[idx].preNonce = tracker.ledger.getNonce(tracker.accounts[idx].address)
-    tracker.accounts[idx].preNonceKnown = true
-
 proc capturePreCode(tracker: BlockAccessListTrackerRef, idx: int32) =
   if tracker.accounts[idx].preCode < 0:
     tracker.accounts[idx].preCode = int32(tracker.codeHashes.len)
     tracker.codeHashes.add(tracker.ledger.getCodeHash(tracker.accounts[idx].address))
-
-proc postCodeHash(tracker: BlockAccessListTrackerRef, idx: int32): Hash32 =
-  ## The account's code hash at the end of the transaction. A self-destructed
-  ## account ends without code although the ledger only clears it on persist.
-  if tracker.accounts[idx].selfDestructed:
-    EMPTY_CODE_HASH
-  else:
-    tracker.ledger.getCodeHash(tracker.accounts[idx].address)
 
 proc capturePreStorage(tracker: BlockAccessListTrackerRef, idx: int32) =
   if not tracker.storage[idx].preKnown:
     let key = tracker.storage[idx].key
     tracker.storage[idx].pre = tracker.ledger.getStorage(key.address, key.slot)
     tracker.storage[idx].preKnown = true
-
-template capturePre(known, pre: untyped, current: Opt, fallback: untyped) =
-  ## Record the pre-transaction value on its first write: the value the caller
-  ## has just read from the ledger when it passes one, otherwise the ledger's
-  ## value right now.
-  if not known:
-    if current.isSome():
-      pre = current[]
-      known = true
-    else:
-      fallback
 
 # ------------------------------------------------------------------------------
 # Tracking
@@ -403,7 +380,9 @@ proc trackBalanceChange(
     return
 
   tracker.touch(idx)
-  capturePre(e.preBalanceKnown, e.preBalance, current, tracker.capturePreBalance(idx))
+  if not e.preBalanceKnown:
+    e.preBalance = current.valueOr(tracker.ledger.getBalance(address))
+    e.preBalanceKnown = true
   tracker.recordOnce(
     e.lastBalanceJournal,
     JournalEntry(
@@ -454,7 +433,9 @@ proc trackNonceChange(
     return
 
   tracker.touch(idx)
-  capturePre(e.preNonceKnown, e.preNonce, current, tracker.capturePreNonce(idx))
+  if not e.preNonceKnown:
+    e.preNonce = current.valueOr(tracker.ledger.getNonce(address))
+    e.preNonceKnown = true
   tracker.recordOnce(
     e.lastNonceJournal,
     JournalEntry(
@@ -474,10 +455,11 @@ proc trackIncNonceChange*(tracker: BlockAccessListTrackerRef, address: Address) 
   tracker.trackNonceChange(address, current + 1, Opt.some(current))
 
 proc trackCodeChange*(
-    tracker: BlockAccessListTrackerRef, address: Address, newCode: seq[byte]
+    tracker: BlockAccessListTrackerRef, address: Address, newCode: openArray[byte]
 ) =
   ## Record that the account's code changes. Only the fact is kept: the code
-  ## is read from the ledger when the transaction is recorded.
+  ## is read from the ledger when the transaction is recorded, and a code that
+  ## ends as it began is dropped then.
   assert tracker.hasPendingCallFrame()
   let idx = tracker.accountEntry(address)
   template e(): untyped =
@@ -508,26 +490,24 @@ proc trackInTransactionSelfDestruct*(
 
 proc normalizeChanges(tracker: BlockAccessListTrackerRef) =
   ## Resolve the accounts that self-destructed in the transaction they were
-  ## created in: their storage writes count as reads and they end with a zero
-  ## nonce and empty code. Then drop changes that leave a value as it was
-  ## before the transaction; such a storage write still counts as a read.
+  ## created in: their storage writes count as reads and their nonce and code
+  ## end as they began, zero and empty. Then drop changes that leave a value
+  ## as it was before the transaction; such a storage write still counts as a
+  ## read.
   for idx in 0 ..< tracker.accounts.len:
     template e(): untyped =
       tracker.accounts[idx]
 
     if e.selfDestructed:
-      tracker.capturePreNonce(int32(idx))
-      e.postNonce = 0
-      e.nonceWritten = true
-      tracker.capturePreCode(int32(idx))
-      e.codeWritten = true
+      e.nonceWritten = false
+      e.codeWritten = false
 
     if e.balanceWritten and e.preBalance == e.postBalance:
       e.balanceWritten = false
     if e.nonceWritten and e.preNonce == e.postNonce:
       e.nonceWritten = false
     if e.codeWritten and
-        tracker.codeHashes[e.preCode] == tracker.postCodeHash(int32(idx)):
+        tracker.codeHashes[e.preCode] == tracker.ledger.getCodeHash(e.address):
       e.codeWritten = false
 
   for idx in 0 ..< tracker.storage.len:
@@ -549,12 +529,9 @@ proc recordTransaction(tracker: BlockAccessListTrackerRef) =
     if e.nonceWritten:
       tracker.builder[].addNonceChange(index, e.address, e.postNonce)
     if e.codeWritten:
-      if e.selfDestructed:
-        tracker.builder[].addCodeChange(index, e.address, newSeq[byte]())
-      else:
-        tracker.builder[].addCodeChange(
-          index, e.address, tracker.ledger.getCode(e.address).bytes
-        )
+      tracker.builder[].addCodeChange(
+        index, e.address, tracker.ledger.getCode(e.address).bytes
+      )
 
   for e in tracker.storage:
     if e.written:
