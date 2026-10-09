@@ -95,9 +95,6 @@ type
     prev: UInt256 ## previous post value for storage and balance changes
     prevNonce: AccountNonce
 
-  FrameMark = object
-    journalLen: int32
-
   # Entries in insertion order with an open addressing index over them, so
   # that an entry can be referred to by its position. Keys live in the entries;
   # a bucket holds a position + 1, 0 being empty. Entries are only ever removed
@@ -124,7 +121,7 @@ type
     codes: seq[seq[byte]] ## code bytes referred to by the account entries
     lastAccount: int32 ## entry of the most recently resolved address, or -1
     lastStorage: int32 ## entry of the most recently resolved slot, or -1
-    frames: seq[FrameMark]
+    frames: seq[int32] ## journal length at the start of each open frame
     blockAccessList: Opt[BlockAccessListRef]
       ## Created by the builder and cached for reuse.
 
@@ -135,8 +132,6 @@ func indexHash(address: Address): uint64 =
   cast[uint64](hash(address))
 
 func indexHash(key: StorageKey): uint64 =
-  # The slot bytes hashed with the address hash as the seed, so that the pair
-  # costs one hash call and inherits whatever seeding the address hash has.
   rapidhashNano(cast[ptr array[32, byte]](unsafeAddr key.slot)[], indexHash(key.address))
 
 template indexKey(e: AccountEntry): Address =
@@ -292,7 +287,7 @@ proc beginCallFrame*(tracker: BlockAccessListTrackerRef) =
   ## Begin a new call frame for tracking reverts. Records where the frame
   ## begins in the journal so that a revert can undo exactly the frame's
   ## changes, as EIP-7928 requires.
-  tracker.frames.add(FrameMark(journalLen: int32(tracker.journal.len)))
+  tracker.frames.add(int32(tracker.journal.len))
 
 # ------------------------------------------------------------------------------
 # Pre-transaction values
@@ -363,7 +358,7 @@ proc recordOnce(
   ## latest record of the same kind, lies within the current frame: the first
   ## record of a frame already holds the value to restore. An undo puts back
   ## the position a record replaced, so `last` always refers to a live record.
-  if last >= tracker.frames[^1].journalLen:
+  if last >= tracker.frames[^1]:
     return
   tracker.journal.add(entry)
   tracker.journal[^1].prevLast = last
@@ -523,7 +518,6 @@ proc normalizeChanges(tracker: BlockAccessListTrackerRef) =
       tracker.accounts[idx]
 
     if e.selfDestructed:
-      tracker.touch(int32(idx))
       tracker.capturePreNonce(int32(idx))
       e.postNonce = 0
       e.nonceWritten = true
@@ -577,11 +571,11 @@ proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
     tracker.recordTransaction()
     tracker.clearTransaction()
 
-proc undoJournal(tracker: BlockAccessListTrackerRef, mark: FrameMark) =
-  ## Replay the journal back to `mark`. A reverted storage write becomes a
-  ## read.
+proc undoJournal(tracker: BlockAccessListTrackerRef, journalLen: int32) =
+  ## Replay the journal back to `journalLen`. A reverted storage write becomes
+  ## a read.
   var j = tracker.journal.len
-  while j > int(mark.journalLen):
+  while j > int(journalLen):
     dec j
     let entry = tracker.journal[j]
     case entry.kind
@@ -604,7 +598,7 @@ proc undoJournal(tracker: BlockAccessListTrackerRef, mark: FrameMark) =
       tracker.accounts[entry.idx].lastCodeJournal = entry.prevLast
     of jSelfDestruct:
       tracker.accounts[entry.idx].selfDestructed = false
-  tracker.journal.setLen(int(mark.journalLen))
+  tracker.journal.setLen(int(journalLen))
 
 proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef) =
   ## Revert the current call frame. As specified in EIP-7928 the frame's

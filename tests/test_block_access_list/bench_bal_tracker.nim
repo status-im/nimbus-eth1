@@ -122,13 +122,14 @@ proc runTx(tracker: BlockAccessListTrackerRef, w: Workload, tx: int, ops: var in
     coinbase = makeAddress(w.numAccounts)
     fee = u256(21000 * 7)
     value = u256(tx + 1)
+    senderBalance = tracker.ledger.getBalance(sender)
 
   tracker.setBlockAccessIndex(tx + 1)
   tracker.beginCallFrame()
   tracker.trackIncNonceChange(sender)
   tracker.trackSubBalanceChange(sender, fee)
   tracker.trackAddressAccess(recipient)
-  tracker.trackSubBalanceChange(sender, value)
+  tracker.trackBalanceChange(sender, senderBalance - fee - value)
   tracker.trackAddBalanceChange(recipient, value)
   ops += 5
 
