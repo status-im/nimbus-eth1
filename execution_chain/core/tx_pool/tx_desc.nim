@@ -188,9 +188,6 @@ func baseFee*(xp: TxPoolRef): GasInt =
   ## when a new insertion point is set via `head=`.
   xp.vmState.blockCtx.baseFeePerGas
 
-func gasLimit(xp: TxPoolRef): GasInt =
-  xp.vmState.blockCtx.gasLimit
-
 func excessBlobGas(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
 
@@ -417,7 +414,7 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   let
     sender = ptx.tx.recoverSenderCached().valueOr:
       return err(txErrorInvalidSignature)
-    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit, sender)
+    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, sender)
 
   validateTxBasic(
     xp.com,
