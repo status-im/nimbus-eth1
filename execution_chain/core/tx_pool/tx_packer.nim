@@ -222,7 +222,9 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   # without this one.
   template doesNotFit(_: untyped) =
     return ContinueWithNextAccount
-  check2dGasInclusion(vmState, item.tx.gasLimit, doesNotFit)
+
+  let intrinsic = item.tx.intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, item.sender)
+  checkBlockGasCapacity(vmState, item.tx, intrinsic, doesNotFit)
 
   # EIP-4844
   if item.tx.txType == TxEip4844:
@@ -254,7 +256,8 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
     vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
 
   # Find out what to do next: accepting this tx or trying the next account
-  var rc = processTransaction(vmState, item.tx, item.sender)
+  var rc = processTransaction(vmState, item.tx, item.sender,
+            intrinsic = Opt.some(intrinsic))
   if rc.isErr:
     if vmState.classifyPackedNext():
       return ContinueWithNextAccount

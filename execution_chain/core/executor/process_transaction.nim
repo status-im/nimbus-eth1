@@ -38,7 +38,6 @@ proc commitOrRollbackDependingOnGasUsed(
     savePoint: LedgerSpRef;
     tx: Transaction;
     callResult: var TxResult;
-    blobGasUsed: GasInt;
       ): Result[void, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the vmState.blockCtx. Again, the EIP-1559 reference does not mention
@@ -81,15 +80,17 @@ proc commitOrRollbackDependingOnGasUsed(
   vmState.cumulativeGasUsed += gasUsed
   vmState.blockExecutionGasUsed += callResult.blockExecutionGasUsed
   vmState.blockStateGasUsed += callResult.blockStateGasUsed
-  vmState.blobGasUsed += blobGasUsed
+  vmState.blobGasUsed += tx.getTotalBlobGas
 
   ok()
 
-template check2dGasInclusion*(
+template checkBlockGasCapacity*(
     vmState: BaseVMState;
-    txGasLimit: GasInt;
+    tx: Transaction;
+    intrinsic: IntrinsicGas;
     fail: untyped) =
   let
+    txGasLimit = tx.gasLimit
     executionGasAvailable = vmState.blockCtx.gasLimit - vmState.blockExecutionGasUsed
     stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
     want = min(TX_MAX_GAS_LIMIT.GasInt, txGasLimit)
@@ -100,13 +101,21 @@ template check2dGasInclusion*(
   if txGasLimit > stateGasAvailable:
     fail("state gas used exceeds limit, want: " & $txGasLimit & ", available: " & $stateGasAvailable)
 
+  # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
+  let
+    blobGasUsed = tx.getTotalBlobGas
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.hardFork)
+  if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
+    fail("blobGasUsed " & $blobGasUsed &
+      " exceeds maximum allowance " & $maxBlobGasPerBlock)
+
 template validateForInclusion(
     vmState: BaseVMState;
     tx: Transaction;
     sender: Address;
     skipNonceCheck: bool;
     buildError: static bool;
-    intrinsicVar, blobGasUsedVar: untyped) =
+    intrinsic: IntrinsicGas) =
 
   template fail(msg: untyped): untyped =
     when buildError:
@@ -114,22 +123,9 @@ template validateForInclusion(
     else:
       return
 
-  let
-    com = vmState.com
-    fork = vmState.hardFork
-    intrinsicVar = tx.intrinsicGas(fork, vmState.blockCtx.gasLimit, sender)
+  checkBlockGasCapacity(vmState, tx, intrinsic, fail)
 
-  check2dGasInclusion(vmState, tx.gasLimit, fail)
-
-  # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
-  let
-    blobGasUsedVar = tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(com, fork)
-  if vmState.blobGasUsed + blobGasUsedVar > maxBlobGasPerBlock:
-    fail("blobGasUsed " & $blobGasUsedVar &
-      " exceeds maximum allowance " & $maxBlobGasPerBlock)
-
-  validateTxBasic(com, tx, intrinsicVar, fork).isOkOr:
+  validateTxBasic(vmState.com, tx, intrinsic, vmState.hardFork).isOkOr:
     fail(error)
   vmState.validateTransaction(tx, sender, skipNonceCheck).isOkOr:
     fail(error)
@@ -141,13 +137,20 @@ template validateForInclusion(
 proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction
     tx:      Transaction; ## Transaction to validate
-    sender:  Address;  ## tx.recoverSender
+    sender:  Address;     ## tx.recoverSender
+    intrinsic = Opt.none(IntrinsicGas); ## Precalculated intrinsic or use internal intrinsic
     persist = true;
       ): Result[TxResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framework for EIP1559.
 
-  validateForInclusion(vmState, tx, sender, false, true, intrinsic, blobGasUsed)
+  let
+    intrinsic = if intrinsic.isNone:
+                  tx.intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
+                else:
+                  intrinsic.value
+
+  validateForInclusion(vmState, tx, sender, false, true, intrinsic)
 
   # Execute the transaction.
   vmState.captureTxStart(tx.gasLimit)
@@ -161,7 +164,7 @@ proc processTransaction*(
 
   let
     tmp = commitOrRollbackDependingOnGasUsed(
-      vmState, savePoint, tx, callResult, blobGasUsed)
+      vmState, savePoint, tx, callResult)
     res = if tmp.isErr:
       err(tmp.error)
     else:
@@ -181,8 +184,9 @@ proc prefetchTransaction*(
     tx:      Transaction; ## Transaction to speculatively execute
     sender:  Address;     ## Pre-recovered sender
       ) =
-
-  validateForInclusion(vmState, tx, sender, true, false, intrinsic, blobGasUsed)
+  let
+    intrinsic = tx.intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
+  validateForInclusion(vmState, tx, sender, true, false, intrinsic)
 
   let savePoint = vmState.ledger.beginSavePoint()
   tx.txCallEvm(sender, vmState, intrinsic, discardResult = true)

@@ -56,7 +56,7 @@ proc toAsyncEvmStateBackend*(engine: RpcVerificationEngine): AsyncEvmStateBacken
     blockHashProc = proc(
         header: Header, number: BlockNumber
     ): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
-      let blockHash = (await engine.getBlockHash(number)).valueOr:
+      let blockHash = (await engine.getBlockHash(header, number)).valueOr:
         return Opt.none(Hash32)
 
       Opt.some(blockHash)

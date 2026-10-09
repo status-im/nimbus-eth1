@@ -648,7 +648,7 @@ proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
       wire.brUpdateTimer = sleepAsync(blockRangeUpdateTicker)
 
     let
-      res = await one(wire.cleanupTimer, wire.brUpdateTimer)
+      res = await race(wire.cleanupTimer, wire.brUpdateTimer)
 
     if res == wire.cleanupTimer:
       wire.reqisterAction("Periodical cleanup"):

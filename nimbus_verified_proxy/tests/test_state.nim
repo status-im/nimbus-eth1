@@ -56,9 +56,8 @@ suite "test state verification":
     # this is for optimistic state fetch
     ts.loadAccessList(tx, blk, accessList)
 
-    check:
-      engine.headerStore.add(convHeader(blk), blk.hash).isOk()
-      engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+    engine.setAnchor(convHeader(blk), blk.hash, Finalized)
 
     let
       verifiedBalance = waitFor frontend.eth_getBalance(address, latestTag)

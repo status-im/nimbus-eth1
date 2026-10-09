@@ -278,8 +278,14 @@ static void execution_transport(
 
     const char *file = NULL;
     if (strcmp(name, "eth_getBlockByNumber") == 0 ||
-        strcmp(name, "eth_getBlockByHash")   == 0)
-        file = "nimbus_verified_proxy/tests/data/block_0x17a2d23.json";
+        strcmp(name, "eth_getBlockByHash")   == 0) {
+        const char *params = execCtxParams(userData);
+        if (strstr(params, "0x17a2d65") != NULL ||
+            strstr(params, "0x5b34070154b4331237ca3975de14df77359f7269a65b95d01b0e81c626e3151d") != NULL)
+            file = "nimbus_verified_proxy/tests/data/block_0x17a2d65.json";
+        else
+            file = "nimbus_verified_proxy/tests/data/block_0x17a2d23.json";
+    }
 
     if (file) {
         char *data = read_file(file);
@@ -396,6 +402,7 @@ static void check_event_loop(Context *ctx) {
     CbState gas_s     = {0};
     CbState prio_s    = {0};
     CbState latest_s  = {0};
+    CbState finalized_s = {0};
     CbState chainid_s = {0};
     CbState fee_s     = {0};
     CbState rx_s      = {0};
@@ -411,6 +418,7 @@ static void check_event_loop(Context *ctx) {
     eth_gasPrice(ctx, collect_error_cb, &gas_s);
     eth_maxPriorityFeePerGas(ctx, collect_error_cb, &prio_s);
     eth_getBlockByNumber(ctx, "latest", false, collect_error_cb, &latest_s);
+    eth_getBlockByNumber(ctx, "finalized", false, collect_error_cb, &finalized_s);
     eth_chainId(ctx, collect_error_cb, &chainid_s);
     proxyCall(ctx, "eth_feeHistory", "[\"0x2\", \"latest\", []]", collect_error_cb, &fee_s);
     eth_getTransactionReceipt(ctx, (char *)UNKNOWN_TX_HASH, collect_error_cb, &rx_s);
@@ -423,11 +431,13 @@ static void check_event_loop(Context *ctx) {
     TEST("eth_gasPrice: callback fired",             gas_s.called);
     TEST("eth_maxPriorityFeePerGas: callback fired", prio_s.called);
     TEST("eth_getBlockByNumber latest: callback fired", latest_s.called);
+    TEST("eth_getBlockByNumber finalized: callback fired", finalized_s.called);
     TEST("eth_chainId: callback fired",              chainid_s.called);
     TEST("proxyCall eth_feeHistory hex blockCount: callback fired", fee_s.called);
     TEST("eth_gasPrice: RET_SUCCESS",                gas_s.status  == RET_SUCCESS);
     TEST("eth_maxPriorityFeePerGas: RET_SUCCESS",    prio_s.status == RET_SUCCESS);
     TEST("eth_getBlockByNumber latest: RET_SUCCESS", latest_s.status == RET_SUCCESS);
+    TEST("eth_getBlockByNumber finalized: RET_SUCCESS", finalized_s.status == RET_SUCCESS);
     TEST("eth_chainId: RET_SUCCESS",                 chainid_s.status == RET_SUCCESS);
     TEST("proxyCall eth_feeHistory hex blockCount: RET_SUCCESS", fee_s.status == RET_SUCCESS);
     TEST("proxyCall eth_feeHistory hex blockCount: forwarded as 0x2, not 0x0",
