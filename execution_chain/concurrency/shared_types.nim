@@ -24,143 +24,109 @@ export hashes, results
 # SharedSeq is needed in order to pass sequences (e.g. seq[byte]) between threads
 # safely when using refc. SharedBytes and SharedString are the byte and char
 # specialisations used to pass bytes and strings across thread boundaries.
-#
-# SmallSeq is the general form: the first N elements are stored inline in the
-# object itself (similar to Rust's SmallVec) and the elements are only moved to
-# the shared heap once the sequence grows beyond N, which avoids a heap
-# allocation for the common case of a sequence that holds only a handful of
-# elements. SharedSeq is simply a SmallSeq with no inline storage.
-#
-# Elements live inline iff `data` is nil. The object never points into its own
-# inline storage so a SmallSeq (and anything containing one) can always be
-# moved with a plain memory copy.
 
 type
-  SmallSeq*[N: static int, E] = object
+  SharedSeq*[E] = object
     data: ptr UncheckedArray[E]
     count: int
     cap: int
-    when N > 0:
-      inl: array[N, E]
-
-  SharedSeq*[E] = SmallSeq[0, E]
 
 const seqInitialCapacity = 16
 
-template capacity[N, E](s: SmallSeq[N, E]): int =
-  if s.data.isNil(): N else: s.cap
-
-template buf[N, E](s: SmallSeq[N, E]): ptr UncheckedArray[E] =
-  when N > 0:
-    if s.data.isNil():
-      cast[ptr UncheckedArray[E]](unsafeAddr s.inl)
-    else:
-      s.data
-  else:
-    s.data
-
-proc reallocTo[N, E](s: var SmallSeq[N, E], newCap: int) =
-  when N > 0:
-    let wasInline = s.data.isNil()
+proc reallocTo[E](s: var SharedSeq[E], newCap: int) =
   s.data = cast[ptr UncheckedArray[E]](c_realloc(s.data, csize_t(newCap * sizeof(E))))
   s.cap = newCap
-  when N > 0:
-    if wasInline and s.count > 0:
-      copyMem(s.data, unsafeAddr s.inl, s.count * sizeof(E))
 
-proc init*[N, E](T: type SmallSeq[N, E], len: int, zeroed = true): SmallSeq[N, E] =
+proc init*[E](T: type SharedSeq[E], len: int, zeroed = true): SharedSeq[E] =
   static:
     doAssert supportsCopyMem(E), "E must be a non-GC type"
 
   if len <= 0:
     return T()
 
-  if len > N:
-    result.reallocTo(len)
+  result.reallocTo(len)
   result.count = len
   if zeroed:
-    zeroMem(result.buf, len * sizeof(E))
+    zeroMem(result.data, len * sizeof(E))
 
-proc init*[N, E](T: type SmallSeq[N, E], values: openArray[E]): SmallSeq[N, E] =
-  result = T.init(values.len(), zeroed = false)
+proc init*[E](T: type SharedSeq[E], values: openArray[E]): SharedSeq[E] =
+  var s = T.init(values.len(), zeroed = false)
   if values.len() > 0:
-    copyMem(result.buf, unsafeAddr values[0], values.len() * sizeof(E))
+    copyMem(s.data, unsafeAddr values[0], values.len() * sizeof(E))
+  s
 
-proc dispose*[N, E](s: var SmallSeq[N, E]) =
+proc dispose*[E](s: var SharedSeq[E]) =
   if not s.data.isNil():
     c_free(s.data)
     s.data = nil
   s.count = 0
   s.cap = 0
 
-proc `=copy`*[N, E](
-    dest: var SmallSeq[N, E], src: SmallSeq[N, E]
-) {.error: "Copying SmallSeq is forbidden".} =
+proc `=copy`*[E](
+    dest: var SharedSeq[E], src: SharedSeq[E]
+) {.error: "Copying SharedSeq is forbidden".} =
   discard
 
-template toOpenArray[N, E](s: SmallSeq[N, E]): openArray[E] =
-  s.buf.toOpenArray(0, s.count - 1)
+template toOpenArray[E](s: SharedSeq[E]): openArray[E] =
+  s.data.toOpenArray(0, s.count - 1)
 
-func toSeq[N, E](s: SmallSeq[N, E]): seq[E] =
+func toSeq[E](s: SharedSeq[E]): seq[E] =
   if s.count == 0:
     return default(seq[E])
 
   let res = newSeq[E](s.count)
-  copyMem(addr res[0], s.buf, s.count * sizeof(E))
+  copyMem(addr res[0], s.data, s.count * sizeof(E))
   res
 
-template data*[N, E](s: SmallSeq[N, E], asOpenArray: static bool = false): auto =
+template data*[E](s: SharedSeq[E], asOpenArray: static bool = false): auto =
   when asOpenArray:
     s.toOpenArray()
   else:
     s.toSeq()
 
-proc `[]`*[N, E](s: SmallSeq[N, E], i: int): lent E =
-  s.buf[i]
+proc `[]`*[E](s: SharedSeq[E], i: int): lent E =
+  s.data[i]
 
-proc `[]`*[N, E](s: var SmallSeq[N, E], i: int): var E =
-  s.buf[i]
+proc `[]`*[E](s: var SharedSeq[E], i: int): var E =
+  s.data[i]
 
-template len*[N, E](s: SmallSeq[N, E]): int =
+template len*[E](s: SharedSeq[E]): int =
   s.count
 
 const seqGrowThresholdBytes = 128 * 1024
 
-proc grow[N, E](s: var SmallSeq[N, E], minCap: int) =
-  let cap = s.capacity
-  if max(cap, minCap) * sizeof(E) >= seqGrowThresholdBytes:
-    s.reallocTo(max(minCap, cap + (cap div 2)))
+proc grow[E](s: var SharedSeq[E], minCap: int) =
+  if max(s.cap, minCap) * sizeof(E) >= seqGrowThresholdBytes:
+    s.reallocTo(max(minCap, s.cap + (s.cap div 2)))
   else:
     s.reallocTo(nextPowerOfTwo(max(minCap, seqInitialCapacity)))
 
-proc setLen*[N, E](s: var SmallSeq[N, E], newLen: int, zeroed = true, exact = false) =
-  if newLen > s.capacity:
+proc setLen*[E](s: var SharedSeq[E], newLen: int, zeroed = true, exact = false) =
+  if newLen > s.cap:
     if exact:
       s.reallocTo(newLen)
     else:
       s.grow(newLen)
   if zeroed and newLen > s.count:
-    zeroMem(addr s.buf[s.count], (newLen - s.count) * sizeof(E))
+    zeroMem(addr s.data[s.count], (newLen - s.count) * sizeof(E))
   s.count = newLen
 
-proc add*[N, E](s: var SmallSeq[N, E], value: E) =
+proc add*[E](s: var SharedSeq[E], value: E) =
   # Not `sink`: E is always a `supportsCopyMem` type here, and the compiler
   # passes a `sink` parameter of such a type by value - an extra copy of the
   # element before the one this makes into the buffer.
-  if s.count == s.capacity:
+  if s.count == s.cap:
     s.grow(s.count + 1)
-  copyMem(addr s.buf[s.count], unsafeAddr value, sizeof(E))
+  copyMem(addr s.data[s.count], unsafeAddr value, sizeof(E))
   inc s.count
 
-iterator items*[N, E](s: SmallSeq[N, E]): lent E =
-  let b = s.buf
+iterator items*[E](s: SharedSeq[E]): lent E =
   for i in 0 ..< s.count:
-    yield b[i]
+    yield s.data[i]
 
-iterator mitems*[N, E](s: var SmallSeq[N, E]): var E =
-  let b = s.buf
+iterator mitems*[E](s: var SharedSeq[E]): var E =
   for i in 0 ..< s.count:
-    yield b[i]
+    yield s.data[i]
 
 type
   SharedBytes* = SharedSeq[byte]
