@@ -118,7 +118,7 @@ proc getStatus(url: string, headers: openArray[(string, string)]): int =
   let session = chronoshttpclient.HttpSessionRef.new()
   defer: waitFor session.closeWait()
   let req = chronoshttpclient.HttpClientRequestRef.new(
-    session, url, headers = headers).value
+    session, chronoshttpclient.getHttpAddress(url).value, headers = headers)
   (waitFor req.fetch()).status
 
 # ------------------------------------------------------------------------------
