@@ -91,7 +91,7 @@ procSuite "Portal Wire Protocol Tests":
   asyncTest "Ping/Pong":
     let (proto1, proto2) = defaultTestSetup(rng)
 
-    let pong = await proto1.ping(proto2.localNode)
+    let pong = await proto1.ping(proto2.localNode.toNode())
 
     let customPayload = CapabilitiesPayload(
       client_info: NIMBUS_PORTAL_CLIENT_INFO,
@@ -117,7 +117,7 @@ procSuite "Portal Wire Protocol Tests":
 
     block: # Find itself
       let nodes =
-        await proto1.findNodesImpl(proto2.localNode, List[uint16, 256](@[0'u16]))
+        await proto1.findNodesImpl(proto2.localNode.toNode(), List[uint16, 256](@[0'u16]))
 
       check:
         nodes.isOk()
@@ -126,7 +126,7 @@ procSuite "Portal Wire Protocol Tests":
 
     block: # Find nothing: this should result in nothing as we haven't started
       # the seeding of the portal protocol routing table yet.
-      let nodes = await proto1.findNodesImpl(proto2.localNode, List[uint16, 256](@[]))
+      let nodes = await proto1.findNodesImpl(proto2.localNode.toNode(), List[uint16, 256](@[]))
 
       check:
         nodes.isOk()
@@ -137,8 +137,8 @@ procSuite "Portal Wire Protocol Tests":
       # ping in one direction to add, ping in the other to update as seen,
       # adding the node in the discovery v5 routing table. Could also launch
       # with bootstrap node instead.
-      check (await proto1.baseProtocol.ping(proto2.localNode)).isOk()
-      check (await proto2.baseProtocol.ping(proto1.localNode)).isOk()
+      check (await proto1.baseProtocol.ping(proto2.localNode.toNode())).isOk()
+      check (await proto2.baseProtocol.ping(proto1.localNode.toNode())).isOk()
 
       # Start the portal protocol to seed nodes from the discoveryv5 routing
       # table.
@@ -146,7 +146,7 @@ procSuite "Portal Wire Protocol Tests":
 
       let distance = logDistance(proto1.localNode.id, proto2.localNode.id)
       let nodes =
-        await proto1.findNodesImpl(proto2.localNode, List[uint16, 256](@[distance]))
+        await proto1.findNodesImpl(proto2.localNode.toNode(), List[uint16, 256](@[distance]))
 
       check:
         nodes.isOk()
@@ -163,19 +163,19 @@ procSuite "Portal Wire Protocol Tests":
       proto3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20404))
 
     # Make node1 know about node2, and node2 about node3
-    check proto1.addNode(proto2.localNode) == Added
-    check proto2.addNode(proto3.localNode) == Added
+    check proto1.addNode(proto2.localNode.toNode()) == Added
+    check proto2.addNode(proto3.localNode.toNode()) == Added
 
     # node1 needs to know the radius of the nodes to determine if they are
     # interested in content, so a ping is done.
-    check (await proto1.ping(proto2.localNode)).isOk()
-    check (await proto2.ping(proto3.localNode)).isOk()
+    check (await proto1.ping(proto2.localNode.toNode())).isOk()
+    check (await proto2.ping(proto3.localNode.toNode())).isOk()
 
     let contentKey = ContentKeyByteList.init(@[1'u8])
 
     # content does not exist so this should provide us with the closest nodes
     # to the content, which should only be node 3 because node 1 should be excluded
-    let content = await proto1.findContentImpl(proto2.localNode, contentKey)
+    let content = await proto1.findContentImpl(proto2.localNode.toNode(), contentKey)
 
     check:
       content.isOk()
@@ -188,7 +188,7 @@ procSuite "Portal Wire Protocol Tests":
     let (proto1, proto2) = defaultTestSetup(rng)
     let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
 
-    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
 
     check:
       accept.isOk()
@@ -202,7 +202,7 @@ procSuite "Portal Wire Protocol Tests":
     let (proto1, proto2) = defaultTestSetup(rng)
     let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
 
-    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
     let expectedByteList = ContentKeysAcceptList.init(@[Accepted])
 
     check:
@@ -210,7 +210,7 @@ procSuite "Portal Wire Protocol Tests":
       # Content accepted
       accept.get().contentKeys == expectedByteList
 
-    let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+    let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
 
     check:
       accept2.isOk()
@@ -225,7 +225,7 @@ procSuite "Portal Wire Protocol Tests":
     let (proto1, proto2) = defaultTestSetup(rng)
     let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
 
-    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
     let expectedByteList = ContentKeysAcceptList.init(@[Accepted])
 
     check:
@@ -235,7 +235,7 @@ procSuite "Portal Wire Protocol Tests":
 
     await sleepAsync(connectionTimeoutTest)
 
-    let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+    let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
     check:
       accept2.isOk()
       # Content accepted because previous offer was pruned
@@ -253,7 +253,7 @@ procSuite "Portal Wire Protocol Tests":
       )
       content.add(contentKV)
 
-    let res = await proto1.offer(proto2.baseProtocol.localNode, content)
+    let res = await proto1.offer(proto2.baseProtocol.localNode.toNode(), content)
 
     check res.isOk()
 
@@ -273,8 +273,8 @@ procSuite "Portal Wire Protocol Tests":
   asyncTest "Neighborhood gossip - single content key, value":
     let (proto1, proto2) = defaultTestSetup(rng)
 
-    check proto1.addNode(proto2.localNode) == Added
-    let pong = await proto1.ping(proto2.localNode)
+    check proto1.addNode(proto2.localNode.toNode()) == Added
+    let pong = await proto1.ping(proto2.localNode.toNode())
     check pong.isOk()
 
     let
@@ -323,8 +323,8 @@ procSuite "Portal Wire Protocol Tests":
   asyncTest "Random gossip - single content key, value":
     let (proto1, proto2) = defaultTestSetup(rng)
 
-    check proto1.addNode(proto2.localNode) == Added
-    let pong = await proto1.ping(proto2.localNode)
+    check proto1.addNode(proto2.localNode.toNode()) == Added
+    let pong = await proto1.ping(proto2.localNode.toNode())
     check pong.isOk()
 
     let
@@ -378,7 +378,7 @@ procSuite "Portal Wire Protocol Tests":
     check:
       len(initialNeighbours) == 0
 
-    discard proto1.addNode(proto2.localNode)
+    discard proto1.addNode(proto2.localNode.toNode())
 
     let allNeighboursAfterAdd = proto1.neighbours(proto1.localNode.id, seenOnly = false)
     let seenNeighboursAfterAdd = proto1.neighbours(proto1.localNode.id, seenOnly = true)
@@ -387,7 +387,7 @@ procSuite "Portal Wire Protocol Tests":
       len(allNeighboursAfterAdd) == 1
       len(seenNeighboursAfterAdd) == 0
 
-    let pong = await proto1.ping(proto2.localNode)
+    let pong = await proto1.ping(proto2.localNode.toNode())
 
     let allNeighboursAfterPing =
       proto1.neighbours(proto1.localNode.id, seenOnly = false)
@@ -410,16 +410,16 @@ procSuite "Portal Wire Protocol Tests":
 
     # Make node1 know about node2, and node2 about node3
     # node1 will then do a lookup for node3
-    check node1.addNode(node2.localNode) == Added
-    check node2.addNode(node3.localNode) == Added
+    check node1.addNode(node2.localNode.toNode()) == Added
+    check node2.addNode(node3.localNode.toNode()) == Added
 
-    check (await node2.ping(node3.localNode)).isOk()
+    check (await node2.ping(node3.localNode.toNode())).isOk()
 
     let lookupResult = await node1.lookup(node3.localNode.id)
 
     check:
       # Result should contain node3 as it is in the routing table of node2
-      lookupResult.contains(node3.localNode)
+      lookupResult.contains(node3.localNode.toNode())
 
     await node1.stopPortalProtocol()
     await node2.stopPortalProtocol()
@@ -439,13 +439,13 @@ procSuite "Portal Wire Protocol Tests":
     node3.storeContent(contentList, contentId, content)
 
     # Make node1 know about node2, and node2 about node3
-    check node1.addNode(node2.localNode) == Added
-    check node2.addNode(node3.localNode) == Added
+    check node1.addNode(node2.localNode.toNode()) == Added
+    check node2.addNode(node3.localNode.toNode()) == Added
 
     # node1 needs to know the radius of the nodes to determine if they are
     # interested in content, so a ping is done.
-    check (await node1.ping(node2.localNode)).isOk()
-    check (await node2.ping(node3.localNode)).isOk()
+    check (await node1.ping(node2.localNode.toNode())).isOk()
+    check (await node2.ping(node3.localNode.toNode())).isOk()
 
     let lookupResult = await node1.contentLookup(contentList, contentId)
 
@@ -456,7 +456,7 @@ procSuite "Portal Wire Protocol Tests":
 
     check:
       res.content == content
-      res.nodesInterestedInContent.contains(node2.localNode)
+      res.nodesInterestedInContent.contains(node2.localNode.toNode())
 
     await node1.stopPortalProtocol()
     await node2.stopPortalProtocol()
@@ -495,7 +495,7 @@ procSuite "Portal Wire Protocol Tests":
     check node2.neighbours(node2.localNode.id).len == 1
 
     # This should fail and drop node1 from the routing table
-    await node2.revalidateNode(node1.localNode)
+    await node2.revalidateNode(node1.localNode.toNode())
 
     check node2.neighbours(node2.localNode.id).len == 0
 
@@ -686,7 +686,7 @@ procSuite "Portal Wire Protocol Tests":
 
     # add the node
     check:
-      proto1.addNode(proto2.localNode) == Added
+      proto1.addNode(proto2.localNode.toNode()) == Added
       proto1.getNode(proto2.localNode.id).isSome()
 
     # banning the node should remove it from the routing table
@@ -695,7 +695,7 @@ procSuite "Portal Wire Protocol Tests":
 
     # cannot add a banned node
     check:
-      proto1.addNode(proto2.localNode) == Banned
+      proto1.addNode(proto2.localNode.toNode()) == Banned
       proto1.getNode(proto2.localNode.id).isNone()
 
     await proto1.stopPortalProtocol()
@@ -708,13 +708,13 @@ procSuite "Portal Wire Protocol Tests":
       proto3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
       distance = logDistance(proto2.localNode.id, proto3.localNode.id)
 
-    check proto2.addNode(proto3.localNode) == Added
-    check (await proto2.ping(proto3.localNode)).isOk()
-    check (await proto3.ping(proto2.localNode)).isOk()
+    check proto2.addNode(proto3.localNode.toNode()) == Added
+    check (await proto2.ping(proto3.localNode.toNode())).isOk()
+    check (await proto3.ping(proto2.localNode.toNode())).isOk()
 
     # before banning the node it is returned in the response
     block:
-      let res = await proto1.findNodes(proto2.localNode, @[distance])
+      let res = await proto1.findNodes(proto2.localNode.toNode(), @[distance])
       check:
         res.isOk()
         res.get().len() == 1
@@ -723,7 +723,7 @@ procSuite "Portal Wire Protocol Tests":
 
     # after banning the node, it is not returned in the response
     block:
-      let res = await proto1.findNodes(proto2.localNode, @[distance])
+      let res = await proto1.findNodes(proto2.localNode.toNode(), @[distance])
       check:
         res.isOk()
         res.get().len() == 0
@@ -738,14 +738,14 @@ procSuite "Portal Wire Protocol Tests":
       proto2 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
       proto3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
 
-    check proto2.addNode(proto3.localNode) == Added
-    check (await proto2.ping(proto3.localNode)).isOk()
-    check (await proto3.ping(proto2.localNode)).isOk()
+    check proto2.addNode(proto3.localNode.toNode()) == Added
+    check (await proto2.ping(proto3.localNode.toNode())).isOk()
+    check (await proto3.ping(proto2.localNode.toNode())).isOk()
 
     let contentKey = ContentKeyByteList.init(@[1'u8])
 
     block:
-      let res = await proto1.findContent(proto2.localNode, contentKey)
+      let res = await proto1.findContent(proto2.localNode.toNode(), contentKey)
       check:
         res.isOk()
         res.get().nodes.len() == 1
@@ -753,7 +753,7 @@ procSuite "Portal Wire Protocol Tests":
     proto1.banNode(proto3.localNode.id, 1.minutes)
 
     block:
-      let res = await proto1.findContent(proto2.localNode, contentKey)
+      let res = await proto1.findContent(proto2.localNode.toNode(), contentKey)
       check:
         res.isOk()
         res.get().nodes.len() == 0
@@ -775,11 +775,11 @@ procSuite "Portal Wire Protocol Tests":
     proto4.banNode(proto1.localNode.id, 1.minutes)
 
     check:
-      (await proto1.ping(proto2.localNode)).error() ==
+      (await proto1.ping(proto2.localNode.toNode())).error() ==
         "No message data, peer might not support this talk protocol"
-      (await proto1.findNodes(proto3.localNode, @[0.uint16])).error() ==
+      (await proto1.findNodes(proto3.localNode.toNode(), @[0.uint16])).error() ==
         "No message data, peer might not support this talk protocol"
-      (await proto1.findContent(proto4.localNode, contentKey)).error() ==
+      (await proto1.findContent(proto4.localNode.toNode(), contentKey)).error() ==
         "No message data, peer might not support this talk protocol"
 
     await proto1.stopPortalProtocol()
@@ -791,17 +791,17 @@ procSuite "Portal Wire Protocol Tests":
       contentKey = ContentKeyByteList.init(@[1'u8])
 
     check:
-      (await proto1.ping(proto2.localNode)).isOk()
-      (await proto1.findNodes(proto2.localNode, @[0.uint16])).isOk()
-      (await proto1.findContent(proto2.localNode, contentKey)).isOk()
+      (await proto1.ping(proto2.localNode.toNode())).isOk()
+      (await proto1.findNodes(proto2.localNode.toNode(), @[0.uint16])).isOk()
+      (await proto1.findContent(proto2.localNode.toNode(), contentKey)).isOk()
 
     proto1.banNode(proto2.localNode.id, 1.minutes)
 
     check:
-      (await proto1.ping(proto2.localNode)).error() == "destination node is banned"
-      (await proto1.findNodes(proto2.localNode, @[0.uint16])).error() ==
+      (await proto1.ping(proto2.localNode.toNode())).error() == "destination node is banned"
+      (await proto1.findNodes(proto2.localNode.toNode(), @[0.uint16])).error() ==
         "destination node is banned"
-      (await proto1.findContent(proto2.localNode, contentKey)).error() ==
+      (await proto1.findContent(proto2.localNode.toNode(), contentKey)).error() ==
         "destination node is banned"
 
     await proto1.stopPortalProtocol()

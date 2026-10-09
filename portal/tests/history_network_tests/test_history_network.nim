@@ -52,14 +52,14 @@ suite "History Network":
     node2.start()
 
     check:
-      node1.portalProtocol().addNode(node2.localNode()) == Added
-      node2.portalProtocol().addNode(node1.localNode()) == Added
+      node1.portalProtocol().addNode(node2.localNode().toNode()) == Added
+      node2.portalProtocol().addNode(node1.localNode().toNode()) == Added
 
-      (await node1.portalProtocol().ping(node2.localNode())).isOk()
-      (await node2.portalProtocol().ping(node1.localNode())).isOk()
+      (await node1.portalProtocol().ping(node2.localNode().toNode())).isOk()
+      (await node2.portalProtocol().ping(node1.localNode().toNode())).isOk()
 
       # This version of offer does not require to store the content locally
-      (await node1.portalProtocol().offer(node2.localNode(), @[contentKV])).isOk()
+      (await node1.portalProtocol().offer(node2.localNode().toNode(), @[contentKV])).isOk()
 
       node2
         .portalProtocol()
@@ -79,11 +79,11 @@ suite "History Network":
     node2.start()
 
     check:
-      node1.portalProtocol().addNode(node2.localNode()) == Added
-      node2.portalProtocol().addNode(node1.localNode()) == Added
+      node1.portalProtocol().addNode(node2.localNode().toNode()) == Added
+      node2.portalProtocol().addNode(node1.localNode().toNode()) == Added
 
-      (await node1.portalProtocol().ping(node2.localNode())).isOk()
-      (await node2.portalProtocol().ping(node1.localNode())).isOk()
+      (await node1.portalProtocol().ping(node2.localNode().toNode())).isOk()
+      (await node2.portalProtocol().ping(node1.localNode().toNode())).isOk()
 
     var list: seq[ContentKeyByteList]
     for i in 0 ..< contentKeysLimit + 1:
@@ -91,7 +91,7 @@ suite "History Network":
     # This is invalid way of creating ContentKeysList and will allow to go over the limit
     let contentKeyList = ContentKeysList(list)
 
-    check (await node1.portalProtocol().offer(node2.localNode(), contentKeyList)).isErr()
+    check (await node1.portalProtocol().offer(node2.localNode().toNode(), contentKeyList)).isErr()
 
     await node1.stop()
     await node2.stop()
@@ -121,11 +121,11 @@ suite "History Network":
     node2.start()
 
     check:
-      node1.portalProtocol().addNode(node2.localNode()) == Added
-      node2.portalProtocol().addNode(node1.localNode()) == Added
+      node1.portalProtocol().addNode(node2.localNode().toNode()) == Added
+      node2.portalProtocol().addNode(node1.localNode().toNode()) == Added
 
-      (await node1.portalProtocol().ping(node2.localNode())).isOk()
-      (await node2.portalProtocol().ping(node1.localNode())).isOk()
+      (await node1.portalProtocol().ping(node2.localNode().toNode())).isOk()
+      (await node2.portalProtocol().ping(node1.localNode().toNode())).isOk()
 
     # All blocks we send in the test are empty
     let emptyWithdrawals: seq[Withdrawal] = @[]
@@ -141,7 +141,7 @@ suite "History Network":
         )
       )
 
-    check (await node1.portalProtocol().offer(node2.localNode(), contentKVList)).isOk()
+    check (await node1.portalProtocol().offer(node2.localNode().toNode(), contentKVList)).isOk()
 
     # Wait for contentQueueWorker to process all the content
     while count < contentKeysLimit:

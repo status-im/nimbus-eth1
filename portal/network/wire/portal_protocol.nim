@@ -187,7 +187,7 @@ type
     Database
 
   OfferRequest = object
-    dst: Node
+    dst: DiscoveryNode
     case kind: OfferRequestType
     of Direct:
       contentList: List[ContentKV, contentKeysLimit]
@@ -233,21 +233,21 @@ type
     Content
 
   FoundContent* = object
-    src*: Node
+    src*: DiscoveryNode
     case kind*: FoundContentKind
     of Content:
       content*: seq[byte]
       utpTransfer*: bool
     of Nodes:
-      nodes*: seq[Node]
+      nodes*: seq[DiscoveryNode]
 
   ContentLookupResult* = object
     content*: seq[byte]
     utpTransfer*: bool
-    receivedFrom*: Node
+    receivedFrom*: DiscoveryNode
     # List of nodes which do not have requested content, and for which
     # content is in their range
-    nodesInterestedInContent*: seq[Node]
+    nodesInterestedInContent*: seq[DiscoveryNode]
 
   TraceResponse* = object
     durationMs*: int64
@@ -295,8 +295,8 @@ func init*(
     T: type ContentLookupResult,
     content: seq[byte],
     utpTransfer: bool,
-    receivedFrom: Node,
-    nodesInterestedInContent: seq[Node],
+    receivedFrom: DiscoveryNode,
+    nodesInterestedInContent: seq[DiscoveryNode],
 ): T =
   ContentLookupResult(
     content: content,
@@ -324,7 +324,7 @@ func fromNodeStatus(T: type NodeAddResult, status: NodeStatus): T =
   of NodeStatus.NoAddress: T.NoAddress
   of NodeStatus.Banned: T.Banned
 
-proc addNode*(p: PortalProtocol, node: Node): NodeAddResult =
+proc addNode*(p: PortalProtocol, node: DiscoveryNode): NodeAddResult =
   if node.highestCommonPortalVersionAndChain(p.portalEnrField).isOk():
     let status = p.routingTable.addNode(node)
     trace "Adding node to routing table", status, node
@@ -334,12 +334,12 @@ proc addNode*(p: PortalProtocol, node: Node): NodeAddResult =
     NodeAddResult.IncompatibleVersion
 
 proc addNode*(p: PortalProtocol, r: Record): bool =
-  p.addNode(Node.fromRecord(r)) == NodeAddResult.Added
+  p.addNode(DiscoveryNode.fromRecord(r)) == NodeAddResult.Added
 
-func getNode*(p: PortalProtocol, id: NodeId): Opt[Node] =
+func getNode*(p: PortalProtocol, id: NodeId): Opt[DiscoveryNode] =
   p.routingTable.getNode(id)
 
-func localNode*(p: PortalProtocol): Node =
+func localNode*(p: PortalProtocol): LocalDiscoveryNode =
   p.baseProtocol.localNode
 
 func inRange(
@@ -356,7 +356,7 @@ func neighbours*(
     k: int = BUCKET_SIZE,
     seenOnly = false,
     excluding = initHashSet[NodeId](),
-): seq[Node] =
+): seq[DiscoveryNode] =
   func nodeNotExcluded(nodeId: NodeId): bool =
     not excluding.contains(nodeId)
 
@@ -368,7 +368,7 @@ func neighboursInRange*(
     k: int = BUCKET_SIZE,
     seenOnly = false,
     excluding = initHashSet[NodeId](),
-): seq[Node] =
+): seq[DiscoveryNode] =
   func nodeNotExcludedAndInRange(nodeId: NodeId): bool =
     if excluding.contains(nodeId):
       return false
@@ -379,7 +379,7 @@ func neighboursInRange*(
   p.routingTable.neighbours(id, k, seenOnly, nodeNotExcludedAndInRange)
 
 func truncateEnrs(
-    nodes: seq[Node], maxSize: int, enrOverhead: int
+    nodes: seq[DiscoveryNode], maxSize: int, enrOverhead: int
 ): List[ByteList[2048], 32] =
   var enrs: List[ByteList[2048], 32]
   var totalSize = 0
@@ -635,7 +635,7 @@ proc messageHandler(
     request: seq[byte],
     srcId: NodeId,
     srcUdpAddress: Address,
-    nodeOpt: Opt[Node],
+    nodeOpt: Opt[DiscoveryNode],
 ): seq[byte] =
   doAssert(protocol of PortalProtocol)
 
@@ -723,7 +723,8 @@ proc new*(
     protocolId: protocolId,
     portalEnrField: portalEnrField,
     routingTable: RoutingTable.init(
-      baseProtocol.localNode, config.bitsPerHop, config.tableIpLimits, baseProtocol.rng
+      baseProtocol.localNode.id, config.bitsPerHop, config.tableIpLimits,
+      baseProtocol.rng,
     ),
     baseProtocol: baseProtocol,
     toContentId: toContentId,
@@ -755,7 +756,7 @@ proc new*(
 # Sends the discv5 talkreq message with provided Portal message, awaits and
 # validates the proper response, and updates the Portal Network routing table.
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
-    p: PortalProtocol, dst: Node, request: Request
+    p: PortalProtocol, dst: DiscoveryNode, request: Request
 ): Future[PortalResult[Response]] {.async: (raises: [CancelledError]).} =
   logScope:
     protocolId = p.protocolId
@@ -808,7 +809,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
   return messageResponse
 
 proc pingImpl*(
-    p: PortalProtocol, dst: Node
+    p: PortalProtocol, dst: DiscoveryNode
 ): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
   let pingPayload = encodePayload(
     CapabilitiesPayload(
@@ -828,7 +829,7 @@ proc pingImpl*(
   return await reqResponse[PingMessage, PongMessage](p, dst, ping)
 
 proc findNodesImpl*(
-    p: PortalProtocol, dst: Node, distances: List[uint16, 256]
+    p: PortalProtocol, dst: DiscoveryNode, distances: List[uint16, 256]
 ): Future[PortalResult[NodesMessage]] {.async: (raises: [CancelledError]).} =
   let fn = FindNodesMessage(distances: distances)
 
@@ -836,14 +837,14 @@ proc findNodesImpl*(
   return await reqResponse[FindNodesMessage, NodesMessage](p, dst, fn)
 
 proc findContentImpl*(
-    p: PortalProtocol, dst: Node, contentKey: ContentKeyByteList
+    p: PortalProtocol, dst: DiscoveryNode, contentKey: ContentKeyByteList
 ): Future[PortalResult[ContentMessage]] {.async: (raises: [CancelledError]).} =
   let fc = FindContentMessage(contentKey: contentKey)
 
   return await reqResponse[FindContentMessage, ContentMessage](p, dst, fc)
 
 proc offerImpl*(
-    p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
+    p: PortalProtocol, dst: DiscoveryNode, contentKeys: ContentKeysList
 ): Future[PortalResult[AcceptMessage]] {.async: (raises: [CancelledError]).} =
   let offer = OfferMessage(contentKeys: contentKeys)
 
@@ -862,7 +863,7 @@ proc recordsFromBytes(rawRecords: List[ByteList[2048], 32]): PortalResult[seq[Re
   ok(records)
 
 proc ping*(
-    p: PortalProtocol, dst: Node
+    p: PortalProtocol, dst: DiscoveryNode
 ): Future[PortalResult[(uint64, uint16, CapabilitiesPayload)]] {.
     async: (raises: [CancelledError])
 .} =
@@ -890,8 +891,8 @@ proc ping*(
   ok((pong.enrSeq, pong.payload_type, payload))
 
 proc findNodes*(
-    p: PortalProtocol, dst: Node, distances: seq[uint16]
-): Future[PortalResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
+    p: PortalProtocol, dst: DiscoveryNode, distances: seq[uint16]
+): Future[PortalResult[seq[DiscoveryNode]]] {.async: (raises: [CancelledError]).} =
   # Fail if no common portal version is found
   let _ = ?dst.highestCommonPortalVersionAndChain(p.portalEnrField)
 
@@ -908,7 +909,7 @@ proc findNodes*(
   )
 
 proc findContent*(
-    p: PortalProtocol, dst: Node, contentKey: ContentKeyByteList
+    p: PortalProtocol, dst: DiscoveryNode, contentKey: ContentKeyByteList
 ): Future[PortalResult[FoundContent]] {.async: (raises: [CancelledError]).} =
   # Fail if no common portal version is found
   let _ = ?dst.highestCommonPortalVersionAndChain(p.portalEnrField)
@@ -1150,13 +1151,13 @@ proc offer(
   ok(response.contentKeys)
 
 proc offer*(
-    p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
+    p: PortalProtocol, dst: DiscoveryNode, contentKeys: ContentKeysList
 ): Future[PortalResult[ContentKeysAcceptList]] {.async: (raises: [CancelledError]).} =
   let req = OfferRequest(dst: dst, kind: Database, contentKeys: contentKeys)
   await p.offer(req)
 
 proc offer*(
-    p: PortalProtocol, dst: Node, content: seq[ContentKV]
+    p: PortalProtocol, dst: DiscoveryNode, content: seq[ContentKV]
 ): Future[PortalResult[ContentKeysAcceptList]] {.async: (raises: [CancelledError]).} =
   if len(content) > contentKeysLimit:
     return err("Cannot offer more than 64 content items")
@@ -1193,8 +1194,8 @@ proc offerRateLimited*(
   res
 
 proc lookupWorker(
-    p: PortalProtocol, dst: Node, target: NodeId
-): Future[seq[Node]] {.async: (raises: [CancelledError]).} =
+    p: PortalProtocol, dst: DiscoveryNode, target: NodeId
+): Future[seq[DiscoveryNode]] {.async: (raises: [CancelledError]).} =
   let distances = lookupDistances(target, dst.id)
   let nodesMessage = await p.findNodes(dst, distances)
   if nodesMessage.isOk():
@@ -1208,7 +1209,7 @@ proc lookupWorker(
 
 proc lookup*(
     p: PortalProtocol, target: NodeId
-): Future[seq[Node]] {.async: (raises: [CancelledError]).} =
+): Future[seq[DiscoveryNode]] {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
@@ -1222,7 +1223,7 @@ proc lookup*(
     seen.incl(node.id)
 
   var pendingQueries =
-    newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](p.config.alpha)
+    newSeqOfCap[Future[seq[DiscoveryNode]].Raising([CancelledError])](p.config.alpha)
   var requestAmount = 0'i64
 
   while true:
@@ -1264,7 +1265,7 @@ proc lookup*(
           n,
           closestNodes.lowerBound(
             n,
-            proc(x: Node, n: Node): int =
+            proc(x: DiscoveryNode, n: DiscoveryNode): int =
               cmp(distance(x.id, target), distance(n.id, target)),
           ),
         )
@@ -1278,7 +1279,7 @@ proc lookup*(
 
 proc triggerPoke*(
     p: PortalProtocol,
-    nodes: seq[Node],
+    nodes: seq[DiscoveryNode],
     contentKey: ContentKeyByteList,
     content: seq[byte],
 ): Future[void] {.async: (raises: [CancelledError]).} =
@@ -1325,7 +1326,7 @@ proc contentLookup*(
 
   # Sort closestNodes so that nodes that are in range of the target content
   # are queried first
-  proc nodesCmp(x, y: Node): int =
+  proc nodesCmp(x, y: DiscoveryNode): int =
     let
       xRadius = p.radiusCache.get(x.id)
       yRadius = p.radiusCache.get(y.id)
@@ -1350,7 +1351,7 @@ proc contentLookup*(
   ](p.config.alpha)
   var requestAmount = 0'i64
 
-  var nodesWithoutContent: seq[Node] = newSeq[Node]()
+  var nodesWithoutContent: seq[DiscoveryNode] = newSeq[DiscoveryNode]()
 
   while true:
     var i = 0
@@ -1404,7 +1405,7 @@ proc contentLookup*(
               n,
               closestNodes.lowerBound(
                 n,
-                proc(x: Node, n: Node): int =
+                proc(x: DiscoveryNode, n: DiscoveryNode): int =
                   cmp(distance(x.id, targetId), distance(n.id, targetId)),
               ),
             )
@@ -1451,7 +1452,7 @@ proc traceContentLookup*(
 
   # Sort closestNodes so that nodes that are in range of the target content
   # are queried first
-  proc nodesCmp(x, y: Node): int =
+  proc nodesCmp(x, y: DiscoveryNode): int =
     let
       xRadius = p.radiusCache.get(x.id)
       yRadius = p.radiusCache.get(y.id)
@@ -1487,10 +1488,10 @@ proc traceContentLookup*(
   var pendingQueries = newSeqOfCap[
     Future[PortalResult[FoundContent]].Raising([CancelledError])
   ](p.config.alpha)
-  var pendingNodes = newSeq[Node]()
+  var pendingNodes = newSeq[DiscoveryNode]()
   var requestAmount = 0'i64
 
-  var nodesWithoutContent: seq[Node] = newSeq[Node]()
+  var nodesWithoutContent: seq[DiscoveryNode] = newSeq[DiscoveryNode]()
 
   while true:
     var i = 0
@@ -1555,7 +1556,7 @@ proc traceContentLookup*(
               n,
               closestNodes.lowerBound(
                 n,
-                proc(x: Node, n: Node): int =
+                proc(x: DiscoveryNode, n: DiscoveryNode): int =
                   cmp(distance(x.id, targetId), dist),
               ),
             )
@@ -1634,7 +1635,7 @@ proc traceContentLookup*(
 
 proc query*(
     p: PortalProtocol, target: NodeId, k = BUCKET_SIZE
-): Future[seq[Node]] {.async: (raises: [CancelledError]).} =
+): Future[seq[DiscoveryNode]] {.async: (raises: [CancelledError]).} =
   ## Query k nodes for the given target, returns all nodes found, including the
   ## nodes queried.
   ##
@@ -1650,7 +1651,7 @@ proc query*(
     seen.incl(node.id)
 
   var pendingQueries =
-    newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](p.config.alpha)
+    newSeqOfCap[Future[seq[DiscoveryNode]].Raising([CancelledError])](p.config.alpha)
 
   while true:
     var i = 0
@@ -1689,7 +1690,7 @@ proc query*(
 
 proc queryRandom*(
     p: PortalProtocol
-): Future[seq[Node]] {.async: (raw: true, raises: [CancelledError]).} =
+): Future[seq[DiscoveryNode]] {.async: (raw: true, raises: [CancelledError]).} =
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
@@ -1920,7 +1921,7 @@ proc populateTable(p: PortalProtocol) {.async: (raises: [CancelledError]).} =
 
   debug "Total nodes in routing table after populate", total = p.routingTable.len()
 
-proc revalidateNode*(p: PortalProtocol, n: Node) {.async: (raises: [CancelledError]).} =
+proc revalidateNode*(p: PortalProtocol, n: DiscoveryNode) {.async: (raises: [CancelledError]).} =
   let pong = await p.ping(n)
 
   if pong.isOk():
@@ -1933,11 +1934,11 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async: (raises: [CancelledErr
         if nodes.len > 0: # Normally a node should only return 1 record actually
           discard p.addNode(nodes[0])
 
-proc getNodeForRevalidation(p: PortalProtocol): Opt[Node] =
+proc getNodeForRevalidation(p: PortalProtocol): Opt[DiscoveryNode] =
   let node = p.routingTable.nodeToRevalidate()
   if node.isNil:
     # This should not occur except for when the RT is empty
-    return Opt.none(Node)
+    return Opt.none(DiscoveryNode)
 
   let now = now(chronos.Moment)
   let timestamp = p.pingTimings.getOrDefault(node.id, Moment.init(0'i64, Second))
@@ -1945,7 +1946,7 @@ proc getNodeForRevalidation(p: PortalProtocol): Opt[Node] =
   if (timestamp + revalidationTimeout) < now:
     Opt.some(node)
   else:
-    Opt.none(Node)
+    Opt.none(DiscoveryNode)
 
 proc revalidateLoop(p: PortalProtocol) {.async: (raises: []).} =
   ## Loop which revalidates the nodes in the routing table by sending the ping
@@ -2007,21 +2008,21 @@ proc stop*(p: PortalProtocol) {.async: (raises: []).} =
 
 proc resolve*(
     p: PortalProtocol, id: NodeId
-): Future[Opt[Node]] {.async: (raises: [CancelledError]).} =
-  ## Resolve a `Node` based on provided `NodeId`.
+): Future[Opt[DiscoveryNode]] {.async: (raises: [CancelledError]).} =
+  ## Resolve a `DiscoveryNode` based on provided `NodeId`.
   ##
   ## This will first look in the own routing table. If the node is known, it
   ## will try to contact if for newer information. If node is not known or it
   ## does not reply, a lookup is done to see if it can find a (newer) record of
   ## the node on the network.
   if id == p.localNode.id:
-    return Opt.some(p.localNode)
+    return Opt.some(p.localNode.toNode())
 
   # No point in trying to resolve a banned node because it won't exist in the
   # routing table and it will be filtered out of any respones in the lookup call
   if p.isBanned(id):
     debug "Not resolving banned node", nodeId = id
-    return Opt.none(Node)
+    return Opt.none(DiscoveryNode)
 
   let node = p.getNode(id)
   if node.isSome():

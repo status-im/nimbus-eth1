@@ -99,7 +99,7 @@ proc new*(
     contentQueueWorkers: contentQueueWorkers,
   )
 
-func localNode*(n: HistoryNetwork): Node =
+func localNode*(n: HistoryNetwork): LocalDiscoveryNode =
   n.portalProtocol.localNode()
 
 proc getContent*(

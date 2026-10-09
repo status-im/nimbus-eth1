@@ -145,8 +145,8 @@ func getRoutingTableInfo*(r: RoutingTable): RoutingTableInfo =
 
   info
 
-func toNodeWithAddress*(enr: Record): Node {.raises: [ValueError].} =
-  let node = Node.fromRecord(enr)
+func toNodeWithAddress*(enr: Record): DiscoveryNode {.raises: [ValueError].} =
+  let node = DiscoveryNode.fromRecord(enr)
   if node.address.isNone():
     raise newException(ValueError, "ENR without address")
   else:

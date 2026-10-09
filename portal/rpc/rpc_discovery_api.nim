@@ -50,7 +50,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
       return getRoutingTableInfo(d.routingTable)
 
     proc discv5_addEnr(enr: Record): bool =
-      let node = Node.fromRecord(enr)
+      let node = DiscoveryNode.fromRecord(enr)
       let res = d.addNode(node)
       if res:
         d.routingTable.setJustSeen(node)
@@ -62,7 +62,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
       # parameter, but perhaps only if that makes sense on other locations in
       # discv5/portal that are not testing/debug related.
       for enr in enrs:
-        let node = Node.fromRecord(enr)
+        let node = DiscoveryNode.fromRecord(enr)
         if d.addNode(node):
           d.routingTable.setJustSeen(node)
 
@@ -116,7 +116,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
         raise newException(ValueError, $nodes.error)
       else:
         return nodes.get().map(
-            proc(n: Node): Record =
+            proc(n: DiscoveryNode): Record =
               n.record
           )
 
@@ -136,6 +136,6 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
     ): seq[Record] {.async: (raises: [CancelledError]).} =
       let discovered = await d.lookup(nodeId)
       return discovered.map(
-        proc(n: Node): Record =
+        proc(n: DiscoveryNode): Record =
           n.record
       )

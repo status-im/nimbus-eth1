@@ -61,7 +61,7 @@ func highestCommonPortalVersionAndChain*(
   portalField.highestCommonPortalVersionAndChain(supportedPortalField)
 
 func highestCommonPortalVersionAndChain*(
-    node: Node, supportedPortalField: PortalEnrField
+    node: DiscoveryNode, supportedPortalField: PortalEnrField
 ): Result[uint8, string] =
   ## Return highest common portal protocol version of both nodes, but only if chainIds match
   node.record.highestCommonPortalVersionAndChain(supportedPortalField)
