@@ -91,7 +91,9 @@ suite "History Network":
     # This is invalid way of creating ContentKeysList and will allow to go over the limit
     let contentKeyList = ContentKeysList(list)
 
-    check (await node1.portalProtocol().offer(node2.localNode().toNode(), contentKeyList)).isErr()
+    check (
+      await node1.portalProtocol().offer(node2.localNode().toNode(), contentKeyList)
+    ).isErr()
 
     await node1.stop()
     await node2.stop()
@@ -141,7 +143,9 @@ suite "History Network":
         )
       )
 
-    check (await node1.portalProtocol().offer(node2.localNode().toNode(), contentKVList)).isOk()
+    check (
+      await node1.portalProtocol().offer(node2.localNode().toNode(), contentKVList)
+    ).isOk()
 
     # Wait for contentQueueWorker to process all the content
     while count < contentKeysLimit:

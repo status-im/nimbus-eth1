@@ -1921,7 +1921,9 @@ proc populateTable(p: PortalProtocol) {.async: (raises: [CancelledError]).} =
 
   debug "Total nodes in routing table after populate", total = p.routingTable.len()
 
-proc revalidateNode*(p: PortalProtocol, n: DiscoveryNode) {.async: (raises: [CancelledError]).} =
+proc revalidateNode*(
+    p: PortalProtocol, n: DiscoveryNode
+) {.async: (raises: [CancelledError]).} =
   let pong = await p.ping(n)
 
   if pong.isOk():

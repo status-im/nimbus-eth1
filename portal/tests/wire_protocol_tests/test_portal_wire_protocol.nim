@@ -116,8 +116,9 @@ procSuite "Portal Wire Protocol Tests":
     let (proto1, proto2) = defaultTestSetup(rng)
 
     block: # Find itself
-      let nodes =
-        await proto1.findNodesImpl(proto2.localNode.toNode(), List[uint16, 256](@[0'u16]))
+      let nodes = await proto1.findNodesImpl(
+        proto2.localNode.toNode(), List[uint16, 256](@[0'u16])
+      )
 
       check:
         nodes.isOk()
@@ -126,7 +127,8 @@ procSuite "Portal Wire Protocol Tests":
 
     block: # Find nothing: this should result in nothing as we haven't started
       # the seeding of the portal protocol routing table yet.
-      let nodes = await proto1.findNodesImpl(proto2.localNode.toNode(), List[uint16, 256](@[]))
+      let nodes =
+        await proto1.findNodesImpl(proto2.localNode.toNode(), List[uint16, 256](@[]))
 
       check:
         nodes.isOk()
@@ -145,8 +147,9 @@ procSuite "Portal Wire Protocol Tests":
       proto2.start()
 
       let distance = logDistance(proto1.localNode.id, proto2.localNode.id)
-      let nodes =
-        await proto1.findNodesImpl(proto2.localNode.toNode(), List[uint16, 256](@[distance]))
+      let nodes = await proto1.findNodesImpl(
+        proto2.localNode.toNode(), List[uint16, 256](@[distance])
+      )
 
       check:
         nodes.isOk()
@@ -188,7 +191,8 @@ procSuite "Portal Wire Protocol Tests":
     let (proto1, proto2) = defaultTestSetup(rng)
     let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
 
-    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
+    let accept =
+      await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
 
     check:
       accept.isOk()
@@ -202,7 +206,8 @@ procSuite "Portal Wire Protocol Tests":
     let (proto1, proto2) = defaultTestSetup(rng)
     let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
 
-    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
+    let accept =
+      await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
     let expectedByteList = ContentKeysAcceptList.init(@[Accepted])
 
     check:
@@ -210,7 +215,8 @@ procSuite "Portal Wire Protocol Tests":
       # Content accepted
       accept.get().contentKeys == expectedByteList
 
-    let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
+    let accept2 =
+      await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
 
     check:
       accept2.isOk()
@@ -225,7 +231,8 @@ procSuite "Portal Wire Protocol Tests":
     let (proto1, proto2) = defaultTestSetup(rng)
     let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
 
-    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
+    let accept =
+      await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
     let expectedByteList = ContentKeysAcceptList.init(@[Accepted])
 
     check:
@@ -235,7 +242,8 @@ procSuite "Portal Wire Protocol Tests":
 
     await sleepAsync(connectionTimeoutTest)
 
-    let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
+    let accept2 =
+      await proto1.offerImpl(proto2.baseProtocol.localNode.toNode(), contentKeys)
     check:
       accept2.isOk()
       # Content accepted because previous offer was pruned
@@ -798,7 +806,8 @@ procSuite "Portal Wire Protocol Tests":
     proto1.banNode(proto2.localNode.id, 1.minutes)
 
     check:
-      (await proto1.ping(proto2.localNode.toNode())).error() == "destination node is banned"
+      (await proto1.ping(proto2.localNode.toNode())).error() ==
+        "destination node is banned"
       (await proto1.findNodes(proto2.localNode.toNode(), @[0.uint16])).error() ==
         "destination node is banned"
       (await proto1.findContent(proto2.localNode.toNode(), contentKey)).error() ==
