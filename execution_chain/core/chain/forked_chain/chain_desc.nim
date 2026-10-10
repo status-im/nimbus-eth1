@@ -50,8 +50,8 @@ type
       # A map of block hash to a block.
 
     base*        : BlockRef
-      # The base block, the last block stored in database.
-      # Any blocks newer than base is kept in memory.
+      # The last block whose Aristo state is persisted. Newer state frames
+      # stay in memory; headers and bodies are already in shared KVT.
 
     baseQueue*   : Deque[BlockRef]
       # Queue of blocks that will become base.

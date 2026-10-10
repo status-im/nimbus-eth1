@@ -17,6 +17,7 @@ import
   ../../constants,
   ../[kvt, aristo],
   ../kvt/kvt_init/init_common,
+  ../kvt/kvt_desc/desc_error,
   ./base_desc
 
 # Persist performance metrics are disabled on bare metal
@@ -30,13 +31,14 @@ export
   CoreDbPersistentTypes,
   CoreDbRef,
   CoreDbTxRef,
-  CoreDbType
+  CoreDbType,
+  KvtError
 
 import
   ../aristo/[
     aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_proof,
     aristo_tx_frame],
-  ../kvt/[kvt_desc, kvt_utils, kvt_tx_frame]
+  ../kvt/[kvt_desc, kvt_utils]
 
 func toError*(e: KvtError; s: string; error = Unspecified): CoreDbError =
   CoreDbError(
@@ -76,7 +78,7 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
 
   CoreDbTxRef(
     aTx: db.mpt.baseTxFrame(),
-    kTx: db.kvt.baseTxFrame())
+    kvt: db.kvt)
 
 proc kvtBackend*(db: CoreDbRef): TypedBackendRef =
   ## Get KVT backend
@@ -112,10 +114,9 @@ proc persist*(db: CoreDbRef, txFrame: CoreDbTxRef) =
   ## database.
 
   let
-    kvtBatch = db.kvt.putBegFn()
     mptBatch = db.mpt.putBegFn()
 
-  if kvtBatch.isOk() and mptBatch.isOk():
+  if mptBatch.isOk():
     # TODO the `persist` api stages changes but does not actually persist - a
     #      separate "actually-write" api is needed so the changes from both
     #      kvt and ari can be staged and then written together - for this to
@@ -126,32 +127,23 @@ proc persist*(db: CoreDbRef, txFrame: CoreDbTxRef) =
     #      error), we have to panic instead.
 
     when not defined(`any`) and not defined(standalone):
-      let kvtTick = Moment.now()
-      db.kvt.persist(kvtBatch[], txFrame.kTx)
       let mptTick = Moment.now()
       db.mpt.persist(mptBatch[], txFrame.aTx)
 
       let endTick = Moment.now()
-      db.kvt.putEndFn(kvtBatch[]).isOkOr:
-        raiseAssert $error
       db.mpt.putEndFn(mptBatch[]).isOkOr:
         raiseAssert $error
 
       debug "Core DB persisted",
-        kvtDur = mptTick - kvtTick,
         mptDur = endTick - mptTick,
         endDur = Moment.now() - endTick
     else:
-      db.kvt.persist(kvtBatch[], txFrame.kTx)
       db.mpt.persist(mptBatch[], txFrame.aTx)
-      db.kvt.putEndFn(kvtBatch[]).isOkOr:
-        raiseAssert $error
       db.mpt.putEndFn(mptBatch[]).isOkOr:
         raiseAssert $error
 
       debug "Core DB persisted"
   else:
-    discard kvtBatch.expect("should always be able to create batch")
     discard mptBatch.expect("should always be able to create batch")
 
 proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
@@ -171,7 +163,7 @@ proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
 
 proc get*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## This function always returns a non-empty `seq[byte]` or an error code.
-  var rc = kvt.kTx.get(key)
+  var rc = kvt.kvt.get(key)
   if rc.isOk:
     ok(move(rc.value))
   elif rc.error == GetNotFound:
@@ -183,7 +175,7 @@ proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## Variant of `get()` returning an empty `seq[byte]` if the key is not found
   ## on the database.
   ##
-  var rc = kvt.kTx.get(key)
+  var rc = kvt.kvt.get(key)
   if rc.isOk:
     ok(move(rc.value))
   elif rc.error == GetNotFound:
@@ -193,7 +185,7 @@ proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
 
 proc len*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[int] =
   ## This function returns the size of the value associated with `key`.
-  let rc = kvt.kTx.len(key)
+  let rc = kvt.kvt.len(key)
   if rc.isOk:
     ok(rc.value)
   elif rc.error == GetNotFound:
@@ -210,13 +202,13 @@ proc multiGet*(
   ## Fetch a batch of values having the given keys. Returned values are copied into
   ## the values array. The values array should be pre-allocated and have the same
   ## size as the keys array.
-  kvt.kTx.multiGet(keys, values, sortedInput).isOkOr:
+  kvt.kvt.multiGet(keys, values, sortedInput).isOkOr:
     return err(error.toError(""))
 
   ok()
 
 proc del*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[void] =
-  kvt.kTx.del(key).isOkOr:
+  kvt.kvt.del(key).isOkOr:
     return err(error.toError(""))
 
   ok()
@@ -226,7 +218,7 @@ proc put*(
     key: openArray[byte];
     val: openArray[byte];
       ): CoreDbRc[void] =
-  kvt.kTx.put(key, val).isOkOr:
+  kvt.kvt.put(key, val).isOkOr:
     return err(error.toError(""))
 
   ok()
@@ -238,7 +230,7 @@ proc putMove*(
       ): CoreDbRc[void] =
   ## Variant of `put()` that takes over ownership of `val` instead of
   ## copying it - the caller must not use `val` after this call
-  kvt.kTx.putMove(key, val).isOkOr:
+  kvt.kvt.putMove(key, val).isOkOr:
     return err(error.toError(""))
 
   ok()
@@ -248,7 +240,7 @@ proc hasKeyRc*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[bool] =
   ## that argument, `false` if it returned `GetNotFound`, and an error
   ## otherwise.
   ##
-  let rc = kvt.kTx.hasKeyRc(key).valueOr:
+  let rc = kvt.kvt.hasKeyRc(key).valueOr:
     return err(error.toError(""))
 
   ok(rc)
@@ -260,7 +252,7 @@ proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte]): bool =
   ## This function prototype is in line with the `hasKey` function for
   ## `Tables`.
   ##
-  kvt.kTx.hasKeyRc(key).valueOr(false)
+  kvt.kvt.hasKeyRc(key).valueOr(false)
 
 # ------------------------------------------------------------------------------
 # Public methods for accounts
@@ -495,10 +487,9 @@ proc txFrameBegin*(db: CoreDbRef): CoreDbTxRef =
   ## Constructor
   ##
   let
-    kTx = db.kvt.txFrameBegin(nil)
     aTx = db.mpt.txFrameBegin(nil, false)
 
-  CoreDbTxRef(kTx: kTx, aTx: aTx)
+  CoreDbTxRef(kvt: db.kvt, aTx: aTx)
 
 proc txFrameBegin*(
     parent: CoreDbTxRef,
@@ -507,15 +498,14 @@ proc txFrameBegin*(
   ## Constructor
   ##
   let
-    kTx = parent.kTx.db.txFrameBegin(parent.kTx)
     aTx = parent.aTx.db.txFrameBegin(parent.aTx, moveParentHashKeys)
 
-  CoreDbTxRef(kTx: kTx, aTx: aTx)
+  CoreDbTxRef(kvt: parent.kvt, aTx: aTx, blockHashFn: parent.blockHashFn)
 
 proc parent*(tx: CoreDbTxRef): CoreDbTxRef =
-  assert not tx.kTx.parent.isNil()
+  assert not tx.kvt.isNil()
   assert not tx.aTx.parent.isNil()
-  CoreDbTxRef(kTx: tx.kTx.parent, aTx: tx.aTx.parent)
+  CoreDbTxRef(kvt: tx.kvt, aTx: tx.aTx.parent)
 
 proc checkpoint*(tx: CoreDbTxRef, blockNumber: BlockNumber, skipSnapshot = false) =
   tx.aTx.checkpoint(blockNumber, skipSnapshot)
@@ -525,7 +515,6 @@ proc clearSnapshot*(tx: CoreDbTxRef) =
 
 proc dispose*(tx: CoreDbTxRef) =
   tx.aTx.dispose()
-  tx.kTx.dispose()
   tx[].reset()
 
 # ------------------------------------------------------------------------------

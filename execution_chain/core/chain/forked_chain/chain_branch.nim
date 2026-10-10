@@ -21,9 +21,11 @@ type
     hash*    : Hash32
     parent*  : BlockRef
 
-    index*   : uint
-      # Alias to parent when serializing
-      # Also used for DAG node finalized marker
+    txHashes*: seq[Hash32]
+      # In block order. The tx lookup on disk covers base and below only,
+      # this is the lookup for blocks above base.
+
+    isFinalized*: bool
 
 template number*(b: BlockRef): BlockNumber =
   b.header.number
@@ -47,18 +49,29 @@ template loopItImpl(condition: untyped, init: BlockRef) =
 template stateRoot*(b: BlockRef): Hash32 =
   b.header.stateRoot
 
-const
-  DAG_NODE_FINALIZED = 1
-
 template finalize*(b: BlockRef) =
-  b.index = DAG_NODE_FINALIZED
+  b.isFinalized = true
 
 template notFinalized*(b: BlockRef): bool =
-  b.index != DAG_NODE_FINALIZED
+  not b.isFinalized
+
+proc branchBlockHashFn*(parent: BlockRef, number: BlockNumber, hash: Hash32): BlockHashFn =
+  ## Block hashes of the branch made of block (`number`, `hash`) on top of
+  ## `parent`. Numbers below the in-memory part of the branch resolve from the
+  ## canonical index on disk. Captures the parent rather than the block, so the
+  ## block's frame holding the closure does not form a cycle with the block.
+  proc(n: BlockNumber): Opt[Hash32] =
+    if n == number:
+      return Opt.some(hash)
+    var it = parent
+    while not it.isNil and not it.txFrame.isNil and n <= it.number:
+      if n == it.number:
+        return Opt.some(it.hash)
+      it = it.parent
+    Opt.none(Hash32)
 
 iterator ancestors*(init: BlockRef): BlockRef =
   loopItImpl(isOk, init)
 
 iterator loopNotFinalized*(init: BlockRef): BlockRef =
   loopItImpl(notFinalized, init)
-
