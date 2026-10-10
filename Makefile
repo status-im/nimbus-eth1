@@ -174,9 +174,9 @@ deps: | deps-common nat-libs nimbus.nims build/generate_makefile
 
 # Build the generate_makefile tool which turns Nim compilation into a
 # two-step process (nim c --compileOnly → generate_makefile → sub-make)
-build/generate_makefile: vendor/nimbus-eth2/tools/generate_makefile.nim | deps-common
+build/generate_makefile: tools/generate_makefile.nim vendor/nimbus-eth2/tools/generate_makefile.nim | deps-common
 	+ echo -e $(BUILD_MSG) "$@" && \
-		$(ENV_SCRIPT) $(NIMC) c -o:$@ $(NIM_PARAMS) --skipParentCfg vendor/nimbus-eth2/tools/generate_makefile.nim && \
+		$(ENV_SCRIPT) $(NIMC) c -o:$@ $(NIM_PARAMS) tools/generate_makefile.nim && \
 		echo -e $(BUILD_END_MSG) "$@"
 
 # eth protocol settings, rules from "execution_chain/sync/protocol/eth/variables.mk"
