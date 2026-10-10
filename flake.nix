@@ -6,7 +6,7 @@
     # WARNING: Do not use relative path, it breaks caching of NBS.
     # Remember to call 'nix flake update' when NBS is updated.
     nimbusBuildSystem = {
-      url = "git+https://github.com/status-im/nimbus-build-system?submodules=1#";
+      url = "git+https://github.com/status-im/nimbus-build-system";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     self = {
@@ -33,7 +33,7 @@
       pkgsFor = forEach stableSystems (
         system: import nixpkgs { inherit system; }
       );
-    in rec {
+    in {
       packages = forAllSystems (system: let
         buildTarget = pkgsFor.${system}.callPackage ./nix/default.nix {
           inherit stableSystems self;
