@@ -60,5 +60,5 @@ proc stop*(n: HistoryNode) {.async: (raises: []).} =
 func portalProtocol*(n: HistoryNode): PortalProtocol =
   n.historyNetwork.portalProtocol
 
-func localNode*(n: HistoryNode): Node =
+func localNode*(n: HistoryNode): LocalDiscoveryNode =
   n.historyNetwork.localNode()

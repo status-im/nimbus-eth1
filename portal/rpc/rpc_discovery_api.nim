@@ -29,7 +29,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
 
   rpcServer.rpc(EthJson):
     proc discv5_nodeInfo(): NodeInfo =
-      return d.routingTable.getNodeInfo()
+      return d.localNode.getNodeInfo()
 
     proc discv5_updateNodeInfo(
         kvPairs: seq[(string, string)]
@@ -44,13 +44,13 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
       if updated.isErr():
         raise newException(ValueError, $updated.error)
 
-      return d.routingTable.getNodeInfo()
+      return d.localNode.getNodeInfo()
 
     proc discv5_routingTableInfo(): RoutingTableInfo =
       return getRoutingTableInfo(d.routingTable)
 
     proc discv5_addEnr(enr: Record): bool =
-      let node = Node.fromRecord(enr)
+      let node = DiscoveryNode.fromRecord(enr)
       let res = d.addNode(node)
       if res:
         d.routingTable.setJustSeen(node)
@@ -62,7 +62,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
       # parameter, but perhaps only if that makes sense on other locations in
       # discv5/portal that are not testing/debug related.
       for enr in enrs:
-        let node = Node.fromRecord(enr)
+        let node = DiscoveryNode.fromRecord(enr)
         if d.addNode(node):
           d.routingTable.setJustSeen(node)
 
@@ -116,7 +116,7 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
         raise newException(ValueError, $nodes.error)
       else:
         return nodes.get().map(
-            proc(n: Node): Record =
+            proc(n: DiscoveryNode): Record =
               n.record
           )
 
@@ -136,6 +136,6 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
     ): seq[Record] {.async: (raises: [CancelledError]).} =
       let discovered = await d.lookup(nodeId)
       return discovered.map(
-        proc(n: Node): Record =
+        proc(n: DiscoveryNode): Record =
           n.record
       )

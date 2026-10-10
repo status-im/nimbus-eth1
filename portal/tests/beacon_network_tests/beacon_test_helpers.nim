@@ -43,7 +43,7 @@ proc newLCNode*(
 func portalProtocol*(n: BeaconNode): PortalProtocol =
   n.beaconNetwork.portalProtocol
 
-func localNode*(n: BeaconNode): Node =
+func localNode*(n: BeaconNode): LocalDiscoveryNode =
   n.discv5.localNode
 
 proc start*(n: BeaconNode) =

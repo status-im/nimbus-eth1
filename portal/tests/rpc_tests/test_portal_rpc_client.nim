@@ -46,7 +46,7 @@ proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
 proc portalProtocol(hn: HistoryNode): PortalProtocol =
   hn.historyNetwork.portalProtocol
 
-proc localNode(hn: HistoryNode): Node =
+proc localNode(hn: HistoryNode): LocalDiscoveryNode =
   hn.discv5.localNode
 
 proc start(hn: HistoryNode) =
@@ -89,8 +89,8 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
   historyNode2.start()
 
   check:
-    historyNode1.portalProtocol().addNode(historyNode2.localNode()) == Added
-    historyNode2.portalProtocol().addNode(historyNode1.localNode()) == Added
+    historyNode1.portalProtocol().addNode(historyNode2.localNode().toNode()) == Added
+    historyNode2.portalProtocol().addNode(historyNode1.localNode().toNode()) == Added
 
   let rpcHttpServer = RpcHttpServer.new()
   rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
