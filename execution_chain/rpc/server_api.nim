@@ -39,6 +39,7 @@ logScope:
 type ServerAPIRef* = ref object
   txPool: TxPoolRef
   oracle: Oracle
+  totalDifficulty: bool
 
 const defaultTag = blockId("latest")
 
@@ -48,13 +49,16 @@ template com(api: ServerAPIRef): CommonRef =
 template chain(api: ServerAPIRef): ForkedChainRef =
   api.txPool.chain
 
-func newServerAPI*(txPool: TxPoolRef): ServerAPIRef =
+func newServerAPI*(txPool: TxPoolRef, totalDifficulty = false): ServerAPIRef =
   ServerAPIRef(
     txPool: txPool,
     oracle: Oracle.new(txPool.chain),
+    totalDifficulty: totalDifficulty,
   )
 
 proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32, header: Header): Opt[UInt256] =
+  if not api.totalDifficulty:
+    return Opt.none(UInt256)
   api.txPool.chain.getTotalDifficulty(blockHash, header)
 
 const emptyDbAccount = CoreDbAccount(

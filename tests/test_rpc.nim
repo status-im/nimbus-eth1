@@ -892,6 +892,15 @@ proc rpcMain*() =
       expect RpcResponseError:
         discard await client.eth_getBlockByNumber($1, true)
 
+    test "totalDifficulty is opt-in":
+      let
+        genesis = env.com.genesisHeader
+        genesisHash = genesis.computeBlockHash
+      check newServerAPI(env.txPool).getTotalDifficulty(genesisHash, genesis).isNone
+      check newServerAPI(env.txPool, totalDifficulty = true).getTotalDifficulty(genesisHash, genesis).isSome
+      let res = await client.eth_getBlockByNumber(blockId(0'u64), false)
+      check res.totalDifficulty.isNone
+
     test "eth_getTransactionByHash":
       let res = await client.eth_getTransactionByHash(env.txHash)
       check res.isNil.not
