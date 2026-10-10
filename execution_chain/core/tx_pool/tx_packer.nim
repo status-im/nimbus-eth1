@@ -223,7 +223,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   template doesNotFit(_: untyped) =
     return ContinueWithNextAccount
 
-  let intrinsic = item.tx.intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, item.sender)
+  let intrinsic = item.tx.intrinsicGas(vmState.hardFork, item.sender)
   checkBlockGasCapacity(vmState, item.tx, intrinsic, doesNotFit)
 
   # EIP-4844

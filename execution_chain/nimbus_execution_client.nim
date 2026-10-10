@@ -561,9 +561,6 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
         quit(QuitFailure)
     except CancelledError:
       raiseAssert "Never cancelled"
-  defer:
-    if metricsServer.isSome():
-      waitFor metricsServer.stopMetricsServer()
 
   when compileOption("threads"):
     let
@@ -595,6 +592,10 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
         quit(QuitFailure)
 
   defer:
+    # Stopping the metrics server runs the event loop, which resumes any task
+    # that outlived `closeWait`. Close the database only after that.
+    if metricsServer.isSome():
+      waitFor metricsServer.stopMetricsServer()
     com.db.close()
 
   case config.cmd

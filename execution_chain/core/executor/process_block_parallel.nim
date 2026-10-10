@@ -408,7 +408,7 @@ proc processTxTask(
       BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
     vmState.balTracker.setBlockAccessIndex(e[].txIndex + 1)
 
-  let intrinsic = e[].tx[].intrinsicGas(vmState.hardFork, vmState.blockCtx.gasLimit, sender)
+  let intrinsic = e[].tx[].intrinsicGas(vmState.hardFork, sender)
   let txResult = vmState.processTransaction(e[].tx[], sender,
                    intrinsic = Opt.some(intrinsic), persist = false).valueOr:
     e[].error = SharedString.init(error)
