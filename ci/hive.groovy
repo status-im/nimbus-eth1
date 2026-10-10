@@ -8,7 +8,7 @@
  * at your option. This file may not be copied, modified, or distributed except according to those terms.
  */
 
-library 'status-jenkins-lib@v1.9.33'
+library 'status-jenkins-lib@v1.10.0'
 
 def failedStages = []
 
