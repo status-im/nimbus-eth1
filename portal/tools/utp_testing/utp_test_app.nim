@@ -59,7 +59,7 @@ proc installUtpHandlers(
     proc utp_connect(
         r: enr.Record
     ): SKey {.async: (raises: [ValueError, CancelledError]).} =
-      let node = Node.fromRecord(r)
+      let node = DiscoveryNode.fromRecord(r)
       let nodeAddress = NodeAddress.init(node).unsafeGet()
       discard d.addNode(node)
       let connResult = await s.connectTo(nodeAddress)

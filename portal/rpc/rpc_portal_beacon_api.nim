@@ -53,7 +53,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
           EthJson.encode(res).JsonString
         of Nodes:
           let enrs = foundContent.nodes.map(
-            proc(n: Node): Record =
+            proc(n: DiscoveryNode): Record =
               n.record
           )
           let jsonEnrs = EthJson.encode(enrs)
