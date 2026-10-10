@@ -32,14 +32,16 @@ import
 export block_access_lists
 
 type
-  StorageWrite = tuple[address: Address, slot: UInt256, value: UInt256]
-  StorageReadEntry = tuple[address: Address, slot: UInt256]
-  BalanceWrite = tuple[address: Address, balance: UInt256]
-  NonceWrite = tuple[address: Address, nonce: AccountNonce]
-  CodeWrite = tuple[address: Address, code: SharedBytes]
+  LocalAccountId* = distinct int32
+
+  StorageWrite = tuple[account: LocalAccountId, slot: UInt256, value: UInt256]
+  StorageReadEntry = tuple[account: LocalAccountId, slot: UInt256]
+  BalanceWrite = tuple[account: LocalAccountId, balance: UInt256]
+  NonceWrite = tuple[account: LocalAccountId, nonce: AccountNonce]
+  CodeWrite = tuple[account: LocalAccountId, code: SharedBytes]
 
   BalIndexData = object
-    touchedAccounts: SharedSeq[Address]
+    accounts: SharedSeq[Address]
     storageChanges: SharedSeq[StorageWrite]
     storageReads: SharedSeq[StorageReadEntry]
     balanceChanges: SharedSeq[BalanceWrite]
@@ -50,7 +52,7 @@ type
     perIndex: SharedSeq[BalIndexData]
 
 proc dispose(indexData: var BalIndexData) =
-  indexData.touchedAccounts.dispose()
+  indexData.accounts.dispose()
   indexData.storageChanges.dispose()
   indexData.storageReads.dispose()
   indexData.balanceChanges.dispose()
@@ -93,11 +95,47 @@ proc ensureIndexCount*(builder: var BlockAccessListBuilder, n: int, exact = fals
   if n > builder.perIndex.len:
     builder.perIndex.setLen(n, zeroed = true, exact)
 
+proc localId(indexData: var BalIndexData, address: Address): LocalAccountId =
+  let n = indexData.accounts.len
+  if n > 0 and indexData.accounts[n - 1] == address:
+    LocalAccountId(n - 1)
+  else:
+    indexData.accounts.add(address)
+    LocalAccountId(n)
+
+proc accountCount*(builder: BlockAccessListBuilder, blockAccessIndex: int): int =
+  assert blockAccessIndex < builder.perIndex.len
+  builder.perIndex[blockAccessIndex].accounts.len
+
+proc addAccount*(
+    builder: var BlockAccessListBuilder, blockAccessIndex: int, address: Address
+): LocalAccountId =
+  assert blockAccessIndex < builder.perIndex.len
+  let d = addr builder.perIndex[blockAccessIndex]
+  result = LocalAccountId(d[].accounts.len)
+  d[].accounts.add(address)
+
 proc addTouchedAccount*(
     builder: var BlockAccessListBuilder, blockAccessIndex: int, address: Address
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].touchedAccounts.add(address)
+  discard builder.perIndex[blockAccessIndex].localId(address)
+
+template checkAccount(
+    builder: BlockAccessListBuilder, blockAccessIndex: int, account: LocalAccountId
+) =
+  assert blockAccessIndex < builder.perIndex.len
+  assert int(account) in 0 ..< builder.perIndex[blockAccessIndex].accounts.len
+
+proc addStorageWrite*(
+    builder: var BlockAccessListBuilder,
+    blockAccessIndex: int,
+    account: LocalAccountId,
+    slot: UInt256,
+    newValue: UInt256,
+) =
+  builder.checkAccount(blockAccessIndex, account)
+  builder.perIndex[blockAccessIndex].storageChanges.add((account, slot, newValue))
 
 proc addStorageWrite*(
     builder: var BlockAccessListBuilder,
@@ -107,7 +145,17 @@ proc addStorageWrite*(
     newValue: UInt256,
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].storageChanges.add((address, slot, newValue))
+  let d = addr builder.perIndex[blockAccessIndex]
+  d[].storageChanges.add((d[].localId(address), slot, newValue))
+
+proc addStorageRead*(
+    builder: var BlockAccessListBuilder,
+    blockAccessIndex: int,
+    account: LocalAccountId,
+    slot: UInt256,
+) =
+  builder.checkAccount(blockAccessIndex, account)
+  builder.perIndex[blockAccessIndex].storageReads.add((account, slot))
 
 proc addStorageRead*(
     builder: var BlockAccessListBuilder,
@@ -116,7 +164,17 @@ proc addStorageRead*(
     slot: UInt256,
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].storageReads.add((address, slot))
+  let d = addr builder.perIndex[blockAccessIndex]
+  d[].storageReads.add((d[].localId(address), slot))
+
+proc addBalanceChange*(
+    builder: var BlockAccessListBuilder,
+    blockAccessIndex: int,
+    account: LocalAccountId,
+    postBalance: UInt256,
+) =
+  builder.checkAccount(blockAccessIndex, account)
+  builder.perIndex[blockAccessIndex].balanceChanges.add((account, postBalance))
 
 proc addBalanceChange*(
     builder: var BlockAccessListBuilder,
@@ -125,7 +183,17 @@ proc addBalanceChange*(
     postBalance: UInt256,
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].balanceChanges.add((address, postBalance))
+  let d = addr builder.perIndex[blockAccessIndex]
+  d[].balanceChanges.add((d[].localId(address), postBalance))
+
+proc addNonceChange*(
+    builder: var BlockAccessListBuilder,
+    blockAccessIndex: int,
+    account: LocalAccountId,
+    newNonce: AccountNonce,
+) =
+  builder.checkAccount(blockAccessIndex, account)
+  builder.perIndex[blockAccessIndex].nonceChanges.add((account, newNonce))
 
 proc addNonceChange*(
     builder: var BlockAccessListBuilder,
@@ -134,7 +202,19 @@ proc addNonceChange*(
     newNonce: AccountNonce,
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].nonceChanges.add((address, newNonce))
+  let d = addr builder.perIndex[blockAccessIndex]
+  d[].nonceChanges.add((d[].localId(address), newNonce))
+
+proc addCodeChange*(
+    builder: var BlockAccessListBuilder,
+    blockAccessIndex: int,
+    account: LocalAccountId,
+    newCode: openArray[byte],
+) =
+  builder.checkAccount(blockAccessIndex, account)
+  builder.perIndex[blockAccessIndex].codeChanges.add(
+    (account, SharedBytes.init(newCode))
+  )
 
 proc addCodeChange*(
     builder: var BlockAccessListBuilder,
@@ -143,9 +223,8 @@ proc addCodeChange*(
     newCode: openArray[byte],
 ) =
   assert blockAccessIndex < builder.perIndex.len
-  builder.perIndex[blockAccessIndex].codeChanges.add(
-    (address, SharedBytes.init(newCode))
-  )
+  let d = addr builder.perIndex[blockAccessIndex]
+  d[].codeChanges.add((d[].localId(address), SharedBytes.init(newCode)))
 
 type
   # Flattened per-index writes, tagged with a dense account id instead of the
@@ -328,10 +407,10 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
   let blockAccessList = new BlockAccessList
 
   # Phase 1: reserve exact capacity, then flatten.
-  var totT, totS, totR, totB, totN, totC = 0
+  var totA, totS, totR, totB, totN, totC = 0
   for idx in 0 ..< builder.perIndex.len:
     let d = addr builder.perIndex[idx]
-    totT += d[].touchedAccounts.len
+    totA += d[].accounts.len
     totS += d[].storageChanges.len
     totR += d[].storageReads.len
     totB += d[].balanceChanges.len
@@ -339,9 +418,10 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
     totC += d[].codeChanges.len
 
   var
-    # The touched account count bounds the distinct addresses for a tracker
-    # driven builder and is a fair size estimate otherwise.
-    accounts = AccountIds.init(totT)
+    # Every address is in some index's account list, so their total bounds
+    # the distinct addresses.
+    accounts = AccountIds.init(totA)
+    ids: seq[int32]
     sFlat = newSeqOfCap[FlatStorageChange](totS)
     rFlat = newSeqOfCap[FlatStorageRead](totR)
     bFlat = newSeqOfCap[FlatBalanceChange](totB)
@@ -352,19 +432,20 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
     let
       balIndex = BlockAccessIndex(idx)
       d = addr builder.perIndex[idx]
-    for a in d[].touchedAccounts.items():
-      discard accounts.idOf(a)
+    ids.setLen(d[].accounts.len)
+    for i in 0 ..< d[].accounts.len:
+      ids[i] = accounts.idOf(d[].accounts[i])
     for w in d[].storageChanges.items():
-      sFlat.add((accounts.idOf(w.address), balIndex, w.slot, w.value))
+      sFlat.add((ids[int(w.account)], balIndex, w.slot, w.value))
     for r in d[].storageReads.items():
-      rFlat.add((accounts.idOf(r.address), r.slot))
+      rFlat.add((ids[int(r.account)], r.slot))
     for b in d[].balanceChanges.items():
-      bFlat.add((accounts.idOf(b.address), balIndex, b.balance))
+      bFlat.add((ids[int(b.account)], balIndex, b.balance))
     for nc in d[].nonceChanges.items():
-      nFlat.add((accounts.idOf(nc.address), balIndex, nc.nonce))
+      nFlat.add((ids[int(nc.account)], balIndex, nc.nonce))
     for j in 0 ..< d[].codeChanges.len:
       let cc = addr d[].codeChanges[j]
-      cFlat.add((accounts.idOf(cc[].address), balIndex, addr cc[].code))
+      cFlat.add((ids[int(cc[].account)], balIndex, addr cc[].code))
 
   let numAccounts = accounts.addresses.len
 

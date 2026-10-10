@@ -71,8 +71,7 @@ func getPreStorage(
   tracker.preStorage(address, slot).valueOr(0.u256)
 
 func isTouched(tracker: BlockAccessListTrackerRef, address: Address): bool =
-  let idx = tracker.findAccount(address)
-  idx >= 0 and tracker.accounts[idx].touched
+  tracker.findAccount(address) >= 0
 
 func hasStorageRead(
     tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
