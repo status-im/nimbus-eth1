@@ -79,14 +79,15 @@ proc getEIP2935Hash(
 ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
   let slot = (number mod HISTORY_SERVE_WINDOW).u256
 
-  let storedValue = (
+  let storedValues = (
     await engine.getStorageAt(
-      HISTORY_STORAGE_ADDRESS, slot, anchor.number, anchor.stateRoot
+      HISTORY_STORAGE_ADDRESS, @[slot], anchor.number, anchor.stateRoot
     )
   ).valueOr:
     error "Failed to fetch EIP-2935 storage proof",
       anchorNumber = anchor.number, number, slot, err = error.errMsg
     return err(error)
+  let storedValue = storedValues[0]
 
   # storage value is zero only when the fork activated less than 8191 blocks before
   if storedValue.isZero():
@@ -421,7 +422,10 @@ proc verifyHeader(
 proc getBlockHash*(
     engine: RpcVerificationEngine, anchor: Header, number: base.BlockNumber
 ): Future[EngineResult[Hash32]] {.async: (raises: [CancelledError]).} =
-  if number >= anchor.number:
+  if number == anchor.number:
+    return ok(anchor.computeBlockHash)
+
+  if number > anchor.number:
     return err(
       (
         InvalidDataError, "block hash requested for a block that is not in the past",

@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[sets, algorithm],
+  std/[sets, tables, algorithm],
   stew/byteutils,
   chronos,
   chronicles,
@@ -62,6 +62,7 @@ logScope:
 const
   EVM_CALL_LIMIT = 10_000
   EVM_CALL_GAS_CAP* = 50_000_000.GasInt
+  STORAGE_FETCH_BATCH_SIZE = 256
 
 type
   AccountQuery = object
@@ -70,8 +71,8 @@ type
 
   StorageQuery = object
     address: Address
-    slotKey: UInt256
-    storageFut: Future[Opt[UInt256]]
+    slotKeys: seq[UInt256]
+    storageFut: Future[Opt[seq[UInt256]]]
 
   CodeQuery = object
     address: Address
@@ -89,9 +90,12 @@ func init(T: type AccountQuery, adr: Address, fut: Future[Opt[Account]]): T =
   T(address: adr, accFut: fut)
 
 func init(
-    T: type StorageQuery, adr: Address, slotKey: UInt256, fut: Future[Opt[UInt256]]
+    T: type StorageQuery,
+    adr: Address,
+    slotKeys: seq[UInt256],
+    fut: Future[Opt[seq[UInt256]]],
 ): T =
-  T(address: adr, slotKey: slotKey, storageFut: fut)
+  T(address: adr, slotKeys: slotKeys, storageFut: fut)
 
 func init(T: type CodeQuery, adr: Address, fut: Future[Opt[seq[byte]]]): T =
   T(address: adr, codeFut: fut)
@@ -183,7 +187,9 @@ proc callFetchingState(
       # one piece of state (the next in the ordered witness keys) while the remaining
       # state queries are still issued in the background just incase the state is
       # needed in the next iteration.
-      var stateFetchDone = false
+      var
+        stateFetchDone = false
+        storageKeys: OrderedTable[Address, seq[UInt256]]
       for k, codeTouched in witnessKeys:
         let (adr, maybeSlot) = k
         if adr == default(Address):
@@ -192,12 +198,7 @@ proc callFetchingState(
         if maybeSlot.isSome():
           let slot = maybeSlot.get()
           if (adr, slot) notin fetchedStorage:
-            debug "Fetching storage slot", address = adr, slot
-            let storageFut = evm.backend.getStorage(header, adr, slot)
-            if not stateFetchDone:
-              storageQueries.add(StorageQuery.init(adr, slot, storageFut))
-              if not optimisticStateFetch:
-                stateFetchDone = true
+            storageKeys.mgetOrPut(adr, @[]).add(slot)
         else:
           if adr notin fetchedAccounts:
             debug "Fetching account", address = adr
@@ -214,6 +215,18 @@ proc callFetchingState(
               codeQueries.add(CodeQuery.init(adr, codeFut))
               if not optimisticStateFetch:
                 stateFetchDone = true
+
+      for adr, slots in storageKeys:
+        var i = 0
+        while i < slots.len():
+          let batch = slots[i ..< min(i + STORAGE_FETCH_BATCH_SIZE, slots.len())]
+          debug "Fetching storage slots", address = adr, count = batch.len()
+          let storageFut = evm.backend.getStorage(header, adr, batch)
+          if not stateFetchDone:
+            storageQueries.add(StorageQuery.init(adr, batch, storageFut))
+            if not optimisticStateFetch:
+              stateFetchDone = true
+          i += batch.len()
 
       for number, blockHash in vmState.ledger.getBlockHashesCache():
         if number notin fetchedBlockHashes:
@@ -245,10 +258,13 @@ proc callFetchingState(
         fetchedAccounts.incl(q.address)
 
       for q in storageQueries:
-        let slotValue = (await q.storageFut).valueOr:
+        let slotValues = (await q.storageFut).valueOr:
           return err("Unable to get slot")
-        vmState.ledger.setStorage(q.address, q.slotKey, slotValue)
-        fetchedStorage.incl((q.address, q.slotKey))
+        if slotValues.len() != q.slotKeys.len():
+          return err("Unable to get slot")
+        for i, slotKey in q.slotKeys:
+          vmState.ledger.setStorage(q.address, slotKey, slotValues[i])
+          fetchedStorage.incl((q.address, slotKey))
 
       for q in codeQueries:
         let code = (await q.codeFut).valueOr:
