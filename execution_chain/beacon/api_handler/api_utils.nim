@@ -50,7 +50,8 @@ func computePayloadId*(blockHash: common.Hash32,
 
 func validateBlockHash*(header: common.Header,
                         wantHash: common.Hash32,
-                        version: Version): Result[void, PayloadStatus] =
+                        version: Version): Result[void, PayloadStatus]
+                          {.gcsafe.} =
   let gotHash = header.computeBlockHash
   if wantHash != gotHash:
     let status = if version == Version.V1:
@@ -70,10 +71,11 @@ func validateBlockHash*(header: common.Header,
 template toValidHash*(x: common.Hash32): Opt[Hash32] =
   Opt.some(x)
 
+
 func simpleFCU*(status: PayloadStatus): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: status)
 
-func simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
+proc simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: PayloadStatus(status: status))
 
 func simpleFCU*(status: PayloadExecutionStatus,
@@ -106,12 +108,11 @@ func validFCU*(id: Opt[Bytes8],
     payloadId: id
   )
 
-func invalidStatus*(
-    validHash: Opt[common.Hash32], msg: string): PayloadStatus =
+func invalidStatus*(validHash: Opt[common.Hash32], msg: string): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: validHash,
-    validationError: Opt.some(msg)
+    validationError: Opt.some(msg),
   )
 
 func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatus =
@@ -123,7 +124,7 @@ func invalidStatus*(msg: string): PayloadStatus =
 func invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.invalid,
-    latestValidHash: toValidHash(validHash)
+    latestValidHash: toValidHash(validHash),
   )
 
 func acceptedStatus*(validHash: common.Hash32): PayloadStatus =
@@ -137,16 +138,11 @@ func acceptedStatus*(): PayloadStatus =
     status: PayloadExecutionStatus.accepted
   )
 
-func validStatus*(validHash: common.Hash32): PayloadStatus =
-  PayloadStatus(
-    status: PayloadExecutionStatus.valid,
-    latestValidHash: toValidHash(validHash)
-  )
-
-func validStatus*(validHash: common.Hash32, witness: Opt[seq[byte]]): PayloadStatus =
+func validStatus*(validHash: common.Hash32, validIL = Opt.none(bool), witness = Opt.none(seq[byte])): PayloadStatus =
   PayloadStatus(
     status: PayloadExecutionStatus.valid,
     latestValidHash: toValidHash(validHash),
+    inclusionListSatisfied: validIL,
     witness: witness,
   )
 
