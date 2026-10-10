@@ -43,6 +43,13 @@ proc callVMState(
 
   vmState
 
+proc runCall(params: CallParams, vmState: BaseVMState): CallResult =
+  result = runComputation(params, CallResult)
+  # The EVM clears the output of a successful create. A call returns the
+  # created code, as other clients do.
+  if params.isCreate and not result.isError:
+    result.output = vmState.ledger.getCode(result.contractAddress).bytes()
+
 proc rpcCallEvm*(
     args: TransactionArgs,
     header: Header,
@@ -65,7 +72,7 @@ proc rpcCallEvm*(
     intrinsic = tx.intrinsicGas(vmState.hardFork, args.sender)
     params = tx.callParams(args.sender, vmState, intrinsic)
 
-  ok(runComputation(params, CallResult))
+  ok(runCall(params, vmState))
 
 proc rpcCallEvm*(
     args: TransactionArgs, header: Header, vmState: BaseVMState, globalGasCap = 0.GasInt
@@ -75,7 +82,7 @@ proc rpcCallEvm*(
     tx = ? toTransaction(vmState, args, globalGasCap, header)
     intrinsic = tx.intrinsicGas(vmState.hardFork, args.sender)
     params = tx.callParams(args.sender, vmState, intrinsic)
-  ok(runComputation(params, CallResult))
+  ok(runCall(params, vmState))
 
 proc rpcEstimateGas*(
     args: TransactionArgs, header: Header, vmState: BaseVMState, gasCap: GasInt
