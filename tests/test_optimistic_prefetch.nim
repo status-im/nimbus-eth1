@@ -139,7 +139,9 @@ when defined(gcRefc):
       defer:
         env.com.shutdownTaskpool()
 
-      var txs = (0'u64 ..< 4'u64).toSeq().mapIt(createTx(it, env.com.chainId))
+      var txs = (0'u64 ..< optimisticPrefetchMinTxs.uint64).toSeq().mapIt(
+        createTx(it, env.com.chainId)
+      )
       let before = txs.mapIt(cellRefcount(it.payload))
 
       for _ in 0 ..< 5000:

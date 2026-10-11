@@ -33,6 +33,8 @@ import
 
 from ../../transaction/call_types import intrinsicGas, IntrinsicGas
 
+const optimisticPrefetchMinTxs* = 5
+
 type
   OptimisticPrefetchCtx* = object
     com: CommonRef
@@ -40,9 +42,11 @@ type
     parent: Header
     blockCtx: BlockContext
     cancelled: Atomic[bool]
+    executedIndex: Atomic[int]
 
   OptimisticTxEntry* = object
     tx: ptr Transaction
+    txIndex: int
     sender: Address
     senderReady: Atomic[bool]
 
@@ -86,7 +90,8 @@ proc recoverAndPrefetchTask*(
   e[].senderReady.store(true, moRelease)
 
   # When ctx is non-nil, optimistic state prefetch is enabled
-  if ctx.isNil() or sender == default(Address) or ctx[].cancelled.load(moAcquire):
+  if ctx.isNil() or sender == default(Address) or ctx[].cancelled.load(moAcquire) or
+      ctx[].executedIndex.load(moAcquire) > e[].txIndex:
     return true
 
   # Create the ledger without triggering a ref count increment on the txFrame
@@ -143,7 +148,8 @@ template withSenderParallel*(
 
   # Skip optimistic state prefetch when block access list prefetch is running
   # to avoid prefetching the same state twice.
-  if vmState.com.optimisticStatePrefetchEnabled() and
+  if txs.len >= optimisticPrefetchMinTxs and
+      vmState.com.optimisticStatePrefetchEnabled() and
       not vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
     ctx.parent = vmState.parent
     ctx.blockCtx = vmState.blockCtx
@@ -153,6 +159,7 @@ template withSenderParallel*(
     # use locking on the frame data structures.
     ctx.txFrame = vmState.ledger.txFrame.parent()
     ctx.cancelled.store(false, moRelease)
+    ctx.executedIndex.store(0, moRelease)
     ctxPtr = ctx.addr
 
   # Spawn one task per transaction that recovers the sender and, when ctxPtr
@@ -160,6 +167,7 @@ template withSenderParallel*(
   # allows the task to start early, while we still haven't processed subsequent txs.
   for i, e in entries.mpairs():
     e.tx = txs[i].addr
+    e.txIndex = i
     let entryPtr = e.addr
     futs[i] = vmState.com.taskpool.spawn recoverAndPrefetchTask(ctxPtr, entryPtr)
 
@@ -168,12 +176,15 @@ template withSenderParallel*(
       template tx(): untyped =
         txs[txIndex]
 
-      # Wait until the worker has published the sender.
-      while not e.senderReady.load(moAcquire):
-        cpuRelax()
-      let sender {.inject.} = e.sender
+      let sender {.inject.} =
+        if e.senderReady.load(moAcquire):
+          e.sender
+        else:
+          tx.recoverSenderCached().valueOr(default(Address))
 
       body
+
+      ctx.executedIndex.store(txIndex + 1, moRelease)
   finally:
     if not ctxPtr.isNil():
       # Cancel any in-flight prefetch tasks so that they bail out quickly.
