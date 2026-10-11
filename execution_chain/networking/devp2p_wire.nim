@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -56,6 +56,26 @@ type
 #------------------------------------------------------------------------------
 # DevP2P private helpers
 #------------------------------------------------------------------------------
+
+proc read*(rlp: var Rlp, T: type HelloPacket): T {.gcsafe, raises: [RlpError].} =
+  ## Rlp mixin: `HelloPacket` parser
+  # Implementations should also ignore any additional list elements
+  # at the end of the hello packet.
+  # https://eips.ethereum.org/EIPS/eip-8
+  rlp.consumeList(RlpListMode.IgnoreAdditionalElements):
+    let
+      version = rlp.read(uint64)
+      clientId = rlp.read(string)
+      capabilities = rlp.read(seq[Capability])
+      listenPort = rlp.read(uint)
+      nodeId = rlp.read(array[RawPublicKeySize, byte])
+  T(
+    version: version,
+    clientId: clientId,
+    capabilities: capabilities,
+    listenPort: listenPort,
+    nodeId: nodeId,
+  )
 
 proc read*(
     rlp: var Rlp, T: type DisconnectionReasonList
