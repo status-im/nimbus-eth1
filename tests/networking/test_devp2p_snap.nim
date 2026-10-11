@@ -18,9 +18,15 @@ import
   ./stubloglevel,
   ./p2p_test_helper
 
-procSuite "devp2p snap Tests":
+const timeout = chronos.seconds(3)
 
-  asyncTest "storageRanges - reply to a peer that negotiated snap/2 only":
+func testHash(b: byte): Hash32 =
+  var data: array[32, byte]
+  data[31] = b
+  Hash32(data)
+
+procSuite "devp2p snap Tests":
+  asyncTest "snap/2 requests are answered":
     var
       env1 = newTestEnv()
       env2 = newTestEnv()
@@ -33,20 +39,57 @@ procSuite "devp2p snap Tests":
     let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
     check connRes.isOk()
 
-    # Both nodes offer snap/1 and snap/2 but the handshake keeps snap/2 only.
+    # Both nodes offer snap/1 and snap/2; the handshake keeps snap/2 only.
     let peer = connRes.get()
     check:
       peer.supports(snap2)
       not peer.supports(snap1)
 
-    let
-      responder = Responder(peer: peer, reqId: 1)
-      slots = @[@[StorageItem(slotHash: default(Hash32), slotData: @[1.byte])]]
+      (await peer.getAccountRange(AccountRangeRequest(
+        rootHash: testHash(1), startingHash: testHash(2), limitHash: testHash(3),
+        responseBytes: 1024), timeout)).isSome()
+      (await peer.getStorageRanges(StorageRangesRequest(
+        rootHash: testHash(1), accountHashes: @[testHash(4)], startingHash: testHash(2),
+        limitHash: testHash(3), responseBytes: 1024), timeout)).isSome()
+      (await peer.getByteCodes(ByteCodesRequest(
+        hashes: @[testHash(5), testHash(6)], bytes: 1024), timeout)).isSome()
+      (await snap.getBlockAccessLists(peer, SnapBalRequest(
+        blockHashes: @[testHash(7)], bytes: 1024), timeout)).isSome()
+      peer.connectionState == ConnectionState.Connected
 
-    await responder.storageRanges(slots, @[])
-    await responder.storageRanges(slots, @[ProofNode(@[0x80.byte])])
+    await env2.close()
+    await env1.close()
 
-    check peer.connectionState == ConnectionState.Connected
+  asyncTest "snap/1 requests are answered":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env1.node.addCapability(snap1, SnapWireStateRef())
+    env2.node.addCapability(snap1, SnapWireStateRef())
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check:
+      peer.supports(snap1)
+      not peer.supports(snap2)
+
+      (await peer.getAccountRange(AccountRangeRequest(
+        rootHash: testHash(1), startingHash: testHash(2), limitHash: testHash(3),
+        responseBytes: 1024), timeout)).isSome()
+      (await peer.getStorageRanges(StorageRangesRequest(
+        rootHash: testHash(1), accountHashes: @[testHash(4)], startingHash: testHash(2),
+        limitHash: testHash(3), responseBytes: 1024), timeout)).isSome()
+      (await peer.getByteCodes(ByteCodesRequest(
+        hashes: @[testHash(5), testHash(6)], bytes: 1024), timeout)).isSome()
+      (await peer.getTrieNodes(TrieNodesRequest(
+        rootHash: testHash(1), paths: @[@[AccountOrSlotPath(@[0x12.byte])]],
+        bytes: 1024), timeout)).isSome()
+      peer.connectionState == ConnectionState.Connected
 
     await env2.close()
     await env1.close()
