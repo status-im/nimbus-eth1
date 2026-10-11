@@ -95,10 +95,16 @@ proc storageRanges*(
     proof: seq[ProofNode];
       ): Future[void]
       {.async: (raises: [CancelledError,EthP2PError], raw: true).} =
-  if proof.len == 0:
-    snap1.rlpxSendMessage(responder, StorageRangesMsg, slots)
+  if responder.supports(snap1):
+    if proof.len == 0:
+      snap1.rlpxSendMessage(responder, StorageRangesMsg, slots)
+    else:
+      snap1.rlpxSendMessage(responder, StorageRangesMsg, slots, proof)
   else:
-    snap1.rlpxSendMessage(responder, StorageRangesMsg, slots, proof)
+    if proof.len == 0:
+      snap2.rlpxSendMessage(responder, StorageRangesMsg, slots)
+    else:
+      snap2.rlpxSendMessage(responder, StorageRangesMsg, slots, proof)
 
 
 proc getByteCodes*(
