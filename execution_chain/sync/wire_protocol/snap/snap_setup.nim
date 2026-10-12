@@ -12,6 +12,7 @@
 
 import
   pkg/chronos,
+  ../../../core/chain/forked_chain,
   ../../../networking/p2p,
   ./[snap_handler, snap_requester, snap_types]
 
@@ -21,9 +22,10 @@ import
 
 proc addSnapHandlerCapability*(
     node: EthereumNode;
+    chain: ForkedChainRef;
       ): SnapWireStateRef =
   ## Install wire prototcol handler.
-  let wire = SnapWireStateRef.new(node)
+  let wire = SnapWireStateRef.new(chain)
   node.addCapability(snap2, wire)
   node.addCapability(snap1, wire)
   wire

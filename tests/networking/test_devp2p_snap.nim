@@ -10,11 +10,15 @@
 {.used.}
 
 import
+  std/[sequtils, typetraits],
   unittest2,
   testutils,
   chronos,
   ../../execution_chain/networking/p2p,
   ../../execution_chain/sync/wire_protocol,
+  ../../execution_chain/core/chain/forked_chain,
+  ../../execution_chain/db/core_db,
+  ../../execution_chain/db/core_db/core_apps,
   ./stubloglevel,
   ./p2p_test_helper
 
@@ -31,8 +35,11 @@ procSuite "devp2p snap Tests":
       env1 = newTestEnv()
       env2 = newTestEnv()
 
-    discard env1.node.addSnapHandlerCapability()
-    discard env2.node.addSnapHandlerCapability()
+    discard env1.node.addSnapHandlerCapability(env1.chain)
+    discard env2.node.addSnapHandlerCapability(env2.chain)
+
+    # Stored empty BAL, encoded `0xc0`, distinct from the `0x80` placeholder.
+    env2.chain.latestTxFrame.persistBlockAccessList(testHash(7), new BlockAccessList)
 
     env2.node.startListening()
 
@@ -53,8 +60,11 @@ procSuite "devp2p snap Tests":
         limitHash: testHash(3), responseBytes: 1024), timeout)).isSome()
       (await peer.getByteCodes(ByteCodesRequest(
         hashes: @[testHash(5), testHash(6)], bytes: 1024), timeout)).isSome()
+      # Served like `eth/71`: request order kept, `0x80` for an unavailable BAL.
       (await snap.getBlockAccessLists(peer, SnapBalRequest(
-        blockHashes: @[testHash(7)], bytes: 1024), timeout)).isSome()
+        blockHashes: @[testHash(7), testHash(8)], bytes: 1024), timeout))
+        .expect("reply").accessLists.mapIt(it.distinctBase) ==
+          @[@[0xc0'u8], @[0x80'u8]]
       peer.connectionState == ConnectionState.Connected
 
     await env2.close()
