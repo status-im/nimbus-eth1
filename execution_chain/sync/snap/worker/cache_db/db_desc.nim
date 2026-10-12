@@ -14,7 +14,8 @@ import
   std/paths,
   pkg/[chronos, eth/common, rocksdb],
   pkg/stew/interval_set,
-  ../mpt_build/build_desc
+  ../mpt_build/build_desc,
+  ../worker_const
 
 export
   build_desc
@@ -99,5 +100,19 @@ type
   KvPair* = tuple
     key: seq[byte]
     value: seq[byte]
+
+  # ---------
+
+  TimerDataRef* = ref object
+    time*: Moment
+
+template yieldThread*(timer: TimerDataRef) =
+  ## Thead switch helper
+  if timer.time + threadSwitchTimeSlot < Moment.now():
+    try:
+      await sleepAsync ZeroDuration
+    except:
+      discard
+    timer.time = Moment.now()
 
 # End

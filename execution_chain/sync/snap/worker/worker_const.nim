@@ -63,6 +63,13 @@ const
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
+  threadSwitchTimeSlot* = chronos.milliseconds(300)
+    ## For some long running jobs, a pseudo thread switch is forced using
+    ## nano-seep wait. This is the time between wto of these nano-seep
+    ## directives.
+
+  # -----------------
+
   noPeersLogWaitInterval* = chronos.seconds(50)
     ## Reduce logging noise
 

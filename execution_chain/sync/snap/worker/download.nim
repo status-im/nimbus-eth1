@@ -156,20 +156,36 @@ proc downloadInit*(
   ctx.accountDownloadMetricsUpdate()
   ok()
 
-proc downloadCommit*(
+template downloadCommit*(
     ctx: SnapCtxRef;
     info: static[string];
-      ): Result[void,ErrorType] =
+      ): auto =
+  ## Async template
+  ##
   ## Finish downloading.
   ##
-  # This directive should come after storing `accountDownloadCommit()`
-  # updates. It will update the tables and delete partial MPTs.
-  ?ctx.storageDownloadCommit(info)
-  ?ctx.codeDownloadCommit(info)
+  # This directive should come last after storing state data when all peers
+  # are idle (i.e. synchronised.) It will update the tables and delete partial
+  # MPTs.
+  var bodyRc = Result[void,ErrorType].ok()
+  block body:
+    var timer = TimerDataRef(time: Moment.now())
 
-  ?ctx.accountDownloadCommit(info)
+    ctx.storageDownloadCommit(timer, info).isOkOr:
+      bodyRc = typeof(bodyRc).err(error)
+      break body
 
-  ok()
+    ctx.codeDownloadCommit(timer, info).isOkOr:
+      bodyRc = typeof(bodyRc).err(error)
+      break body
+
+    ctx.accountDownloadCommit(info).isOkOr:
+      bodyRc = typeof(bodyRc).err(error)
+      break body
+
+    # End `block body`
+
+  bodyRc
 
 template downloadState*(
     buddy: SnapPeerRef;
@@ -291,33 +307,48 @@ template downloadBals*(
 
   bodyRc
 
-proc downloadResume*(ctx: SnapCtxRef; info: static[string]): Opt[void] =
+template downloadResume*(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): auto =
+  ## Async template
+  ##
   ## Attempt to resume an interrupted download session
-  let adb = ctx.pool.cacheDB
+  ##
+  var bodyRc = Opt[void].err()
+  block body:
+    let adb = ctx.pool.cacheDB
 
-  # Cannot have lock entries
-  for _ in adb.walkStoLock:
-    return err()
-  for _ in adb.walkCodeLock:
-    return err()
+    # Cannot have lock entries
+    for _ in adb.walkStoLock:
+      break body                                    # failed immediately
+    for _ in adb.walkCodeLock:
+      break body                                    # failed immediately
 
-  # Clean up as best as possible
-  var accPaths: seq[Hash32]
+    # Clean up as best as possible
+    var
+      accPaths: seq[Hash32]
+      timer = TimerDataRef(time: Moment.now())
 
-  # Collect paths for partial storage sub-MPTs and contract codes
-  for w in adb.walkStoMissingIntv:
-    if 0 < w.error.len:
-      error info & ": Error walking missing storage list", `error`=w.error
-      return err()
-    accPaths.add w.accPath
-  for key in adb.walkMissingBlob:
-    accPaths.add key
+    # Collect paths for partial storage sub-MPTs and contract codes
+    for w in adb.walkStoMissingIntv:
+      if 0 < w.error.len:
+        error info & ": Error walking missing storage list", `error`=w.error
+        break body                                  # failed
+      accPaths.add w.accPath
+      timer.yieldThread()
+    for key in adb.walkMissingBlob:
+      accPaths.add key
 
-  # Delete all accounts for partial sub-MPTs and contract codes.
-  for accPath in accPaths:
-    ctx.deleteAccount(accPath, info).isOkOr:
-      return err()
-  ok()
+    # Delete all accounts for partial sub-MPTs and contract codes.
+    for accPath in accPaths:
+      ctx.deleteAccount(accPath, timer, info).isOkOr:
+        break body                                  # failed
+
+    bodyRc = typeof(bodyRc).ok()
+    # End `block body`
+
+  bodyRc
 
 # ------------------------------------------------------------------------------
 # End

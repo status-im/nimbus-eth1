@@ -340,41 +340,54 @@ template queueAndDownload(
 # Public function
 # ------------------------------------------------------------------------------
 
-proc storageDownloadCommit*(
+template storageDownloadCommit*(
     ctx: SnapCtxRef;
+    timer: TimerDataRef;
     info: static[string];
-      ): Result[void,ErrorType] =
+      ): auto =
+  ## Async template
+  ##
   ## Get ready for state forward procedure using BAL.
   ##
   ## In particular, for partial storage sub-MPTs and lock records, its
   ## correspnding accounts and contract code are deleted.
   ##
-  if not ctx.accUnproc.synced():
-    error info & ": Cannot commit unsynced accounts ranges"
-    return err(ENoDataAvailable)
+  var bodyRc = Result[void,ErrorType].err(EGeneric)
+  block body:
+    if not ctx.accUnproc.synced():
+      error info & ": Cannot commit unsynced accounts ranges"
+      bodyRc = typeof(bodyRc).err(ENoDataAvailable)
+      break body
 
-  let adb = ctx.pool.cacheDB
+    let adb = ctx.pool.cacheDB
 
-  # Collect paths for partial sub-MPTs.
-  var accPaths: seq[Hash32]
-  for w in adb.walkStoMissingIntv:
-    if 0 < w.error.len:
-      error info & ": Error walking missing storage list", `error`=w.error
-      return err(ECacheError)
-    accPaths.add w.accPath
+    # Collect paths for partial sub-MPTs.
+    var accPaths: seq[Hash32]
+    for w in adb.walkStoMissingIntv:
+      if 0 < w.error.len:
+        error info & ": Error walking missing storage list", `error`=w.error
+        bodyRc = typeof(bodyRc).err(ECacheError)
+        break body
+      accPaths.add w.accPath
+      timer.yieldThread()
 
-  let nPartMpt = accPaths.len
-  for key in adb.walkStoLock:
-    accPaths.add key
+    let nPartMpt {.inject.} = accPaths.len
+    for key in adb.walkStoLock:
+      accPaths.add key
 
-  # Delete all accounts for partial sub-MPTs and obsolete storage locks.
-  for accPath in accPaths:
-    ctx.deleteAccount(accPath, info).isOkOr:
-      return err(ECacheError)
+    # Delete all accounts for partial sub-MPTs and obsolete storage locks.
+    for accPath in accPaths:
+      ctx.deleteAccount(accPath, timer, info).isOkOr:
+        bodyRc = typeof(bodyRc).err(ECacheError)
+        break body
 
-  chronicles.info info & ": Cleared partial storage sub-MPTs",
-    nPartMpt, nStoLock=(accPaths.len-nPartMpt)
-  ok()
+    chronicles.info info & ": Cleared partial storage sub-MPTs",
+      nPartMpt, nStoLock=(accPaths.len-nPartMpt)
+
+    bodyRc = typeof(bodyRc).ok()
+    # End `block body`
+
+  bodyRc
 
 template storageDownload*(
     buddy: SnapPeerRef;                             # Snap peer
