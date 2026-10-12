@@ -257,7 +257,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
 
   # Find out what to do next: accepting this tx or trying the next account
   var rc = processTransaction(vmState, item.tx, item.sender,
-            intrinsic = Opt.some(intrinsic), rollbackReads = true)
+            intrinsic = Opt.some(intrinsic))
   if rc.isErr:
     if vmState.classifyPackedNext():
       return ContinueWithNextAccount

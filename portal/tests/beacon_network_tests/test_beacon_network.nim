@@ -30,11 +30,11 @@ procSuite "Beacon Network":
       forkDigests = (newClone networkData.forks)[]
 
     check:
-      lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
-      lcNode2.portalProtocol().addNode(lcNode1.localNode()) == Added
+      lcNode1.portalProtocol().addNode(lcNode2.localNode().toNode()) == Added
+      lcNode2.portalProtocol().addNode(lcNode1.localNode().toNode()) == Added
 
-      (await lcNode1.portalProtocol().ping(lcNode2.localNode())).isOk()
-      (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
+      (await lcNode1.portalProtocol().ping(lcNode2.localNode().toNode())).isOk()
+      (await lcNode2.portalProtocol().ping(lcNode1.localNode().toNode())).isOk()
 
     let
       altairData = SSZ.decode(bootstrapBytes, altair.LightClientBootstrap)
@@ -73,11 +73,11 @@ procSuite "Beacon Network":
       forkDigests = (newClone networkData.forks)[]
 
     check:
-      lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
-      lcNode2.portalProtocol().addNode(lcNode1.localNode()) == Added
+      lcNode1.portalProtocol().addNode(lcNode2.localNode().toNode()) == Added
+      lcNode2.portalProtocol().addNode(lcNode1.localNode().toNode()) == Added
 
-      (await lcNode1.portalProtocol().ping(lcNode2.localNode())).isOk()
-      (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
+      (await lcNode1.portalProtocol().ping(lcNode2.localNode().toNode())).isOk()
+      (await lcNode2.portalProtocol().ping(lcNode1.localNode().toNode())).isOk()
 
     let
       finalityUpdateData =
@@ -141,11 +141,11 @@ procSuite "Beacon Network":
       forkDigests = (newClone networkData.forks)[]
 
     check:
-      lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
-      lcNode2.portalProtocol().addNode(lcNode1.localNode()) == Added
+      lcNode1.portalProtocol().addNode(lcNode2.localNode().toNode()) == Added
+      lcNode2.portalProtocol().addNode(lcNode1.localNode().toNode()) == Added
 
-      (await lcNode1.portalProtocol().ping(lcNode2.localNode())).isOk()
-      (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
+      (await lcNode1.portalProtocol().ping(lcNode2.localNode().toNode())).isOk()
+      (await lcNode2.portalProtocol().ping(lcNode1.localNode().toNode())).isOk()
 
     let
       altairData1 = SSZ.decode(lightClientUpdateBytes, altair.LightClientUpdate)
@@ -235,11 +235,11 @@ procSuite "Beacon Network":
       lcNode2 = newLCNode(rng, 20303, networkData)
 
     check:
-      lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
-      lcNode2.portalProtocol().addNode(lcNode1.localNode()) == Added
+      lcNode1.portalProtocol().addNode(lcNode2.localNode().toNode()) == Added
+      lcNode2.portalProtocol().addNode(lcNode1.localNode().toNode()) == Added
 
-      (await lcNode1.portalProtocol().ping(lcNode2.localNode())).isOk()
-      (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
+      (await lcNode1.portalProtocol().ping(lcNode2.localNode().toNode())).isOk()
+      (await lcNode2.portalProtocol().ping(lcNode1.localNode().toNode())).isOk()
 
     let
       contentKeyEncoded =

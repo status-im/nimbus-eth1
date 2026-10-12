@@ -38,7 +38,6 @@ proc commitOrRollbackDependingOnGasUsed(
     savePoint: LedgerSpRef;
     tx: Transaction;
     callResult: var TxResult;
-    rollbackReads: bool;
       ): Result[void, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the vmState.blockCtx. Again, the EIP-1559 reference does not mention
@@ -53,14 +52,14 @@ proc commitOrRollbackDependingOnGasUsed(
       vmState.blockStateGasUsed + callResult.blockStateGasUsed)
     if vmState.blockCtx.gasLimit < limit2d:
       if vmState.balTrackerEnabled:
-        vmState.balTracker.rollbackCallFrame(rollbackReads)
+        vmState.balTracker.rollbackCallFrame()
       vmState.ledger.rollback(savePoint)
       return err(&"invalid tx: block gas limit reached (2D). gasLimit={vmState.blockCtx.gasLimit}, executionGas={vmState.blockExecutionGasUsed}+{callResult.blockExecutionGasUsed}, stateGas={vmState.blockStateGasUsed}+{callResult.blockStateGasUsed}")
   else:
     let limit = vmState.cumulativeGasUsed + gasUsed
     if vmState.blockCtx.gasLimit < limit:
       if vmState.balTrackerEnabled:
-        vmState.balTracker.rollbackCallFrame(rollbackReads)
+        vmState.balTracker.rollbackCallFrame()
       vmState.ledger.rollback(savePoint)
       return err(&"invalid tx: block gasLimit reached. gasLimit={vmState.blockCtx.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
 
@@ -140,7 +139,6 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  Address;     ## tx.recoverSender
     intrinsic = Opt.none(IntrinsicGas); ## Precalculated intrinsic or use internal intrinsic
-    rollbackReads: bool = false;
     persist = true;
       ): Result[TxResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
@@ -166,7 +164,7 @@ proc processTransaction*(
 
   let
     tmp = commitOrRollbackDependingOnGasUsed(
-      vmState, savePoint, tx, callResult, rollbackReads)
+      vmState, savePoint, tx, callResult)
     res = if tmp.isErr:
       err(tmp.error)
     else:
