@@ -91,7 +91,7 @@ proc recoverAndPrefetchTask*(
 
   # When ctx is non-nil, optimistic state prefetch is enabled
   if ctx.isNil() or sender == default(Address) or ctx[].cancelled.load(moAcquire) or
-      ctx[].executedIndex.load(moAcquire) > e[].txIndex:
+      ctx[].executedIndex.load(moAcquire) >= e[].txIndex:
     return true
 
   # Create the ledger without triggering a ref count increment on the txFrame
@@ -176,6 +176,9 @@ template withSenderParallel*(
       template tx(): untyped =
         txs[txIndex]
 
+      if not ctxPtr.isNil():
+        ctxPtr[].executedIndex.store(txIndex, moRelease)
+
       let sender {.inject.} =
         if e.senderReady.load(moAcquire):
           e.sender
@@ -183,8 +186,6 @@ template withSenderParallel*(
           tx.recoverSenderCached().valueOr(default(Address))
 
       body
-
-      ctx.executedIndex.store(txIndex + 1, moRelease)
   finally:
     if not ctxPtr.isNil():
       # Cancel any in-flight prefetch tasks so that they bail out quickly.
