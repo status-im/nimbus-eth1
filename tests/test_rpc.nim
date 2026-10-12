@@ -766,6 +766,56 @@ proc rpcMain*() =
         call.string == latestCall.string
         accessList.string == latestAccessList.string
 
+    test "blob fee without blob hashes and empty blob hashes are rejected":
+      const
+        missingHashes = "blob transaction missing blob hashes"
+        loneBlobFee = "maxFeePerBlobGas specified without blobVersionedHashes"
+      let
+        base = %*{
+          "from": signer.to0xHex,
+          "to": contractAddress.to0xHex,
+          "gas": "0x30000",
+        }
+        hash = "0x0100000000000000000000000000000000000000000000000000000000000000"
+      var
+        loneCap = base.copy()
+        nullHashesCap = base.copy()
+        emptyHashes = base.copy()
+        emptyHashesCap = base.copy()
+        oneHashCap = base.copy()
+      loneCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+      nullHashesCap["blobVersionedHashes"] = newJNull()
+      nullHashesCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+      emptyHashes["blobVersionedHashes"] = %[]
+      emptyHashesCap["blobVersionedHashes"] = %[]
+      emptyHashesCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+      oneHashCap["blobVersionedHashes"] = %[%hash]
+      oneHashCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+
+      for (args, msg) in [(loneCap, loneBlobFee), (nullHashesCap, loneBlobFee),
+                          (emptyHashes, missingHashes), (emptyHashesCap, loneBlobFee)]:
+        try:
+          discard await client.call("eth_call", %[args, %"latest"], EthJson)
+          check false
+        except RpcResponseError as exc:
+          check exc.code == -32000
+          check EthJson.decode(exc.data.string, string) == "rpcCallEvm error: " & msg
+        try:
+          discard await client.call("eth_estimateGas", %[args, %"latest"], EthJson)
+          check false
+        except RpcResponseError as exc:
+          check exc.code == 3
+          check exc.msg == msg
+
+      let
+        call = await client.call("eth_call", %[oneHashCap, %"latest"], EthJson)
+        gas = await client.call("eth_estimateGas", %[oneHashCap, %"latest"], EthJson)
+        al = parseJson(
+          (await client.call("eth_createAccessList", %[oneHashCap, %"latest"], EthJson)).string)
+      check EthJson.decode(call.string, seq[byte]) == hexToSeqByte("deadbeef")
+      check EthJson.decode(gas.string, Quantity).uint64 > 21000'u64
+      check al{"error"}.isNil or al["error"].kind == JNull
+
     test "eth_estimateGas includes EIP-7702 authorization intrinsic cost":
       let
         baseArgs = TransactionArgs(
