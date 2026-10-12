@@ -24,6 +24,11 @@ export
 logScope:
   topics = "p2p"
 
+const
+  connectLoopSleep = chronos.milliseconds(2000)
+  updateLoopSleep = chronos.seconds(15)
+  maxConcurrentConnectionRequests = 40
+
 type
   ForkIdProcs* = object
     forkId*: ForkIdProc
@@ -68,10 +73,11 @@ proc newEthereumNode*(
       connectionState: ConnectionState.None,
       bindIp: bindIp,
       bindPort: bindTcpPort,
+      discovery: discovery,
+      forkId: forkIdProcs.forkId,
       rng: rng,
     )
-  node.peerPool = newPeerPool[EthereumNode](
-    node, discovery, maxPeers = maxPeers, forkId = forkIdProcs.forkId)
+  node.peerPool = newPeerPool[EthereumNode](node, maxPeers = maxPeers)
   node
 
 proc processIncoming(server: StreamServer,
@@ -102,6 +108,97 @@ proc startListening*(node: EthereumNode) {.raises: [TransportOsError].} =
   node.listeningServer.start()
   info "RLPx listener up", self = node.listeningAddress
 
+# This code is loosely based on code from nimbus-eth2;
+# see eth2_network.nim and search for connQueue.
+proc createConnectionWorker(
+    node: EthereumNode, workerId: int
+) {.async: (raises: [CancelledError]).} =
+  trace "Connection worker started", workerId = workerId
+  while true:
+    let n = await node.connQueue.popFirst()
+    await node.peerPool.connectToNode(n)
+
+proc lookupPeers(node: EthereumNode) {.async: (raises: [CancelledError]).} =
+  ## Look for more peers while the pool has room for them and hand the nodes
+  ## that discovery came up with to the connection workers.
+  if node.peerPool.dialTargetReached():
+    return
+
+  for n in await node.discovery.lookupRandomNode():
+    await node.connQueue.addLast(n)
+
+func updateForkId(node: EthereumNode) =
+  ## Keep the advertised ENR `eth` entry in sync with the chain, without
+  ## rewriting the record on every tick.
+  if node.forkId.isNil:
+    return
+
+  let forkId = node.forkId()
+  if node.lastForkId == forkId:
+    return
+
+  node.discovery.updateForkId(forkId)
+  node.lastForkId = forkId
+
+proc runDiscovery(node: EthereumNode) {.async: (raises: [CancelledError]).} =
+  trace "Running discovery loop..."
+
+  # initial cycle
+  node.updateForkId()
+  node.discovery.start()
+  await node.lookupPeers()
+
+  var
+    connectTimer: Future[void].Raising([CancelledError])
+    updateTimer: Future[void].Raising([CancelledError])
+
+  while true:
+    debug "Amount of peers", amount = node.peerPool.numPeers
+
+    # Create or replenish timer
+    if connectTimer.isNil or connectTimer.finished:
+      connectTimer = sleepAsync(connectLoopSleep)
+
+    if updateTimer.isNil or updateTimer.finished:
+      updateTimer = sleepAsync(updateLoopSleep)
+
+    let res = await race(connectTimer, updateTimer)
+
+    if res == connectTimer:
+      await node.lookupPeers()
+
+    if res == updateTimer:
+      node.updateForkId()
+
+proc startDiscovery(node: EthereumNode) =
+  try:
+    node.discovery.open()
+  except TransportOsError as exc:
+    fatal "Cannot start discovery protocol", msg=exc.msg
+    quit(QuitFailure)
+
+  node.connQueue = newAsyncQueue[Node](maxConcurrentConnectionRequests)
+  node.connWorkers = newSeqOfCap[Future[void].Raising([CancelledError])](
+    maxConcurrentConnectionRequests)
+  for i in 0 ..< maxConcurrentConnectionRequests:
+    node.connWorkers.add createConnectionWorker(node, i)
+
+  node.discoveryLoop = runDiscovery(node)
+
+proc stopDiscovery(node: EthereumNode) {.async: (raises: []).} =
+  if node.discoveryLoop.isNil:
+    return
+
+  var futures = newSeqOfCap[Future[void]](node.connWorkers.len + 1)
+  futures.add node.discoveryLoop.cancelAndWait()
+  for worker in node.connWorkers:
+    futures.add worker.cancelAndWait()
+  await noCancel(allFutures(futures))
+
+  node.discoveryLoop = nil
+  node.connWorkers.reset()
+  await node.discovery.closeWait()
+
 proc connectToNetwork*(
     node: EthereumNode,
     startListening = true) =
@@ -116,8 +213,8 @@ proc connectToNetwork*(
       fatal "Cannot start listening server", msg=exc.msg
       quit(QuitFailure)
 
-  if node.peerPool.eth1Discovery != nil:
-    node.peerPool.start()
+  if node.discovery != nil:
+    node.startDiscovery()
   else:
     info "Discovery disabled"
 
@@ -149,8 +246,7 @@ proc closeWait*(node: EthereumNode) {.async: (raises: []).} =
   node.stopListening()
   if not node.listeningServer.isNil():
     await node.listeningServer.closeWait()
-  if not node.peerPool.isNil():
-    await node.peerPool.closeWait()
+  await node.stopDiscovery()
 
 proc addCapability*(node: EthereumNode,
                     p: ProtocolInfo,

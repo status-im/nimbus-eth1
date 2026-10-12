@@ -14,13 +14,14 @@ import
   eth/common/[base, keys],
   eth/enode/enode,
   ./rlpx/rlpxtransport,
+  ./eth1_discovery,
   ./p2p_node,
   ./p2p_peers,
   ./peer_pool,
   json_serialization/std/net as jsnet
 
 export
-  base.NetworkId, rlpxtransport, p2p_node,
+  base.NetworkId, rlpxtransport, eth1_discovery, p2p_node,
   p2p_peers, jsnet
 
 type
@@ -38,6 +39,7 @@ type
     keys*: KeyPair
     address*: Address # The external address that the node will be advertising
     peerPool*: PeerPool
+    discovery*: Eth1Discovery
     bindIp*: IpAddress
     bindPort*: Port
 
@@ -46,6 +48,11 @@ type
     protocols*: seq[ProtocolInfo]
     networkStates*: array[MAX_PROTOCOLS, RootRef] # e.g. WireRef
     listeningServer*: StreamServer
+    discoveryLoop*: Future[void].Raising([CancelledError])
+    connQueue*: AsyncQueue[Node]
+    connWorkers*: seq[Future[void].Raising([CancelledError])]
+    forkId*: ForkIdProc
+    lastForkId*: ForkId
 
     rng*: ref HmacDrbgContext
 
