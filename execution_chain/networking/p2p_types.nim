@@ -32,6 +32,11 @@ type
   PeerPool* = PeerPoolRef[EthereumNode]
   PeerObserver* = PeerObserverRef[EthereumNode]
 
+  SeenNode* = object
+    ## A node that is not worth dialing again until `stamp` has passed.
+    nodeId*: NodeId
+    stamp*: chronos.Moment
+
   EthereumNode* = ref object
     networkId*: NetworkId
     clientId*: string
@@ -51,6 +56,10 @@ type
     discoveryLoop*: Future[void].Raising([CancelledError])
     connQueue*: AsyncQueue[Node]
     connWorkers*: seq[Future[void].Raising([CancelledError])]
+    connectingNodes*: HashSet[Node]
+      ## Dials in flight, outgoing and incoming alike, so that the dialer and
+      ## `rlpxAccept` cannot both set up a connection to the same node.
+    seenTable*: Table[NodeId, SeenNode]
     forkId*: ForkIdProc
     lastForkId*: ForkId
 

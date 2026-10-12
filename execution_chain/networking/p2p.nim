@@ -10,12 +10,12 @@
 {.push raises: [].}
 
 import
-  std/[tables, typetraits, strutils, net],
+  std/[tables, times, typetraits, strutils, net, sets],
   chronos, chronos/timer, chronicles,
   eth/common/keys,
   eth/enode/enode,
   results,
-  ./[peer_pool, rlpx, p2p_types, bootnodes],
+  ./[peer_pool, rlpx, p2p_types, p2p_metrics, bootnodes],
   ./eth1_discovery
 
 export
@@ -28,6 +28,19 @@ const
   connectLoopSleep = chronos.milliseconds(2000)
   updateLoopSleep = chronos.seconds(15)
   maxConcurrentConnectionRequests = 40
+
+  SeenTableTimeDeadPeer = chronos.minutes(10)
+    ## Period of time for dead / unreachable peers.
+
+  SeenTableTimeUselessPeer = chronos.hours(24)
+    ## Period of time for Useless peers, either because of no matching
+    ## capabilities or on an irrelevant network.
+
+  SeenTableTimeProtocolError = chronos.minutes(30)
+    ## Period of time for peers with a protocol error.
+
+  SeenTableTimeReconnect = chronos.minutes(5)
+    ## Period of time for peers with general disconnections / transport errors.
 
 type
   ForkIdProcs* = object
@@ -77,7 +90,7 @@ proc newEthereumNode*(
       forkId: forkIdProcs.forkId,
       rng: rng,
     )
-  node.peerPool = newPeerPool[EthereumNode](node, maxPeers = maxPeers)
+  node.peerPool = newPeerPool[EthereumNode](maxPeers = maxPeers)
   node
 
 proc processIncoming(server: StreamServer,
@@ -88,7 +101,7 @@ proc processIncoming(server: StreamServer,
     if not peer.isNil:
       trace "Connection established (incoming)", peer
       if node.peerPool != nil:
-        node.peerPool.connectingNodes.excl(peer.remote)
+        node.connectingNodes.excl(peer.remote)
         node.peerPool.addPeer(peer)
   except EthP2PError as exc:
     error "processIncoming", msg=exc.msg
@@ -108,6 +121,89 @@ proc startListening*(node: EthereumNode) {.raises: [TransportOsError].} =
   node.listeningServer.start()
   info "RLPx listener up", self = node.listeningAddress
 
+proc isSeen(node: EthereumNode, nodeId: NodeId): bool =
+  ## Returns ``true`` if ``nodeId`` present in the seen table and the time
+  ## period has not yet expired.
+  let currentTime = now(chronos.Moment)
+  if nodeId notin node.seenTable:
+    false
+  else:
+    let item = try: node.seenTable[nodeId]
+    except KeyError: raiseAssert "checked with notin"
+    if currentTime >= item.stamp:
+      # Peer is in the seen table, but the time period has expired.
+      node.seenTable.del(nodeId)
+      false
+    else:
+      true
+
+proc addSeen(node: EthereumNode, nodeId: NodeId, period: chronos.Duration) =
+  ## Adds peer with NodeId ``nodeId`` to the seen table with timeout ``period``.
+  let item = SeenNode(nodeId: nodeId, stamp: now(chronos.Moment) + period)
+  withValue(node.seenTable, nodeId, entry) do:
+    if entry.stamp < item.stamp:
+      entry.stamp = item.stamp
+  do:
+    node.seenTable[nodeId] = item
+
+proc dialPeer(
+    node: EthereumNode, remote: Node
+): Future[Peer] {.async: (raises: [CancelledError]).} =
+  ## Dial the given remote and return the peer when the handshake succeeded.
+  ## Returns nil if the remote is unreachable, times out or is useless.
+  if remote in node.peerPool:
+    trace "skipping_connection_to_already_connected_peer", remote
+    return nil
+
+  if remote in node.connectingNodes:
+    return nil
+
+  if node.isSeen(remote.id):
+    return nil
+
+  if node.peerPool.isFull:
+    trace "Peer limit reached, not dialing", remote,
+      maxPeers = node.peerPool.maxPeers
+    return nil
+
+  trace "Connecting to node", remote
+  node.connectingNodes.incl(remote)
+  let res = await node.rlpxConnect(remote)
+  node.connectingNodes.excl(remote)
+
+  if res.isOk():
+    rlpx_connect_success.inc()
+    return res.get()
+
+  rlpx_connect_failure.inc()
+  rlpx_connect_failure.inc(labelValues = [$res.error])
+  case res.error()
+  of UselessRlpxPeerError:
+    node.addSeen(remote.id, SeenTableTimeUselessPeer)
+  of TransportConnectError:
+    node.addSeen(remote.id, SeenTableTimeDeadPeer)
+  of RlpxHandshakeError, ProtocolError, InvalidIdentityError:
+    node.addSeen(remote.id, SeenTableTimeProtocolError)
+  of RlpxHandshakeTransportError,
+      P2PHandshakeError,
+      P2PTransportError,
+      PeerDisconnectedError,
+      TooManyPeersError:
+    node.addSeen(remote.id, SeenTableTimeReconnect)
+
+  nil
+
+proc connectToNode*(
+    node: EthereumNode, n: Node) {.async: (raises: [CancelledError]).} =
+  let peer = await node.dialPeer(n)
+  if not peer.isNil:
+    trace "Connection established (outgoing)", peer
+    node.peerPool.addPeer(peer)
+
+proc connectToNode*(
+    node: EthereumNode, n: ENode) {.async: (raises: [CancelledError]).} =
+  await node.connectToNode(newNode(n))
+
 # This code is loosely based on code from nimbus-eth2;
 # see eth2_network.nim and search for connQueue.
 proc createConnectionWorker(
@@ -116,7 +212,7 @@ proc createConnectionWorker(
   trace "Connection worker started", workerId = workerId
   while true:
     let n = await node.connQueue.popFirst()
-    await node.peerPool.connectToNode(n)
+    await node.connectToNode(n)
 
 proc lookupPeers(node: EthereumNode) {.async: (raises: [CancelledError]).} =
   ## Look for more peers while the pool has room for them and hand the nodes
@@ -232,12 +328,6 @@ iterator peers*(node: EthereumNode): Peer =
 iterator peers*(node: EthereumNode, Protocol: type): Peer =
   for peer in node.peerPool.peers(Protocol):
     yield peer
-
-proc connectToNode*(node: EthereumNode, n: Node) {.async: (raises: [CancelledError]).} =
-  await node.peerPool.connectToNode(n)
-
-proc connectToNode*(node: EthereumNode, n: ENode) {.async: (raises: [CancelledError]).} =
-  await node.peerPool.connectToNode(n)
 
 func numPeers*(node: EthereumNode): int =
   node.peerPool.numPeers
