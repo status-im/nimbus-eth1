@@ -33,7 +33,7 @@ import
 
 from ../../transaction/call_types import intrinsicGas, IntrinsicGas
 
-const optimisticPrefetchMinTxs* = 5
+const parallelSenderRecoveryMinTxs* = 5
 
 type
   OptimisticPrefetchCtx* = object
@@ -81,7 +81,7 @@ type
     error: SharedString
     preempted: bool
 
-proc isStale(ctx: ptr OptimisticPrefetchCtx, txIndex: int): bool {.inline.} =
+template isStale(ctx: ptr OptimisticPrefetchCtx, txIndex: int): bool =
   ctx[].cancelled.load(moAcquire) or ctx[].currentIndex.load(moAcquire) >= txIndex
 
 proc recoverAndPrefetchTask*(
@@ -90,13 +90,13 @@ proc recoverAndPrefetchTask*(
   if ctx.isStale(e[].txIndex):
     return true
 
-  # Recover the sender from the signature. `default(Address)` signals sig
-  # check failure.
-  let sender = e[].tx[].recoverSenderCached().valueOr(default(Address))
+  # Recover the sender from the signature.
+  let sender = e[].tx[].recoverSenderCached().valueOr:
+    return true
   e[].sender = sender
   e[].senderReady.store(true, moRelease)
 
-  if not ctx[].prefetch or sender == default(Address) or ctx.isStale(e[].txIndex):
+  if not ctx[].prefetch or ctx.isStale(e[].txIndex):
     return true
 
   # Create the ledger without triggering a ref count increment on the txFrame
@@ -152,8 +152,7 @@ template withSenderParallel*(
 
   # Skip optimistic state prefetch when block access list prefetch is running
   # to avoid prefetching the same state twice.
-  if txs.len >= optimisticPrefetchMinTxs and
-      vmState.com.optimisticStatePrefetchEnabled() and
+  if vmState.com.optimisticStatePrefetchEnabled() and
       not vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
     ctx.prefetch = true
     ctx.parent = vmState.parent
