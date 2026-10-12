@@ -41,8 +41,9 @@ type
     txFrame: CoreDbTxRef
     parent: Header
     blockCtx: BlockContext
+    prefetch: bool
     cancelled: Atomic[bool]
-    executedIndex: Atomic[int]
+    currentIndex: Atomic[int]
 
   OptimisticTxEntry* = object
     tx: ptr Transaction
@@ -80,18 +81,22 @@ type
     error: SharedString
     preempted: bool
 
+proc isStale(ctx: ptr OptimisticPrefetchCtx, txIndex: int): bool {.inline.} =
+  ctx[].cancelled.load(moAcquire) or ctx[].currentIndex.load(moAcquire) >= txIndex
+
 proc recoverAndPrefetchTask*(
     ctx: ptr OptimisticPrefetchCtx, e: ptr OptimisticTxEntry
 ): bool {.nimcall.} =
+  if ctx.isStale(e[].txIndex):
+    return true
+
   # Recover the sender from the signature. `default(Address)` signals sig
   # check failure.
   let sender = e[].tx[].recoverSenderCached().valueOr(default(Address))
   e[].sender = sender
   e[].senderReady.store(true, moRelease)
 
-  # When ctx is non-nil, optimistic state prefetch is enabled
-  if ctx.isNil() or sender == default(Address) or ctx[].cancelled.load(moAcquire) or
-      ctx[].executedIndex.load(moAcquire) >= e[].txIndex:
+  if not ctx[].prefetch or sender == default(Address) or ctx.isStale(e[].txIndex):
     return true
 
   # Create the ledger without triggering a ref count increment on the txFrame
@@ -144,13 +149,13 @@ template withSenderParallel*(
     entries = newSeq[OptimisticTxEntry](txs.len)
     futs = newSeq[Flowvar[bool]](txs.len)
     ctx: OptimisticPrefetchCtx
-    ctxPtr: ptr OptimisticPrefetchCtx = nil
 
   # Skip optimistic state prefetch when block access list prefetch is running
   # to avoid prefetching the same state twice.
   if txs.len >= optimisticPrefetchMinTxs and
       vmState.com.optimisticStatePrefetchEnabled() and
       not vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
+    ctx.prefetch = true
     ctx.parent = vmState.parent
     ctx.blockCtx = vmState.blockCtx
     ctx.com = vmState.com
@@ -158,12 +163,12 @@ template withSenderParallel*(
     # be writen to during block execution and this way we avoid having to
     # use locking on the frame data structures.
     ctx.txFrame = vmState.ledger.txFrame.parent()
-    ctx.cancelled.store(false, moRelease)
-    ctx.executedIndex.store(0, moRelease)
-    ctxPtr = ctx.addr
+  ctx.cancelled.store(false, moRelease)
+  ctx.currentIndex.store(0, moRelease)
+  let ctxPtr = ctx.addr
 
-  # Spawn one task per transaction that recovers the sender and, when ctxPtr
-  # is non-nil, also performs an optimistic state prefetch. Spawning here
+  # Spawn one task per transaction that recovers the sender and, when prefetch
+  # is enabled, also performs an optimistic state prefetch. Spawning here
   # allows the task to start early, while we still haven't processed subsequent txs.
   for i, e in entries.mpairs():
     e.tx = txs[i].addr
@@ -176,8 +181,7 @@ template withSenderParallel*(
       template tx(): untyped =
         txs[txIndex]
 
-      if not ctxPtr.isNil():
-        ctxPtr[].executedIndex.store(txIndex, moRelease)
+      ctxPtr[].currentIndex.store(txIndex, moRelease)
 
       let sender {.inject.} =
         if e.senderReady.load(moAcquire):
@@ -187,9 +191,8 @@ template withSenderParallel*(
 
       body
   finally:
-    if not ctxPtr.isNil():
-      # Cancel any in-flight prefetch tasks so that they bail out quickly.
-      ctxPtr[].cancelled.store(true, moRelease)
+    # Cancel any in-flight prefetch tasks so that they bail out quickly.
+    ctxPtr[].cancelled.store(true, moRelease)
     # Wait for all tasks to complete before returning so that no task
     # outlives the local data it references.
     for f in futs.mitems():

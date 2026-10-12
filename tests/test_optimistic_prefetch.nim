@@ -120,12 +120,14 @@ when defined(gcRefc):
         txs = @[createTx(0, env.com.chainId)]
         ctx: OptimisticPrefetchCtx
         entry: OptimisticTxEntry
+      ctx.prefetch = true
       ctx.parent = env.vmState.parent
       ctx.blockCtx = env.vmState.blockCtx
       ctx.com = env.vmState.com
       ctx.txFrame = env.vmState.ledger.txFrame.parent()
       ctx.cancelled.store(false, moRelease)
       entry.tx = txs[0].addr
+      entry.txIndex = 1
 
       let before = cellRefcount(txs[0].payload)
       let ran = sync(env.com.taskpool.spawn recoverAndPrefetchTask(ctx.addr, entry.addr))
