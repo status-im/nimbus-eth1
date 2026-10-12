@@ -95,14 +95,6 @@ proc ensureIndexCount*(builder: var BlockAccessListBuilder, n: int, exact = fals
   if n > builder.perIndex.len:
     builder.perIndex.setLen(n, zeroed = true, exact)
 
-proc localId(indexData: var BalIndexData, address: Address): LocalAccountId =
-  let n = indexData.accounts.len
-  if n > 0 and indexData.accounts[n - 1] == address:
-    LocalAccountId(n - 1)
-  else:
-    indexData.accounts.add(address)
-    LocalAccountId(n)
-
 proc accountCount*(builder: BlockAccessListBuilder, blockAccessIndex: int): int =
   assert blockAccessIndex < builder.perIndex.len
   builder.perIndex[blockAccessIndex].accounts.len
@@ -114,12 +106,6 @@ proc addAccount*(
   let d = addr builder.perIndex[blockAccessIndex]
   result = LocalAccountId(d[].accounts.len)
   d[].accounts.add(address)
-
-proc addTouchedAccount*(
-    builder: var BlockAccessListBuilder, blockAccessIndex: int, address: Address
-) =
-  assert blockAccessIndex < builder.perIndex.len
-  discard builder.perIndex[blockAccessIndex].localId(address)
 
 template checkAccount(
     builder: BlockAccessListBuilder, blockAccessIndex: int, account: LocalAccountId
@@ -137,17 +123,6 @@ proc addStorageWrite*(
   builder.checkAccount(blockAccessIndex, account)
   builder.perIndex[blockAccessIndex].storageChanges.add((account, slot, newValue))
 
-proc addStorageWrite*(
-    builder: var BlockAccessListBuilder,
-    blockAccessIndex: int,
-    address: Address,
-    slot: UInt256,
-    newValue: UInt256,
-) =
-  assert blockAccessIndex < builder.perIndex.len
-  let d = addr builder.perIndex[blockAccessIndex]
-  d[].storageChanges.add((d[].localId(address), slot, newValue))
-
 proc addStorageRead*(
     builder: var BlockAccessListBuilder,
     blockAccessIndex: int,
@@ -156,16 +131,6 @@ proc addStorageRead*(
 ) =
   builder.checkAccount(blockAccessIndex, account)
   builder.perIndex[blockAccessIndex].storageReads.add((account, slot))
-
-proc addStorageRead*(
-    builder: var BlockAccessListBuilder,
-    blockAccessIndex: int,
-    address: Address,
-    slot: UInt256,
-) =
-  assert blockAccessIndex < builder.perIndex.len
-  let d = addr builder.perIndex[blockAccessIndex]
-  d[].storageReads.add((d[].localId(address), slot))
 
 proc addBalanceChange*(
     builder: var BlockAccessListBuilder,
@@ -176,16 +141,6 @@ proc addBalanceChange*(
   builder.checkAccount(blockAccessIndex, account)
   builder.perIndex[blockAccessIndex].balanceChanges.add((account, postBalance))
 
-proc addBalanceChange*(
-    builder: var BlockAccessListBuilder,
-    blockAccessIndex: int,
-    address: Address,
-    postBalance: UInt256,
-) =
-  assert blockAccessIndex < builder.perIndex.len
-  let d = addr builder.perIndex[blockAccessIndex]
-  d[].balanceChanges.add((d[].localId(address), postBalance))
-
 proc addNonceChange*(
     builder: var BlockAccessListBuilder,
     blockAccessIndex: int,
@@ -194,16 +149,6 @@ proc addNonceChange*(
 ) =
   builder.checkAccount(blockAccessIndex, account)
   builder.perIndex[blockAccessIndex].nonceChanges.add((account, newNonce))
-
-proc addNonceChange*(
-    builder: var BlockAccessListBuilder,
-    blockAccessIndex: int,
-    address: Address,
-    newNonce: AccountNonce,
-) =
-  assert blockAccessIndex < builder.perIndex.len
-  let d = addr builder.perIndex[blockAccessIndex]
-  d[].nonceChanges.add((d[].localId(address), newNonce))
 
 proc addCodeChange*(
     builder: var BlockAccessListBuilder,
@@ -215,16 +160,6 @@ proc addCodeChange*(
   builder.perIndex[blockAccessIndex].codeChanges.add(
     (account, SharedBytes.init(newCode))
   )
-
-proc addCodeChange*(
-    builder: var BlockAccessListBuilder,
-    blockAccessIndex: int,
-    address: Address,
-    newCode: openArray[byte],
-) =
-  assert blockAccessIndex < builder.perIndex.len
-  let d = addr builder.perIndex[blockAccessIndex]
-  d[].codeChanges.add((d[].localId(address), SharedBytes.init(newCode)))
 
 type
   # Flattened per-index writes, tagged with a dense account id instead of the
