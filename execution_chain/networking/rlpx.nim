@@ -69,18 +69,6 @@ export options, rlp, chronicles, protocol_dsl
 logScope:
   topics = "p2p rlpx"
 
-include p2p_tracing
-
-when tracingEnabled:
-  import eth/common/eth_types_json_serialization
-
-  export
-    # XXX: This is a work-around for a Nim issue.
-    # See a more detailed comment in p2p_tracing.nim
-    init,
-    writeValue,
-    getOutput
-
 chronicles.formatIt(Peer):
   $(it.remote)
 chronicles.formatIt(Opt[uint64]):
@@ -376,7 +364,6 @@ proc disconnect*(
     elif not peer.transport.closed:
       peer.transport.close()
 
-    logDisconnectedPeer peer
     peer.connectionState = Disconnected
     removePeer(peer.network, peer)
 
@@ -560,7 +547,6 @@ proc rlpxConnect*(
 ): Future[Result[Peer, RlpxError]] {.async: (raises: [CancelledError]).} =
   # TODO move logging elsewhere - the aim is to have exactly _one_ debug log per
   #      connection attempt (success or failure) to not spam the logs
-  initTracing(devp2pInfo, node.protocols)
   logScope:
     remote
   trace "Connecting to peer"
@@ -593,8 +579,6 @@ proc rlpxConnect*(
     except TransportError as exc:
       debug "Connect transport error", err = exc.msg
       return err(TransportConnectError)
-
-  logConnectedPeer peer
 
   # RLPx p2p capability handshake: After the initial handshake, both sides of
   # the connection must send either Hello or a Disconnect message.
@@ -660,8 +644,6 @@ proc rlpxAccept*(
 ): Future[Peer] {.async: (raises: [CancelledError, EthP2PError]).} =
   # TODO move logging elsewhere - the aim is to have exactly _one_ debug log per
   #      connection attempt (success or failure) to not spam the logs
-  initTracing(devp2pInfo, node.protocols)
-
   let
     peer = Peer(network: node, disconnectPeer: disconnect, inbound: true)
     deadline = sleepAsync(connectionTimeout)
@@ -711,8 +693,6 @@ proc rlpxAccept*(
 
   peer.remote = newNode(ENode(pubkey: peer.transport.pubkey, address: address))
 
-  logAcceptedPeer peer
-
   logScope:
     remote = peer.remote
 
@@ -759,28 +739,28 @@ proc rlpxAccept*(
   # In case there is an outgoing connection started with this peer we give
   # precedence to that one and we disconnect here with `AlreadyConnected`
   if peer.remote in node.peerPool.connectedNodes or
-      peer.remote in node.peerPool.connectingNodes:
+      peer.remote in node.connectingNodes:
     trace "Duplicate connection in rlpxAccept"
     rlpx_accept_failure.inc(labelValues = [$AlreadyConnected])
     return nil
 
-  node.peerPool.connectingNodes.incl(peer.remote)
+  node.connectingNodes.incl(peer.remote)
 
   try:
     await postHelloSteps(peer, response)
   except PeerDisconnected as exc:
-    node.peerPool.connectingNodes.excl(peer.remote)
+    node.connectingNodes.excl(peer.remote)
     debug "Disconnect while accepting", reason = exc.reason, err = exc.msg
     rlpx_accept_failure.inc(labelValues = [$exc.reason])
     return nil
   except UselessPeerError as exc:
-    node.peerPool.connectingNodes.excl(peer.remote)
+    node.connectingNodes.excl(peer.remote)
     debug "Useless peer while accepting", err = exc.msg
 
     rlpx_accept_failure.inc(labelValues = [$UselessPeer])
     return nil
   except EthP2PError as exc:
-    node.peerPool.connectingNodes.excl(peer.remote)
+    node.connectingNodes.excl(peer.remote)
     trace "P2P error during accept", err = exc.msg
     rlpx_accept_failure.inc(labelValues = [$exc.name])
     return nil
