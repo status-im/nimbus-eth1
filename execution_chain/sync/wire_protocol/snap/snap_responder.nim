@@ -116,8 +116,8 @@ proc getStorageRangesUserHandler[PROTO](
       accountHashes  = (if request.accountHashes.len == 0: "n/a"
                         else: "[" & request.accountHashes[0].short & ",..]"),
       nAccountHashes = request.accountHashes.len,
-      startingHash   = request.startingHash.short,
-      limitHash      = request.limitHash.short,
+      startingHash   = request.startingHash.to(Hash32).short,
+      limitHash      = request.limitHash.to(Hash32).short,
       responseBytes  = request.responseBytes
 
   # Get storage ranges from application handler
