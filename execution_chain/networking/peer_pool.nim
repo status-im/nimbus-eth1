@@ -27,8 +27,8 @@ type
       ## Number of peers up to which we actively dial out. This is deliberately
       ## lower than `maxPeers` so that the dialer cannot fill every slot and
       ## leave the node unreachable for incoming connections.
-    connectedNodes*: Table[Node, PeerRef[Network]]
-    observers*: Table[int, PeerObserverRef[Network]]
+    connectedNodes: Table[Node, PeerRef[Network]]
+    observers: Table[int, PeerObserverRef[Network]]
 
   PeerObserverRef*[Network] = object
     onPeerConnected*: proc(p: PeerRef[Network]) {.gcsafe, raises: [].}
@@ -117,3 +117,22 @@ proc addPeer*(pool: PeerPoolRef, peer: PeerRef) {.gcsafe.} =
     if not observer.onPeerConnected.isNil:
       if observer.protocols.len == 0 or peer.supports(observer.protocols):
         observer.onPeerConnected(peer)
+
+proc removePeer*(pool: PeerPoolRef, peer: PeerRef) {.gcsafe.} =
+  ## Drop a peer that is no longer connected. Tolerates peers that were never
+  ## added: the remote may have disconnected first, racing our own teardown.
+  if peer.remote.isNil or peer.remote notin pool.connectedNodes:
+    return
+
+  pool.connectedNodes.del(peer.remote)
+  rlpx_connected_peers.dec()
+
+  # `supports` below needs the dispatcher, and a peer can be disconnected
+  # before that is set up.
+  if peer.dispatcher.isNil:
+    return
+
+  for observer in pool.observers.values:
+    if not observer.onPeerDisconnected.isNil:
+      if observer.protocols.len == 0 or peer.supports(observer.protocols):
+        observer.onPeerDisconnected(peer)

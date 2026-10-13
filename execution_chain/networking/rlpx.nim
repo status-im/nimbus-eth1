@@ -288,24 +288,6 @@ proc dispatchMessages(peer: Peer) {.async: (raises: []).} =
 # Rlpx Implementation
 #------------------------------------------------------------------------------
 
-proc removePeer(network: EthereumNode, peer: Peer) =
-  # It is necessary to check if peer.remote still exists. The connection might
-  # have been dropped already from the peers side.
-  # E.g. when receiving a p2p.disconnect message from a peer, a race will happen
-  # between which side disconnects first.
-  if network.peerPool != nil and not peer.remote.isNil and
-      peer.remote in network.peerPool.connectedNodes:
-    network.peerPool.connectedNodes.del(peer.remote)
-    rlpx_connected_peers.dec()
-
-    # Note: we need to do this check as disconnect (and thus removePeer)
-    # currently can get called before the dispatcher is initialized.
-    if not peer.dispatcher.isNil:
-      for observer in network.peerPool.observers.values:
-        if not observer.onPeerDisconnected.isNil:
-          if observer.protocols.len == 0 or peer.supports(observer.protocols):
-            observer.onPeerDisconnected(peer)
-
 proc disconnect*(
     peer: Peer, reason: DisconnectionReason, notifyRemote = false
 ) {.async: (raises: []).} =
@@ -365,7 +347,8 @@ proc disconnect*(
       peer.transport.close()
 
     peer.connectionState = Disconnected
-    removePeer(peer.network, peer)
+    if peer.network.peerPool != nil:
+      peer.network.peerPool.removePeer(peer)
 
 proc initPeerState(
     peer: Peer, h: HelloPacket
@@ -738,7 +721,7 @@ proc rlpxAccept*(
 
   # In case there is an outgoing connection started with this peer we give
   # precedence to that one and we disconnect here with `AlreadyConnected`
-  if peer.remote in node.peerPool.connectedNodes or
+  if peer.remote in node.peerPool or
       peer.remote in node.connectingNodes:
     trace "Duplicate connection in rlpxAccept"
     rlpx_accept_failure.inc(labelValues = [$AlreadyConnected])
