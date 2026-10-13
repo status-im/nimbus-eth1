@@ -168,7 +168,12 @@ proc dialPeer(
 
   trace "Connecting to node", remote
   node.connectingNodes.incl(remote)
-  let res = await node.rlpxConnect(remote)
+  let res =
+    try:
+      await node.rlpxConnect(remote)
+    except CancelledError as exc:
+      node.connectingNodes.excl(remote)
+      raise exc
   node.connectingNodes.excl(remote)
 
   if res.isOk():
