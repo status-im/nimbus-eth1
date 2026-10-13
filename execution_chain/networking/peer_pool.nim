@@ -10,20 +10,20 @@
 {.push raises: [].}
 
 import
-  std/[tables, sets],
+  std/tables,
   eth/common/base,
   ./p2p_metrics,
   ./[p2p_node, p2p_peers]
 
-export sets, tables, base, p2p_node
+export tables, base, p2p_node
 
 type
   # Usually Network generic param is instantiated with EthereumNode
   PeerPoolRef*[Network] = ref object
-    maxPeers*: int
+    maxPeers: int
       ## Hard limit on the number of connected peers, incoming and outgoing
       ## alike - see `isFull`
-    dialTarget*: int
+    dialTarget: int
       ## Number of peers up to which we actively dial out. This is deliberately
       ## lower than `maxPeers` so that the dialer cannot fill every slot and
       ## leave the node unreachable for incoming connections.
@@ -38,7 +38,7 @@ type
 const
   defaultMaxPeers* = 25
     ## Fallback when `--max-peers` is not given. Exported so that `conf.nim`
-    ## and the `newPeerPool` / `newEthereumNode` defaults cannot drift apart.
+    ## and the `PeerPool.new` / `newEthereumNode` defaults cannot drift apart.
 
   inboundSlotDivisor = 3
     ## One in this many peer slots is kept free for incoming connections.
@@ -47,12 +47,17 @@ const
 # Public functions
 #------------------------------------------------------------------------------
 
+func maxPeers*(p: PeerPoolRef): int =
+  p.maxPeers
+
 func isFull*(p: PeerPoolRef): bool =
   ## `true` when the pool holds `maxPeers` peers and no further connection,
   ## incoming or outgoing, may be established.
   p.connectedNodes.len >= p.maxPeers
 
-func newPeerPool*[Network](maxPeers = defaultMaxPeers): PeerPoolRef[Network] =
+func new*[Network](
+    _: type PeerPoolRef[Network], maxPeers = defaultMaxPeers
+): PeerPoolRef[Network] =
   let limit = max(1, maxPeers)
   PeerPoolRef[Network](
     maxPeers: limit,
@@ -61,7 +66,7 @@ func newPeerPool*[Network](maxPeers = defaultMaxPeers): PeerPoolRef[Network] =
     observers: initTable[int, PeerObserverRef[Network]](),
   )
 
-proc addObserver*(p: PeerPoolRef, observerId: int, observer: PeerObserverRef) =
+proc addObserver(p: PeerPoolRef, observerId: int, observer: PeerObserverRef) =
   doAssert(observerId notin p.observers)
   p.observers[observerId] = observer
   if not observer.onPeerConnected.isNil:
@@ -69,7 +74,7 @@ proc addObserver*(p: PeerPoolRef, observerId: int, observer: PeerObserverRef) =
       if observer.protocols.len == 0 or peer.supports(observer.protocols):
         observer.onPeerConnected(peer)
 
-func delObserver*(p: PeerPoolRef, observerId: int) =
+func delObserver(p: PeerPoolRef, observerId: int) =
   p.observers.del(observerId)
 
 proc addObserver*(p: PeerPoolRef, observerId: ref, observer: PeerObserverRef) =
@@ -95,19 +100,8 @@ iterator peers*[Network](p: PeerPoolRef[Network], Protocol: type): PeerRef[Netwo
     if peer.supports(Protocol):
       yield peer
 
-func numPeers*(p: PeerPoolRef): int =
-  p.connectedNodes.len
-
-func contains*(p: PeerPoolRef, n: ENode): bool =
-  for remote, _ in p.connectedNodes:
-    if remote.node == n:
-      return true
-
 func contains*(p: PeerPoolRef, n: Node): bool =
   n in p.connectedNodes
-
-func contains*(p: PeerPoolRef, n: PeerRef): bool =
-  n.remote in p.connectedNodes
 
 proc addPeer*(pool: PeerPoolRef, peer: PeerRef) {.gcsafe.} =
   doAssert(peer.remote notin pool.connectedNodes)

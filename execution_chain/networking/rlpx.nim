@@ -684,7 +684,7 @@ proc rlpxAccept*(
   # connection, keeps it until the process exits.
   if node.peerPool.isFull:
     debug "Too many peers, rejecting incoming connection",
-      numPeers = node.peerPool.numPeers, maxPeers = node.peerPool.maxPeers
+      numPeers = node.peerPool.len, maxPeers = node.peerPool.maxPeers
     await peer.disconnect(TooManyPeers, notifyRemote = true)
     rlpx_accept_failure.inc(labelValues = [$TooManyPeers])
     return nil
