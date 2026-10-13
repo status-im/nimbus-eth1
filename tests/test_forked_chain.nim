@@ -1619,6 +1619,42 @@ suite "ForkedChainRef tests":
     check restarted.fcuHead.hash == blk4.blockHash
     check restarted.fcuSafe.hash == blk4.blockHash
 
+  test "a restart without a snapshot does not serve blocks imported above base":
+    # Import writes block data to disk right away, so after a crash the disk
+    # holds blocks above base that the restarted FC does not track. A CL
+    # forkchoiceUpdated to such a head must start a sync, not fail.
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
+    for blk in [blk1, blk2, blk3, blk4, blk5, C5]:
+      checkImportBlock(chain, blk)
+    checkForkChoice(chain, blk5, blk3)
+    check chain.baseHash == blk3.blockHash
+
+    # Restart without a snapshot, as after a crash
+    let restarted = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
+    check restarted.baseHash == blk3.blockHash
+    for blk in [blk4, blk5, C5]:
+      check restarted.headerByHash(blk.blockHash).isErr
+      check restarted.blockByHash(blk.blockHash).isErr
+      check restarted.blockBodyByHash(blk.blockHash).isErr
+      check restarted.payloadBodyV1ByHash(blk.blockHash).isErr
+      check restarted.receiptsByBlockHash(blk.blockHash).isErr
+    # Base and the canonical blocks below it are on disk
+    check restarted.headerByHash(blk3.blockHash).isOk
+    check restarted.headerByHash(blk2.blockHash).isOk
+    check restarted.blockByHash(blk2.blockHash).isOk
+
+    # Base moves past the untracked fork block `C5`, it is still not part of
+    # the chain
+    checkImportBlock(restarted, blk4)
+    checkImportBlock(restarted, blk5)
+    checkForkChoice(restarted, blk5, blk5)
+    check restarted.baseHash == blk5.blockHash
+    check restarted.headerByHash(blk5.blockHash).isOk
+    check restarted.headerByHash(C5.blockHash).isErr
+    check restarted.blockByHash(C5.blockHash).isErr
+
   test "fcu with empty fin":
     const info = "setHead finalized"
     let com = env.newCom()

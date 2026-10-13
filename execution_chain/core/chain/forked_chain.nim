@@ -1102,11 +1102,21 @@ proc safeBlock*(c: ForkedChainRef): Result[Block, string] =
 
   c.baseTxFrame.getEthBlock(c.base.hash)
 
+proc persistedHeaderByHash(c: ForkedChainRef, blockHash: Hash32): Result[Header, string] =
+  ## Header of base or a canonical block below it. Import writes headers to
+  ## disk before the block becomes base, so after a crash the disk also holds
+  ## headers of blocks this chain does not track.
+  let header = ?c.baseTxFrame.getBlockHeader(blockHash)
+  if header.number > c.base.number or
+      c.baseTxFrame.getBlockHash(header.number).valueOr(default(Hash32)) != blockHash:
+    return err("No block with hash " & $blockHash)
+  ok(header)
+
 proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string] =
   c.hashToBlock.withValue(blockHash, loc):
     return ok(loc[].header)
 
-  c.baseTxFrame.getBlockHeader(blockHash)
+  c.persistedHeaderByHash(blockHash)
 
 proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint64), string] =
   ## Locate `txHash` on the `latest` lineage: `(block hash, index)`.
@@ -1135,7 +1145,7 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
 proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
   c.hashToBlock.withValue(blockHash, loc):
     return loc[].txFrame.getBlockBody(loc[].header)
-  c.baseTxFrame.getBlockBody(blockHash)
+  c.baseTxFrame.getBlockBody(?c.persistedHeaderByHash(blockHash))
 
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # used by getPayloadBodiesByHash
@@ -1143,7 +1153,7 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
   c.hashToBlock.withValue(blockHash, loc):
     return loc[].txFrame.getEthBlock(loc[].hash)
-  var header = ?c.baseTxFrame.getBlockHeader(blockHash)
+  var header = ?c.persistedHeaderByHash(blockHash)
   var blockBody = c.baseTxFrame.getBlockBody(header).valueOr:
     # Serve portal data if block not found in db
     if c.isPortalActive:
@@ -1159,7 +1169,7 @@ proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Executio
     let blk = ?loc[].txFrame.getEthBlock(loc[].hash)
     return ok(toPayloadBodyV1(blk))
 
-  var header = ?c.baseTxFrame.getBlockHeader(blockHash)
+  var header = ?c.persistedHeaderByHash(blockHash)
   var blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
 
   if blk.isErr:
@@ -1176,7 +1186,7 @@ proc payloadBodyV2ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Executio
     let blk = ?loc[].txFrame.getEthBlock(loc[].hash)
     return ok(toPayloadBodyV2(blk, ?loc[].txFrame.getBlockAccessList(loc[].hash)))
 
-  var header = ?c.baseTxFrame.getBlockHeader(blockHash)
+  var header = ?c.persistedHeaderByHash(blockHash)
   var blk = c.baseTxFrame.getExecutionPayloadBodyV2(header)
 
   if blk.isErr:
@@ -1273,7 +1283,7 @@ proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Stor
       let header = ?loc[].txFrame.getBlockHeader(loc[].hash)
       return loc[].txFrame.getReceipts(header.receiptsRoot)
 
-  let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
+  let header = c.persistedHeaderByHash(blockHash).valueOr:
     return err("Block header not found")
 
   c.baseTxFrame.getReceipts(header.receiptsRoot)
@@ -1284,7 +1294,7 @@ proc receiptByBlockHashAndIndex*(c: ForkedChainRef, blockHash: Hash32, index: ui
       let header = ?loc[].txFrame.getBlockHeader(loc[].hash)
       return loc[].txFrame.getReceiptByIndex(header.receiptsRoot, index.uint16)
 
-  let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
+  let header = c.persistedHeaderByHash(blockHash).valueOr:
     return err("Block header not found")
 
   c.baseTxFrame.getReceiptByIndex(header.receiptsRoot, index.uint16)
@@ -1294,7 +1304,7 @@ proc txByBlockHashAndIndex*(c: ForkedChainRef, blockHash: Hash32, index: uint64)
     c.hashToBlock.withValue(blockHash, loc):
       return loc[].txFrame.getTransactionByIndex(loc[].header.txRoot, index.uint16)
 
-  let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
+  let header = c.persistedHeaderByHash(blockHash).valueOr:
     return err("Block header not found")
 
   c.baseTxFrame.getTransactionByIndex(header.txRoot, index.uint16)
