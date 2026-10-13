@@ -118,6 +118,15 @@ proc init*(
 proc dispose*(evm: AsyncEvm) =
   evm.com.db.close()
 
+proc blockHashResolver(blockHashes: ref Table[BlockNumber, Hash32]): BlockHashFn =
+  ## Serves the block hashes fetched during one call. A separate proc, so the
+  ## closure captures the table only, not the async call's environment.
+  proc(n: BlockNumber): Opt[Hash32] =
+    if n in blockHashes[]:
+      Opt.some(blockHashes[].getOrDefault(n))
+    else:
+      Opt.none(Hash32)
+
 proc callFetchingState(
     evm: AsyncEvm,
     vmState: BaseVMState,
@@ -138,7 +147,11 @@ proc callFetchingState(
     fetchedAccounts = initHashSet[Address]()
     fetchedStorage = initHashSet[(Address, UInt256)]()
     fetchedCode = initHashSet[Address]()
-    fetchedBlockHashes = initHashSet[BlockNumber]()
+    fetchedBlockHashes = new Table[BlockNumber, Hash32]
+
+  # Block hashes are served from the call's frame and die with it. Written to
+  # the shared database, they would outlive the call, and a reorg.
+  vmState.ledger.txFrame.blockHashFn = blockHashResolver(fetchedBlockHashes)
 
   # Set code of the 'to' address in the EVM so that we can execute the transaction
   let code = (await evm.backend.getCode(header, to)).valueOr:
@@ -229,7 +242,7 @@ proc callFetchingState(
           i += batch.len()
 
       for number, blockHash in vmState.ledger.getBlockHashesCache():
-        if number notin fetchedBlockHashes:
+        if number notin fetchedBlockHashes[]:
           debug "Fetching block hash", blockNumber = number
           let blockHashFut = evm.backend.getBlockHash(header, number)
           blockHashQueries.add(BlockHashQuery.init(number, blockHashFut))
@@ -275,8 +288,7 @@ proc callFetchingState(
       for q in blockHashQueries:
         let blockHash = (await q.blockHashFut).valueOr:
           return err("Unable to get block hash")
-        vmState.ledger.txFrame.addBlockNumberToHashLookup(q.number, blockHash)
-        fetchedBlockHashes.incl(q.number)
+        fetchedBlockHashes[][q.number] = blockHash
 
     except CancelledError as e:
       raise e
