@@ -32,13 +32,13 @@ proc installPortalCommonApiHandlers*(
   const networkStr = network.symbolName()
 
   rpc("portal_" & networkStr & "NodeInfo") do() -> NodeInfo:
-    return p.routingTable.getNodeInfo()
+    return p.localNode.getNodeInfo()
 
   rpc("portal_" & networkStr & "RoutingTableInfo") do() -> RoutingTableInfo:
     return getRoutingTableInfo(p.routingTable)
 
   rpc("portal_" & networkStr & "AddEnr") do(enr: Record) -> bool:
-    let node = Node.fromRecord(enr)
+    let node = DiscoveryNode.fromRecord(enr)
     if p.addNode(node) == Added:
       p.routingTable.setJustSeen(node)
       true
@@ -48,7 +48,7 @@ proc installPortalCommonApiHandlers*(
   rpc("portal_" & networkStr & "AddEnrs") do(enrs: seq[Record]) -> bool:
     # Note: unspecified RPC, but useful for our local testnet test
     for enr in enrs:
-      let node = Node.fromRecord(enr)
+      let node = DiscoveryNode.fromRecord(enr)
       if p.addNode(node) == Added:
         p.routingTable.setJustSeen(node)
 
@@ -124,13 +124,13 @@ proc installPortalCommonApiHandlers*(
       raise newException(ValueError, $nodes.error)
     else:
       return nodes.get().map(
-          proc(n: Node): Record =
+          proc(n: DiscoveryNode): Record =
             n.record
         )
 
   rpc("portal_" & networkStr & "RecursiveFindNodes") do(nodeId: NodeId) -> seq[Record]:
     let discovered = await p.lookup(nodeId)
     return discovered.map(
-      proc(n: Node): Record =
+      proc(n: DiscoveryNode): Record =
         n.record
     )

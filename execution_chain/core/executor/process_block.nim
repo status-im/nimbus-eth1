@@ -228,6 +228,7 @@ proc procBlkPreamble(
 proc procBlkEpilogue(
     vmState: BaseVMState,
     blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
     skipValidation: bool,
     skipReceipts: bool,
     skipStateRootCheck: bool,
@@ -275,8 +276,13 @@ proc procBlkEpilogue(
 
       let
         bal = vmState.balTracker.getBlockAccessList().get()
-        balHash = bal[].computeBlockAccessListHash()
-      if header.blockAccessListHash.get != balHash:
+        matches =
+          if blockAccessList.isSome():
+            bal[] == blockAccessList.get()[]
+          else:
+            bal[].computeBlockAccessListHash() == header.blockAccessListHash.get
+      if not matches:
+        let balHash = bal[].computeBlockAccessListHash()
         debug "wrong blockAccessListHash, generated block access list does not " &
           "match expected blockAccessListHash in header",
           blockNumber = header.number,
@@ -374,7 +380,9 @@ proc processBlock*(
     skipStateRootCheck = false,
     skipPostExecBalCheck = false,
 ): Result[void, string] =
-  ## Generalised function to processes `blk` for any network.
+  ## Generalised function to processes `blk` for any network. A given
+  ## `blockAccessList` must already have been validated against the header's
+  ## `blockAccessListHash`.
 
   vmState.withBalPrefetch(blockAccessList):
     ?vmState.procBlkPreamble(
@@ -385,7 +393,10 @@ proc processBlock*(
     if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
       vmState.calculateReward(blk.header, blk.uncles)
 
-    ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck, skipPostExecBalCheck)
+    ?vmState.procBlkEpilogue(
+      blk, blockAccessList, skipValidation, skipReceipts, skipStateRootCheck,
+      skipPostExecBalCheck,
+    )
 
   ok()
 
