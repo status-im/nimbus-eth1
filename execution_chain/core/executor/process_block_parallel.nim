@@ -33,7 +33,7 @@ import
 
 from ../../transaction/call_types import intrinsicGas, IntrinsicGas
 
-const parallelSenderRecoveryMinTxs* = 5
+const parallelSenderRecoveryMinTxs* {.intdefine.} = 5
 
 type
   OptimisticPrefetchCtx* = object
@@ -92,6 +92,8 @@ proc recoverAndPrefetchTask*(
 
   # Recover the sender from the signature.
   let sender = e[].tx[].recoverSenderCached().valueOr:
+    e[].sender = default(Address)
+    e[].senderReady.store(true, moRelease)
     return true
   e[].sender = sender
   e[].senderReady.store(true, moRelease)
@@ -163,7 +165,7 @@ template withSenderParallel*(
     # use locking on the frame data structures.
     ctx.txFrame = vmState.ledger.txFrame.parent()
   ctx.cancelled.store(false, moRelease)
-  ctx.currentIndex.store(0, moRelease)
+  ctx.currentIndex.store(-1, moRelease)
   let ctxPtr = ctx.addr
 
   # Spawn one task per transaction that recovers the sender and, when prefetch

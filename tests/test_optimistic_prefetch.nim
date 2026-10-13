@@ -90,6 +90,26 @@ proc initEnv(): PrefetchEnv =
     vmState: BaseVMState.new(parent, header, com, base.txFrameBegin()),
   )
 
+proc initCtx(ctx: var OptimisticPrefetchCtx, env: PrefetchEnv) =
+  privateAccess(OptimisticPrefetchCtx)
+  ctx.prefetch = true
+  ctx.parent = env.vmState.parent
+  ctx.blockCtx = env.vmState.blockCtx
+  ctx.com = env.vmState.com
+  ctx.txFrame = env.vmState.ledger.txFrame.parent()
+  ctx.cancelled.store(false, moRelease)
+  ctx.currentIndex.store(-1, moRelease)
+
+proc invalidSignatureTx(nonce: uint64, chainId: ChainId): Transaction =
+  result = createTx(nonce, chainId)
+  result.R = 0.u256
+
+proc blockerTask(started: ptr Atomic[int], release: ptr Atomic[bool]): bool {.nimcall.} =
+  discard started[].fetchAdd(1, moRelease)
+  while not release[].load(moAcquire):
+    cpuRelax()
+  true
+
 proc collectTask(): bool {.nimcall.} =
   GC_fullCollect()
   true
@@ -120,14 +140,9 @@ when defined(gcRefc):
         txs = @[createTx(0, env.com.chainId)]
         ctx: OptimisticPrefetchCtx
         entry: OptimisticTxEntry
-      ctx.prefetch = true
-      ctx.parent = env.vmState.parent
-      ctx.blockCtx = env.vmState.blockCtx
-      ctx.com = env.vmState.com
-      ctx.txFrame = env.vmState.ledger.txFrame.parent()
-      ctx.cancelled.store(false, moRelease)
+      ctx.initCtx(env)
       entry.tx = txs[0].addr
-      entry.txIndex = 1
+      entry.txIndex = 0
 
       let before = cellRefcount(txs[0].payload)
       let ran = sync(env.com.taskpool.spawn recoverAndPrefetchTask(ctx.addr, entry.addr))
@@ -136,14 +151,88 @@ when defined(gcRefc):
       check entry.sender == env.sender
       check after == before
 
+    test "stale or cancelled task skips sender recovery and prefetch":
+      privateAccess(OptimisticPrefetchCtx)
+      privateAccess(OptimisticTxEntry)
+      let env = initEnv()
+      defer:
+        env.com.shutdownTaskpool()
+
+      var txs = @[createTx(0, env.com.chainId)]
+      for (currentIndex, cancelled) in [(0, false), (1, false), (-1, true)]:
+        var
+          ctx: OptimisticPrefetchCtx
+          entry: OptimisticTxEntry
+        ctx.initCtx(env)
+        ctx.currentIndex.store(currentIndex, moRelease)
+        ctx.cancelled.store(cancelled, moRelease)
+        entry.tx = txs[0].addr
+        entry.txIndex = 0
+
+        check sync(env.com.taskpool.spawn recoverAndPrefetchTask(ctx.addr, entry.addr))
+        check not entry.senderReady.load(moAcquire)
+        check entry.sender == default(Address)
+
+    test "worker publishes the zero address for an invalid signature":
+      privateAccess(OptimisticPrefetchCtx)
+      privateAccess(OptimisticTxEntry)
+      let env = initEnv()
+      defer:
+        env.com.shutdownTaskpool()
+
+      var
+        txs = @[invalidSignatureTx(0, env.com.chainId)]
+        ctx: OptimisticPrefetchCtx
+        entry: OptimisticTxEntry
+      check txs[0].recoverSenderCached().isNone()
+      ctx.initCtx(env)
+      entry.tx = txs[0].addr
+      entry.txIndex = 0
+
+      check sync(env.com.taskpool.spawn recoverAndPrefetchTask(ctx.addr, entry.addr))
+      check entry.senderReady.load(moAcquire)
+      check entry.sender == default(Address)
+
+    test "senders match serial recovery with and without free workers":
+      let env = initEnv()
+      defer:
+        env.com.shutdownTaskpool()
+
+      var txs = (0'u64 ..< 6'u64).toSeq().mapIt(createTx(it, env.com.chainId))
+      txs[3] = invalidSignatureTx(3, env.com.chainId)
+
+      for holdWorkers in [false, true]:
+        var
+          started: Atomic[int]
+          release: Atomic[bool]
+          blockers: seq[Flowvar[bool]]
+          indices: seq[int]
+          senders: seq[Address]
+        try:
+          if holdWorkers:
+            for _ in 1 ..< env.com.taskpool.numThreads:
+              blockers.add env.com.taskpool.spawn blockerTask(started.addr, release.addr)
+            while started.load(moAcquire) < blockers.len:
+              cpuRelax()
+
+          env.vmState.withSenderParallel(txs, Opt.none(BlockAccessListRef)):
+            indices.add txIndex
+            senders.add sender
+        finally:
+          release.store(true, moRelease)
+          for f in blockers.mitems():
+            discard sync(f)
+
+        check indices == (0 ..< txs.len).toSeq()
+        for i, sender in senders:
+          check sender == (if i == 3: default(Address) else: env.sender)
+
     test "concurrent main and worker execution keeps payload refcounts stable":
       let env = initEnv()
       defer:
         env.com.shutdownTaskpool()
 
-      var txs = (0'u64 ..< parallelSenderRecoveryMinTxs.uint64).toSeq().mapIt(
-        createTx(it, env.com.chainId)
-      )
+      var txs = (0'u64 ..< 4'u64).toSeq().mapIt(createTx(it, env.com.chainId))
       let before = txs.mapIt(cellRefcount(it.payload))
 
       for _ in 0 ..< 5000:
