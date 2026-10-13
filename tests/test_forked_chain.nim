@@ -1292,6 +1292,54 @@ suite "ForkedChainRef tests":
     check db.get(fcStateKey(0).toOpenArray).isErr
     check db.get(fcStateKey(1).toOpenArray).isErr
 
+  test "snapshot invalidation deletes the frame blobs of its blocks":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+      db = chain.baseTxFrame
+    for blk in [blk1, blk2, blk3, B4]:
+      checkImportBlock(chain, blk)
+    check chain.serialize(db).isOk
+    for blk in [blk1, blk2, blk3, B4]:
+      check db.hasKey(txFrameKey(blk.blockHash).toOpenArray)
+
+    # A snapshot from an older build: the manifest does not decode
+    check db.put(fcStateKey(0).toOpenArray, [1'u8]).isOk
+    check ForkedChainRef.init(com).deserialize().isErr
+
+    # Startup as `basicServices` does it. A block that is never imported
+    # again (B4) must not keep its blob
+    check db.invalidateFcSnapshot().isOk
+    for blk in [blk1, blk2, blk3, B4]:
+      check not db.hasKey(txFrameKey(blk.blockHash).toOpenArray)
+
+  test "an interrupted snapshot invalidation is finished by the next one":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+      db = chain.baseTxFrame
+      backendDel = db.kvt.delKvpFn
+    defer: db.kvt.delKvpFn = backendDel
+    for blk in [blk1, blk2, blk3]:
+      checkImportBlock(chain, blk)
+    check chain.serialize(db).isOk
+    # The base and three blocks
+    check db.hasKey(fcStateKey(4).toOpenArray)
+
+    # Stop midway, as a crash would
+    db.kvt.delKvpFn = proc(key: openArray[byte]): Result[void, KvtError] =
+      if key == fcStateKey(3).toOpenArray:
+        return err(RdbBeDriverDelError)
+      backendDel(key)
+    check db.invalidateFcSnapshot().isErr
+    db.kvt.delKvpFn = backendDel
+
+    check db.invalidateFcSnapshot().isOk
+    for i in 0'u64 .. 4'u64:
+      check not db.hasKey(fcStateKey(i).toOpenArray)
+    for blk in [blk1, blk2, blk3]:
+      check not db.hasKey(txFrameKey(blk.blockHash).toOpenArray)
+
   test "failed serialization does not publish a partial snapshot":
     let
       com = env.newCom()

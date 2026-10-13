@@ -138,12 +138,21 @@ proc invalidateFcSnapshot*(db: CoreDbTxRef): CoreDbRc[void] =
   # shared database changes, a restart must not load the old manifest.
   # Delete key by key: tx and receipt entries (`hashIndexKey`) carry no kind
   # prefix, so a range over the `fcState` kind byte would delete them too.
-  # The manifest goes first, the block entries are numbered from 1 up.
+  # The manifest goes first. The block entries are numbered from 1 up and go
+  # from the top down, so an interrupted run leaves 1..k for the next one.
+  # Each entry takes its block's frame blob along: a load copies the blob into
+  # memory, a rejected snapshot never reads it.
   ?db.del(fcStateKey(0).toOpenArray)
-  var i = 1'u64
-  while ?db.hasKeyRc(fcStateKey(i).toOpenArray):
-    ?db.del(fcStateKey(i).toOpenArray)
-    inc i
+  var n = 0'u64
+  while ?db.hasKeyRc(fcStateKey(n + 1).toOpenArray):
+    inc n
+  for i in countdown(n, 1'u64):
+    let key = fcStateKey(i)
+    try:
+      ?db.deleteTxFrame(rlp.decode(?db.get(key.toOpenArray), StoredBlock).hash)
+    except RlpError:
+      discard # the entry does not decode, its block hash is unknown
+    ?db.del(key.toOpenArray)
   ok()
 
 proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbError] =
