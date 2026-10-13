@@ -747,6 +747,9 @@ proc rlpxAccept*(
     trace "P2P error during accept", err = exc.msg
     rlpx_accept_failure.inc(labelValues = [$exc.name])
     return nil
+  except CancelledError as exc:
+    node.connectingNodes.excl(peer.remote)
+    raise exc
 
   debug "Peer accepted", capabilities = response.capabilities, peer=peer.clientId
 
