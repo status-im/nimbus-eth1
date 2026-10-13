@@ -10,10 +10,11 @@
 {.used.}
 
 import
-  std/[sequtils, typetraits],
+  std/[sequtils, strutils, typetraits],
   unittest2,
   testutils,
   chronos,
+  eth/rlp,
   ../../execution_chain/networking/p2p,
   ../../execution_chain/sync/wire_protocol,
   ../../execution_chain/core/chain/forked_chain,
@@ -28,6 +29,14 @@ func testHash(b: byte): Hash32 =
   var data: array[32, byte]
   data[31] = b
   Hash32(data)
+
+proc getStorageRangesUnbounded(
+    peer: Peer;
+      ): Future[Opt[StorageRangesPacket]]
+      {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
+  snap2.rlpxSendRequest(peer, timeout, GetStorageRangesMsg,
+    testHash(1), @[testHash(4), testHash(5)], newSeq[byte](), newSeq[byte](),
+    1024'u64)
 
 procSuite "devp2p snap Tests":
   asyncTest "snap/2 requests are answered":
@@ -56,8 +65,10 @@ procSuite "devp2p snap Tests":
         rootHash: testHash(1), startingHash: testHash(2), limitHash: testHash(3),
         responseBytes: 1024), timeout)).isSome()
       (await peer.getStorageRanges(StorageRangesRequest(
-        rootHash: testHash(1), accountHashes: @[testHash(4)], startingHash: testHash(2),
-        limitHash: testHash(3), responseBytes: 1024), timeout)).isSome()
+        rootHash: testHash(1), accountHashes: @[testHash(4)],
+        startingHash: testHash(2).SnapStartHash,
+        limitHash: testHash(3).SnapLimitHash, responseBytes: 1024), timeout)).isSome()
+      (await peer.getStorageRangesUnbounded()).isSome()
       (await peer.getByteCodes(ByteCodesRequest(
         hashes: @[testHash(5), testHash(6)], bytes: 1024), timeout)).isSome()
       # Served like `eth/71`: request order kept, `0x80` for an unavailable BAL.
@@ -92,8 +103,9 @@ procSuite "devp2p snap Tests":
         rootHash: testHash(1), startingHash: testHash(2), limitHash: testHash(3),
         responseBytes: 1024), timeout)).isSome()
       (await peer.getStorageRanges(StorageRangesRequest(
-        rootHash: testHash(1), accountHashes: @[testHash(4)], startingHash: testHash(2),
-        limitHash: testHash(3), responseBytes: 1024), timeout)).isSome()
+        rootHash: testHash(1), accountHashes: @[testHash(4)],
+        startingHash: testHash(2).SnapStartHash,
+        limitHash: testHash(3).SnapLimitHash, responseBytes: 1024), timeout)).isSome()
       (await peer.getByteCodes(ByteCodesRequest(
         hashes: @[testHash(5), testHash(6)], bytes: 1024), timeout)).isSome()
       (await peer.getTrieNodes(TrieNodesRequest(
@@ -103,3 +115,25 @@ procSuite "devp2p snap Tests":
 
     await env2.close()
     await env1.close()
+
+suite "snap GetStorageRanges bounds":
+  test "empty bounds cover the whole range, 32 byte bounds are kept":
+    var w = initRlpWriter()
+    w.startList(5)
+    w.append(testHash(1))
+    w.append(@[testHash(4)])
+    w.append(newSeq[byte]())
+    w.append(newSeq[byte]())
+    w.append(1024'u64)
+    let
+      unbounded = rlp.decode(w.finish(), StorageRangesRequest)
+      bounded = rlp.decode(rlp.encode(StorageRangesRequest(
+        rootHash: testHash(1), accountHashes: @[testHash(4)],
+        startingHash: testHash(2).SnapStartHash,
+        limitHash: testHash(3).SnapLimitHash, responseBytes: 1024)),
+        StorageRangesRequest)
+    check:
+      unbounded.startingHash.to(Hash32) == default(Hash32)
+      unbounded.limitHash.to(Hash32) == Hash32.fromHex("0x" & "ff".repeat(32))
+      bounded.startingHash.to(Hash32) == testHash(2)
+      bounded.limitHash.to(Hash32) == testHash(3)
