@@ -32,7 +32,7 @@ type
 
   PeerManagerRef* = ref object
     state: PMState
-    pool: PeerPool
+    node: EthereumNode
     maxRetryCount: int # zero == infinite
     retryInterval: int # in seconds
     reconnectStates: Table[Node,ReconnectState]
@@ -65,7 +65,7 @@ proc reconnect(pm: PeerManagerRef) {.async, gcsafe.} =
     if not n.connected and pm.state == Running:
       if n.retryCount < pm.maxRetryCount or pm.maxRetryCount == 0:
         trace "Reconnecting to", remote=n.node.node
-        await pm.pool.connectToNode(n.node)
+        await pm.node.connectToNode(n.node)
         inc n.retryCount
       elif n.retryCount == pm.maxRetryCount:
         trace "Exceed max retry count, give up reconnecting", remote=n.node.node
@@ -97,7 +97,7 @@ proc setupManager(pm: PeerManagerRef, boot: BootstrapNodes) =
   po.addProtocol eth69
   po.addProtocol eth70
   po.addProtocol eth71
-  pm.pool.addObserver(pm, po)
+  pm.node.peerPool.addObserver(pm, po)
 
   for enode in boot.enodes:
     if enode.address.tcpPort == Port(0):
@@ -125,12 +125,12 @@ proc setupManager(pm: PeerManagerRef, boot: BootstrapNodes) =
     pm.reconnectStates[state.node] = state
 
 proc new*(_: type PeerManagerRef,
-          pool: PeerPool,
+          node: EthereumNode,
           retryInterval: int,
           maxRetryCount: int,
           nodes: BootstrapNodes): PeerManagerRef =
   result = PeerManagerRef(
-    pool: pool,
+    node: node,
     state: Starting,
     maxRetryCount: max(0, maxRetryCount),
     retryInterval: max(5, retryInterval)

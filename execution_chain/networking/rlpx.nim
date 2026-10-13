@@ -759,28 +759,28 @@ proc rlpxAccept*(
   # In case there is an outgoing connection started with this peer we give
   # precedence to that one and we disconnect here with `AlreadyConnected`
   if peer.remote in node.peerPool.connectedNodes or
-      peer.remote in node.peerPool.connectingNodes:
+      peer.remote in node.connectingNodes:
     trace "Duplicate connection in rlpxAccept"
     rlpx_accept_failure.inc(labelValues = [$AlreadyConnected])
     return nil
 
-  node.peerPool.connectingNodes.incl(peer.remote)
+  node.connectingNodes.incl(peer.remote)
 
   try:
     await postHelloSteps(peer, response)
   except PeerDisconnected as exc:
-    node.peerPool.connectingNodes.excl(peer.remote)
+    node.connectingNodes.excl(peer.remote)
     debug "Disconnect while accepting", reason = exc.reason, err = exc.msg
     rlpx_accept_failure.inc(labelValues = [$exc.reason])
     return nil
   except UselessPeerError as exc:
-    node.peerPool.connectingNodes.excl(peer.remote)
+    node.connectingNodes.excl(peer.remote)
     debug "Useless peer while accepting", err = exc.msg
 
     rlpx_accept_failure.inc(labelValues = [$UselessPeer])
     return nil
   except EthP2PError as exc:
-    node.peerPool.connectingNodes.excl(peer.remote)
+    node.connectingNodes.excl(peer.remote)
     trace "P2P error during accept", err = exc.msg
     rlpx_accept_failure.inc(labelValues = [$exc.name])
     return nil

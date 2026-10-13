@@ -25,7 +25,12 @@ logScope:
   topics = "p2p"
 
 type
+  ForkIdProc* = proc(): ForkId {.noSideEffect, raises: [].}
+    ## Current fork id of the chain, used to keep the advertised ENR `eth`
+    ## entry up to date.
+
   CompatibleForkIdProc* = proc(id: ForkId): bool {.noSideEffect, raises: [].}
+    ## Whether a fork id found in a peer's ENR is worth dialing.
 
   Eth1Discovery* = ref object
     discv5: discv5_protocol.Protocol
@@ -53,6 +58,12 @@ func eligibleNode(proto: Eth1Discovery, rec: enr.Record): bool =
     forkId = ethValue[0]
 
   proto.compatibleForkId(forkId)
+
+func toNode(rec: enr.Record): Opt[p2p_node.Node] =
+  ## Turn a discovered ENR into a dialable `Node`.
+  let enode = ENode.fromEnr(rec).valueOr:
+    return Opt.none(p2p_node.Node)
+  Opt.some(newNode(enode))
 
 #------------------------------------------------------------------------------
 # Public functions
@@ -92,15 +103,17 @@ proc start*(proto: Eth1Discovery) =
   proto.discv5.start()
 
 proc lookupRandomNode*(
-    proto: Eth1Discovery, queue: AsyncQueue[p2p_node.Node]
-) {.async: (raises: [CancelledError]).} =
-  let discv5Nodes = await proto.discv5.queryRandom()
-  for discv5Node in discv5Nodes:
+    proto: Eth1Discovery
+): Future[seq[p2p_node.Node]] {.async: (raises: [CancelledError]).} =
+  ## Random discovery lookup, returning the nodes that are worth dialing.
+  var res: seq[p2p_node.Node]
+  for discv5Node in await proto.discv5.queryRandom():
     if not proto.eligibleNode(discv5Node.record):
       continue
-    let enode = ENode.fromEnr(discv5Node.record).valueOr:
+    let n = toNode(discv5Node.record).valueOr:
       continue
-    await queue.addLast(newNode(enode))
+    res.add(n)
+  res
 
 func getEnr*(proto: Eth1Discovery): Opt[enr.Record] =
   ## Get the ENR of the local node from DiscoveryV5.

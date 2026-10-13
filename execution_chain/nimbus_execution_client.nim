@@ -156,7 +156,7 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
   let staticPeers = config.getStaticPeers()
   if staticPeers.len > 0:
     nimbus.peerManager = PeerManagerRef.new(
-      nimbus.ethNode.peerPool,
+      nimbus.ethNode,
       config.reconnectInterval,
       config.reconnectMaxRetry,
       staticPeers
