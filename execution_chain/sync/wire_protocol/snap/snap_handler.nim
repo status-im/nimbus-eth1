@@ -12,8 +12,9 @@
 
 import
   pkg/[chronicles, chronos],
-  ../../../networking/p2p,
+  ../../../core/chain/forked_chain,
   ../../../utils/utils,
+  ../eth/[eth_broadcast, eth_handler],
   ./[snap_trace_config, snap_types]
 
 logScope:
@@ -23,8 +24,8 @@ logScope:
 # Public constructor/destructor
 # ------------------------------------------------------------------------------
 
-proc new*(T: type SnapWireStateRef, node: EthereumNode): T =
-  T()
+proc new*(T: type SnapWireStateRef; chain: ForkedChainRef): T =
+  T(chain: chain)
 
 # ------------------------------------------------------------------------------
 # Public functions: snap wire protocol handlers
@@ -85,11 +86,11 @@ proc getBlockAccessLists*(
     ctx: SnapWireStateRef;
     req: SnapBalRequest;
       ): Opt[BlockAccessListsPacket] =
-  ## Note that there is a working version for BALs at `../eth/eth_handler`
+  ## Same response as `eth/71` `GetBlockAccessLists`
+  let softLimit = min(req.bytes, SOFT_RESPONSE_LIMIT.uint64).int
   when trSnapTraceHandlerOk:
-    trace "getBlockAccessLists: not implemented",
-      nReq=req.blockHashes.len
-  err()
+    trace "getBlockAccessLists", nReq=req.blockHashes.len, softLimit
+  ok(ctx.chain.getBlockAccessLists(req.blockHashes, softLimit))
 
 # ------------------------------------------------------------------------------
 # End

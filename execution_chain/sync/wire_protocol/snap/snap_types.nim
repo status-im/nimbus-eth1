@@ -15,6 +15,8 @@ import
   pkg/[chronicles, eth/common],
   ../../../constants
 
+from ../../../core/chain/forked_chain import ForkedChainRef
+
 # Borrow from eth71 and later
 from ../eth/eth_types import
   RawBlockAccessList,
@@ -35,6 +37,7 @@ type
 
   SnapWireStateRef* = ref object of RootRef
     ## Internal state
+    chain*: ForkedChainRef
 
   # ---------
 
