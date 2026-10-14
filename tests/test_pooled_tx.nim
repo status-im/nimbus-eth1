@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -108,6 +108,7 @@ proc tx6(i: int): PooledTransaction =
       txType:              TxEip4844,
       chainId:             chainId(1),
       nonce:               i.AccountNonce,
+      to:                  Opt.some(recipient),
       gasLimit:            123457.GasInt,
       maxPriorityFeePerGas:42.GasInt,
       maxFeePerGas:        10.GasInt,
@@ -127,6 +128,7 @@ proc tx7(i: int): PooledTransaction =
       txType:              TxEip4844,
       chainID:             chainId(1),
       nonce:               i.AccountNonce,
+      to:                  Opt.some(recipient),
       gasLimit:            123457.GasInt,
       maxPriorityFeePerGas:42.GasInt,
       maxFeePerGas:        10.GasInt,
@@ -211,9 +213,6 @@ suite "Pooled Transactions":
 
   test "Minimal Blob Tx":
     roundTrip(tx7, 8)
-
-  test "Minimal Blob Tx contract creation":
-    roundTrip(tx8, 9)
 
   test "EIP 7702":
     roundTrip(txEip7702, 9)

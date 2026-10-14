@@ -22,6 +22,17 @@ const
   localSupportedVersionMin* = 2'u8
   localSupportedVersionMax* = 2'u8
 
+func read*(rlp: var Rlp, T: type PortalEnrField): T {.raises: [RlpError].} =
+  # We use `rlp` encoded list as it allows us to add more items at the end in
+  # the future upgrades. The implementation should take that into consideration.
+  # https://github.com/ethereum/portal-network-specs/blob/master/portal-wire-protocol.md#enr-record
+  rlp.consumeList(RlpListMode.IgnoreAdditionalElements):
+    let
+      pvMin = rlp.read(uint8)
+      pvMax = rlp.read(uint8)
+      chainId = rlp.read(ChainId)
+  T(pvMin: pvMin, pvMax: pvMax, chainId: chainId)
+
 func init*(T: type PortalEnrField, pvMin: uint8, pvMax: uint8, chainId: ChainId): T =
   T(pvMin: pvMin, pvMax: pvMax, chainId: chainId)
 
