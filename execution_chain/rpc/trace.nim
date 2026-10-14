@@ -225,7 +225,9 @@ proc replayTx(com: CommonRef, chain: ForkedChainRef, blk: Block,
               txIndex: int, blockHash: Hash32,
               traceTypes: set[TraceTypeFlag]): ParityTracer =
   let
-    txFrame    = chain.txFrame(blk.header)
+    # Replay needs the pre-state of the block: execute on a throwaway child
+    # of the parent's frame so the shared chain state is never modified.
+    txFrame    = chain.txFrame(blk.header.parentHash).txFrameBegin()
     tracerInst = newParityTracer(traceTypes)
     vmState    = BaseVMState.new(
       Header(number: blk.header.number - 1), blk.header, com, txFrame)
@@ -294,7 +296,7 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         tag        = quantityTag.get(blockId("latest"))
         header     = chain.headerFromTag(tag).valueOr:
           raise invalidParams(error)
-        txFrame    = chain.txFrame(header)
+        txFrame    = chain.txFrame(header).txFrameBegin()
         flags      = parseTraceTypes(traceTypes)
         tracerInst = newParityTracer(flags)
         vmState    = BaseVMState.new(
@@ -324,7 +326,7 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         tag     = quantityTag.get(blockId("latest"))
         header  = chain.headerFromTag(tag).valueOr:
           raise invalidParams(error)
-        txFrame = chain.txFrame(header)
+        txFrame = chain.txFrame(header).txFrameBegin()
         vmState = BaseVMState.new(
           Header(number: header.number - 1), header, com, txFrame)
       defer:

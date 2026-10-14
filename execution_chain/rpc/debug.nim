@@ -68,7 +68,9 @@ proc traceOptionsToFlags(options: Opt[TraceOptions]): set[TracerFlags] =
 proc traceBlockWith(com: CommonRef, chain: ForkedChainRef, blk: Block,
                     flags: set[TracerFlags]): JsonNode =
   let
-    txFrame    = chain.txFrame(blk.header)
+    # Replay needs the pre-state of the block: execute on a throwaway child
+    # of the parent's frame so the shared chain state is never modified.
+    txFrame    = chain.txFrame(blk.header.parentHash).txFrameBegin()
     tracerInst = newLegacyTracer(flags)
     vmState    = BaseVMState.new(
       Header(number: blk.header.number - 1), blk.header, com, txFrame, tracerInst)
@@ -96,7 +98,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         raise invalidParams("Transaction index out of range")
       let
         flags      = traceOptionsToFlags(options)
-        txFrame    = chain.txFrame(blk.header)
+        txFrame    = chain.txFrame(blk.header.parentHash).txFrameBegin()
         tracerInst = newLegacyTracer(flags)
         vmState    = BaseVMState.new(
           Header(number: blk.header.number - 1), blk.header, com, txFrame)
@@ -129,7 +131,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       let
         header     = chain.headerFromTag(quantityTag).valueOr:
           raise invalidParams(error)
-        txFrame    = chain.txFrame(header)
+        txFrame    = chain.txFrame(header).txFrameBegin()
         flags      = traceOptionsToFlags(options)
         tracerInst = newLegacyTracer(flags)
         vmState    = BaseVMState.new(
