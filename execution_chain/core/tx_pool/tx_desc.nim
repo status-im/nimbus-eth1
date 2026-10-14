@@ -113,7 +113,7 @@ proc setupVMState(com: CommonRef;
     fork = com.toHardFork(pos.timestamp)
     gasLimit = getGasLimit(com, parent, pos.targetGasLimit)
 
-  BaseVMState.new(
+  result = BaseVMState.new(
     parent   = parent,
     blockCtx = BlockContext(
       timestamp    : pos.timestamp,
@@ -129,6 +129,9 @@ proc setupVMState(com: CommonRef;
     txFrame = parentFrame.txFrameBegin(),
     com     = com,
     enableBalTracker = com.isAmsterdamOrLater(pos.timestamp))
+  # A built block may never be imported. Import runs it again and stores the
+  # code then
+  result.ledger.holdCode = true
 
 template append(tab: var TxSenderTab, sn: TxSenderNonceRef) =
   tab[item.sender] = sn

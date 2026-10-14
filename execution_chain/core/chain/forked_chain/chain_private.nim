@@ -94,6 +94,8 @@ proc getVmState(
     txFrame,
     enableBalTracker = enableBalTracker,
   )
+  # Code is stored with the block's other data, once the block is accepted
+  vmState.ledger.holdCode = true
   vmState
 
 proc processBlock*(
@@ -175,6 +177,8 @@ proc processBlock*(
       ?executionWitness.toExecutionWitness().statelessProcessBlock(c.com, blk)
 
     ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
+
+  ?vmState.ledger.storeHeldCode()
 
   # We still need to write header to database
   # because validateUncles still need it
