@@ -76,7 +76,7 @@ proc start*(buddy: SnapPeerRef; info: static[string]): bool =
 
   debug info & ": New peer", peer, nSyncPeers=ctx.nSyncPeers(),
     peerType=buddy.only.peerType, clientId=buddy.peer.clientId,
-    supportsBal=buddy.only.supportsBal, nSnap2Peers=ctx.pool.nSnap2Peers
+    snapVersion=buddy.only.snapVersion, nSnap2Peers=ctx.pool.nSnap2Peers
   true
 
 proc stop*(buddy: SnapPeerRef; info: static[string]) =

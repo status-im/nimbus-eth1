@@ -381,8 +381,9 @@ template storageDownloadCommit*(
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body
 
-    chronicles.info info & ": Cleared partial storage sub-MPTs",
-      nPartMpt, nStoLock=(accPaths.len-nPartMpt)
+    if 0 < accPaths.len:
+      chronicles.info info & ": Cleared partial storage sub-MPTs",
+        nPartMpt, nStoLock=(accPaths.len-nPartMpt)
 
     bodyRc = typeof(bodyRc).ok()
     # End `block body`

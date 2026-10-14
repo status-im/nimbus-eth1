@@ -76,7 +76,7 @@ proc setFirstPivotFromFinNumber(
         # downloader.
         ctx.pool.cacheDB.putHeader(value, info).isErrOr:
           debug info & ": Opportunistically accept pivot", pivot=value.number
-          ctx.pool.balSupported = true
+          ctx.pool.balSupported = true              # so state download ok, now
           return Opt.some(value.number)
   Opt.none(BlockNumber)
 
@@ -183,6 +183,7 @@ template downloadCommit*(
       bodyRc = typeof(bodyRc).err(error)
       break body
 
+    chronicles.info info & ": Ready for state update"
     # End `block body`
 
   bodyRc

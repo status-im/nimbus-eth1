@@ -267,8 +267,9 @@ template codeDownloadCommit*(
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body
 
-    chronicles.info info & ": Cleared missing contract codes",
-      nMissCode, nCodeLock=(accPaths.len-nMissCode)
+    if 0 < accPaths.len:
+      chronicles.info info & ": Cleared missing contract codes",
+        nMissCode, nCodeLock=(accPaths.len-nMissCode)
 
     bodyRc = typeof(bodyRc).ok()
     # End `block body`
