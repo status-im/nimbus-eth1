@@ -32,10 +32,11 @@ type
     value*:    UInt256
 
   TraceCreateAction* = object
-    `from`*:   Address
-    gas*:      Quantity
-    init*:     seq[byte]
-    value*:    UInt256
+    `from`*:         Address
+    gas*:            Quantity
+    init*:           seq[byte]
+    value*:          UInt256
+    creationMethod*: string
 
   TraceSuicideAction* = object
     address*:       Address
@@ -109,6 +110,8 @@ type
     nonce*:   Opt[NonceDiff]
     code*:    Opt[tuple[`from`: seq[byte], to: seq[byte]]]
     storage*: Table[UInt256, StorageDiff]
+    born*:    bool
+    died*:    bool
 
   StateDiff* = Table[Address, AccountDiff]
 

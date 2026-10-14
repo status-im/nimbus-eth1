@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/json,
+  std/[json, strutils],
   stew/byteutils,
   stint,
   json_rpc/rpcserver,
@@ -88,6 +88,8 @@ proc actionToJson(action: TraceAction): JsonNode =
     result["gas"]   = newJString($a.gas)
     result["init"]  = newJString(a.init.to0xHex)
     result["value"] = newJString("0x" & a.value.toHex)
+    if a.creationMethod.len > 0:
+      result["creationMethod"] = newJString(a.creationMethod)
   of takSuicide:
     let a = action.suicideAction
     result["address"]       = newJString(a.address.to0xHex)
@@ -184,49 +186,73 @@ proc vmTraceToJson(vt: VmTrace): JsonNode {.gcsafe.} =
     ops.add vmTraceOpToJson(op)
   result["ops"] = ops
 
+func minHex(v: UInt256): string =
+  "0x" & v.toHex
+
+func minHex(v: uint64): string =
+  minHex(v.u256)
+
+func word32(v: UInt256): string =
+  "0x" & v.toBytesBE.to0xHex[2..^1]
+
+proc markerJson(marker: string, a, b: JsonNode): JsonNode =
+  result = newJObject()
+  case marker
+  of "+": result["+"] = b
+  of "-": result["-"] = a
+  else:
+    let inner = newJObject()
+    inner["from"] = a
+    inner["to"]   = b
+    result["*"]   = inner
+
+proc fieldJson(born, died: bool, changed: bool, a, b: JsonNode): JsonNode =
+  if born:    markerJson("+", a, b)
+  elif died:  markerJson("-", a, b)
+  elif changed: markerJson("*", a, b)
+  else: newJString("=")
+
 proc stateDiffToJson(sd: StateDiff): JsonNode =
   result = newJObject()
-  for addr, diff in sd:
+  for acct, diff in sd:
     let addrJ = newJObject()
-    if diff.balance.isSome:
-      let b  = diff.balance.get
-      let bJ = newJObject()
-      bJ["from"] = newJString("0x" & b.`from`.toHex)
-      bJ["to"]   = newJString("0x" & b.to.toHex)
-      addrJ["balance"] = bJ
-    else:
-      addrJ["balance"] = newJString("=")
-    if diff.nonce.isSome:
-      let n  = diff.nonce.get
-      let nJ = newJObject()
-      nJ["from"] = newJString("0x" & n.`from`.toHex)
-      nJ["to"]   = newJString("0x" & n.to.toHex)
-      addrJ["nonce"] = nJ
-    else:
-      addrJ["nonce"] = newJString("=")
-    if diff.code.isSome:
-      let c  = diff.code.get
-      let cJ = newJObject()
-      cJ["from"] = newJString(c.`from`.to0xHex)
-      cJ["to"]   = newJString(c.to.to0xHex)
-      addrJ["code"] = cJ
-    else:
-      addrJ["code"] = newJString("=")
+    addrJ["balance"] =
+      if diff.balance.isSome:
+        let b = diff.balance.get
+        fieldJson(diff.born, diff.died, true,
+                  newJString(minHex(b.`from`)), newJString(minHex(b.to)))
+      else:
+        newJString("=")
+    addrJ["nonce"] =
+      if diff.nonce.isSome:
+        let n = diff.nonce.get
+        fieldJson(diff.born, diff.died, true,
+                  newJString(minHex(n.`from`)), newJString(minHex(n.to)))
+      else:
+        newJString("=")
+    addrJ["code"] =
+      if diff.code.isSome:
+        let c = diff.code.get
+        fieldJson(diff.born, diff.died, true,
+                  newJString(c.`from`.to0xHex), newJString(c.to.to0xHex))
+      else:
+        newJString("=")
     let storJ = newJObject()
     for slot, sDiff in diff.storage:
-      let sJ = newJObject()
-      sJ["from"] = newJString("0x" & sDiff.`from`.toHex)
-      sJ["to"]   = newJString("0x" & sDiff.to.toHex)
-      storJ["0x" & slot.toHex] = sJ
+      storJ[word32(slot)] =
+        if diff.born:
+          markerJson("+", newJNull(), newJString(word32(sDiff.to)))
+        else:
+          markerJson("*", newJString(word32(sDiff.`from`)),
+                     newJString(word32(sDiff.to)))
     addrJ["storage"] = storJ
-    result[addr.to0xHex] = addrJ
+    result[acct.to0xHex] = addrJ
 
 proc replayTx(com: CommonRef, chain: ForkedChainRef, blk: Block,
               txIndex: int, blockHash: Hash32,
-              traceTypes: set[TraceTypeFlag]): ParityTracer =
+              traceTypes: set[TraceTypeFlag],
+              setLoc = true): ParityTracer =
   let
-    # Replay needs the pre-state of the block: execute on a throwaway child
-    # of the parent's frame so the shared chain state is never modified.
     txFrame    = chain.txFrame(blk.header.parentHash).txFrameBegin()
     tracerInst = newParityTracer(traceTypes)
     vmState    = BaseVMState.new(
@@ -235,18 +261,25 @@ proc replayTx(com: CommonRef, chain: ForkedChainRef, blk: Block,
     vmState.dispose()
     txFrame.dispose()
   for idx, tx in blk.transactions:
+    let sender = tx.recoverSenderCached().expect("valid signature")
     if idx == txIndex:
       vmState.tracer = tracerInst
-    let sender = tx.recoverSenderCached().expect("valid signature")
+      if ttStateDiff in traceTypes:
+        tracerInst.preSnap(vmState.ledger, sender)
+        tracerInst.preSnap(vmState.ledger, blk.header.coinbase)
+        if tx.to.isSome:
+          tracerInst.preSnap(vmState.ledger, tx.to.get)
     discard vmState.processTransaction(tx, sender)
     if idx == txIndex:
       break
-  let txHash = blk.transactions[txIndex].computeRlpHash()
-  for i in 0 ..< tracerInst.results.len:
-    tracerInst.results[i].blockHash            = Opt.some(blockHash)
-    tracerInst.results[i].blockNumber          = Opt.some(blk.header.number)
-    tracerInst.results[i].transactionHash      = Opt.some(txHash)
-    tracerInst.results[i].transactionPosition  = Opt.some(txIndex)
+  tracerInst.finalizeStateDiff(vmState.ledger)
+  if setLoc:
+    let txHash = blk.transactions[txIndex].computeRlpHash()
+    for i in 0 ..< tracerInst.results.len:
+      tracerInst.results[i].blockHash            = Opt.some(blockHash)
+      tracerInst.results[i].blockNumber          = Opt.some(blk.header.number)
+      tracerInst.results[i].transactionHash      = Opt.some(txHash)
+      tracerInst.results[i].transactionPosition  = Opt.some(txIndex)
   tracerInst
 
 proc rewardTraceObject(author: Address, value: UInt256,
@@ -304,8 +337,13 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       defer:
         vmState.dispose()
         txFrame.dispose()
+      if ttStateDiff in flags:
+        tracerInst.preSnap(vmState.ledger, args.`from`.get(default(Address)))
+        if args.to.isSome:
+          tracerInst.preSnap(vmState.ledger, args.to.get)
       let callRes = rpcCallEvm(args, header, vmState).valueOr:
         raise invalidParams(error)
+      tracerInst.finalizeStateDiff(vmState.ledger)
       let res = newJObject()
       res["output"] = newJString(callRes.output.to0xHex)
       res["stateDiff"] =
@@ -350,7 +388,12 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
           flags      = parseTraceTypes(traceTypeStrs)
           tracerInst = newParityTracer(flags)
         vmState.tracer = tracerInst
+        if ttStateDiff in flags:
+          tracerInst.preSnap(vmState.ledger, args.`from`.get(default(Address)))
+          if args.to.isSome:
+            tracerInst.preSnap(vmState.ledger, args.to.get)
         let callRes = rpcCallEvm(args, header, vmState)
+        tracerInst.finalizeStateDiff(vmState.ledger)
         let entry = newJObject()
         entry["output"] = newJString(
           if callRes.isOk: callRes.get.output.to0xHex else: "0x")
@@ -368,12 +411,31 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     proc trace_transaction(txHash: Hash32): JsonNode {.raises: [RpcResponseError].} =
       let
         (blockHash, txIndex) = chain.txDetailsByTxHash(txHash).valueOr:
-          raise invalidParams("Transaction not found")
+          return newJNull()
         blk = chain.blockByHash(blockHash).valueOr:
-          raise invalidParams("Block not found")
+          return newJNull()
         tracer = replayTx(com, chain, blk, int(txIndex), blockHash,
                           {TraceTypeFlag.ttTrace})
       tracesToJson(tracer.results)
+
+    proc trace_get(txHash: Hash32, positions: seq[string]): JsonNode {.raises: [RpcResponseError].} =
+      var path: seq[int]
+      for p in positions:
+        try:
+          path.add parseHexInt(p)
+        except ValueError:
+          raise invalidParams("position entries must be hex quantities")
+      let
+        (blockHash, txIndex) = chain.txDetailsByTxHash(txHash).valueOr:
+          return newJNull()
+        blk = chain.blockByHash(blockHash).valueOr:
+          return newJNull()
+        tracer = replayTx(com, chain, blk, int(txIndex), blockHash,
+                          {TraceTypeFlag.ttTrace})
+      for t in tracer.results:
+        if t.traceAddress == path:
+          return traceObjectToJson(t)
+      newJNull()
 
     proc trace_block(quantityTag: BlockTag): JsonNode {.raises: [RpcResponseError].} =
       let
@@ -396,13 +458,16 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
                                  traceTypes: seq[string]): JsonNode {.raises: [RpcResponseError].} =
       let
         (blockHash, txIndex) = chain.txDetailsByTxHash(txHash).valueOr:
-          raise invalidParams("Transaction not found")
+          return newJNull()
         blk = chain.blockByHash(blockHash).valueOr:
-          raise invalidParams("Block not found")
+          return newJNull()
         flags  = parseTraceTypes(traceTypes)
-        tracer = replayTx(com, chain, blk, int(txIndex), blockHash, flags)
+        tracer = replayTx(com, chain, blk, int(txIndex), blockHash, flags,
+                          setLoc = false)
       let res = newJObject()
       res["output"] = newJString(tracer.output.to0xHex)
+      res["transactionHash"] = newJString(
+        blk.transactions[txIndex].computeRlpHash().to0xHex)
       res["stateDiff"] =
         if ttStateDiff in flags: stateDiffToJson(tracer.stateDiff)
         else: newJNull()
@@ -424,9 +489,12 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         flags     = parseTraceTypes(traceTypes)
       let res = newJArray()
       for i in 0 ..< blk.transactions.len:
-        let tracer = replayTx(com, chain, blk, i, blockHash, flags)
+        let tracer = replayTx(com, chain, blk, i, blockHash, flags,
+                              setLoc = false)
         let entry  = newJObject()
         entry["output"] = newJString(tracer.output.to0xHex)
+        entry["transactionHash"] = newJString(
+          blk.transactions[i].computeRlpHash().to0xHex)
         entry["stateDiff"] =
           if ttStateDiff in flags: stateDiffToJson(tracer.stateDiff)
           else: newJNull()
@@ -436,6 +504,47 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
             vmTraceToJson(tracer.vmTrace.get)
           else: newJNull()
         res.add entry
+      res
+
+    proc trace_rawTransaction(txData: seq[byte],
+                              traceTypes: seq[string]): JsonNode {.raises: [RpcResponseError].} =
+      let tx =
+        try:
+          rlp.decode(txData, Transaction)
+        except RlpError as e:
+          raise invalidParams("invalid raw transaction: " & e.msg)
+      let sender = tx.recoverSenderCached().valueOr:
+        raise invalidParams("invalid transaction signature")
+      let
+        header     = chain.headerFromTag(blockId("latest")).valueOr:
+          raise invalidParams(error)
+        txFrame    = chain.txFrame(header).txFrameBegin()
+        flags      = parseTraceTypes(traceTypes)
+        tracerInst = newParityTracer(flags)
+        vmState    = BaseVMState.new(
+          Header(number: header.number - 1), header, com, txFrame, tracerInst)
+      defer:
+        vmState.dispose()
+        txFrame.dispose()
+      if ttStateDiff in flags:
+        tracerInst.preSnap(vmState.ledger, sender)
+        tracerInst.preSnap(vmState.ledger, header.coinbase)
+        if tx.to.isSome:
+          tracerInst.preSnap(vmState.ledger, tx.to.get)
+      let execRes = vmState.processTransaction(tx, sender)
+      if execRes.isErr:
+        raise invalidParams(execRes.error)
+      tracerInst.finalizeStateDiff(vmState.ledger)
+      let res = newJObject()
+      res["output"] = newJString(tracerInst.output.to0xHex)
+      res["stateDiff"] =
+        if ttStateDiff in flags: stateDiffToJson(tracerInst.stateDiff)
+        else: newJNull()
+      res["trace"] = tracesToJson(tracerInst.results)
+      res["vmTrace"] =
+        if ttVmTrace in flags and tracerInst.vmTrace.isSome:
+          vmTraceToJson(tracerInst.vmTrace.get)
+        else: newJNull()
       res
 
     proc trace_filter(filterReq: TraceFilterRequest): JsonNode {.raises: [RpcResponseError].} =
