@@ -199,11 +199,18 @@ proc read*(
   r.read(seq[byte]).T
 
 proc read*(r: var Rlp, T: type AccBody): T {.gcsafe, raises: [RlpError]} =
-  r.tryEnterList()
-  result.nonce = r.read(AccountNonce)
-  result.balance = r.read(UInt256)
-  result.storageRoot = r.snapRd(SnapRootHash)
-  result.codeHash = r.snapRd(SnapCodeHash)
+  r.consumeList:
+    let
+      nonce = r.read(AccountNonce)
+      balance = r.read(UInt256)
+      storageRoot = r.snapRd(SnapRootHash)
+      codeHash = r.snapRd(SnapCodeHash)
+  T(
+    nonce: nonce,
+    balance: balance,
+    storageRoot: storageRoot,
+    codeHash: codeHash,
+  )
 
 proc read*(r: var Rlp, T: type SnapStartHash): T {.gcsafe, raises: [RlpError]} =
   ## Empty or exactly 32 bytes, any other length is a decoding error.
