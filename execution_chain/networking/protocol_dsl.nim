@@ -374,17 +374,20 @@ macro countFields(fields): untyped =
     inc count
   result = newLit(count)
 
-template wrapRlpxWithPacketException(MSGTYPE: type, peer: Peer, body): untyped =
+template wrapRlpxWithPacketException(
+    MSGTYPE: type, peer: Peer, data: Rlp, body
+): untyped =
   const
     msgName = astToStr(MSGTYPE)
 
   try:
     body
   except rlp.RlpError as exc:
-    discard
     warn "TODO: RLP decoding failed for incoming message",
          msg = msgName, remote = peer.remote,
-         clientId = peer.clientId, err = exc.msg
+         clientId = peer.clientId, err = exc.msg,
+         payload = toHex(
+           data.rawData.toOpenArray(0, min(255, data.rawData.high)))
     await peer.disconnectAndRaise(BreachOfProtocol,
       "Invalid RLP in parameter list for " & msgName)
 
@@ -435,7 +438,7 @@ template rlpxWithPacketHandler*(PROTO: distinct type;
   const
     numFields = countFields(fields)
 
-  wrapRlpxWithPacketException(MSGTYPE, peer):
+  wrapRlpxWithPacketException(MSGTYPE, peer, data):
     var
       rlp = data
       packet {.inject.} = MSGTYPE()
@@ -451,7 +454,7 @@ template rlpxWithPacketResponder*(PROTO: distinct type;
                         peer: Peer;
                         data: Rlp,
                         body): untyped =
-  wrapRlpxWithPacketException(MSGTYPE, peer):
+  wrapRlpxWithPacketException(MSGTYPE, peer, data):
     var rlp = data
     tryEnterList(rlp)
     let reqId = read(rlp, uint64)
@@ -469,7 +472,7 @@ template rlpxWithPacketResponder*(PROTO: distinct type;
   ## Like the variant above, but reads the request fields flat from the
   ## message body ([request-id, field₁, field₂, ...]) instead of as one
   ## nested list ([request-id, [field₁, field₂, ...]]).
-  wrapRlpxWithPacketException(MSGTYPE, peer):
+  wrapRlpxWithPacketException(MSGTYPE, peer, data):
     var rlp = data
     tryEnterList(rlp)
     let reqId = read(rlp, uint64)
@@ -485,7 +488,7 @@ template rlpxWithFutureHandler*(PROTO: distinct type;
                         peer: Peer;
                         data: Rlp,
                         fields: untyped): untyped =
-  wrapRlpxWithPacketException(MSGTYPE, peer):
+  wrapRlpxWithPacketException(MSGTYPE, peer, data):
     var
       rlp = data
       packet = MSGTYPE()
@@ -505,7 +508,7 @@ template rlpxWithFutureHandler*(PROTO: distinct type;
                         peer: Peer;
                         data: Rlp,
                         fields: untyped): untyped =
-  wrapRlpxWithPacketException(MSGTYPE, peer):
+  wrapRlpxWithPacketException(MSGTYPE, peer, data):
     var
       rlp = data
       packet: MSGTYPE
