@@ -37,6 +37,22 @@ type
     compatibleForkId: CompatibleForkIdProc
 
 #------------------------------------------------------------------------------
+# Public helpers
+#------------------------------------------------------------------------------
+
+func decodeEthEntry*(bytes: openArray[byte]): Opt[ForkId] =
+  ## Fork id from the ENR `eth` entry: `entry-value = [[forkHash, forkNext], ...]`.
+  ## Implementations should ignore any additional list elements in `entry-value`.
+  ## https://github.com/ethereum/devp2p/blob/2c19a28b25c29487773ad6b07243e290fa8d65ec/enr-entries/eth.md
+  try:
+    var rlp = rlpFromBytes(bytes)
+    rlp.consumeList(RlpListMode.IgnoreAdditionalElements):
+      let forkId = rlp.read(ForkId)
+    Opt.some(forkId)
+  except RlpError:
+    Opt.none(ForkId)
+
+#------------------------------------------------------------------------------
 # Private functions
 #------------------------------------------------------------------------------
 
@@ -49,13 +65,8 @@ func eligibleNode(proto: Eth1Discovery, rec: enr.Record): bool =
     # Allow all `eth` node to pass if there is no filter
     return true
 
-  let
-    ethValue =
-      try:
-        rlp.decode(bytes, array[1, ForkId])
-      except RlpError:
-        return false
-    forkId = ethValue[0]
+  let forkId = decodeEthEntry(bytes).valueOr:
+    return false
 
   proto.compatibleForkId(forkId)
 
