@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -34,7 +34,7 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
   # Convenience entry, no need to be exact here.
   metrics.set(nec_sync_non_peers_connected,
               # nBuddies might not be commited/updated yet
-              max(0,ctx.node.peerPool.connectedNodes.len - ctx.nSyncPeers()))
+              max(0,ctx.node.numPeers - ctx.nSyncPeers()))
 
 # ---------------
 

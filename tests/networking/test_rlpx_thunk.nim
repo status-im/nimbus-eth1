@@ -14,7 +14,8 @@ import
   unittest2,
   testutils,
   chronos, stew/byteutils,
-  ../../execution_chain/networking/p2p,
+  eth/rlp,
+  ../../execution_chain/networking/[devp2p_wire, p2p],
   ./stubloglevel,
   ./p2p_test_helper
 
@@ -67,3 +68,20 @@ proc testPayloads(filename: string) =
     waitFor env2.close()
 
 testPayloads(sourceDir / "test_rlpx_thunk.json")
+
+suite "devp2p hello packet decoding (via read)":
+  test "version 22 + additional list elements for EIP-8":
+    # https://eips.ethereum.org/EIPS/eip-8
+    let hello = rlp.decode(
+      hexToSeqByte(
+        "f87137916b6e6574682f76302e39312f706c616e39cdc5836574683dc6846d6f726b1682270fb840" &
+        "fda1cff674c90c9a197539fe3dfb53086ace64f83ed7c6eabec741f7f381cc803e52ab2cd55d5569" &
+        "bce4347107a310dfd5f88a010cd2ffd1005ca406f1842877c883666f6f836261720304"
+      ),
+      HelloPacket,
+    )
+    check:
+      hello.version == 55
+      hello.clientId == "kneth/v0.91/plan9"
+      hello.capabilities.len == 2
+      hello.listenPort == 9999

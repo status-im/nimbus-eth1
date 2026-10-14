@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,3 +20,4 @@ switch("define", "chronicles_line_numbers")
 switch("define", "chronicles_sinks=textlines")
 switch("define", "chronicles_thread_ids=no")
 switch("define", "chronicles_runtime_filtering=on")
+switch("define", "optimisticPrefetchMinTxs=1")

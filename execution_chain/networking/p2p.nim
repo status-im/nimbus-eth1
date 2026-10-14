@@ -90,7 +90,7 @@ proc newEthereumNode*(
       forkId: forkIdProcs.forkId,
       rng: rng,
     )
-  node.peerPool = newPeerPool[EthereumNode](maxPeers = maxPeers)
+  node.peerPool = PeerPool.new(maxPeers = maxPeers)
   node
 
 proc processIncoming(server: StreamServer,
@@ -168,7 +168,12 @@ proc dialPeer(
 
   trace "Connecting to node", remote
   node.connectingNodes.incl(remote)
-  let res = await node.rlpxConnect(remote)
+  let res =
+    try:
+      await node.rlpxConnect(remote)
+    except CancelledError as exc:
+      node.connectingNodes.excl(remote)
+      raise exc
   node.connectingNodes.excl(remote)
 
   if res.isOk():
@@ -249,7 +254,7 @@ proc runDiscovery(node: EthereumNode) {.async: (raises: [CancelledError]).} =
     updateTimer: Future[void].Raising([CancelledError])
 
   while true:
-    debug "Amount of peers", amount = node.peerPool.numPeers
+    debug "Amount of peers", amount = node.peerPool.len
 
     # Create or replenish timer
     if connectTimer.isNil or connectTimer.finished:
@@ -330,7 +335,7 @@ iterator peers*(node: EthereumNode, Protocol: type): Peer =
     yield peer
 
 func numPeers*(node: EthereumNode): int =
-  node.peerPool.numPeers
+  node.peerPool.len
 
 proc closeWait*(node: EthereumNode) {.async: (raises: []).} =
   node.stopListening()

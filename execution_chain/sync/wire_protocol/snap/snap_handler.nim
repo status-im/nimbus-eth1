@@ -53,8 +53,8 @@ proc getStorageRanges*(
       accountHashes  = (if req.accountHashes.len == 0: "n/a"
                         else: "[" & req.accountHashes[0].short & ",..]"),
       nAccountHashes = req.accountHashes.len,
-      startingHash   = req.startingHash.short,
-      limitHash      = req.limitHash.short,
+      startingHash   = req.startingHash.to(Hash32).short,
+      limitHash      = req.limitHash.to(Hash32).short,
       responseBytes  = req.responseBytes
   err()
 

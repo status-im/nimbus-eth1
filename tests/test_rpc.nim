@@ -423,12 +423,12 @@ proc rpcMain*() =
 
     test "net_listening":
       let res = await client.net_listening()
-      let listening = node.peerPool.connectedNodes.len < env.conf.maxPeers
+      let listening = node.numPeers < env.conf.maxPeers
       check res == listening
 
     test "net_peerCount":
       let res = await client.net_peerCount()
-      let peerCount = node.peerPool.connectedNodes.len
+      let peerCount = node.numPeers
       check res == w3Qty(peerCount)
 
     test "admin_nodeInfo":
@@ -445,7 +445,7 @@ proc rpcMain*() =
 
     test "admin_peers":
       let peers = await client.admin_peers()
-      check peers.len == node.peerPool.connectedNodes.len
+      check peers.len == node.numPeers
 
       # If there are peers, verify the structure matches Geth specification
       for peer in peers:
@@ -479,7 +479,7 @@ proc rpcMain*() =
     test "eth_syncing":
       let res = await client.eth_syncing()
       if res.syncing == false:
-        let syncing = node.peerPool.connectedNodes.len > 0
+        let syncing = node.numPeers > 0
         check syncing == false
       else:
         let progress = com.beaconSyncerProgress()

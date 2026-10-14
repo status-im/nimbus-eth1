@@ -56,13 +56,22 @@ type
     ## Ditto
 
 
-  SnapDistinctHashes* = SnapRootHash | SnapCodeHash
+  SnapDistinctHashes* =
+    SnapRootHash | SnapCodeHash | SnapStartHash | SnapLimitHash
 
   SnapRootHash* = distinct Hash32
     ## Subject to optimised `RLP`, empty hash: `EMPTY_ROOT_HASH`
 
   SnapCodeHash* = distinct Hash32
     ## Subject to optimised `RLP`, empty hash: `EMPTY_SHA3`
+
+  SnapStartHash* = distinct Hash32
+    ## `startingHash` of `GetStorageRanges`, typed `B` in the spec. Decoded
+    ## from empty as the first slot (zero hash).
+
+  SnapLimitHash* = distinct Hash32
+    ## `limitHash` of `GetStorageRanges`, typed `B` in the spec. Decoded from
+    ## empty as the last slot (`0xff..ff`).
 
   # ---------
 
@@ -91,8 +100,8 @@ type
   StorageRangesRequest* = object
     rootHash*: Hash32
     accountHashes*: seq[Hash32]
-    startingHash*: Hash32
-    limitHash*: Hash32
+    startingHash*: SnapStartHash
+    limitHash*: SnapLimitHash
     responseBytes*: uint64
 
   StorageItem* = object
@@ -123,6 +132,10 @@ type
   SnapBalRequest* = object
     blockHashes*: seq[Hash32]
     bytes*: uint64
+
+const
+  lastSlotHash =
+    hash32"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -192,6 +205,25 @@ proc read*(r: var Rlp, T: type AccBody): T {.gcsafe, raises: [RlpError]} =
   result.storageRoot = r.snapRd(SnapRootHash)
   result.codeHash = r.snapRd(SnapCodeHash)
 
+proc read*(r: var Rlp, T: type SnapStartHash): T {.gcsafe, raises: [RlpError]} =
+  ## Empty or exactly 32 bytes, any other length is a decoding error.
+  if r.isEmpty():
+    r.skipElem()
+    zeroHash32.T
+  else:
+    r.read(Hash32).T
+
+proc read*(r: var Rlp, T: type SnapLimitHash): T {.gcsafe, raises: [RlpError]} =
+  ## Empty or exactly 32 bytes, any other length is a decoding error.
+  if r.isEmpty():
+    r.skipElem()
+    lastSlotHash.T
+  else:
+    r.read(Hash32).T
+
+proc append*(w: var RlpWriter; val: SnapStartHash|SnapLimitHash) =
+  ## Always 32 bytes, accepted by all clients.
+  w.append Hash32(val)
 
 proc append*(w: var RlpWriter; val: SnapDistinctBlobs) =
   ## RLP encoding for a sequence of some `distinct` type.

@@ -61,6 +61,15 @@ const
   peerLivenessInterval = 5.seconds
     ## How often peers are examined for the above two conditions.
 
+  disconnectSendTimeout = 2.seconds
+    ## How long to spend delivering the disconnect reason before closing the
+    ## connection anyway. The disconnecting peer occupies a pool slot until it
+    ## returns.
+
+  transportCloseDelay = 2.seconds
+    ## How long the connection stays open after the disconnect message, so the
+    ## peer can read it before it's closed.
+
 # TODO: chronicles re-export here is added for the error
 # "undeclared identifier: 'activeChroniclesStream'", when the code using p2p
 # does not import chronicles. Need to resolve this properly.
@@ -288,23 +297,13 @@ proc dispatchMessages(peer: Peer) {.async: (raises: []).} =
 # Rlpx Implementation
 #------------------------------------------------------------------------------
 
-proc removePeer(network: EthereumNode, peer: Peer) =
-  # It is necessary to check if peer.remote still exists. The connection might
-  # have been dropped already from the peers side.
-  # E.g. when receiving a p2p.disconnect message from a peer, a race will happen
-  # between which side disconnects first.
-  if network.peerPool != nil and not peer.remote.isNil and
-      peer.remote in network.peerPool.connectedNodes:
-    network.peerPool.connectedNodes.del(peer.remote)
-    rlpx_connected_peers.dec()
-
-    # Note: we need to do this check as disconnect (and thus removePeer)
-    # currently can get called before the dispatcher is initialized.
-    if not peer.dispatcher.isNil:
-      for observer in network.peerPool.observers.values:
-        if not observer.onPeerDisconnected.isNil:
-          if observer.protocols.len == 0 or peer.supports(observer.protocols):
-            observer.onPeerDisconnected(peer)
+proc closeAfter(
+    transport: RlpxTransport, delay: Duration
+) {.async: (raises: []).} =
+  ## Close the connection once the peer has had a chance to read the
+  ## disconnect message.
+  await noCancel sleepAsync(delay)
+  await noCancel transport.closeWait()
 
 proc disconnect*(
     peer: Peer, reason: DisconnectionReason, notifyRemote = false
@@ -347,25 +346,25 @@ proc disconnect*(
       await callDisconnectHandlers(peer, reason)
 
     if notifyRemote and not peer.transport.closed:
-      proc waitAndClose(
-          transport: RlpxTransport, time: Duration
-      ) {.async: (raises: []).} =
-        await noCancel sleepAsync(time)
-        await noCancel peer.transport.closeWait()
-
       try:
         await peer.sendDisconnectMsg(DisconnectionReasonList(value: reason))
-      except CatchableError as e:
+          .wait(disconnectSendTimeout)
+      except AsyncTimeoutError:
+        trace "Timed out delivering disconnect message", peer
+      except EthP2PError as e:
         trace "Failed to deliver disconnect message",
           peer, err = e.msg, errName = e.name
+      except CancelledError:
+        # closing below still has to run, cancellation stops here
+        trace "Cancelled while delivering disconnect message", peer
 
-      # Give the peer a chance to disconnect
-      asyncSpawn peer.transport.waitAndClose(2.seconds)
+      asyncSpawn peer.transport.closeAfter(transportCloseDelay)
     elif not peer.transport.closed:
       peer.transport.close()
 
     peer.connectionState = Disconnected
-    removePeer(peer.network, peer)
+    if peer.network.peerPool != nil:
+      peer.network.peerPool.removePeer(peer)
 
 proc initPeerState(
     peer: Peer, h: HelloPacket
@@ -701,7 +700,7 @@ proc rlpxAccept*(
   # connection, keeps it until the process exits.
   if node.peerPool.isFull:
     debug "Too many peers, rejecting incoming connection",
-      numPeers = node.peerPool.numPeers, maxPeers = node.peerPool.maxPeers
+      numPeers = node.peerPool.len, maxPeers = node.peerPool.maxPeers
     await peer.disconnect(TooManyPeers, notifyRemote = true)
     rlpx_accept_failure.inc(labelValues = [$TooManyPeers])
     return nil
@@ -738,7 +737,7 @@ proc rlpxAccept*(
 
   # In case there is an outgoing connection started with this peer we give
   # precedence to that one and we disconnect here with `AlreadyConnected`
-  if peer.remote in node.peerPool.connectedNodes or
+  if peer.remote in node.peerPool or
       peer.remote in node.connectingNodes:
     trace "Duplicate connection in rlpxAccept"
     rlpx_accept_failure.inc(labelValues = [$AlreadyConnected])
@@ -764,6 +763,9 @@ proc rlpxAccept*(
     trace "P2P error during accept", err = exc.msg
     rlpx_accept_failure.inc(labelValues = [$exc.name])
     return nil
+  except CancelledError as exc:
+    node.connectingNodes.excl(peer.remote)
+    raise exc
 
   debug "Peer accepted", capabilities = response.capabilities, peer=peer.clientId
 
