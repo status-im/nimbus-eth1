@@ -41,8 +41,7 @@ template withSender(
     vmState: BaseVMState, txs: openArray[Transaction],
     bal: Opt[BlockAccessListRef], body: untyped) =
   when compileOption("threads"):
-    if vmState.com.parallelSenderRecoveryEnabled() and
-        txs.len >= parallelSenderRecoveryMinTxs:
+    if vmState.com.parallelSenderRecoveryEnabled():
       withSenderParallel(vmState, txs, bal, body)
     else:
       withSenderSerial(txs, body)

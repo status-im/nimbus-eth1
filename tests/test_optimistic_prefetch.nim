@@ -92,13 +92,12 @@ proc initEnv(): PrefetchEnv =
 
 proc initCtx(ctx: var OptimisticPrefetchCtx, env: PrefetchEnv) =
   privateAccess(OptimisticPrefetchCtx)
-  ctx.prefetch = true
   ctx.parent = env.vmState.parent
   ctx.blockCtx = env.vmState.blockCtx
   ctx.com = env.vmState.com
   ctx.txFrame = env.vmState.ledger.txFrame.parent()
   ctx.cancelled.store(false, moRelease)
-  ctx.currentIndex.store(-1, moRelease)
+  ctx.currentIndex.store(0, moRelease)
 
 proc invalidSignatureTx(nonce: uint64, chainId: ChainId): Transaction =
   result = createTx(nonce, chainId)
@@ -142,7 +141,7 @@ when defined(gcRefc):
         entry: OptimisticTxEntry
       ctx.initCtx(env)
       entry.tx = txs[0].addr
-      entry.txIndex = 0
+      entry.txIndex = 1
 
       let before = cellRefcount(txs[0].payload)
       let ran = sync(env.com.taskpool.spawn recoverAndPrefetchTask(ctx.addr, entry.addr))
@@ -159,7 +158,7 @@ when defined(gcRefc):
         env.com.shutdownTaskpool()
 
       var txs = @[createTx(0, env.com.chainId)]
-      for (currentIndex, cancelled) in [(0, false), (1, false), (-1, true)]:
+      for (currentIndex, cancelled) in [(1, false), (2, false), (0, true)]:
         var
           ctx: OptimisticPrefetchCtx
           entry: OptimisticTxEntry
@@ -167,7 +166,7 @@ when defined(gcRefc):
         ctx.currentIndex.store(currentIndex, moRelease)
         ctx.cancelled.store(cancelled, moRelease)
         entry.tx = txs[0].addr
-        entry.txIndex = 0
+        entry.txIndex = 1
 
         check sync(env.com.taskpool.spawn recoverAndPrefetchTask(ctx.addr, entry.addr))
         check not entry.senderReady.load(moAcquire)
@@ -187,13 +186,13 @@ when defined(gcRefc):
       check txs[0].recoverSenderCached().isNone()
       ctx.initCtx(env)
       entry.tx = txs[0].addr
-      entry.txIndex = 0
+      entry.txIndex = 1
 
       check sync(env.com.taskpool.spawn recoverAndPrefetchTask(ctx.addr, entry.addr))
       check entry.senderReady.load(moAcquire)
       check entry.sender == default(Address)
 
-    test "senders match serial recovery with and without free workers":
+    test "senders match serial recovery with and without prefetch or free workers":
       let env = initEnv()
       defer:
         env.com.shutdownTaskpool()
@@ -201,31 +200,33 @@ when defined(gcRefc):
       var txs = (0'u64 ..< 6'u64).toSeq().mapIt(createTx(it, env.com.chainId))
       txs[3] = invalidSignatureTx(3, env.com.chainId)
 
-      for holdWorkers in [false, true]:
-        var
-          started: Atomic[int]
-          release: Atomic[bool]
-          blockers: seq[Flowvar[bool]]
-          indices: seq[int]
-          senders: seq[Address]
-        try:
-          if holdWorkers:
-            for _ in 1 ..< env.com.taskpool.numThreads:
-              blockers.add env.com.taskpool.spawn blockerTask(started.addr, release.addr)
-            while started.load(moAcquire) < blockers.len:
-              cpuRelax()
+      for prefetch in [true, false]:
+        env.com.optimisticStatePrefetch = prefetch
+        for holdWorkers in [false, true]:
+          var
+            started: Atomic[int]
+            release: Atomic[bool]
+            blockers: seq[Flowvar[bool]]
+            indices: seq[int]
+            senders: seq[Address]
+          try:
+            if holdWorkers:
+              for _ in 1 ..< env.com.taskpool.numThreads:
+                blockers.add env.com.taskpool.spawn blockerTask(started.addr, release.addr)
+              while started.load(moAcquire) < blockers.len:
+                cpuRelax()
 
-          env.vmState.withSenderParallel(txs, Opt.none(BlockAccessListRef)):
-            indices.add txIndex
-            senders.add sender
-        finally:
-          release.store(true, moRelease)
-          for f in blockers.mitems():
-            discard sync(f)
+            env.vmState.withSenderParallel(txs, Opt.none(BlockAccessListRef)):
+              indices.add txIndex
+              senders.add sender
+          finally:
+            release.store(true, moRelease)
+            for f in blockers.mitems():
+              discard sync(f)
 
-        check indices == (0 ..< txs.len).toSeq()
-        for i, sender in senders:
-          check sender == (if i == 3: default(Address) else: env.sender)
+          check indices == (0 ..< txs.len).toSeq()
+          for i, sender in senders:
+            check sender == (if i == 3: default(Address) else: env.sender)
 
     test "concurrent main and worker execution keeps payload refcounts stable":
       let env = initEnv()
