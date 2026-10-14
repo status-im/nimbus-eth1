@@ -20,9 +20,11 @@ const senderCacheEnabled* {.booldefine.} = true
 when senderCacheEnabled:
   import ./concurrency/lru
 
+  type SenderCacheKey = FixedBytes[sizeof(Hash32) + RawSignatureSize]
+
   const CACHE_CAPACITY = 1 shl 18
 
-  var cache: ConcurrentLruCache[Hash32, Address]
+  var cache: ConcurrentLruCache[SenderCacheKey, Address]
   cache.init(CACHE_CAPACITY, threadSafe = true)
 
 func recoverSender(msgHash: Hash32, sig: Signature): Opt[Address] =
@@ -35,19 +37,19 @@ proc recoverSenderCached*(msgHash: Hash32, sig: Signature): Opt[Address] =
     recoverSender(msgHash, sig)
   else:
     let
-      key = withKeccak256:
-        h.update(msgHash.data)
-        h.update(sig.toRaw())
-      keyHash = cache.toKeyHash(key)
+      parts = (msgHash, sig.toRaw())
+      key = cast[ptr SenderCacheKey](unsafeAddr parts)
+      keyHash = cache.toKeyHash(key[])
+    static: doAssert sizeof(parts) == sizeof(SenderCacheKey)
 
     var res: Opt[Address]
 
-    cache.withGetByHash(keyHash, key, cached):
+    cache.withGetByHash(keyHash, key[], cached):
       res = Opt.some(cached)
     do:
       res = recoverSender(msgHash, sig)
       if res.isSome():
-        cache.putByHash(keyHash, key, res[])
+        cache.putByHash(keyHash, key[], res[])
 
     res
 
