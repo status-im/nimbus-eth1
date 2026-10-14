@@ -15,14 +15,16 @@ import
   web3/[eth_api_types, conversions],
   ./rpc_utils,
   ./rpc_types,
-  #../tracer,
-  #../evm/types,
   ../common/common,
   ../beacon/web3_eth_conv,
   ../core/tx_pool,
   ../core/chain/forked_chain,
+  ../core/executor,
+  ../evm/[types, state],
+  ../evm/tracer/legacy_tracer,
   ../stateless/[witness_types, witness_generation],
-  ../transaction
+  ../transaction,
+  ../transaction/call_evm_rpc
 
 type
   BadBlock = object
@@ -41,27 +43,42 @@ TestBlockSummary.useDefaultSerializationIn EthJson
 
 ExecutionWitnessWithKeys.useDefaultSerializationIn EthJson
 
-#type
-#   TraceOptions = object
-#     disableStorage: Opt[bool]
-#     disableMemory: Opt[bool]
-#     disableStack: Opt[bool]
-#     disableState: Opt[bool]
-#     disableStateDiff: Opt[bool]
+type
+  TraceOptions = object
+    disableStorage:  Opt[bool]
+    disableMemory:   Opt[bool]
+    disableStack:    Opt[bool]
+    disableState:    Opt[bool]
+    disableStateDiff: Opt[bool]
 
-# TraceOptions.useDefaultSerializationIn EthJson
+TraceOptions.useDefaultSerializationIn EthJson
 
-# proc isTrue(x: Opt[bool]): bool =
-#   result = x.isSome and x.get() == true
+func isTrue(x: Opt[bool]): bool =
+  x.isSome and x.get()
 
-# proc traceOptionsToFlags(options: Opt[TraceOptions]): set[TracerFlags] =
-#   if options.isSome:
-#     let opts = options.get
-#     if opts.disableStorage.isTrue: result.incl TracerFlags.DisableStorage
-#     if opts.disableMemory.isTrue : result.incl TracerFlags.DisableMemory
-#     if opts.disableStack.isTrue  : result.incl TracerFlags.DisableStack
-#     if opts.disableState.isTrue  : result.incl TracerFlags.DisableState
-#     if opts.disableStateDiff.isTrue: result.incl TracerFlags.DisableStateDiff
+proc traceOptionsToFlags(options: Opt[TraceOptions]): set[TracerFlags] =
+  if options.isSome:
+    let opts = options.get
+    if opts.disableStorage.isTrue:   result.incl TracerFlags.DisableStorage
+    if opts.disableMemory.isTrue:    result.incl TracerFlags.DisableMemory
+    if opts.disableStack.isTrue:     result.incl TracerFlags.DisableStack
+    if opts.disableState.isTrue:     result.incl TracerFlags.DisableState
+    if opts.disableStateDiff.isTrue: result.incl TracerFlags.DisableStateDiff
+
+proc traceBlockWith(com: CommonRef, chain: ForkedChainRef, blk: Block,
+                    flags: set[TracerFlags]): JsonNode =
+  let
+    txFrame    = chain.txFrame(blk.header)
+    tracerInst = newLegacyTracer(flags)
+    vmState    = BaseVMState.new(
+      Header(number: blk.header.number - 1), blk.header, com, txFrame, tracerInst)
+  defer:
+    vmState.dispose()
+    txFrame.dispose()
+  for tx in blk.transactions:
+    let sender = tx.recoverSenderCached().expect("valid signature")
+    discard vmState.processTransaction(tx, sender)
+  tracerInst.getTracingResult()
 
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
@@ -69,81 +86,60 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     chain = txPool.chain
 
   server.rpc(EthJson):
-    # proc debug_traceTransaction(data: Hash32, options: Opt[TraceOptions]): JsonNode =
-    #   ## The traceTransaction debugging method will attempt to run the transaction in the exact
-    #   ## same manner as it was executed on the network. It will replay any transaction that may
-    #   ## have been executed prior to this one before it will finally attempt to execute the
-    #   ## transaction that corresponds to the given hash.
-    #   ##
-    #   ## In addition to the hash of the transaction you may give it a secondary optional argument,
-    #   ## which specifies the options for this specific call. The possible options are:
-    #   ##
-    #   ## * disableStorage: BOOL. Setting this to true will disable storage capture (default = false).
-    #   ## * disableMemory: BOOL. Setting this to true will disable memory capture (default = false).
-    #   ## * disableStack: BOOL. Setting this to true will disable stack capture (default = false).
-    #   ## * disableState: BOOL. Setting this to true will disable state trie capture (default = false).
-    #   let
-    #     txHash = data
-    #     txDetails = chainDB.getTransactionKey(txHash)
-    #     header = chainDB.getBlockHeader(txDetails.blockNumber)
-    #     transactions = chainDB.getTransactions(header.txRoot)
-    #     flags = traceOptionsToFlags(options)
+    proc debug_traceTransaction(data: Hash32, options: Opt[TraceOptions]): JsonNode {.raises: [RpcResponseError].} =
+      let
+        (blockHash, txId) = chain.txDetailsByTxHash(data).valueOr:
+          raise invalidParams("Transaction not found")
+        blk = chain.blockByHash(blockHash).valueOr:
+          raise invalidParams("Block not found")
+      if int(txId) >= blk.transactions.len:
+        raise invalidParams("Transaction index out of range")
+      let
+        flags      = traceOptionsToFlags(options)
+        txFrame    = chain.txFrame(blk.header)
+        tracerInst = newLegacyTracer(flags)
+        vmState    = BaseVMState.new(
+          Header(number: blk.header.number - 1), blk.header, com, txFrame)
+      defer:
+        vmState.dispose()
+        txFrame.dispose()
+      for idx, tx in blk.transactions:
+        if idx == int(txId):
+          vmState.tracer = tracerInst
+        let sender = tx.recoverSenderCached().expect("valid signature")
+        discard vmState.processTransaction(tx, sender)
+        if idx == int(txId):
+          break
+      tracerInst.getTracingResult()
 
-    #   traceTransaction(com, header, transactions, txDetails.index, flags)
+    proc debug_traceBlockByNumber(quantityTag: BlockTag, options: Opt[TraceOptions]): JsonNode {.raises: [RpcResponseError].} =
+      let
+        header = chain.headerFromTag(quantityTag).valueOr:
+          raise invalidParams(error)
+        blk = chain.blockByHash(header.computeBlockHash()).valueOr:
+          raise invalidParams("Block not found")
+      traceBlockWith(com, chain, blk, traceOptionsToFlags(options))
 
-    # proc debug_dumpBlockStateByNumber(quantityTag: BlockTag): JsonNode =
-    #   ## Retrieves the state that corresponds to the block number and returns
-    #   ## a list of accounts (including storage and code).
-    #   ##
-    #   ## quantityTag: integer of a block number, or the string "earliest",
-    #   ## "latest" or "pending", as in the default block parameter.
-    #   var
-    #     header = chainDB.headerFromTag(quantityTag)
-    #     blockHash = chainDB.getBlockHash(header.number)
-    #     body = chainDB.getBlockBody(blockHash)
+    proc debug_traceBlockByHash(data: Hash32, options: Opt[TraceOptions]): JsonNode {.raises: [RpcResponseError].} =
+      let blk = chain.blockByHash(data).valueOr:
+        raise invalidParams("Block not found")
+      traceBlockWith(com, chain, blk, traceOptionsToFlags(options))
 
-    #   dumpBlockState(com, EthBlock.init(move(header), move(body)))
-
-    # proc debug_dumpBlockStateByHash(data: Hash32): JsonNode =
-    #   ## Retrieves the state that corresponds to the block number and returns
-    #   ## a list of accounts (including storage and code).
-    #   ##
-    #   ## data: Hash of a block.
-    #   var
-    #     h = data
-    #     blk = chainDB.getEthBlock(h)
-
-    #   dumpBlockState(com, blk)
-
-    # proc debug_traceBlockByNumber(quantityTag: BlockTag, options: Opt[TraceOptions]): JsonNode =
-    #   ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
-    #   ## that were included included in this block.
-    #   ##
-    #   ## quantityTag: integer of a block number, or the string "earliest",
-    #   ## "latest" or "pending", as in the default block parameter.
-    #   ## options: see debug_traceTransaction
-    #   var
-    #     header = chainDB.headerFromTag(quantityTag)
-    #     blockHash = chainDB.getBlockHash(header.number)
-    #     body = chainDB.getBlockBody(blockHash)
-    #     flags = traceOptionsToFlags(options)
-
-    #   traceBlock(com, EthBlock.init(move(header), move(body)), flags)
-
-    # proc debug_traceBlockByHash(data: Hash32, options: Opt[TraceOptions]): JsonNode =
-    #   ## The traceBlock method will return a full stack trace of all invoked opcodes of all transaction
-    #   ## that were included included in this block.
-    #   ##
-    #   ## data: Hash of a block.
-    #   ## options: see debug_traceTransaction
-    #   var
-    #     h = data
-    #     header = chainDB.getBlockHeader(h)
-    #     blockHash = chainDB.getBlockHash(header.number)
-    #     body = chainDB.getBlockBody(blockHash)
-    #     flags = traceOptionsToFlags(options)
-
-    #   traceBlock(com, EthBlock.init(move(header), move(body)), flags)
+    proc debug_traceCall(args: TransactionArgs, quantityTag: BlockTag, options: Opt[TraceOptions]): JsonNode {.raises: [RpcResponseError].} =
+      let
+        header     = chain.headerFromTag(quantityTag).valueOr:
+          raise invalidParams(error)
+        txFrame    = chain.txFrame(header)
+        flags      = traceOptionsToFlags(options)
+        tracerInst = newLegacyTracer(flags)
+        vmState    = BaseVMState.new(
+          Header(number: header.number - 1), header, com, txFrame, tracerInst)
+      defer:
+        vmState.dispose()
+        txFrame.dispose()
+      discard rpcCallEvm(args, header, vmState).valueOr:
+        raise invalidParams(error)
+      tracerInst.getTracingResult()
 
     proc debug_setHead(quantityTag: BlockTag): bool {.async: (raises: [CancelledError, RpcResponseError]).} =
       ## Sets the current head of the local chain by block number, hash or tag.

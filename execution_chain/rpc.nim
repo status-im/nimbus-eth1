@@ -13,7 +13,7 @@ import
   chronicles,
   websock/websock,
   json_rpc/rpcserver,
-  ./rpc/[common, cors, debug, engine_api, jwt_auth, rpc_server, server_api],
+  ./rpc/[common, cors, debug, engine_api, jwt_auth, rpc_server, server_api, trace],
   ./[conf, nimbus_desc]
 
 export
@@ -52,6 +52,9 @@ func installRPC(server: RpcServer,
 
   if RpcFlag.Debug in flags:
     setupDebugRpc(com, nimbus.txPool, server)
+
+  if RpcFlag.Trace in flags:
+    setupTraceRpc(com, nimbus.txPool, server)
 
 
 proc newRpcWebsocketHandler(): RpcWebSocketHandler =
