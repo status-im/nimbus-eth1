@@ -61,6 +61,15 @@ const
   peerLivenessInterval = 5.seconds
     ## How often peers are examined for the above two conditions.
 
+  disconnectSendTimeout = 2.seconds
+    ## How long to spend delivering the disconnect reason before closing the
+    ## connection anyway. The disconnecting peer occupies a pool slot until it
+    ## returns.
+
+  transportCloseDelay = 2.seconds
+    ## How long the connection stays open after the disconnect message, so the
+    ## peer can read it before it's closed.
+
 # TODO: chronicles re-export here is added for the error
 # "undeclared identifier: 'activeChroniclesStream'", when the code using p2p
 # does not import chronicles. Need to resolve this properly.
@@ -288,6 +297,14 @@ proc dispatchMessages(peer: Peer) {.async: (raises: []).} =
 # Rlpx Implementation
 #------------------------------------------------------------------------------
 
+proc closeAfter(
+    transport: RlpxTransport, delay: Duration
+) {.async: (raises: []).} =
+  ## Close the connection once the peer has had a chance to read the
+  ## disconnect message.
+  await noCancel sleepAsync(delay)
+  await noCancel transport.closeWait()
+
 proc disconnect*(
     peer: Peer, reason: DisconnectionReason, notifyRemote = false
 ) {.async: (raises: []).} =
@@ -329,20 +346,19 @@ proc disconnect*(
       await callDisconnectHandlers(peer, reason)
 
     if notifyRemote and not peer.transport.closed:
-      proc waitAndClose(
-          transport: RlpxTransport, time: Duration
-      ) {.async: (raises: []).} =
-        await noCancel sleepAsync(time)
-        await noCancel peer.transport.closeWait()
-
       try:
         await peer.sendDisconnectMsg(DisconnectionReasonList(value: reason))
-      except CatchableError as e:
+          .wait(disconnectSendTimeout)
+      except AsyncTimeoutError:
+        trace "Timed out delivering disconnect message", peer
+      except EthP2PError as e:
         trace "Failed to deliver disconnect message",
           peer, err = e.msg, errName = e.name
+      except CancelledError:
+        # closing below still has to run, cancellation stops here
+        trace "Cancelled while delivering disconnect message", peer
 
-      # Give the peer a chance to disconnect
-      asyncSpawn peer.transport.waitAndClose(2.seconds)
+      asyncSpawn peer.transport.closeAfter(transportCloseDelay)
     elif not peer.transport.closed:
       peer.transport.close()
 
