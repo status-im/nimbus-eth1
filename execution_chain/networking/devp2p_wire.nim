@@ -82,7 +82,14 @@ proc read*(
 ): T {.gcsafe, raises: [RlpError].} =
   ## Rlp mixin: `DisconnectionReasonList` parser
 
+  # The reason is optional, so a peer may hang up without giving one.
+  if not rlp.hasData():
+    return DisconnectionReasonList(value: DisconnectRequested)
+
   if rlp.isList:
+    if rlp.listLen == 0:
+      return DisconnectionReasonList(value: DisconnectRequested)
+
     # Be strict here: The expression `rlp.read(DisconnectionReasonList)`
     # accepts lists with at least one item. The array expression wants
     # exactly one item.
