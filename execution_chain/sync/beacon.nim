@@ -65,8 +65,8 @@ proc runSetup(ctx: BeaconCtxRef): bool =
 proc runRelease(ctx: BeaconCtxRef) =
   worker.release(ctx, "Release")
 
-proc runDaemon(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).} =
-  return worker.runDaemon(ctx, "Daemon")
+template runDaemon(ctx: BeaconCtxRef): Duration =
+  worker.runDaemon(ctx, "Daemon")
 
 proc runTicker(ctx: BeaconCtxRef) =
   worker.runTicker(ctx, "Ticker")
@@ -80,9 +80,9 @@ proc runStop(buddy: BeaconPeerRef) =
 proc runPool(buddy: BeaconPeerRef; last: bool; laps: int): bool =
   worker.runPool(buddy, last, laps, "SyncMode")
 
-proc runPeer(buddy: BeaconPeerRef): Future[Duration] {.async: (raises: []).} =
+template runPeer(buddy: BeaconPeerRef): Duration =
   let rank = buddy.classifyForFetching()
-  return worker.runPeer(buddy, rank, "Peer")
+  worker.runPeer(buddy, rank, "Peer")
 
 # ------------------------------------------------------------------------------
 # Public functions
