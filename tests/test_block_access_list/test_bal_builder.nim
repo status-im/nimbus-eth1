@@ -35,10 +35,10 @@ suite "Block access list builder":
     builder.dispose()
 
   test "Add touched account":
-    builder.addTouchedAccount(0, address3)
-    builder.addTouchedAccount(0, address2)
-    builder.addTouchedAccount(0, address1)
-    builder.addTouchedAccount(0, address1) # duplicate
+    discard builder.addAccount(0, address3)
+    discard builder.addAccount(0, address2)
+    discard builder.addAccount(0, address1)
+    discard builder.addAccount(0, address1) # duplicate
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -56,12 +56,12 @@ suite "Block access list builder":
         accChange.codeChanges.len() == 0
 
   test "Add storage write":
-    builder.addStorageWrite(0, address1, slot3, 3.u256)
-    builder.addStorageWrite(2, address1, slot2, 2.u256)
-    builder.addStorageWrite(1, address1, slot1, 1.u256)
-    builder.addStorageWrite(1, address2, slot1, 1.u256)
-    builder.addStorageWrite(3, address1, slot3, 4.u256)
-    builder.addStorageWrite(3, address1, slot3, 5.u256) # duplicate should overwrite
+    builder.addStorageWrite(0, builder.addAccount(0, address1), slot3, 3.u256)
+    builder.addStorageWrite(2, builder.addAccount(2, address1), slot2, 2.u256)
+    builder.addStorageWrite(1, builder.addAccount(1, address1), slot1, 1.u256)
+    builder.addStorageWrite(1, builder.addAccount(1, address2), slot1, 1.u256)
+    builder.addStorageWrite(3, builder.addAccount(3, address1), slot3, 4.u256)
+    builder.addStorageWrite(3, builder.addAccount(3, address1), slot3, 5.u256) # duplicate should overwrite
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -76,11 +76,11 @@ suite "Block access list builder":
       bal[1].storageChanges[0] == (slot1, @[(1.BlockAccessIndex, 1.u256)])
 
   test "Add storage read":
-    builder.addStorageRead(0, address2, slot3)
-    builder.addStorageRead(0, address2, slot2)
-    builder.addStorageRead(0, address3, slot3)
-    builder.addStorageRead(0, address1, slot1)
-    builder.addStorageRead(0, address1, slot1) # duplicate
+    builder.addStorageRead(0, builder.addAccount(0, address2), slot3)
+    builder.addStorageRead(0, builder.addAccount(0, address2), slot2)
+    builder.addStorageRead(0, builder.addAccount(0, address3), slot3)
+    builder.addStorageRead(0, builder.addAccount(0, address1), slot1)
+    builder.addStorageRead(0, builder.addAccount(0, address1), slot1) # duplicate
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -93,11 +93,11 @@ suite "Block access list builder":
       bal[2].storageReads == @[slot3]
 
   test "Add balance change":
-    builder.addBalanceChange(1, address2, 0.u256)
-    builder.addBalanceChange(0, address2, 1.u256)
-    builder.addBalanceChange(3, address3, 3.u256)
-    builder.addBalanceChange(2, address1, 2.u256)
-    builder.addBalanceChange(2, address1, 10.u256) # duplicate should overwrite
+    builder.addBalanceChange(1, builder.addAccount(1, address2), 0.u256)
+    builder.addBalanceChange(0, builder.addAccount(0, address2), 1.u256)
+    builder.addBalanceChange(3, builder.addAccount(3, address3), 3.u256)
+    builder.addBalanceChange(2, builder.addAccount(2, address1), 2.u256)
+    builder.addBalanceChange(2, builder.addAccount(2, address1), 10.u256) # duplicate should overwrite
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -110,11 +110,11 @@ suite "Block access list builder":
       bal[2].balanceChanges == @[(3.BlockAccessIndex, 3.u256)]
 
   test "Add nonce change":
-    builder.addNonceChange(3, address1, 3)
-    builder.addNonceChange(2, address2, 2)
-    builder.addNonceChange(1, address2, 1)
-    builder.addNonceChange(1, address3, 1)
-    builder.addNonceChange(1, address3, 10) # duplicate should overwrite
+    builder.addNonceChange(3, builder.addAccount(3, address1), 3)
+    builder.addNonceChange(2, builder.addAccount(2, address2), 2)
+    builder.addNonceChange(1, builder.addAccount(1, address2), 1)
+    builder.addNonceChange(1, builder.addAccount(1, address3), 1)
+    builder.addNonceChange(1, builder.addAccount(1, address3), 10) # duplicate should overwrite
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -127,10 +127,10 @@ suite "Block access list builder":
       bal[2].nonceChanges == @[(1.BlockAccessIndex, 10.AccountNonce)]
 
   test "Add code change":
-    builder.addCodeChange(0, address2, @[0x1.byte])
-    builder.addCodeChange(1, address2, @[0x2.byte])
-    builder.addCodeChange(3, address1, @[0x3.byte])
-    builder.addCodeChange(3, address1, @[0x4.byte]) # duplicate should overwrite
+    builder.addCodeChange(0, builder.addAccount(0, address2), @[0x1.byte])
+    builder.addCodeChange(1, builder.addAccount(1, address2), @[0x2.byte])
+    builder.addCodeChange(3, builder.addAccount(3, address1), @[0x3.byte])
+    builder.addCodeChange(3, builder.addAccount(3, address1), @[0x4.byte]) # duplicate should overwrite
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -146,46 +146,46 @@ suite "Block access list builder":
       var b: BlockAccessListBuilder
       b.init()
       b.ensureIndexCount(4)
-      b.addCodeChange(3, address1, @[0x1.byte, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8])
-      b.addCodeChange(3, address1, @[0x9.byte]) # both buffers retained until dispose
+      b.addCodeChange(3, b.addAccount(3, address1), @[0x1.byte, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8])
+      b.addCodeChange(3, b.addAccount(3, address1), @[0x9.byte]) # both buffers retained until dispose
       b.dispose()
     check getOccupiedSharedMem() == before
 
   test "All changes and reads":
-    builder.addTouchedAccount(0, address3)
-    builder.addTouchedAccount(0, address2)
-    builder.addTouchedAccount(0, address1)
-    builder.addTouchedAccount(0, address1) # duplicate
+    discard builder.addAccount(0, address3)
+    discard builder.addAccount(0, address2)
+    discard builder.addAccount(0, address1)
+    discard builder.addAccount(0, address1) # duplicate
 
-    builder.addStorageWrite(0, address1, slot3, 3.u256)
-    builder.addStorageWrite(2, address1, slot2, 2.u256)
-    builder.addStorageWrite(1, address1, slot1, 1.u256)
-    builder.addStorageWrite(1, address2, slot1, 1.u256)
-    builder.addStorageWrite(3, address1, slot3, 4.u256)
-    builder.addStorageWrite(3, address1, slot3, 5.u256) # duplicate should overwrite
+    builder.addStorageWrite(0, builder.addAccount(0, address1), slot3, 3.u256)
+    builder.addStorageWrite(2, builder.addAccount(2, address1), slot2, 2.u256)
+    builder.addStorageWrite(1, builder.addAccount(1, address1), slot1, 1.u256)
+    builder.addStorageWrite(1, builder.addAccount(1, address2), slot1, 1.u256)
+    builder.addStorageWrite(3, builder.addAccount(3, address1), slot3, 4.u256)
+    builder.addStorageWrite(3, builder.addAccount(3, address1), slot3, 5.u256) # duplicate should overwrite
 
-    builder.addStorageRead(0, address2, slot3)
-    builder.addStorageRead(0, address2, slot2)
-    builder.addStorageRead(0, address3, slot3)
-    builder.addStorageRead(0, address1, slot1)
-    builder.addStorageRead(0, address1, slot1) # duplicate
+    builder.addStorageRead(0, builder.addAccount(0, address2), slot3)
+    builder.addStorageRead(0, builder.addAccount(0, address2), slot2)
+    builder.addStorageRead(0, builder.addAccount(0, address3), slot3)
+    builder.addStorageRead(0, builder.addAccount(0, address1), slot1)
+    builder.addStorageRead(0, builder.addAccount(0, address1), slot1) # duplicate
 
-    builder.addBalanceChange(1, address2, 0.u256)
-    builder.addBalanceChange(0, address2, 1.u256)
-    builder.addBalanceChange(3, address3, 3.u256)
-    builder.addBalanceChange(2, address1, 2.u256)
-    builder.addBalanceChange(2, address1, 10.u256) # duplicate should overwrite
+    builder.addBalanceChange(1, builder.addAccount(1, address2), 0.u256)
+    builder.addBalanceChange(0, builder.addAccount(0, address2), 1.u256)
+    builder.addBalanceChange(3, builder.addAccount(3, address3), 3.u256)
+    builder.addBalanceChange(2, builder.addAccount(2, address1), 2.u256)
+    builder.addBalanceChange(2, builder.addAccount(2, address1), 10.u256) # duplicate should overwrite
 
-    builder.addNonceChange(3, address1, 3)
-    builder.addNonceChange(2, address2, 2)
-    builder.addNonceChange(1, address2, 1)
-    builder.addNonceChange(1, address3, 1)
-    builder.addNonceChange(1, address3, 10) # duplicate should overwrite
+    builder.addNonceChange(3, builder.addAccount(3, address1), 3)
+    builder.addNonceChange(2, builder.addAccount(2, address2), 2)
+    builder.addNonceChange(1, builder.addAccount(1, address2), 1)
+    builder.addNonceChange(1, builder.addAccount(1, address3), 1)
+    builder.addNonceChange(1, builder.addAccount(1, address3), 10) # duplicate should overwrite
 
-    builder.addCodeChange(0, address2, @[0x1.byte])
-    builder.addCodeChange(1, address2, @[0x2.byte])
-    builder.addCodeChange(3, address1, @[0x3.byte])
-    builder.addCodeChange(3, address1, @[0x4.byte]) # duplicate should overwrite
+    builder.addCodeChange(0, builder.addAccount(0, address2), @[0x1.byte])
+    builder.addCodeChange(1, builder.addAccount(1, address2), @[0x2.byte])
+    builder.addCodeChange(3, builder.addAccount(3, address1), @[0x3.byte])
+    builder.addCodeChange(3, builder.addAccount(3, address1), @[0x4.byte]) # duplicate should overwrite
 
     let bal = builder.buildBlockAccessList()[]
     check:
@@ -223,17 +223,17 @@ proc writeChangesForIndex(
 ) =
   ## Simulates a worker thread that exclusively owns block access `index`,
   ## appending a mix of changes for that index.
-  builder[].addTouchedAccount(index, address)
-  builder[].addStorageWrite(index, address, 1.u256, index.u256)
-  builder[].addStorageRead(index, address, 2.u256)
-  builder[].addBalanceChange(index, address, (index * 10).u256)
-  builder[].addNonceChange(index, address, index.AccountNonce)
-  builder[].addCodeChange(index, address, @[index.byte])
+  let account = builder[].addAccount(index, address)
+  builder[].addStorageWrite(index, account, 1.u256, index.u256)
+  builder[].addStorageRead(index, account, 2.u256)
+  builder[].addBalanceChange(index, account, (index * 10).u256)
+  builder[].addNonceChange(index, account, index.AccountNonce)
+  builder[].addCodeChange(index, account, @[index.byte])
 
 proc writeSlotAtIndex(
     builder: ptr BlockAccessListBuilder, address: Address, slot: UInt256, index: int
 ) =
-  builder[].addStorageWrite(index, address, slot, index.u256)
+  builder[].addStorageWrite(index, builder[].addAccount(index, address), slot, index.u256)
 
 suite "Concurrent block access list builder":
   const

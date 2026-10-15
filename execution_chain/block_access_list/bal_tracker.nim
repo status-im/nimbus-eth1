@@ -53,7 +53,6 @@ type
   AccountEntry = object
     address: Address
     bucket: int32 ## position in the account index, for clearing
-    touched: bool
     balanceWritten: bool
     nonceWritten: bool
     codeWritten: bool
@@ -221,7 +220,7 @@ proc truncate[K, E](t: var PosTable[K, E], len: int) =
 # ------------------------------------------------------------------------------
 
 proc accountEntry(tracker: BlockAccessListTrackerRef, address: Address): int32 =
-  ## Position of the account's entry, creating an untouched one if new.
+  ## Position of the account's entry, creating one if new.
   # Accesses cluster on one account, the current target of the call frame.
   if tracker.lastAccount >= 0 and tracker.accounts[tracker.lastAccount].address == address:
     return tracker.lastAccount
@@ -314,19 +313,15 @@ proc capturePreStorage(tracker: BlockAccessListTrackerRef, idx: int32) =
 # Tracking
 # ------------------------------------------------------------------------------
 
-template touch(tracker: BlockAccessListTrackerRef, idx: int32) =
-  tracker.accounts[idx].touched = true
-
 proc trackAddressAccess*(tracker: BlockAccessListTrackerRef, address: Address) =
   assert tracker.hasPendingCallFrame()
-  tracker.touch(tracker.accountEntry(address))
+  discard tracker.accountEntry(address)
 
 proc trackStorageRead*(
     tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
 ) =
   assert tracker.hasPendingCallFrame()
   let idx = tracker.storageEntry((address, slot))
-  tracker.touch(tracker.storage[idx].account)
   tracker.storage[idx].read = true
 
 proc recordOnce(
@@ -356,7 +351,6 @@ proc trackStorageWrite*(
   if e.written and e.post == newValue:
     return
 
-  tracker.touch(e.account)
   tracker.capturePreStorage(idx)
   tracker.recordOnce(
     e.lastJournal,
@@ -379,7 +373,6 @@ proc trackBalanceChange(
   if e.balanceWritten and e.postBalance == newBalance:
     return
 
-  tracker.touch(idx)
   if not e.preBalanceKnown:
     e.preBalance = current.valueOr(tracker.ledger.getBalance(address))
     e.preBalanceKnown = true
@@ -432,7 +425,6 @@ proc trackNonceChange(
   if e.nonceWritten and e.postNonce == newNonce:
     return
 
-  tracker.touch(idx)
   if not e.preNonceKnown:
     e.preNonce = current.valueOr(tracker.ledger.getNonce(address))
     e.preNonceKnown = true
@@ -465,7 +457,6 @@ proc trackCodeChange*(
   template e(): untyped =
     tracker.accounts[idx]
 
-  tracker.touch(idx)
   tracker.capturePreCode(idx)
   tracker.recordOnce(
     e.lastCodeJournal, JournalEntry(kind: jCode, idx: idx, prevWritten: e.codeWritten)
@@ -479,7 +470,6 @@ proc trackInTransactionSelfDestruct*(
   ## is resolved at the end of the transaction and undone if the frame reverts.
   assert tracker.hasPendingCallFrame()
   let idx = tracker.accountEntry(address)
-  tracker.touch(idx)
   if not tracker.accounts[idx].selfDestructed:
     tracker.accounts[idx].selfDestructed = true
     tracker.journal.add(JournalEntry(kind: jSelfDestruct, idx: idx))
@@ -520,24 +510,27 @@ proc normalizeChanges(tracker: BlockAccessListTrackerRef) =
 
 proc recordTransaction(tracker: BlockAccessListTrackerRef) =
   ## Hand the transaction's accesses and changes to the builder.
-  let index = tracker.currentBlockAccessIndex
+  if tracker.accounts.len == 0:
+    return
+  let
+    index = tracker.currentBlockAccessIndex
+    builder = tracker.builder
+    first = builder[].accountCount(index)
   for e in tracker.accounts:
-    if e.touched:
-      tracker.builder[].addTouchedAccount(index, e.address)
+    let id = builder[].addAccount(index, e.address)
     if e.balanceWritten:
-      tracker.builder[].addBalanceChange(index, e.address, e.postBalance)
+      builder[].addBalanceChange(index, id, e.postBalance)
     if e.nonceWritten:
-      tracker.builder[].addNonceChange(index, e.address, e.postNonce)
+      builder[].addNonceChange(index, id, e.postNonce)
     if e.codeWritten:
-      tracker.builder[].addCodeChange(
-        index, e.address, tracker.ledger.getCode(e.address).bytes
-      )
+      builder[].addCodeChange(index, id, tracker.ledger.getCode(e.address).bytes)
 
   for e in tracker.storage:
+    let id = LocalAccountId(first + int(e.account))
     if e.written:
-      tracker.builder[].addStorageWrite(index, e.key.address, e.key.slot, e.post)
+      builder[].addStorageWrite(index, id, e.key.slot, e.post)
     elif e.read:
-      tracker.builder[].addStorageRead(index, e.key.address, e.key.slot)
+      builder[].addStorageRead(index, id, e.key.slot)
 
 proc commitCallFrame*(tracker: BlockAccessListTrackerRef) =
   ## Commit the current call frame: its changes stay in place. Committing the

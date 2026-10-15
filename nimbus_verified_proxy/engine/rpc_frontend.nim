@@ -96,9 +96,9 @@ proc getExecutionApiFrontend*(
 
     let header = engine.penaltyOr(await engine.getVerifiedHeader(quantityTag))
     let storage = engine.penaltyOr(
-      await engine.getStorageAt(address, slot, header.number, header.stateRoot)
+      await engine.getStorageAt(address, @[slot], header.number, header.stateRoot)
     )
-    ok(storage.to(Bytes32))
+    ok(storage[0].to(Bytes32))
 
   frontend.eth_getTransactionCount = proc(
       address: Address, quantityTag: BlockTag

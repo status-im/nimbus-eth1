@@ -145,18 +145,20 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
   # Add eth peer service protocol capabilities.
   nimbus.ethWire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
 
-  # Add snap sync service if enabled. This server is currently a dummy only
-  # and will never be fully functional. The costs of implementing the 128
-  # blocks sevice window is too expensive. What could be provided is a BAL
-  # download facility.
+  # Add snap sync service if enabled. Only `snap/2` `GetBlockAccessLists` is
+  # served. State requests (`GetAccountRange`, `GetStorageRanges`,
+  # `GetByteCodes`, `GetTrieNodes`) get empty replies: serving them for the
+  # last 128 blocks needs hash-ordered range reads, which other clients do from
+  # a flat state store. Aristo stores trie vertices by vertex ID, so each range
+  # would be a trie walk with one lookup per vertex, too costly to serve.
   if config.snapSyncEnabled:
-    nimbus.snapWire = nimbus.ethNode.addSnapHandlerCapability()
+    nimbus.snapWire = nimbus.ethNode.addSnapHandlerCapability(fc)
 
   # Connect directly to the static nodes
   let staticPeers = config.getStaticPeers()
   if staticPeers.len > 0:
     nimbus.peerManager = PeerManagerRef.new(
-      nimbus.ethNode.peerPool,
+      nimbus.ethNode,
       config.reconnectInterval,
       config.reconnectMaxRetry,
       staticPeers

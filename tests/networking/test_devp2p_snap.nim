@@ -10,43 +10,130 @@
 {.used.}
 
 import
+  std/[sequtils, strutils, typetraits],
   unittest2,
   testutils,
   chronos,
+  eth/rlp,
   ../../execution_chain/networking/p2p,
   ../../execution_chain/sync/wire_protocol,
+  ../../execution_chain/core/chain/forked_chain,
+  ../../execution_chain/db/core_db,
+  ../../execution_chain/db/core_db/core_apps,
   ./stubloglevel,
   ./p2p_test_helper
 
-procSuite "devp2p snap Tests":
+const timeout = chronos.seconds(3)
 
-  asyncTest "storageRanges - reply to a peer that negotiated snap/2 only":
+func testHash(b: byte): Hash32 =
+  var data: array[32, byte]
+  data[31] = b
+  Hash32(data)
+
+proc getStorageRangesUnbounded(
+    peer: Peer;
+      ): Future[Opt[StorageRangesPacket]]
+      {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
+  snap2.rlpxSendRequest(peer, timeout, GetStorageRangesMsg,
+    testHash(1), @[testHash(4), testHash(5)], newSeq[byte](), newSeq[byte](),
+    1024'u64)
+
+procSuite "devp2p snap Tests":
+  asyncTest "snap/2 requests are answered":
     var
       env1 = newTestEnv()
       env2 = newTestEnv()
 
-    discard env1.node.addSnapHandlerCapability()
-    discard env2.node.addSnapHandlerCapability()
+    discard env1.node.addSnapHandlerCapability(env1.chain)
+    discard env2.node.addSnapHandlerCapability(env2.chain)
+
+    # Stored empty BAL, encoded `0xc0`, distinct from the `0x80` placeholder.
+    env2.chain.latestTxFrame.persistBlockAccessList(testHash(7), new BlockAccessList)
 
     env2.node.startListening()
 
     let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
     check connRes.isOk()
 
-    # Both nodes offer snap/1 and snap/2 but the handshake keeps snap/2 only.
+    # Both nodes offer snap/1 and snap/2; the handshake keeps snap/2 only.
     let peer = connRes.get()
     check:
       peer.supports(snap2)
       not peer.supports(snap1)
 
-    let
-      responder = Responder(peer: peer, reqId: 1)
-      slots = @[@[StorageItem(slotHash: default(Hash32), slotData: @[1.byte])]]
-
-    await responder.storageRanges(slots, @[])
-    await responder.storageRanges(slots, @[ProofNode(@[0x80.byte])])
-
-    check peer.connectionState == ConnectionState.Connected
+      (await peer.getAccountRange(AccountRangeRequest(
+        rootHash: testHash(1), startingHash: testHash(2), limitHash: testHash(3),
+        responseBytes: 1024), timeout)).isSome()
+      (await peer.getStorageRanges(StorageRangesRequest(
+        rootHash: testHash(1), accountHashes: @[testHash(4)],
+        startingHash: testHash(2).SnapStartHash,
+        limitHash: testHash(3).SnapLimitHash, responseBytes: 1024), timeout)).isSome()
+      (await peer.getStorageRangesUnbounded()).isSome()
+      (await peer.getByteCodes(ByteCodesRequest(
+        hashes: @[testHash(5), testHash(6)], bytes: 1024), timeout)).isSome()
+      # Served like `eth/71`: request order kept, `0x80` for an unavailable BAL.
+      (await snap.getBlockAccessLists(peer, SnapBalRequest(
+        blockHashes: @[testHash(7), testHash(8)], bytes: 1024), timeout))
+        .expect("reply").accessLists.mapIt(it.distinctBase) ==
+          @[@[0xc0'u8], @[0x80'u8]]
+      peer.connectionState == ConnectionState.Connected
 
     await env2.close()
     await env1.close()
+
+  asyncTest "snap/1 requests are answered":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env1.node.addCapability(snap1, SnapWireStateRef())
+    env2.node.addCapability(snap1, SnapWireStateRef())
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check:
+      peer.supports(snap1)
+      not peer.supports(snap2)
+
+      (await peer.getAccountRange(AccountRangeRequest(
+        rootHash: testHash(1), startingHash: testHash(2), limitHash: testHash(3),
+        responseBytes: 1024), timeout)).isSome()
+      (await peer.getStorageRanges(StorageRangesRequest(
+        rootHash: testHash(1), accountHashes: @[testHash(4)],
+        startingHash: testHash(2).SnapStartHash,
+        limitHash: testHash(3).SnapLimitHash, responseBytes: 1024), timeout)).isSome()
+      (await peer.getByteCodes(ByteCodesRequest(
+        hashes: @[testHash(5), testHash(6)], bytes: 1024), timeout)).isSome()
+      (await peer.getTrieNodes(TrieNodesRequest(
+        rootHash: testHash(1), paths: @[@[AccountOrSlotPath(@[0x12.byte])]],
+        bytes: 1024), timeout)).isSome()
+      peer.connectionState == ConnectionState.Connected
+
+    await env2.close()
+    await env1.close()
+
+suite "snap GetStorageRanges bounds":
+  test "empty bounds cover the whole range, 32 byte bounds are kept":
+    var w = initRlpWriter()
+    w.startList(5)
+    w.append(testHash(1))
+    w.append(@[testHash(4)])
+    w.append(newSeq[byte]())
+    w.append(newSeq[byte]())
+    w.append(1024'u64)
+    let
+      unbounded = rlp.decode(w.finish(), StorageRangesRequest)
+      bounded = rlp.decode(rlp.encode(StorageRangesRequest(
+        rootHash: testHash(1), accountHashes: @[testHash(4)],
+        startingHash: testHash(2).SnapStartHash,
+        limitHash: testHash(3).SnapLimitHash, responseBytes: 1024)),
+        StorageRangesRequest)
+    check:
+      unbounded.startingHash.to(Hash32) == default(Hash32)
+      unbounded.limitHash.to(Hash32) == Hash32.fromHex("0x" & "ff".repeat(32))
+      bounded.startingHash.to(Hash32) == testHash(2)
+      bounded.limitHash.to(Hash32) == testHash(3)

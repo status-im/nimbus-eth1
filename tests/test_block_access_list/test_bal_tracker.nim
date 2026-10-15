@@ -71,8 +71,7 @@ func getPreStorage(
   tracker.preStorage(address, slot).valueOr(0.u256)
 
 func isTouched(tracker: BlockAccessListTrackerRef, address: Address): bool =
-  let idx = tracker.findAccount(address)
-  idx >= 0 and tracker.accounts[idx].touched
+  tracker.findAccount(address) >= 0
 
 func hasStorageRead(
     tracker: BlockAccessListTrackerRef, address: Address, slot: UInt256
@@ -741,7 +740,7 @@ suite "Block access list tracker":
       let owned = BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger)
       check owned.builderOwner
       owned.builder[].ensureIndexCount(1)
-      owned.builder[].addTouchedAccount(0, address1)
+      discard owned.builder[].addAccount(0, address1)
       check owned.builder[].buildBlockAccessList()[].hasAccount(address1)
       owned.dispose()
     check getOccupiedSharedMem() == before
@@ -763,8 +762,8 @@ suite "Block access list tracker":
     # Not concurrent: both writes happen on this thread, so a single index
     # partition with one writer at a time is sufficient.
     shared[].ensureIndexCount(1)
-    t1.builder[].addTouchedAccount(0, address1)
-    t2.builder[].addTouchedAccount(0, address2)
+    discard t1.builder[].addAccount(0, address1)
+    discard t2.builder[].addAccount(0, address2)
     check:
       shared[].buildBlockAccessList()[].hasAccount(address1)
       shared[].buildBlockAccessList()[].hasAccount(address2)

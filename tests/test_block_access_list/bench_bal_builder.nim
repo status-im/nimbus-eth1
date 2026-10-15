@@ -30,7 +30,8 @@
 # serializes every write on an internal lock) and the lock-free index-partitioned
 # builder (where each block access index is an independent single-writer
 # partition), via `when compiles` guards, so the exact same workload can be run
-# against both to compare them.
+# against both to compare them. A builder with per-transaction account ids is
+# filled through `addAccount` and the ids it returns, as the tracker does.
 
 {.used.}
 
@@ -212,28 +213,32 @@ proc fillTx(b: ptr BlockAccessListBuilder, w: Workload, txIndex: int) =
       acctId = (txIndex * 7 + a * 131) mod w.numAccounts
       address = makeAddress(acctId)
 
-    when compiles(b[].addTouchedAccount(txIndex, address)):
+    when compiles(b[].addAccount(txIndex, address)):
+      let account = b[].addAccount(txIndex, address)
+    elif compiles(b[].addTouchedAccount(txIndex, address)):
       b[].addTouchedAccount(txIndex, address)
+      let account = address
     else:
       b[].addTouchedAccount(address)
+      let account = address
 
     if a < w.storageAccounts:
       for s in 0 ..< w.writesPerAccount:
-        b[].addStorageWrite(txIndex, address, u256(acctId * 100 + s), u256(s + 1))
+        b[].addStorageWrite(txIndex, account, u256(acctId * 100 + s), u256(s + 1))
 
       for r in 0 ..< w.readsPerAccount:
         let slot = u256(acctId * 100 + 50 + r)
-        when compiles(b[].addStorageRead(txIndex, address, slot)):
-          b[].addStorageRead(txIndex, address, slot)
+        when compiles(b[].addStorageRead(txIndex, account, slot)):
+          b[].addStorageRead(txIndex, account, slot)
         else:
-          b[].addStorageRead(address, slot)
+          b[].addStorageRead(account, slot)
 
-    b[].addBalanceChange(txIndex, address, u256(acctId + 1))
+    b[].addBalanceChange(txIndex, account, u256(acctId + 1))
     if a < w.nonceAccounts:
-      b[].addNonceChange(txIndex, address, AccountNonce(txIndex + 1))
+      b[].addNonceChange(txIndex, account, AccountNonce(txIndex + 1))
 
     if a == 0 and w.codeLen > 0:
-      b[].addCodeChange(txIndex, address, codePattern.toOpenArray(0, w.codeLen - 1))
+      b[].addCodeChange(txIndex, account, codePattern.toOpenArray(0, w.codeLen - 1))
 
 proc fillRangeProc(ctx: ptr FillRange) {.thread.} =
   for t in ctx.startTx ..< ctx.endTx:

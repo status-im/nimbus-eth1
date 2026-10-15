@@ -25,11 +25,32 @@ logScope:
   topics = "p2p"
 
 type
+  ForkIdProc* = proc(): ForkId {.noSideEffect, raises: [].}
+    ## Current fork id of the chain, used to keep the advertised ENR `eth`
+    ## entry up to date.
+
   CompatibleForkIdProc* = proc(id: ForkId): bool {.noSideEffect, raises: [].}
+    ## Whether a fork id found in a peer's ENR is worth dialing.
 
   Eth1Discovery* = ref object
     discv5: discv5_protocol.Protocol
     compatibleForkId: CompatibleForkIdProc
+
+#------------------------------------------------------------------------------
+# Public helpers
+#------------------------------------------------------------------------------
+
+func decodeEthEntry*(bytes: openArray[byte]): Opt[ForkId] =
+  ## Fork id from the ENR `eth` entry: `entry-value = [[forkHash, forkNext], ...]`.
+  ## Implementations should ignore any additional list elements in `entry-value`.
+  ## https://github.com/ethereum/devp2p/blob/2c19a28b25c29487773ad6b07243e290fa8d65ec/enr-entries/eth.md
+  try:
+    var rlp = rlpFromBytes(bytes)
+    rlp.consumeList(RlpListMode.IgnoreAdditionalElements):
+      let forkId = rlp.read(ForkId)
+    Opt.some(forkId)
+  except RlpError:
+    Opt.none(ForkId)
 
 #------------------------------------------------------------------------------
 # Private functions
@@ -44,15 +65,16 @@ func eligibleNode(proto: Eth1Discovery, rec: enr.Record): bool =
     # Allow all `eth` node to pass if there is no filter
     return true
 
-  let
-    ethValue =
-      try:
-        rlp.decode(bytes, array[1, ForkId])
-      except RlpError:
-        return false
-    forkId = ethValue[0]
+  let forkId = decodeEthEntry(bytes).valueOr:
+    return false
 
   proto.compatibleForkId(forkId)
+
+func toNode(rec: enr.Record): Opt[p2p_node.Node] =
+  ## Turn a discovered ENR into a dialable `Node`.
+  let enode = ENode.fromEnr(rec).valueOr:
+    return Opt.none(p2p_node.Node)
+  Opt.some(newNode(enode))
 
 #------------------------------------------------------------------------------
 # Public functions
@@ -92,15 +114,17 @@ proc start*(proto: Eth1Discovery) =
   proto.discv5.start()
 
 proc lookupRandomNode*(
-    proto: Eth1Discovery, queue: AsyncQueue[p2p_node.Node]
-) {.async: (raises: [CancelledError]).} =
-  let discv5Nodes = await proto.discv5.queryRandom()
-  for discv5Node in discv5Nodes:
+    proto: Eth1Discovery
+): Future[seq[p2p_node.Node]] {.async: (raises: [CancelledError]).} =
+  ## Random discovery lookup, returning the nodes that are worth dialing.
+  var res: seq[p2p_node.Node]
+  for discv5Node in await proto.discv5.queryRandom():
     if not proto.eligibleNode(discv5Node.record):
       continue
-    let enode = ENode.fromEnr(discv5Node.record).valueOr:
+    let n = toNode(discv5Node.record).valueOr:
       continue
-    await queue.addLast(newNode(enode))
+    res.add(n)
+  res
 
 func getEnr*(proto: Eth1Discovery): Opt[enr.Record] =
   ## Get the ENR of the local node from DiscoveryV5.
