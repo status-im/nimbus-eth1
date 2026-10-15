@@ -196,14 +196,14 @@ suite "Block access list utils":
 
 suite "Block access list retention period":
   # isWithinBalRetentionPeriod is true iff the block falls within the last
-  # BAL_RETENTION_EPOCHS (33024) epochs of the head slot. An epoch is
-  # SLOTS_PER_EPOCH (32) slots, so the retention window is 33024 * 32 = 1056768
+  # BAL_RETENTION_EPOCHS (14299) epochs of the head slot. An epoch is
+  # SLOTS_PER_EPOCH (32) slots, so the retention window is 14299 * 32 = 457568
   # slots, but the boundary is on the epoch (slot div 32), not the raw slot.
 
   func headerWithSlot(slot: uint64): Header =
     Header(slotNumber: Opt.some(slot))
 
-  const retentionSlots = BAL_RETENTION_EPOCHS * SLOTS_PER_EPOCH # 1056768
+  const retentionSlots = BAL_RETENTION_EPOCHS * SLOTS_PER_EPOCH # 457568
 
   test "a pre-Amsterdam header (no slot number) is never within retention":
     let header = Header(slotNumber: Opt.none(uint64))
@@ -241,7 +241,7 @@ suite "Block access list retention period":
       not headerWithSlot(0).isWithinBalRetentionPeriod(headSlot)
 
   test "a block exactly the retention window back is pruned":
-    const headSlot = retentionSlots + 1_000_000'u64 # head epoch 64274
+    const headSlot = retentionSlots + 1_000_000'u64 # head epoch 45549
     let blockSlot = headSlot - retentionSlots # 1000000, epoch 31250
     check:
       not headerWithSlot(blockSlot).isWithinBalRetentionPeriod(headSlot)

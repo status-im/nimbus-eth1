@@ -19,9 +19,9 @@ const
   SLOTS_PER_EPOCH* = 32'u64
     ## Consensus layer slots per epoch.
 
-  BAL_RETENTION_EPOCHS* = 33024'u64
+  BAL_RETENTION_EPOCHS* = 14299'u64
     ## EIP-7928: execution clients are only required to retain block access
-    ## lists for (at least) the last 33024 epochs.
+    ## lists for (at least) the last 14299 epochs.
 
 func isWithinBalRetentionPeriod*(header: Header, headSlot: uint64): bool =
   ## Whether the block access list (EIP-7928) for `header` must still be retained
