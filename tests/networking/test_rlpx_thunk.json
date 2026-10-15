@@ -54,10 +54,13 @@
     "error": "PeerDisconnected",
     "description": "listElem to assert on not a single entry list"
   },
-  "Listing single element list when having empty list": {
+  "DisconnectReason: empty list means no reason was given": {
     "payload": "01c0",
-    "error": "PeerDisconnected",
-    "description": "listElem to assert on not a single entry list"
+    "description": "The reason is optional, so an empty list is a valid disconnect"
+  },
+  "DisconnectReason: no payload means no reason was given": {
+    "payload": "01",
+    "description": "The reason is optional, so no payload at all is a valid disconnect"
   },
   "DisconnectReason: single element list with entry out off enum range": {
     "payload": "01c111",
