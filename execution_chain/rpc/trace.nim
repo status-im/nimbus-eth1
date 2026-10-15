@@ -116,8 +116,9 @@ proc resultToJson(r: TraceResult): JsonNode =
 proc traceObjectToJson(t: TraceObject): JsonNode =
   result = newJObject()
   result["action"] = actionToJson(t.action)
-  if t.result.isSome:
-    result["result"] = resultToJson(t.result.get)
+  result["result"] =
+    if t.result.isSome: resultToJson(t.result.get)
+    else: newJNull()
   if t.error.isSome:
     result["error"] = newJString(t.error.get)
   result["subtraces"] = newJInt(t.subtraces)
@@ -146,6 +147,10 @@ proc vmTraceOpToJson(op: VmTraceOp): JsonNode {.gcsafe.} =
   result = newJObject()
   result["pc"]   = newJInt(op.pc)
   result["cost"] = newJInt(op.cost.BiggestInt)
+  if op.op.len > 0:
+    result["op"] = newJString(op.op)
+  if op.idx.len > 0:
+    result["idx"] = newJString(op.idx)
   if op.ex.isSome:
     let ex  = op.ex.get
     let exJ = newJObject()
@@ -365,10 +370,7 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         header  = chain.headerFromTag(tag).valueOr:
           raise invalidParams(error)
         txFrame = chain.txFrame(header).txFrameBegin()
-        vmState = BaseVMState.new(
-          Header(number: header.number - 1), header, com, txFrame)
       defer:
-        vmState.dispose()
         txFrame.dispose()
       let res = newJArray()
       for callItem in calls:
@@ -387,13 +389,16 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         let
           flags      = parseTraceTypes(traceTypeStrs)
           tracerInst = newParityTracer(flags)
-        vmState.tracer = tracerInst
+          vmState    = BaseVMState.new(
+            Header(number: header.number - 1), header, com, txFrame, tracerInst)
         if ttStateDiff in flags:
           tracerInst.preSnap(vmState.ledger, args.`from`.get(default(Address)))
           if args.to.isSome:
             tracerInst.preSnap(vmState.ledger, args.to.get)
         let callRes = rpcCallEvm(args, header, vmState)
         tracerInst.finalizeStateDiff(vmState.ledger)
+        vmState.ledger.persist()
+        vmState.dispose()
         let entry = newJObject()
         entry["output"] = newJString(
           if callRes.isOk: callRes.get.output.to0xHex else: "0x")
