@@ -727,11 +727,18 @@ proc persistCodeByHash*(db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]
 
   ok()
 
-proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] =
-  let code = db.get(contractHashKey(codeHash).toOpenArray).valueOr:
-    return err("getCodeByHash: " & $$error)
+proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] {.inline.} =
+  var rc = db.get(contractHashKey(codeHash).toOpenArray)
+  if rc.isOk:
+    ok(move(rc.value))
+  else:
+    err("getCodeByHash: " & $$rc.error)
 
-  ok(code)
+proc getCodeLenByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[int, string] =
+  let len = db.len(contractHashKey(codeHash).toOpenArray).valueOr:
+    return err("getCodeLenByHash: " & $$error)
+
+  ok(len)
 
 proc setChainTail*(
     db: CoreDbTxRef;
