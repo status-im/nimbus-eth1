@@ -144,14 +144,20 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       discard ctx.headerDownloadTrigger(info)
       bodyRc = daemonWaitDownloadInterval           # parallel peer action
 
-    of SnapDownloadFinish:
+    of SnapDownloadFinish:                          # wait for sync
       discard
+
+    of SnapDownloadCommit:
+      # FIXME: The directive `downloadCommit()` needs to be async-ified.
+      ctx.downloadCommit(info).isOkOr:              # write back ranges to DB
+        # FIXME: any useful error handling here?
+        error info & ": Error storing progress", `error`=error
 
     of SnapBalsFetch:
       discard ctx.headerDownloadTrigger(info)       # see `SnapDownload`
       bodyRc = daemonWaitBalsFetchInterval          # parallel peer action
 
-    of SnapBalsFetchFinish:
+    of SnapBalsFetchFinish:                         # wait for sync
       discard
 
     of SnapStateForward:
@@ -220,16 +226,6 @@ proc runPool*(
   ##
   ## Note that this function does not run in `async` mode.
   ##
-  let ctx = buddy.ctx
-
-  case ctx.pool.syncState:
-  of SnapDownloadFinish:
-    ctx.downloadCommit(info).isOkOr:                # write back ranges to DB
-      error info & ": Error storing progress", `error`=error
-  else:
-    discard
-
-  ctx.statsStateLog info                            # print statistics
   true                                              # stop
 
 template runPeer*(

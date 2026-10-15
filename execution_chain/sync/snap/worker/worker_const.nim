@@ -21,6 +21,7 @@ type
     SnapReady                      ## Wait for download state
     SnapDownload                   ## Download and cache initial state data
     SnapDownloadFinish             ## Wait for sync before proceeding
+    SnapDownloadCommit             ## Get ready for BAL forward
     SnapBalsFetch                  ## Bring state forward using BALs
     SnapBalsFetchFinish            ## Wait for sync before proceeding
     SnapStateForward               ## Apply BALs and advance state

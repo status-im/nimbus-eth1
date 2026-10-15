@@ -192,8 +192,12 @@ proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
     return SnapDownloadFinish
-  metrics.set(nec_snap_download_window, 0)          # download window done
 
+  metrics.set(nec_snap_download_window, 0)          # download window done
+  SnapDownloadCommit
+
+proc downloadCommitNext(ctx: SnapCtxRef, info: static[string]): SnapState =
+  ## State transition handler
   # Make sure that a BAL is available for the current pivot.
   if ctx.pool.forwardNum == 0:
     return SnapBalsFetch
@@ -247,7 +251,10 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   #               |    |        download <--------'       |
   #               |    |           |                      |
   #               |    |           v                      |
-  #               |    `---- downloadFinish               |
+  #               |    |     downloadFinish               |
+  #               |    |           |                      |
+  #               |    |           v                      |
+  #               |    `---- downloadCommit               |
   #               |                |                      |
   #               |                v                      |
   #               `----------> assembleMpt ---------------'
@@ -269,6 +276,8 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
       ctx.downloadNext info
     of SnapDownloadFinish:
       ctx.downloadFinishNext info
+    of SnapDownloadCommit:
+      ctx.downloadCommitNext info
     of SnapBalsFetch:
       ctx.balsFetchNext info
     of SnapBalsFetchFinish:
@@ -287,7 +296,8 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   ctx.pool.syncState = newState
 
   case newState:
-  of SnapReady, SnapDownload, SnapDownloadFinish, SnapAssembleMpt:
+  of SnapReady, SnapDownload, SnapDownloadFinish, SnapDownloadCommit,
+     SnapAssembleMpt:
     chronicles.info info & ": State changed", prevState, newState,
       pivot=ctx.pool.pivotNum, finHead=ctx.finHeadNum(info),
       consHead=ctx.consHeadNum(), nSyncPeers=ctx.nSyncPeers()
