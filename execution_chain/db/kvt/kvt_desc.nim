@@ -29,6 +29,10 @@ when compileOption("threads"):
 export hashes, tables, kvt_constants, desc_error
 
 type
+  KvtBatch* = object
+    ## Puts and deletes that `write` applies in one atomic step
+    ops*: seq[tuple[key: seq[byte], val: Opt[seq[byte]]]] # none: delete
+
   GetKvpFn* =
     proc(key: openArray[byte]): Result[seq[byte], KvtError] {.gcsafe, raises: [].}
     ## Generic backend database retrieval function
@@ -52,6 +56,10 @@ type
   ): Result[void, KvtError] {.gcsafe, raises: [].}
     ## Generic backend database bulk delete function.
 
+  WriteKvpFn* =
+    proc(batch: KvtBatch): Result[void, KvtError] {.gcsafe, raises: [].}
+    ## Generic backend database atomic batch write function.
+
   # -------------
 
   CloseFn* = proc(wipe: bool) {.gcsafe, raises: [].}
@@ -74,6 +82,8 @@ type
 
     delKvpFn*: DelKvpFn ## Delete key-value pair
     delRangeKvpFn*: DelRangeKvpFn ## Bulk delete key-value pairs
+
+    writeKvpFn*: WriteKvpFn ## Apply a batch of puts and deletes atomically
 
     closeFn*: CloseFn ## Generic destructor
 

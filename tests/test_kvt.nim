@@ -11,15 +11,17 @@
 {.used.}
 
 import
+  std/[os, tempfiles],
   unittest2,
   results,
   eth/common,
   eth/rlp,
   ../execution_chain/db/core_db,
-  ../execution_chain/db/core_db/memory_only,
+  ../execution_chain/db/core_db/[memory_only, persistent],
+  ../execution_chain/db/opts,
   ../execution_chain/db/storage_types,
   ../execution_chain/db/kvt,
-  ../execution_chain/db/kvt/[kvt_init/memory_only, kvt_utils]
+  ../execution_chain/db/kvt/[kvt_desc, kvt_init/memory_only, kvt_utils]
 
 suite "Kvt":
   setup:
@@ -60,6 +62,35 @@ suite "Kvt":
       not db.hasKey([byte 0, 1, 1])
       not db.hasKey([byte 0, 1, 2])
       db.get([byte 0, 1, 3]).expect("entry") == @[byte 0, 1, 6]
+
+    db.close()
+
+  test "Batch write - write":
+    check db.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
+
+    var batch: KvtBatch
+    batch.del([byte 0, 1, 1])
+    batch.put([byte 0, 1, 2], [byte 0, 1, 5])
+
+    check:
+      db.write(batch).isOk()
+      not db.hasKey([byte 0, 1, 1])
+      db.get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 5]
+
+    db.close()
+
+  test "Batch write - an invalid entry writes nothing":
+    check db.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
+
+    var batch: KvtBatch
+    batch.del([byte 0, 1, 1])
+    batch.put([byte 0, 1, 2], [byte 0, 1, 5])
+    batch.put([byte 0, 1, 3], default(seq[byte]))
+
+    check:
+      db.write(batch).error == DataInvalid
+      db.get([byte 0, 1, 1]).expect("entry") == @[byte 0, 1, 4]
+      not db.hasKey([byte 0, 1, 2])
 
     db.close()
 
@@ -236,3 +267,41 @@ suite "Kvt block hash cache":
     check db.baseTxFrame().getBlockHash(BlockNumber(1)).isErr()
 
     db.close()
+
+  test "A block hash deleted in a batch is not served from the cache":
+    let base = db.baseTxFrame()
+    base.addBlockNumberToHashLookup(BlockNumber(1), hashA)
+    db.persist(base)
+
+    check db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
+
+    var batch: KvtBatch
+    batch.del(blockNumberToHashKey(BlockNumber(1)).toOpenArray)
+
+    check:
+      db.kvt.write(batch).isOk()
+      db.baseTxFrame().getBlockHash(BlockNumber(1)).isErr()
+
+    db.close()
+
+suite "Kvt on RocksDB":
+  setup:
+    let
+      path = createTempDir("nimbus-kvt-", "")
+      db = AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+
+  teardown:
+    db.close()
+    removeDir(path)
+
+  test "Batch write - write":
+    check db.kvt.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
+
+    var batch: KvtBatch
+    batch.del([byte 0, 1, 1])
+    batch.put([byte 0, 1, 2], [byte 0, 1, 5])
+
+    check:
+      db.kvt.write(batch).isOk()
+      not db.kvt.hasKey([byte 0, 1, 1])
+      db.kvt.get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 5]

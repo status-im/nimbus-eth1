@@ -126,6 +126,23 @@ proc delRangeKvpFn(db: MemBackendRef): DelRangeKvpFn =
 
 # -------------
 
+proc writeKvpFn(db: MemBackendRef): WriteKvpFn =
+  result =
+    proc(batch: KvtBatch): Result[void, KvtError] =
+      for op in batch.ops:
+        if op.key.len == 0:
+          return err(KeyInvalid)
+
+      for op in batch.ops:
+        if op.val.isSome:
+          db.tab[op.key] = op.val.get()
+        else:
+          db.tab.del(op.key)
+
+      ok()
+
+# -------------
+
 proc closeFn(db: MemBackendRef): CloseFn =
   result =
     proc(ignore: bool) =
@@ -156,6 +173,8 @@ proc memoryBackend*: KvtDbRef =
 
   db.delKvpFn = delKvpFn(be)
   db.delRangeKvpFn = delRangeKvpFn(be)
+
+  db.writeKvpFn = writeKvpFn(be)
 
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be

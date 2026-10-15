@@ -53,6 +53,33 @@ proc put*(
     return err((errSym,error))
   ok()
 
+proc write*(
+    rdb: RdbInst;
+    batch: KvtBatch;
+    cf: static[KvtCFs]): Result[void,(KvtError,string)] =
+  # A batch of its own: the shared one is written only when Aristo commits
+  let wb = rdb.baseDb.db.openWriteBatch(rdb.store[cf].handle())
+  defer: wb.close()
+  for op in batch.ops:
+    if op.val.isSome:
+      wb.put(op.key, op.val.get()).isOkOr:
+        const errSym = RdbBeDriverPutError
+        when extraTraceMessages:
+          trace logTxt "write", key=op.key, error=errSym, info=error
+        return err((errSym,error))
+    else:
+      wb.delete(op.key).isOkOr:
+        const errSym = RdbBeDriverDelError
+        when extraTraceMessages:
+          trace logTxt "write", key=op.key, error=errSym, info=error
+        return err((errSym,error))
+  rdb.baseDb.db.write(wb).isOkOr:
+    const errSym = RdbBeDriverWriteError
+    when extraTraceMessages:
+      trace logTxt "write", error=errSym, info=error
+    return err((errSym,error))
+  ok()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
