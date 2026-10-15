@@ -247,8 +247,7 @@ method captureStart*(ctx: ParityTracer, comp: Computation,
     action:        action,
     actionKind:    if create: takCreate else: takCall,
     traceAddr:     @[],
-    createAddress: to,
-    vmTrace:       VmTrace(code: comp.code.bytes))
+    createAddress: to)
   ctx.addSkeleton(frame)
   ctx.frames.add frame
 
@@ -305,8 +304,7 @@ method captureEnter*(ctx: ParityTracer, comp: Computation, op: Op,
     action:        action,
     actionKind:    if isCreate: takCreate else: takCall,
     traceAddr:     childAddr,
-    createAddress: to,
-    vmTrace:       VmTrace(code: comp.code.bytes))
+    createAddress: to)
   ctx.addSkeleton(frame)
   ctx.frames.add frame
 
@@ -353,6 +351,8 @@ method captureOpStart*(ctx: ParityTracer, comp: Computation,
       discard
 
   if ttVmTrace in ctx.traceTypes:
+    if ctx.frames[^1].vmTrace.code.len == 0 and ctx.frames[^1].vmTrace.ops.len == 0:
+      ctx.frames[^1].vmTrace.code = comp.code.bytes
     var pending = PendingOp(
       active: true,
       op:     op,
