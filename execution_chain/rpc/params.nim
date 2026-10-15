@@ -46,6 +46,12 @@ proc toTransaction*(vmState: BaseVMState,
     (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
     return err("Invalid combinations of pre and post 1559 fee styles")
 
+  if args.maxFeePerBlobGas.isSome and
+      (args.blobVersionedHashes.isNone or args.blobVersionedHashes.get.len == 0):
+    return err("maxFeePerBlobGas specified without blobVersionedHashes")
+  if args.blobVersionedHashes.isSome and args.blobVersionedHashes.get.len == 0:
+    return err("blob transaction missing blob hashes")
+
   let
     baseFee = vmState.blockCtx.baseFeePerGas
     feeCap = GasInt args.gasPrice.get(args.maxFeePerGas.get(0.Quantity))
