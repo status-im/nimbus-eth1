@@ -27,7 +27,7 @@ proc parseTx(com: CommonRef, hexLine: string) =
       tx = decodeTx(bytes)
       sender = tx.recoverSender().expect("valid signature")
       fork = HardFork.Prague
-      intrinsic = tx.intrinsicGas(fork, 10_000_000, sender)
+      intrinsic = tx.intrinsicGas(fork, sender)
 
     validateTxBasic(com, tx, intrinsic, fork).isOkOr:
       echo "err: ", error

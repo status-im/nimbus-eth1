@@ -54,6 +54,7 @@ type
     hardFork*         : HardFork
     tracer*           : TracerRef
     receipts*         : seq[StoredReceipt]
+    receiptBlooms*    : seq[Bloom]
     cumulativeGasUsed*: GasInt
     blockExecutionGasUsed*: GasInt
     blockStateGasUsed*: GasInt

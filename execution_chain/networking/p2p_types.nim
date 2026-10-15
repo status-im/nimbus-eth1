@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -14,13 +14,14 @@ import
   eth/common/[base, keys],
   eth/enode/enode,
   ./rlpx/rlpxtransport,
-  ./discoveryv4/kademlia,
+  ./eth1_discovery,
+  ./p2p_node,
   ./p2p_peers,
   ./peer_pool,
   json_serialization/std/net as jsnet
 
 export
-  base.NetworkId, rlpxtransport, kademlia,
+  base.NetworkId, rlpxtransport, eth1_discovery, p2p_node,
   p2p_peers, jsnet
 
 type
@@ -31,6 +32,11 @@ type
   PeerPool* = PeerPoolRef[EthereumNode]
   PeerObserver* = PeerObserverRef[EthereumNode]
 
+  SeenNode* = object
+    ## A node that is not worth dialing again until `stamp` has passed.
+    nodeId*: NodeId
+    stamp*: chronos.Moment
+
   EthereumNode* = ref object
     networkId*: NetworkId
     clientId*: string
@@ -38,6 +44,7 @@ type
     keys*: KeyPair
     address*: Address # The external address that the node will be advertising
     peerPool*: PeerPool
+    discovery*: Eth1Discovery
     bindIp*: IpAddress
     bindPort*: Port
 
@@ -46,6 +53,15 @@ type
     protocols*: seq[ProtocolInfo]
     networkStates*: array[MAX_PROTOCOLS, RootRef] # e.g. WireRef
     listeningServer*: StreamServer
+    discoveryLoop*: Future[void].Raising([CancelledError])
+    connQueue*: AsyncQueue[Node]
+    connWorkers*: seq[Future[void].Raising([CancelledError])]
+    connectingNodes*: HashSet[Node]
+      ## Dials in flight, outgoing and incoming alike, so that the dialer and
+      ## `rlpxAccept` cannot both set up a connection to the same node.
+    seenTable*: Table[NodeId, SeenNode]
+    forkId*: ForkIdProc
+    lastForkId*: ForkId
 
     rng*: ref HmacDrbgContext
 

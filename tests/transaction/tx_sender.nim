@@ -14,12 +14,12 @@ import
   stew/endians2,
   nimcrypto/sha2,
   chronicles,
-  ./engine_client,
   ./blobs,
-  ../execution_chain/transaction,
-  ../execution_chain/common,
-  ../execution_chain/utils/utils,
-  ../execution_chain/core/pooled_txs
+  ../../execution_api/engine_client,  
+  ../../execution_chain/transaction,
+  ../../execution_chain/common,
+  ../../execution_chain/utils/utils,
+  ../../execution_chain/core/pooled_txs
 
 from std/sequtils import mapIt
 

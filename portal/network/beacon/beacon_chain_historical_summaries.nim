@@ -60,7 +60,9 @@ func decodeSsz*(
   if contextFork >= ConsensusFork.Electra:
     # As only the very latest version of the historical_summaries is useful for
     # the node it doesn't make sense to support older forks for the proofs.
-    decodeSsz(data.toOpenArray(4, len(data) - 1), HistoricalSummariesWithProof)
+    common_types.decodeSsz(
+      data.toOpenArray(4, len(data) - 1), HistoricalSummariesWithProof
+    )
   else:
     Result[HistoricalSummariesWithProof, string].err(
       "Invalid Fork for HistoricalSummaries"

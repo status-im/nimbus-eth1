@@ -9,7 +9,6 @@
 
 import
   std/[typetraits],
-  web3/execution_types,
   json_rpc/errors,
   nimcrypto/sha2,
   stew/endians2,
@@ -51,7 +50,7 @@ func computePayloadId*(blockHash: common.Hash32,
 
 func validateBlockHash*(header: common.Header,
                         wantHash: common.Hash32,
-                        version: Version): Result[void, PayloadStatusV1] =
+                        version: Version): Result[void, PayloadStatus] =
   let gotHash = header.computeBlockHash
   if wantHash != gotHash:
     let status = if version == Version.V1:
@@ -59,7 +58,7 @@ func validateBlockHash*(header: common.Header,
                  else:
                    PayloadExecutionStatus.invalid
 
-    let res = PayloadStatusV1(
+    let res = PayloadStatus(
       status: status,
       validationError: Opt.some("blockhash mismatch, want " &
         $wantHash & ", got " & $gotHash)
@@ -71,16 +70,16 @@ func validateBlockHash*(header: common.Header,
 template toValidHash*(x: common.Hash32): Opt[Hash32] =
   Opt.some(x)
 
-func simpleFCU*(status: PayloadStatusV1): ForkchoiceUpdatedResponse =
+func simpleFCU*(status: PayloadStatus): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus: status)
 
 func simpleFCU*(status: PayloadExecutionStatus): ForkchoiceUpdatedResponse =
-  ForkchoiceUpdatedResponse(payloadStatus: PayloadStatusV1(status: status))
+  ForkchoiceUpdatedResponse(payloadStatus: PayloadStatus(status: status))
 
 func simpleFCU*(status: PayloadExecutionStatus,
                 msg: string): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
-    payloadStatus: PayloadStatusV1(
+    payloadStatus: PayloadStatus(
       status: status,
       validationError: Opt.some(msg)
     )
@@ -90,7 +89,7 @@ func invalidFCU*(
     validationError: string,
     hash = default(common.Hash32)): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(payloadStatus:
-    PayloadStatusV1(
+    PayloadStatus(
       status: PayloadExecutionStatus.invalid,
       latestValidHash: toValidHash(hash),
       validationError: Opt.some validationError
@@ -100,7 +99,7 @@ func invalidFCU*(
 func validFCU*(id: Opt[Bytes8],
                validHash: common.Hash32): ForkchoiceUpdatedResponse =
   ForkchoiceUpdatedResponse(
-    payloadStatus: PayloadStatusV1(
+    payloadStatus: PayloadStatus(
       status: PayloadExecutionStatus.valid,
       latestValidHash: toValidHash(validHash)
     ),
@@ -108,44 +107,44 @@ func validFCU*(id: Opt[Bytes8],
   )
 
 func invalidStatus*(
-    validHash: Opt[common.Hash32], msg: string): PayloadStatusV1 =
-  PayloadStatusV1(
+    validHash: Opt[common.Hash32], msg: string): PayloadStatus =
+  PayloadStatus(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: validHash,
     validationError: Opt.some(msg)
   )
 
-func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatusV1 =
+func invalidStatus*(validHash: common.Hash32, msg: string): PayloadStatus =
   invalidStatus(Opt.some(validHash), msg)
 
-func invalidStatus*(msg: string): PayloadStatusV1 =
+func invalidStatus*(msg: string): PayloadStatus =
   invalidStatus(Opt.none(Hash32), msg)
-  
-func invalidStatus*(validHash = default(common.Hash32)): PayloadStatusV1 =
-  PayloadStatusV1(
+
+func invalidStatus*(validHash = default(common.Hash32)): PayloadStatus =
+  PayloadStatus(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash)
   )
 
-func acceptedStatus*(validHash: common.Hash32): PayloadStatusV1 =
-  PayloadStatusV1(
+func acceptedStatus*(validHash: common.Hash32): PayloadStatus =
+  PayloadStatus(
     status: PayloadExecutionStatus.accepted,
     latestValidHash: toValidHash(validHash)
   )
 
-func acceptedStatus*(): PayloadStatusV1 =
-  PayloadStatusV1(
+func acceptedStatus*(): PayloadStatus =
+  PayloadStatus(
     status: PayloadExecutionStatus.accepted
   )
 
-func validStatus*(validHash: common.Hash32): PayloadStatusV1 =
-  PayloadStatusV1(
+func validStatus*(validHash: common.Hash32): PayloadStatus =
+  PayloadStatus(
     status: PayloadExecutionStatus.valid,
     latestValidHash: toValidHash(validHash)
   )
 
-func validStatus*(validHash: common.Hash32, witness: Opt[seq[byte]]): PayloadStatusV1 =
-  PayloadStatusV1(
+func validStatus*(validHash: common.Hash32, witness: Opt[seq[byte]]): PayloadStatus =
+  PayloadStatus(
     status: PayloadExecutionStatus.valid,
     latestValidHash: toValidHash(validHash),
     witness: witness,

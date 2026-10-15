@@ -48,6 +48,7 @@ proc init(
   self.fork = ToEVMFork[self.hardFork]
   self.tracer = tracer
   self.receipts.setLen(0)
+  self.receiptBlooms.setLen(0)
   self.cumulativeGasUsed = 0
   self.blockExecutionGasUsed = 0
   self.blockStateGasUsed = 0

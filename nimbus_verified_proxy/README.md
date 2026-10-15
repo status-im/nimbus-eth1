@@ -24,6 +24,27 @@ As such the Nimbus Verified Proxy turns the untrusted web3 data provider
 into a verified data source, and it can be directly used by any wallet that
 relies on the Ethereum JSON RPC Execution API.
 
+### Trust level of a response
+
+Every response is verified against an anchor block, and the strength of that
+verification is the strength of the anchor. The anchor is derived from the block
+the request names:
+
+| Block parameter | Anchor | Guarantee |
+| --- | --- | --- |
+| `finalized` | the light client's finalized header | finalized by the consensus chain |
+| `safe` | the safe head (on OP Stack, the output root posted on L1) | as strong as the posted proposal |
+| `latest` | the light client's optimistic header | optimistic, may be reorged |
+| a block number or hash | the strongest anchor that covers that block | varies with how old the block is |
+
+`earliest` does not name the genesis block here. It resolves to the first
+finalized block hash the proxy has seen in the current instantiation.
+
+A numeric or hash block parameter therefore carries no fixed guarantee: the same
+request answered before and after finality advances is verified against different
+anchors. **For strict guarantees use the block tags** — `finalized` for
+irreversible answers, `safe` where available — rather than a number or a hash.
+
 
 ### Build the Nimbus Verified Proxy from source
 ```bash

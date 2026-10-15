@@ -46,6 +46,16 @@ proc toTransaction*(vmState: BaseVMState,
     (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
     return err("Invalid combinations of pre and post 1559 fee styles")
 
+  let
+    baseFee = vmState.blockCtx.baseFeePerGas
+    feeCap = GasInt args.gasPrice.get(args.maxFeePerGas.get(0.Quantity))
+    tipCap = GasInt args.gasPrice.get(args.maxPriorityFeePerGas.get(0.Quantity))
+  if feeCap > 0 or tipCap > 0:
+    if tipCap > feeCap:
+      return err("max priority fee per gas higher than max fee per gas")
+    if feeCap < baseFee:
+      return err("max fee per gas less than block base fee")
+
   # Set default gas & gas price if none were set
   var gasLimit = globalGasCap
   if gasLimit == 0:

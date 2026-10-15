@@ -58,7 +58,6 @@ proc pp*(a: Address): string =
   a.toHex[32 .. 39].toLowerAscii
 
 proc pp*(tx: Transaction): string =
-  # "(" & tx.ecRecover.value.pp & "," & $tx.nonce & ")"
   "(" & tx.recoverSender().value().pp & "," & $tx.nonce & ")"
 
 proc pp*(h: Hash32): string =
@@ -589,11 +588,8 @@ proc runLedgerBasicOperationsTests() =
             return false
         true
 
-      proc verifySlots(ledger: LedgerRef, address: int, slots: varargs[int]): bool =
+      proc verifySlots(ledger: LedgerRef, address: int, slots: varargs[int]): bool =      
         let a = address.initAddr
-        if not ledger.inAccessList(a):
-            return false
-
         for c in slots:
           if not ledger.inAccessList(a, c.u256):
             return false
@@ -610,7 +606,10 @@ proc runLedgerBasicOperationsTests() =
       ledger.accessList(0xaa)
       ledger.accessList(0xbb, 0x01)
       ledger.accessList(0xbb, 0x02)
-      check ledger.verifyAddrs(0xaa, 0xbb)
+      
+      check ledger.verifyAddrs(0xaa)
+      # 0xaa and 0xbb located in different set
+      check ledger.verifyAddrs(0xbb) == false            
       check ledger.verifySlots(0xbb, 0x01, 0x02)
       check ledger.verifySlots(0xaa, 0x01) == false
       check ledger.verifySlots(0xaa, 0x02) == false
@@ -621,14 +620,19 @@ proc runLedgerBasicOperationsTests() =
       ledger.accessList(0xaa, 0x01)
       ledger.accessList(0xcc, 0x01)
       ledger.accessList(0xcc)
+      ledger.accessList(0xbb)
 
-      check ledger.verifyAddrs(0xaa, 0xbb, 0xcc)
+      check ledger.verifyAddrs(0xaa)
+      check ledger.verifyAddrs(0xbb)
+      # only 0xcc available in both set
+      check ledger.verifyAddrs(0xcc)
       check ledger.verifySlots(0xaa, 0x01)
       check ledger.verifySlots(0xbb, 0x01, 0x02, 0x03)
       check ledger.verifySlots(0xcc, 0x01)
 
       ledger.rollback(sp)
-      check ledger.verifyAddrs(0xaa, 0xbb)
+      check ledger.verifyAddrs(0xaa)
+      check ledger.verifyAddrs(0xbb) == false
       check ledger.verifyAddrs(0xcc) == false
       check ledger.verifySlots(0xcc, 0x01) == false
 
@@ -640,7 +644,8 @@ proc runLedgerBasicOperationsTests() =
       ledger.accessList(0xdd, 0x04)
       ledger.commit(sp)
 
-      check ledger.verifyAddrs(0xaa, 0xbb, 0xcc)
+      check ledger.verifyAddrs(0xaa, 0xcc)
+      check ledger.verifyAddrs(0xbb) == false
       check ledger.verifySlots(0xaa, 0x01)
       check ledger.verifySlots(0xbb, 0x01, 0x02, 0x03)
       check ledger.verifySlots(0xcc, 0x01)

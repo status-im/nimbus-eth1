@@ -306,7 +306,6 @@ proc run(
       accountCacheLen = config.accountCacheLen,
       codeCacheLen = config.codeCacheLen,
       storageCacheLen = config.storageCacheLen,
-      anchor = blockId("safe"),
     ).valueOr:
       raise newException(ProxyError, "Couldn't initialize OP verification engine")
 
@@ -316,7 +315,7 @@ proc run(
       l2Engine, config.opExecutionApiUrls, fullExecutionCapabilities
     )
 
-    let opFrontend = getExecutionApiFrontend(l2Engine, engine)
+    let opFrontend = getOpExecutionApiFrontend(l2Engine, engine)
     opFrontendServers = startFrontends(opFrontend, config.opFrontendUrls)
 
   try:

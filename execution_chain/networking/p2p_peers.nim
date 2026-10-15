@@ -18,7 +18,7 @@ import
   ./p2p_protocols,
   ./rlpx/rlpxtransport
 
-from ./discoveryv4/kademlia import Node, NodeId
+from ./p2p_node import Node, NodeId
 
 export
   p2p_protocols, rlpxtransport

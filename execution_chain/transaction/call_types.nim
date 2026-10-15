@@ -35,6 +35,7 @@ type
   # Standard call result.
   CallResult* = object of RootObj
     error*:           string            # Something if the call failed.
+    status*:          StatusCode        # EVM status code when the call failed.
     gasUsed*:         GasInt            # Gas used by the tx.
     contractAddress*: addresses.Address # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
@@ -70,7 +71,7 @@ const
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 = 16
   TX_VALUE_COST = 6000
 
-func intrinsicGas*(tx: Transaction, hardFork: HardFork, gasLimit: GasInt, sender: Address): IntrinsicGas =
+func intrinsicGas*(tx: Transaction, hardFork: HardFork, sender: Address): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).

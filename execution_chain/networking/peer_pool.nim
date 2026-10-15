@@ -7,54 +7,28 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-# PeerPoolRef dials out until `dialTarget` peers are connected and caps the
-# total number of connections, incoming and outgoing, at `maxPeers`.
-
 {.push raises: [].}
 
 import
-  std/[os, tables, times, sets],
-  chronos, chronicles,
+  std/tables,
   eth/common/base,
   ./p2p_metrics,
-  ./[eth1_discovery, p2p_peers]
+  ./[p2p_node, p2p_peers]
 
-export sets, tables, CompatibleForkIdProc, base, eth1_discovery
-
-logScope:
-  topics = "p2p peer_pool"
+export tables, base, p2p_node
 
 type
-  SeenNode = object
-    nodeId: NodeId
-    stamp: chronos.Moment
-
-  WorkerFuture = Future[void].Raising([CancelledError])
-
-  ForkIdProc* = proc(): ForkId {.noSideEffect, raises: [].}
-
   # Usually Network generic param is instantiated with EthereumNode
   PeerPoolRef*[Network] = ref object
-    network: Network
-    maxPeers*: int
+    maxPeers: int
       ## Hard limit on the number of connected peers, incoming and outgoing
       ## alike - see `isFull`
-    dialTarget*: int
+    dialTarget: int
       ## Number of peers up to which we actively dial out. This is deliberately
       ## lower than `maxPeers` so that the dialer cannot fill every slot and
       ## leave the node unreachable for incoming connections.
-    connQueue: AsyncQueue[Node]
-    seenTable: Table[NodeId, SeenNode]
-    running: bool
-    discovery: Eth1Discovery
-    workers: seq[WorkerFuture]
-    forkId: ForkIdProc
-    lastForkId: ForkId
-    connectTimer: Future[void].Raising([CancelledError])
-    updateTimer: Future[void].Raising([CancelledError])
-    connectingNodes*: HashSet[Node]
-    connectedNodes*: Table[Node, PeerRef[Network]]
-    observers*: Table[int, PeerObserverRef[Network]]
+    connectedNodes: Table[Node, PeerRef[Network]]
+    observers: Table[int, PeerObserverRef[Network]]
 
   PeerObserverRef*[Network] = object
     onPeerConnected*: proc(p: PeerRef[Network]) {.gcsafe, raises: [].}
@@ -64,197 +38,35 @@ type
 const
   defaultMaxPeers* = 25
     ## Fallback when `--max-peers` is not given. Exported so that `conf.nim`
-    ## and the `newPeerPool` / `newEthereumNode` defaults cannot drift apart.
-
-  connectLoopSleep = chronos.milliseconds(2000)
-  updateLoopSleep = chronos.seconds(15)
-  maxConcurrentConnectionRequests = 40
+    ## and the `PeerPool.new` / `newEthereumNode` defaults cannot drift apart.
 
   inboundSlotDivisor = 3
     ## One in this many peer slots is kept free for incoming connections.
 
-  SeenTableTimeDeadPeer = chronos.minutes(10)
-    ## Period of time for dead / unreachable peers.
-
-  SeenTableTimeUselessPeer = chronos.hours(24)
-    ## Period of time for Useless peers, either because of no matching
-    ## capabilities or on an irrelevant network.
-
-  SeenTableTimeProtocolError = chronos.minutes(30)
-    ## Period of time for peers with a protocol error.
-
-  SeenTableTimeReconnect = chronos.minutes(5)
-    ## Period of time for peers with general disconnections / transport errors.
-
 #------------------------------------------------------------------------------
-# Private functions
+# Public functions
 #------------------------------------------------------------------------------
 
-proc isSeen(p: PeerPoolRef, nodeId: NodeId): bool =
-  ## Returns ``true`` if ``nodeId`` present in SeenTable and time period is not
-  ## yet expired.
-  let currentTime = now(chronos.Moment)
-  if nodeId notin p.seenTable:
-    false
-  else:
-    let item = try: p.seenTable[nodeId]
-    except KeyError: raiseAssert "checked with notin"
-    if currentTime >= item.stamp:
-      # Peer is in SeenTable, but the time period has expired.
-      p.seenTable.del(nodeId)
-      false
-    else:
-      true
-
-proc addSeen(
-    p: PeerPoolRef, nodeId: NodeId, period: chronos.Duration) =
-  ## Adds peer with NodeId ``nodeId`` to SeenTable and timeout ``period``.
-  let item = SeenNode(nodeId: nodeId, stamp: now(chronos.Moment) + period)
-  withValue(p.seenTable, nodeId, entry) do:
-    if entry.stamp < item.stamp:
-      entry.stamp = item.stamp
-  do:
-    p.seenTable[nodeId] = item
+func maxPeers*(p: PeerPoolRef): int =
+  p.maxPeers
 
 func isFull*(p: PeerPoolRef): bool =
   ## `true` when the pool holds `maxPeers` peers and no further connection,
   ## incoming or outgoing, may be established.
   p.connectedNodes.len >= p.maxPeers
 
-proc connect[Network](p: PeerPoolRef[Network], remote: Node): Future[PeerRef[Network]] {.async: (raises: [CancelledError]).} =
-  ## Connect to the given remote and return a Peer instance when successful.
-  ## Returns nil if the remote is unreachable, times out or is useless.
-  if remote in p.connectedNodes:
-    trace "skipping_connection_to_already_connected_peer", remote
-    return nil
+func new*[Network](
+    _: type PeerPoolRef[Network], maxPeers = defaultMaxPeers
+): PeerPoolRef[Network] =
+  let limit = max(1, maxPeers)
+  PeerPoolRef[Network](
+    maxPeers: limit,
+    dialTarget: max(1, limit - limit div inboundSlotDivisor),
+    connectedNodes: initTable[Node, PeerRef[Network]](),
+    observers: initTable[int, PeerObserverRef[Network]](),
+  )
 
-  if remote in p.connectingNodes:
-    # debug "skipping connection"
-    return nil
-
-  if p.isSeen(remote.id):
-    return nil
-
-  if p.isFull:
-    trace "Peer limit reached, not dialing", remote, maxPeers = p.maxPeers
-    return nil
-
-  trace "Connecting to node", remote
-  p.connectingNodes.incl(remote)
-  let res = await p.network.rlpxConnect(remote)
-  p.connectingNodes.excl(remote)
-
-  # TODO: Probably should move all this logic to rlpx.nim
-  if res.isOk():
-    rlpx_connect_success.inc()
-    return res.get()
-  else:
-    rlpx_connect_failure.inc()
-    rlpx_connect_failure.inc(labelValues = [$res.error])
-    case res.error():
-    of UselessRlpxPeerError:
-      p.addSeen(remote.id, SeenTableTimeUselessPeer)
-    of TransportConnectError:
-      p.addSeen(remote.id, SeenTableTimeDeadPeer)
-    of RlpxHandshakeError, ProtocolError, InvalidIdentityError:
-      p.addSeen(remote.id, SeenTableTimeProtocolError)
-    of RlpxHandshakeTransportError,
-        P2PHandshakeError,
-        P2PTransportError,
-        PeerDisconnectedError,
-        TooManyPeersError:
-      p.addSeen(remote.id, SeenTableTimeReconnect)
-
-    return nil
-
-proc connectToNode*(p: PeerPoolRef, n: Node) {.async: (raises: [CancelledError]).}
-
-# This code is loosely based on code from nimbus-eth2;
-# see eth2_network.nim and search for connQueue.
-proc createConnectionWorker(p: PeerPoolRef, workerId: int): Future[void] {.async: (raises: [CancelledError]).} =
-  trace "Connection worker started", workerId = workerId
-  while true:
-    let n = await p.connQueue.popFirst()
-    await connectToNode(p, n)
-
-proc lookupPeers(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
-  ## Lookup more peers if the node is not yet connected to `dialTarget` peers.
-  ## Adds the found nodes to the connection queue.
-  if p.connectedNodes.len < p.dialTarget:
-    # Add nodes to connQueue from discovery protocol,
-    # to be later processed by connection worker
-    await p.discovery.lookupRandomNode(p.connQueue)
-
-func updateForkId(p: PeerPoolRef) =
-  if p.forkId.isNil:
-    return
-
-  let forkId = p.forkId()
-  if p.lastForkId == forkId:
-    return
-
-  p.discovery.updateForkId(forkId)
-  p.lastForkId = forkId
-
-proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
-  trace "Running PeerPool..."
-
-  # initial cycle
-  p.updateForkId()
-  await p.discovery.start()
-
-  # The flag `p.running` has a double meaning. It is used to control the
-  # below `while` loop as well as an indication, that the listener is up
-  # and running. So this means that the `p.running` flag must be set
-  # before the `lookupPeers()`. Placing it later, there is a race condition
-  # when discovery is shut down early and `closeWait()` will not release
-  # the listener which remains blocked.
-  p.running = true
-
-  await p.lookupPeers()
-
-  while p.running:
-    debug "Amount of peers", amount = p.connectedNodes.len()
-
-    # Create or replenish timer
-    if p.connectTimer.isNil or p.connectTimer.finished:
-      p.connectTimer = sleepAsync(connectLoopSleep)
-
-    if p.updateTimer.isNil or p.updateTimer.finished:
-      p.updateTimer = sleepAsync(updateLoopSleep)
-
-    let
-      res = await one(p.connectTimer, p.updateTimer)
-
-    if res == p.connectTimer:
-      await p.lookupPeers()
-
-    if res == p.updateTimer:
-      p.updateForkId()
-
-#------------------------------------------------------------------------------
-# Private functions
-#------------------------------------------------------------------------------
-
-func newPeerPool*[Network](
-    network: Network,
-    discovery: Eth1Discovery,
-    maxPeers = defaultMaxPeers,
-    forkId = ForkIdProc(nil),
-    ): PeerPoolRef[Network] =
-  new result
-  result.network = network
-  result.maxPeers = max(1, maxPeers)
-  result.dialTarget =
-    max(1, result.maxPeers - result.maxPeers div inboundSlotDivisor)
-  result.discovery = discovery
-  result.connQueue = newAsyncQueue[Node](maxConcurrentConnectionRequests)
-  result.connectedNodes = initTable[Node, PeerRef[Network]]()
-  result.connectingNodes = initHashSet[Node]()
-  result.observers = initTable[int, PeerObserverRef[Network]]()
-  result.forkId = forkId
-
-proc addObserver*(p: PeerPoolRef, observerId: int, observer: PeerObserverRef) =
+proc addObserver(p: PeerPoolRef, observerId: int, observer: PeerObserverRef) =
   doAssert(observerId notin p.observers)
   p.observers[observerId] = observer
   if not observer.onPeerConnected.isNil:
@@ -262,7 +74,7 @@ proc addObserver*(p: PeerPoolRef, observerId: int, observer: PeerObserverRef) =
       if observer.protocols.len == 0 or peer.supports(observer.protocols):
         observer.onPeerConnected(peer)
 
-func delObserver*(p: PeerPoolRef, observerId: int) =
+func delObserver(p: PeerPoolRef, observerId: int) =
   p.observers.del(observerId)
 
 proc addObserver*(p: PeerPoolRef, observerId: ref, observer: PeerObserverRef) =
@@ -274,7 +86,8 @@ func delObserver*(p: PeerPoolRef, observerId: ref) =
 template addProtocol*(observer: PeerObserverRef, Protocol: type) =
   observer.protocols.add Protocol.protocolInfo
 
-func eth1Discovery*(p: PeerPoolRef): Eth1Discovery = p.discovery
+func dialTargetReached*(p: PeerPoolRef): bool =
+  p.connectedNodes.len >= p.dialTarget
 
 func len*(p: PeerPoolRef): int = p.connectedNodes.len
 
@@ -287,19 +100,8 @@ iterator peers*[Network](p: PeerPoolRef[Network], Protocol: type): PeerRef[Netwo
     if peer.supports(Protocol):
       yield peer
 
-func numPeers*(p: PeerPoolRef): int =
-  p.connectedNodes.len
-
-func contains*(p: PeerPoolRef, n: ENode): bool =
-  for remote, _ in p.connectedNodes:
-    if remote.node == n:
-      return true
-
 func contains*(p: PeerPoolRef, n: Node): bool =
   n in p.connectedNodes
-
-func contains*(p: PeerPoolRef, n: PeerRef): bool =
-  n.remote in p.connectedNodes
 
 proc addPeer*(pool: PeerPoolRef, peer: PeerRef) {.gcsafe.} =
   doAssert(peer.remote notin pool.connectedNodes)
@@ -310,38 +112,21 @@ proc addPeer*(pool: PeerPoolRef, peer: PeerRef) {.gcsafe.} =
       if observer.protocols.len == 0 or peer.supports(observer.protocols):
         observer.onPeerConnected(peer)
 
-proc connectToNode*(p: PeerPoolRef, n: Node) {.async: (raises: [CancelledError]).} =
-  let peer = await p.connect(n)
-  if not peer.isNil:
-    trace "Connection established (outgoing)", peer
-    p.addPeer(peer)
-
-proc connectToNode*(p: PeerPoolRef, n: ENode) {.async: (raises: [CancelledError]).} =
-  await p.connectToNode(newNode(n))
-
-proc start*(p: PeerPoolRef, enableDiscV4: bool, enableDiscV5: bool) =
-  if p.running:
+proc removePeer*(pool: PeerPoolRef, peer: PeerRef) {.gcsafe.} =
+  ## Drop a peer that is no longer connected. Tolerates peers that were never
+  ## added: the remote may have disconnected first, racing our own teardown.
+  if peer.remote.isNil or peer.remote notin pool.connectedNodes:
     return
 
-  try:
-    p.discovery.open(enableDiscV4, enableDiscV5)
-  except TransportOsError as exc:
-    fatal "Cannot start discovery protocol", msg=exc.msg
-    quit(QuitFailure)
+  pool.connectedNodes.del(peer.remote)
+  rlpx_connected_peers.dec()
 
-  var workers = newSeqOfCap[WorkerFuture](maxConcurrentConnectionRequests+1)
-  for i in 0 ..< maxConcurrentConnectionRequests:
-    workers.add createConnectionWorker(p, i)
-
-  workers.add p.run()
-  p.workers = move(workers)
-
-proc closeWait*(p: PeerPoolRef) {.async: (raises: []).} =
-  if not p.running:
+  # `supports` below needs the dispatcher, and a peer can be disconnected
+  # before that is set up.
+  if peer.dispatcher.isNil:
     return
-  p.running = false
-  var futures = newSeqOfCap[Future[void]](p.workers.len)
-  for worker in p.workers:
-    futures.add worker.cancelAndWait()
-  await noCancel(allFutures(futures))
-  await p.discovery.closeWait()
+
+  for observer in pool.observers.values:
+    if not observer.onPeerDisconnected.isNil:
+      if observer.protocols.len == 0 or peer.supports(observer.protocols):
+        observer.onPeerDisconnected(peer)

@@ -11,40 +11,33 @@
 {.push raises: [].}
 
 import
-  eth/bloom,
   ../../db/ledger,
   ../../evm/state,
   ../../evm/types,
   ../../common/common,
   ../../transaction/call_types
 
-type
-  ExecutorError* = object of CatchableError
-    ## Catch and relay exception error
-
-  # TODO: these types need to be removed
-  # once eth/bloom and eth/common sync'ed
-  LogsBloom = bloom.BloomFilter
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-func logsBloom(logs: openArray[Log]): LogsBloom =
-  for log in logs:
-    result.incl log.address
-    for topic in log.topics:
-      result.incl topic
+func incl(acc: var Bloom, b: Bloom) {.inline.} =
+  for i in 0 ..< acc.data.len:
+    acc.data[i] = acc.data[i] or b.data[i]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 func createBloom*(receipts: openArray[StoredReceipt]): Bloom =
-  var bloom: LogsBloom
   for rec in receipts:
-    bloom.value = bloom.value or logsBloom(rec.logs).value
-  bloom.value.to(Bloom)
+    result.accumLogsBloom(rec.logs)
+
+func createBloom*(blooms: openArray[Bloom], bloom: var Bloom) =
+  var acc: Bloom
+  for b in blooms:
+    acc.incl b
+  bloom = acc
 
 proc makeReceipt*(
     vmState: BaseVMState; txType: TxType): StoredReceipt =

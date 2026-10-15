@@ -32,11 +32,11 @@ suite "History Network Endpoints":
     node2.start()
 
     check:
-      node1.portalProtocol().addNode(node2.localNode()) == Added
-      node2.portalProtocol().addNode(node1.localNode()) == Added
+      node1.portalProtocol().addNode(node2.localNode().toNode()) == Added
+      node2.portalProtocol().addNode(node1.localNode().toNode()) == Added
 
-      (await node1.portalProtocol().ping(node2.localNode())).isOk()
-      (await node2.portalProtocol().ping(node1.localNode())).isOk()
+      (await node1.portalProtocol().ping(node2.localNode().toNode())).isOk()
+      (await node2.portalProtocol().ping(node1.localNode().toNode())).isOk()
 
     for kind, path in walkDir(testsPath):
       if kind == pcFile and path.splitFile.ext == ".yaml":
@@ -68,11 +68,11 @@ suite "History Network Endpoints":
     node2.start()
 
     check:
-      node1.portalProtocol().addNode(node2.localNode()) == Added
-      node2.portalProtocol().addNode(node1.localNode()) == Added
+      node1.portalProtocol().addNode(node2.localNode().toNode()) == Added
+      node2.portalProtocol().addNode(node1.localNode().toNode()) == Added
 
-      (await node1.portalProtocol().ping(node2.localNode())).isOk()
-      (await node2.portalProtocol().ping(node1.localNode())).isOk()
+      (await node1.portalProtocol().ping(node2.localNode().toNode())).isOk()
+      (await node2.portalProtocol().ping(node1.localNode().toNode())).isOk()
 
     for kind, path in walkDir(testsPath):
       if kind == pcFile and path.splitFile.ext == ".yaml":

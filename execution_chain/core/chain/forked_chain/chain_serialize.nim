@@ -25,11 +25,6 @@ logScope:
   topics = "forked chain"
 
 type
-  TxRecord = object
-    txHash: Hash32
-    blockHash: Hash32
-    blockNumber: uint64
-
   FcState = object
     numBlocks: uint
     base: uint
@@ -37,7 +32,6 @@ type
     heads: seq[uint]
     pendingFCU: Hash32
     latestFinalized: FcuHashAndNumber
-    txRecords: seq[TxRecord]
     fcuHead: FcuHashAndNumber
     fcuSafe: FcuHashAndNumber
 
@@ -58,7 +52,7 @@ func append(w: var RlpWriter, b: BlockRef) =
   w.append(parentIndex)
 
 func append(w: var RlpWriter, fc: ForkedChainRef) =
-  w.startList(9)
+  w.startList(8)
   w.append(fc.hashToBlock.len.uint)
   w.append(fc.base.index)
   w.append(fc.latest.index)
@@ -70,13 +64,6 @@ func append(w: var RlpWriter, fc: ForkedChainRef) =
   w.append(heads)
   w.append(fc.pendingFCU)
   w.append(fc.latestFinalized)
-  w.startList(fc.txRecords.len)
-  for k, v in fc.txRecords:
-    w.append(TxRecord(
-      txHash: k,
-      blockHash: v[0],
-      blockNumber: v[1],
-    ))
   w.append(fc.fcuHead)
   w.append(fc.fcuSafe)
 
@@ -95,7 +82,6 @@ func read(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
   rlp.read(result.heads)
   rlp.read(result.pendingFCU)
   rlp.read(result.latestFinalized)
-  rlp.read(result.txRecords)
   rlp.read(result.fcuHead)
   rlp.read(result.fcuSafe)
 
@@ -177,7 +163,6 @@ func reset(fc: ForkedChainRef, base: BlockRef) =
   fc.hashToBlock = {base.hash: base}.toTable
   fc.pendingFCU  = zeroHash32
   fc.latestFinalized.reset()
-  fc.txRecords.clear()
   fc.fcuHead.reset()
   fc.fcuSafe.reset()
 
@@ -279,9 +264,6 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   if fc.base.hash != prevBase.hash:
     fc.reset(prevBase)
     return err("loaded baseHash != baseHash")
-
-  for tx in state.txRecords:
-    fc.txRecords[tx.txHash] = (tx.blockHash, tx.blockNumber)
 
   for b in blocks:
     if b.index > 0:

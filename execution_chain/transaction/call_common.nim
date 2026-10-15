@@ -233,6 +233,7 @@ proc finishRunningComputation(
     # transactions
     if c.isError:
       result.error = c.error.info
+      result.status = c.error.status
     result.gasUsed = gasUsed.txGasUsed
     result.output = system.move(c.output)
     result.contractAddress = if params.isCreate: c.msg.currentTarget

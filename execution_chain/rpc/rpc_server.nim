@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -12,8 +12,12 @@ when false:
     std/importutils
 
 import
+  chronicles,
   json_rpc/servers/httpserver as jrpc_server,
   chronos/apps/http/httpserver {.all.}
+
+logScope:
+  topics = "rpc http server"
 
 type
   RpcHttpServerParams = object
@@ -57,6 +61,11 @@ type
   NimbusHttpServerRef* = ref NimbusHttpServer
 
 {.push gcsafe, raises: [].}
+
+func isRootPath*(request: HttpRequestRef): bool =
+  ## The JSON-RPC handler is not reachable under a path of its own, so it only
+  ## claims the server root. Any other path is left to the handlers after it.
+  request.uri.path.len == 0 or request.uri.path == "/"
 
 func defaultRpcHttpServerParams(): RpcHttpServerParams =
   RpcHttpServerParams(
@@ -273,27 +282,40 @@ proc processLoop(nserver: NimbusHttpServerRef, holder: HttpConnectionHolderRef) 
 
 proc acceptClientLoop(nserver: NimbusHttpServerRef) {.async: (raises: []).} =
   let server = nserver.server
-  var runLoop = true
-  while runLoop:
-    try:
-      let transp = await server.instance.accept()
-      let resId = transp.getId()
-      if resId.isErr():
-        # We are unable to identify remote peer, it means that remote peer
-        # disconnected before identification.
-        await transp.closeWait()
-        runLoop = false
-      else:
-        let connId = resId.get()
-        let holder = HttpConnectionHolderRef.new(server, transp, resId.get())
-        server.connections[connId] = holder
-        holder.future = processLoop(nserver, holder)
-    except TransportTooManyError, TransportAbortedError:
-      # Non-critical error
-      discard
-    except CancelledError, TransportOsError, CatchableError:
-      # Critical, cancellation or unexpected error
-      runLoop = false
+  while true:
+    let transp =
+      try:
+        await server.instance.accept()
+      except TransportTooManyError as exc:
+        debug "Unable to accept HTTP connection",
+          address = $server.address, reason = exc.msg
+        continue
+      except TransportAbortedError as exc:
+        # Remote peer disconnected before accept
+        debug "HTTP connection aborted before accept",
+          address = $server.address, reason = exc.msg
+        continue
+      except TransportUseClosedError, CancelledError:
+        # Server is being stopped or closed
+        debug "HTTP server stopped accepting connections",
+          address = $server.address
+        return
+      except TransportOsError as exc:
+        error "HTTP server stopped accepting connections",
+          address = $server.address, reason = exc.msg
+        return
+
+    let connectionId = transp.getId().valueOr:
+      # The remote peer disconnected (e.g. reset) while queued for acceptance,
+      # so its address can no longer be read.
+      debug "HTTP connection lost before identification",
+        address = $server.address, reason = error
+      await transp.closeWait()
+      continue
+
+    let holder = HttpConnectionHolderRef.new(server, transp, connectionId)
+    server.connections[connectionId] = holder
+    holder.future = processLoop(nserver, holder)
 
 proc start*(server: NimbusHttpServerRef) =
   if server.server.state == ServerStopped:

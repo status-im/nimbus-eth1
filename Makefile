@@ -95,6 +95,8 @@ endif
 	eest_tool_test \
 	eest_benchmark \
 	eest_benchmark_test \
+	eest_zkevm_benchmark \
+	eest_zkevm_benchmark_test \
 	t8n \
 	t8n_test \
 	evmstate \
@@ -172,9 +174,9 @@ deps: | deps-common nat-libs nimbus.nims build/generate_makefile
 
 # Build the generate_makefile tool which turns Nim compilation into a
 # two-step process (nim c --compileOnly → generate_makefile → sub-make)
-build/generate_makefile: vendor/nimbus-eth2/tools/generate_makefile.nim | deps-common
+build/generate_makefile: tools/generate_makefile.nim vendor/nimbus-eth2/tools/generate_makefile.nim | deps-common
 	+ echo -e $(BUILD_MSG) "$@" && \
-		$(ENV_SCRIPT) $(NIMC) c -o:$@ $(NIM_PARAMS) --skipParentCfg vendor/nimbus-eth2/tools/generate_makefile.nim && \
+		$(ENV_SCRIPT) $(NIMC) c -o:$@ $(NIM_PARAMS) tools/generate_makefile.nim && \
 		echo -e $(BUILD_END_MSG) "$@"
 
 # eth protocol settings, rules from "execution_chain/sync/protocol/eth/variables.mk"
@@ -236,6 +238,9 @@ eest:
 
 eest_benchmark:
 	scripts/eest_ci_cache.sh benchmark
+
+eest_zkevm_benchmark:
+	scripts/eest_ci_cache.sh zkevm_benchmark
 
 # builds and runs the nimbus test suite
 test: | build deps rocksdb eest
@@ -481,6 +486,13 @@ eest_stateless_execution_test: | build deps eest
 	build/$@
 
 eest_benchmark_test: | build deps eest_benchmark
+	+ echo -e $(BUILD_MSG) "build/$@" && \
+		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
+		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$@"
+	build/$@
+
+eest_zkevm_benchmark_test: | build deps eest_zkevm_benchmark
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
 		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \

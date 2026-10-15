@@ -26,6 +26,7 @@ import
   ../transaction/call_evm_rpc,
   ../evm/evm_errors,
   ../core/eip4844,
+  ../core/gaslimit,
   ../core/pooled_txs_rlp,
   ./oracle,
   ./rpc_types,
@@ -199,21 +200,21 @@ template sign(privateKey: PrivateKey, message: string): seq[byte] =
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
   server.rpc(EthJson):
-    proc eth_getBalance(data: Address, blockTag: BlockTag): UInt256 {.raises: [ValueError].} =
+    proc eth_getBalance(data: Address, blockTag: Opt[BlockTag]): UInt256 {.raises: [ValueError].} =
       ## Returns the balance of the account of given address.
       let
-        txFrame = api.frameFromTag(blockTag).valueOr:
+        txFrame = api.frameFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)
         address = data
         acc = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
       acc.balance
 
     proc eth_getStorageAt(
-      data: Address, slot: UInt256, blockTag: BlockTag
+      data: Address, slot: UInt256, blockTag: Opt[BlockTag]
     ): FixedBytes[32] {.raises: [ValueError].} =
       ## Returns the value from a storage position at a given address.
       let
-        txFrame = api.frameFromTag(blockTag).valueOr:
+        txFrame = api.frameFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)
         address = data
         accPath = address.computeAccPath
@@ -222,11 +223,12 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       value.to(Bytes32)
 
     proc eth_getTransactionCount(
-      data: Address, blockTag: BlockTag
+      data: Address, blockTag: Opt[BlockTag]
     ): Quantity {.raises: [ValueError].} =
       ## Returns the number of transactions ak.s. nonce sent from an address.
       ## With the "pending" tag the sender's gap-free pooled transactions are
       ## counted as well.
+      let blockTag = blockTag.get(defaultTag)
       if blockTag.kind == bidAlias and blockTag.alias.toLowerAscii == "pending":
         return Quantity(api.txPool.getPendingNonce(data))
 
@@ -246,14 +248,14 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
     proc eth_chainId(): UInt256 =
       return api.com.chainId
 
-    proc eth_getCode(data: Address, blockTag: BlockTag): seq[byte] {.raises: [ValueError].} =
+    proc eth_getCode(data: Address, blockTag: Opt[BlockTag]): seq[byte] {.raises: [ValueError].} =
       ## Returns code at a given address.
       ##
       ## data: address
       ## blockTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
       ## Returns the code from the given address.
       let
-        txFrame = api.frameFromTag(blockTag).valueOr:
+        txFrame = api.frameFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)
         address = data
         accPath = address.computeAccPath
@@ -333,10 +335,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         # tag would be an enum (Earliest, Latest, Pending, Number), and all operations
         # would operate on this enum instead of raw strings. This change would need
         # to be done on every endpoint to be consistent.
-        if filterOptions.toBlock.isSome() and
-            filterOptions.toBlock.get().kind == bidNumber and
-            base.BlockNumber(filterOptions.toBlock.get().number) > api.chain.latestHeader.number:
-          raise invalidParams("block range extends beyond current head block")
+        let latestNumber = api.chain.latestHeader.number
+        for tag in [filterOptions.fromBlock, filterOptions.toBlock]:
+          if tag.isSome() and tag.get().kind == bidNumber and
+              base.BlockNumber(tag.get().number) > latestNumber:
+            raise invalidParams("block range extends beyond current head block")
 
         let
           blockFrom = api.headerFromTag(filterOptions.fromBlock.get(defaultTag)).valueOr:
@@ -364,19 +367,27 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       txHash
 
-    proc eth_call(args: TransactionArgs, blockTag: BlockTag): seq[byte] {.raises: [ValueError].} =
+    proc eth_call(args: TransactionArgs, blockTag: Opt[BlockTag]): seq[byte] {.raises: [RpcResponseError, ValueError].} =
       ## Executes a new message call immediately without creating a transaction on the block chain.
       ##
       ## call: the transaction call object.
       ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
       ## Returns the return value of executed contract.
       let
-        header = api.headerFromTag(blockTag).valueOr:
+        header = api.headerFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, "Block not found")
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
-        res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
+        res = rpcCallEvm(args, header, api.com, txFrame).valueOr:
           raise newException(ValueError, "rpcCallEvm error: " & error)
+      if res.isError:
+        if res.status == StatusCode.Revert and res.output.len > 0:
+          raise (ref RpcResponseError)(
+            code: 3,
+            msg: res.error,
+            data: EthJson.encode(res.output.to0xHex()).JsonString,
+          )
+        raise newException(ValueError, res.error)
       res.output
 
     proc eth_getTransactionReceipt(data: Hash32): ReceiptObject =
@@ -405,21 +416,25 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       return populateReceipt(receipt, receipt.cumulativeGasUsed - prevGasUsed,
                             tx, txid, header, api.com)
 
-    proc eth_estimateGas(args: TransactionArgs): Quantity {.raises: [RpcResponseError, ValueError].} =
+    proc eth_estimateGas(
+        args: TransactionArgs, blockTag: Opt[BlockTag]
+    ): Quantity {.raises: [RpcResponseError, ValueError].} =
       ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
       ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
       ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
       ##
       ## args: the transaction call object.
-      ## quantityTag:  integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
+      ## blockTag: integer block number, block hash, or the string "latest", "earliest" or "pending", see the default block parameter.
       ## Returns the amount of gas used.
+      let header = api.headerFromTag(blockTag.get(defaultTag)).valueOr:
+        raise newException(ValueError, "Block not found")
+      if header.number < api.chain.baseNumber:
+        raise newException(ValueError, "Historical data not available")
       let
-        header = api.headerFromTag(blockId("latest")).valueOr:
-          raise newException(ValueError, "Block not found")
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
         # TODO: change 0 to configureable gas cap
-        gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
+        gasUsed = rpcEstimateGas(args, header, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
           let data = EthJson.encode(error.output.to0xHex()).JsonString
           raise (ref RpcResponseError)(
             code: 3,
@@ -596,6 +611,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.timestamp),
         Opt.some(txId),
         Opt.some(api.chain.com.chainId),
+        blk.header.baseFeePerGas,
       )
 
     proc eth_getTransactionByBlockHashAndIndex(
@@ -620,6 +636,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.timestamp),
         Opt.some(index),
         Opt.some(api.chain.com.chainId),
+        blk.header.baseFeePerGas,
       )
 
     proc eth_getTransactionByBlockNumberAndIndex(
@@ -643,10 +660,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         Opt.some(blk.header.timestamp),
         Opt.some(index),
         Opt.some(api.chain.com.chainId),
+        blk.header.baseFeePerGas,
       )
 
     proc eth_getProof(
-      data: Address, slots: seq[UInt256], quantityTag: BlockTag
+      data: Address, slots: seq[UInt256], quantityTag: Opt[BlockTag]
     ): ProofResponse {.raises: [ValueError].} =
       ## Returns information about an account and storage slots (if the account is a contract
       ## and the slots are requested) along with account and storage proofs which prove the
@@ -658,7 +676,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
       ## Returns: the proof response containing the account, account proof and storage proof
       let
-        txFrame = api.frameFromTag(quantityTag).valueOr:
+        txFrame = api.frameFromTag(quantityTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)
       getProof(txFrame, data, slots)
 
@@ -696,15 +714,23 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         return Opt.none(seq[ReceiptObject])
 
     proc eth_createAccessList(
-      args: TransactionArgs, quantityTag: BlockTag
+      args: TransactionArgs, quantityTag: Opt[BlockTag]
     ): AccessListResult {.raises: [ValueError].} =
       ## Generates an access list for a transaction.
       try:
-        let header = api.headerFromTag(quantityTag).valueOr:
+        let header = api.headerFromTag(quantityTag.get(defaultTag)).valueOr:
           raise newException(ValueError, "Block not found")
         return createAccessList(header, api.com, api.chain, args)
       except CatchableError as exc:
         return AccessListResult(error: Opt.some("createAccessList error: " & exc.msg))
+
+    proc eth_baseFee(): UInt256 {.raises: [ValueError].} =
+      ## Returns the base fee per gas of the next block in wei.
+      let header = api.headerFromTag(blockId("latest")).valueOr:
+        raise newException(ValueError, "Block not found")
+      if not api.com.isLondonOrLater(header.number + 1, header.timestamp):
+        raise newException(ValueError, "base fee not available before London")
+      api.com.calcEip1599BaseFee(header)
 
     proc eth_blobBaseFee(): Quantity {.raises: [ValueError].} =
       ## Returns the base fee per blob gas in wei.
@@ -811,9 +837,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, error)
       w3Qty(maxPriorityFee.uint64)
 
-    proc eth_getStorageValues(request: StorageValuesRequest, blockTag: BlockTag): StorageValuesResponse {.raises: [ValueError].} =
+    proc eth_getStorageValues(request: StorageValuesRequest, blockTag: Opt[BlockTag]): StorageValuesResponse {.raises: [RpcResponseError, ValueError].} =
+      if request.list.len == 0:
+        raise invalidParams("empty request")
       let
-        txFrame = api.frameFromTag(blockTag).valueOr:
+        txFrame = api.frameFromTag(blockTag.get(defaultTag)).valueOr:
           raise newException(ValueError, error)
 
       var res: StorageObject

@@ -11,7 +11,6 @@ import
   eth/common/blocks,
   ../web3_eth_conv,
   ../beacon_engine,
-  web3/execution_types,
   ./api_utils
 
 {.push gcsafe, raises: [CatchableError].}

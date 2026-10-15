@@ -45,12 +45,12 @@ proc stateForward*(
 
   while true:
     if nBalsMax <= dist:
-      trace info & ": BALs applied", pivotNum, number, dist
+      chronicles.info info & ": some BALs applied", pivotNum, number, dist
       break
     number.inc
     let bal = db.getBal(number, info).valueOr:
       number.dec
-      trace info & ": BALs exhausted", pivotNum, number, dist
+      chronicles.info info & ": all BALs applied", pivotNum, number, dist
       break
 
     for w in bal[]:

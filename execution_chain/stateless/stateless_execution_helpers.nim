@@ -15,7 +15,7 @@ import
   stew/[io2, byteutils],
   ./stateless_execution
 
-from ../../hive_integration/engine_client import toBlockHeader, toTransactions
+from ../../execution_api/engine_client import toBlockHeader, toTransactions
 
 export stateless_execution
 

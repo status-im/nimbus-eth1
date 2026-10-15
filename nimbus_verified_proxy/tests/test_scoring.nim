@@ -56,7 +56,8 @@ suite "backend scoring":
     check (waitFor engine.syncOnce()).isOk()
     let frontend1 = engine.getExecutionApiFrontend()
 
-    check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+    engine.setAnchor(convHeader(blk), blk.hash, Finalized)
 
     let res = waitFor frontend1.eth_getBalance(address, latestTag)
 
@@ -92,7 +93,8 @@ suite "backend scoring":
     check (waitFor engine.syncOnce()).isOk()
     let frontend2 = engine.getExecutionApiFrontend()
 
-    check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+    engine.setAnchor(convHeader(blk), blk.hash, Finalized)
 
     let res = waitFor frontend2.eth_getBalance(address, latestTag)
 

@@ -141,7 +141,7 @@ suite "Merkle proof of inclusion validation":
       ],
     )
 
-    let validationResult = getStorageFromProof(stateRoot, u256(0), proof)
+    let validationResult = getStorageFromProof(stateRoot, proof.address, u256(0), proof)
 
     check:
       validationResult.isOk()

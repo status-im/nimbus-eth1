@@ -107,12 +107,12 @@ type
     ## Local descriptor data extension
     supportsBal*: bool               ## Peer supports BAL (snap2 and later)
     finRoot*: Opt[StateRoot]         ## Some finalised state root (if any)
-    notAvailMax*: BlockNumber        ## Max block number of rejected states
     nErrors*: PeerErrors             ## Error register
     peerType*: string                ## Self declared peer type
     failedReq*: PeerFirstFetchReq    ## Don't send the same failed request twice
     lastMsgLog*: Moment              ## Helps reducing logging noise
     stateExhausted*: BlockNumber     ## Wait until pivot is forwarded
+    notAvailBal*: BlockNumber        ## Similar to `stateExhausted`
 
   SnapCtxData* = object
     ## Globally shared data extension
@@ -188,6 +188,14 @@ proc getSnapPeer*(buddy: SnapPeerRef; peerID: Hash): SnapPeerRef =
   ## Getter, retrieve syncer peer (aka buddy) by `peerID` argument.
   if buddy.peerID == peerID: buddy else: buddy.ctx.getSyncPeer peerID
 
+proc getSnapPeers*(buddy: SnapPeerRef): seq[SnapPeerRef] =
+  ## Getter, retrieve all currently active syncer peers (aka buddy)
+  buddy.ctx.getSyncPeers()
+
+proc nSnapPeers*(buddy: SnapPeerRef): int =
+  ## Shortcut for `ctx.getSyncPeers().len`
+  buddy.ctx.nSyncPeers()
+
 proc getEthPeer*(buddy: SnapPeerRef): Opt[BeaconPeerRef] =
   ## Get the `eth` peer context for the current peer. This context is needed
   ## for running `eth` protocol requests.
@@ -201,7 +209,7 @@ proc getEthPeers*(ctx: SnapCtxRef): seq[BeaconPeerRef] =
   ctx.pool.beaconSync.ctx.getSyncPeers()
 
 proc nEthPeers*(ctx: SnapCtxRef): int =
-  ## Shortcut for `buddy.getSyncPeers().len`
+  ## Shortcut for `beaconSync.ctx.getSyncPeers().len`
   ctx.pool.beaconSync.ctx.nSyncPeers()
 
 # ---------

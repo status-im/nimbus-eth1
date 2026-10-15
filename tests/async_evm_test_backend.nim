@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -7,7 +7,7 @@
 
 {.used.}
 
-import std/tables, ../execution_chain/evm/async_evm_backend
+import std/[sequtils, tables], ../execution_chain/evm/async_evm_backend
 
 type TestEvmState* = ref object
   accounts: Table[Address, Account]
@@ -54,9 +54,9 @@ proc toAsyncEvmStateBackend*(testState: TestEvmState): AsyncEvmStateBackend =
     ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
       Opt.some(testState.getAccount(address))
     storageProc = proc(
-        header: Header, address: Address, slotKey: UInt256
-    ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
-      Opt.some(testState.getStorage(address, slotKey))
+        header: Header, address: Address, slotKeys: seq[UInt256]
+    ): Future[Opt[seq[UInt256]]] {.async: (raises: [CancelledError]).} =
+      Opt.some(slotKeys.mapIt(testState.getStorage(address, it)))
     codeProc = proc(
         header: Header, address: Address
     ): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =

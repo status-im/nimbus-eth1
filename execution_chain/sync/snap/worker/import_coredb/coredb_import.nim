@@ -92,12 +92,15 @@ proc mergeAccount(
   ok()
 
 proc mergeAccAndSto(
-    tx2: CoreDbTxRef;
+    db2: CoreDb2Ref;
     db: CacheDbRef;
     accPath: Hash32;
     account: Account;
+    count: var int;
     info: static[string];
       ): Opt[uint] =
+  let tx2 = db2.tx2
+
   # Save account so that the storage trie can be updated
   ?tx2.mergeAccount(accPath, account, info)
 
@@ -117,7 +120,15 @@ proc mergeAccAndSto(
       error info & ": Failed merging slot", accPath=accPath.toStr,
         nSlotsSoFar=nSlots, slotKey=w.slotKey.toStr, `error`=($$error)
       return err()
+
     nSlots.inc
+    count.inc
+
+    # Save regurlarly
+    if nCoreDbImportPersistBatch <= count:
+      tx2.checkpoint(0)
+      db2.db2.persist tx2
+      count = 0
 
   # Verify storage sub-MPT if there is a storage root
   if account.storageRoot != zeroHash32:
@@ -145,10 +156,12 @@ proc fetchStateRootImpl(
   ok(move root)
 
 proc importFlatImpl(
-    tx2: CoreDbTxRef;
+    db2: CoreDb2Ref;
     db: CacheDbRef;
     info: static[string];
       ): Opt[AristoImportStats] =
+  let tx2 = db2.tx2
+
   # Import Genesis
   ?tx2.mergeGenesis(db, info)
 
@@ -156,7 +169,9 @@ proc importFlatImpl(
   let cNum = ?tx2.mergeCanonicalHead(db, info)
 
   # Merge flat tables into CoreDb/Aristo.
-  var u: AristoImportStats
+  var
+    u: AristoImportStats
+    count = 0
   for w in db.walkFlatAcc():
     if 0 < w.error.len:
       error info & ": Error walking accounts",
@@ -185,7 +200,7 @@ proc importFlatImpl(
       # Save account only
       ?tx2.mergeAccount(w.accPath, w.data.account, info)
     else:
-      u.nSlots += ?tx2.mergeAccAndSto(db, w.accPath, w.data.account, info)
+      u.nSlots += ?db2.mergeAccAndSto(db, w.accPath,w.data.account, count, info)
 
     if w.data.account.codeHash != EMPTY_CODE_HASH:
       let code = ?db.getFlatCode(w.accPath, info)
@@ -193,10 +208,19 @@ proc importFlatImpl(
         error info & ": Failed storing contract code", accPath=w.accPath.toStr,
           codeHash=w.data.account.codeHash.toStr, nCode=code.len, `error`=error
         return ok((0,0))
+      count.inc
 
     u.nAccounts.inc
+    count.inc
+
+    # Save regurlarly
+    if nCoreDbImportPersistBatch <= count:
+      tx2.checkpoint(0)
+      db2.db2.persist tx2
+      count = 0
 
   tx2.checkpoint(cNum)
+  db2.db2.persist tx2
   ok(u)
 
 # ------------------------------------------------------------------------------
@@ -208,9 +232,7 @@ proc importFlat*(
     cdb: CacheDbRef;
     info: static[string];
       ): Opt[AristoImportStats] =
-  var stats = ?db2.tx2.importFlatImpl(cdb, info)
-  db2.db2.persist db2.tx2
-  ok(move stats)
+  db2.importFlatImpl(cdb, info)
 
 proc fetchStateRoot*(
     db2: CoreDb2Ref;

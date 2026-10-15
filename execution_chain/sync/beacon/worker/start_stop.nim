@@ -61,9 +61,8 @@ proc updateServices*(ctx: BeaconCtxRef; info: static[string]): bool  =
     return false
 
   # Set up header cache descriptor.
-  if not ctx.pool.hdrCache.isNil:
-    ctx.pool.hdrCache.stop()
-  ctx.pool.hdrCache = HeaderChainRef.init(ctx.chain)
+  if ctx.pool.hdrCache.isNil:
+    ctx.pool.hdrCache = HeaderChainRef.init(ctx.chain)
 
   # Set up the notifier informing when a new syncer session has started.
   ctx.hdrCache.start proc() =
@@ -117,6 +116,7 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
 proc destroyServices*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
   ctx.hdrCache.destroy()
+  ctx.pool.hdrCache = HeaderChainRef(nil)
   ctx.pool.chain.com.beaconSyncerProgress = BeaconSyncerProgressCB(nil)
   ctx.pool.chain.com.headerTargetRequest = HeaderTargetRequestCB(nil)
   ctx.pool.ticker = Ticker(nil)

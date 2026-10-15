@@ -418,6 +418,7 @@ proc destroy*(hc: HeaderChainRef) =
   ## Destructor
   hc.stop()
   hc.clear()
+  hc[].reset
 
 # ------------------------------------------------------------------------------
 # Public heacher cache production API

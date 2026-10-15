@@ -276,22 +276,26 @@ proc getBlockHeaders*(ctx: EthWireRef,
   move(list)
 
 proc getBlockAccessLists*(
-    ctx: EthWireRef, req: BlockAccessListsRequest): BlockAccessListsPacket =
-  var blockHashes = req.blockHashes
-  blockHashes.setLen(min(req.blockHashes.len(), MAX_BALS_SERVE))
+    chain: ForkedChainRef;
+    blockHashes: openArray[Hash32];
+    softLimit: int;
+      ): BlockAccessListsPacket =
+  ## Shared by `eth/71` and `snap/2`, which specify the same response
+  let nHashes = min(blockHashes.len, MAX_BALS_SERVE)
 
-  var balValues = newSeq[Opt[seq[byte]]](blockHashes.len())
-  ctx.chain.latestTxFrame.getBlockAccessLists(blockHashes, balValues).isOkOr:
+  var balValues = newSeq[Opt[seq[byte]]](nHashes)
+  chain.latestTxFrame.getBlockAccessLists(
+      blockHashes.toOpenArray(0, nHashes - 1), balValues).isOkOr:
     trace "handlers.getBlockAccessLists: get block access lists failed", error = ($error)
-    
-  var 
+
+  var
     totalBytes = 0
     i = 0
     res = BlockAccessListsPacket(
       accessLists: newSeqOfCap[RawBlockAccessList](balValues.len())
     )
 
-  while totalBytes <= SOFT_RESPONSE_LIMIT and i <= balValues.high:
+  while totalBytes <= softLimit and i <= balValues.high:
     if balValues[i].isSome():
       let bal = balValues[i].get()
       res.accessLists.add RawBlockAccessList(bal)
@@ -302,8 +306,12 @@ proc getBlockAccessLists*(
       inc totalBytes # 0x80 is a single byte
 
     inc i
-  
+
   res
+
+proc getBlockAccessLists*(
+    ctx: EthWireRef, req: BlockAccessListsRequest): BlockAccessListsPacket =
+  ctx.chain.getBlockAccessLists(req.blockHashes, SOFT_RESPONSE_LIMIT)
 
 # ------------------------------------------------------------------------------
 # End
