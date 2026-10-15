@@ -140,7 +140,7 @@ proc delRangeKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelRangeKvpFn =
 proc writeKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): WriteKvpFn =
   result =
     proc(batch: KvtBatch): Result[void, KvtError] =
-      db.rdb.write(batch, cf).isOkOr:
+      db.rdb.put(batch, cf).isOkOr:
         when extraTraceMessages:
           debug "writeKvpFn() failed", error=($error)
         return err(error[0])
