@@ -90,6 +90,11 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   # whether snap syncer book keeping has been set up.
   # is inialised
   if not ctx.pool.headersSynced:
+    # Special case for an opportunistic first run where the pivot is taken
+    # from an ongoing first header sync.
+    if 0 < ctx.pool.pivotNum and
+       ctx.pool.forwardNum == 0:
+      return SnapDownload
     return SnapReady
   if not ctx.accUnproc.synced():
     return SnapReady

@@ -61,17 +61,38 @@ proc downloadReady(
   w.codeDone = not ?adb.hasMissingBlob(info) and not ?adb.hasCodeLock(info)
   ok(w)
 
+proc setFirstPivotFromFinNumber(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Opt[BlockNumber] =
+  ## Opportunistically fetch the pivot number from an ongoing first sync
+  ## and use it to set the pivot.
+  if ctx.pool.pivotNum == 0 and                     # => forwardNum == 0
+     not ctx.pool.headersSynced:
+    ctx.hdrCache.finHeader().isErrOr:
+      if ctx.chain.com.isAmsterdamOrLater(value.timestamp):
+        # Store header. So the pivot has a target on the DB. Note that this
+        # same header might also be stored independently by the header
+        # downloader.
+        ctx.pool.cacheDB.putHeader(value, info).isErrOr:
+          debug info & ": Opportunistically accept pivot", pivot=value.number
+          ctx.pool.balSupported = true
+          return Opt.some(value.number)
+  Opt.none(BlockNumber)
+
 proc startDownloading(
     ctx: SnapCtxRef;
+    pivotNum: Opt[BlockNumber];
     info: static[string];
       ): Opt[void] =
   let
     adb = ctx.pool.cacheDB
-    number = ?adb.lastHeaderNumber(info)        # => err() unless headers
+    number = if pivotNum.isSome(): pivotNum.unsafeGet()
+             else: ?adb.lastHeaderNumber(info)      # => err() unless headers
     accRng = ItemKeyRangeSet.init ItemKeyRangeMax
-  ?adb.putAccMissingIntv(number, accRng, info)  # new state
+  ?adb.putAccMissingIntv(number, accRng, info)      # new state
   ctx.accUnproc.init ItemKeyRangeMax
-  ctx.pool.pivotNum = number                    # set pivot
+  ctx.pool.pivotNum = number                        # set pivot
   if 0 < ctx.pool.pivotNum:
     debug info & ": Start downloading accounts",
       pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
@@ -109,6 +130,7 @@ proc downloadInit*(
     ctx: SnapCtxRef;
     info: static[string];
       ): Opt[void] =
+  let firstPivot = ctx.setFirstPivotFromFinNumber(info)
   if not ctx.accUnproc.synced():
     ?ctx.verifyAmsterdamOrLater(info)
 
@@ -124,12 +146,12 @@ proc downloadInit*(
         debug info & ": Continue downloading accounts",
           pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
     else:
-      ?ctx.startDownloading(info)
+      ?ctx.startDownloading(firstPivot, info)
 
     ctx.accUnproc.synced = true
 
   elif ctx.pool.pivotNum == 0:                      # delayed intialisation?
-    ?ctx.startDownloading(info)
+    ?ctx.startDownloading(firstPivot, info)
 
   ctx.accountDownloadMetricsUpdate()
   ok()
