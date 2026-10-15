@@ -67,7 +67,7 @@ type
     value* : Opt[UInt256]
     input* : Opt[seq[byte]]
     data*  : Opt[seq[byte]]
-    to*    : Opt[Address]
+    to*    : Opt[seq[byte]]
     v*     : Opt[uint64]
     r*     : Opt[UInt256]
     s*     : Opt[UInt256]

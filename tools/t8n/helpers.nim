@@ -129,7 +129,15 @@ proc parseTxJson*(txo: TxObject, chainId: ChainId): Result[Transaction, string] 
   required(gasLimit, gas, gasLimit)
   required(value)
   required(payload, input, data)
-  tx.to = txo.to
+  if txo.to.isSome:
+    if txo.to.value.len == 0:
+      tx.to = Opt.none(Address)
+    else:
+      if txo.to.value.len != 20:
+        return err("Invalid transaction 'to' address")
+      var address {.noinit.}: Address
+      assign(address.data, txo.to.value)
+      tx.to = Opt.some(address)
 
   case tx.txType
   of TxLegacy:

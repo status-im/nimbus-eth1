@@ -86,7 +86,7 @@ proc debugAccounts*(vmState: BaseVMState): string =
 
 proc debug*(vms: BaseVMState): string =
   result.add "proofOfStake     : " & $vms.proofOfStake()      & "\n"
-  result.add "parent           : " & $vms.parent.computeBlockHash    & "\n"
+  result.add "parent           : " & $vms.parent.computeBlockHash & "\n"
   result.add "timestamp        : " & $vms.blockCtx.timestamp  & "\n"
   result.add "gasLimit         : " & $vms.blockCtx.gasLimit   & "\n"
   result.add "baseFeePerGas    : " & $vms.blockCtx.baseFeePerGas & "\n"
@@ -101,8 +101,7 @@ proc debug*(vms: BaseVMState): string =
   result.add "ledger.root      : " & $vms.ledger.getStateRoot() & "\n"
   result.add "cumulativeGasUsed: " & $vms.cumulativeGasUsed   & "\n"
   result.add "tx.origin        : " & $vms.txCtx.origin        & "\n"
-  result.add "tx.gasPrice      : " & $vms.txCtx.gasPrice      & "\n"
-  result.add "tx.blobHash.len  : " & $vms.txCtx.versionedHashes.len & "\n"
+  result.add "tx.gasPrice      : " & $vms.txCtx.effectiveGasPrice & "\n"
   result.add "tx.blobBaseFee   : " & $vms.txCtx.blobBaseFee   & "\n"
   result.add "fork             : " & $vms.fork                & "\n"
 
