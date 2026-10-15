@@ -48,13 +48,13 @@ proc storeCachedHeaders(
   if not ctx.pool.balSupported:
     ctx.pool.cacheDB.lastHeader(info).isErrOr:
       if ctx.chain.com.isAmsterdamOrLater(value.timestamp):
-        ctx.pool.balSupported = true
+        ctx.pool.balSupported = true                # so state download ok, now
   ctx.pool.lastConsNum = ctx.hdrCache.head.number
   chronicles.info info & ": Registered headers", leastBn,
     finHeader=finHeader.number, count,
     lastConsHead=ctx.pool.lastConsNum,
     consHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState),
-    balSupported=ctx.pool.balSupported
+    onAmsterdamOrLater=ctx.pool.balSupported
 
 proc stateNum(ctx: SnapCtxRef): BlockNumber =
   # Get block number from saved state (if any)

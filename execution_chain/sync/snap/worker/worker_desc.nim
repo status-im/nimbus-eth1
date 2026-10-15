@@ -105,6 +105,7 @@ type
 
   SnapPeerData* = object
     ## Local descriptor data extension
+    snapVersion*: int                ## For logging
     supportsBal*: bool               ## Peer supports BAL (snap2 and later)
     finRoot*: Opt[StateRoot]         ## Some finalised state root (if any)
     nErrors*: PeerErrors             ## Error register
