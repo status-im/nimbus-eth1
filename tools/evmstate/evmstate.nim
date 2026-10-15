@@ -41,7 +41,7 @@ type
     expectedLogs: Hash32
     postState: JsonNode
     forkStr: string
-    chainConfig: ChainConfig
+    com: CommonRef
     index: int
     tracerFlags: set[TracerFlags]
     error: string
@@ -54,6 +54,7 @@ type
     error*: string
     state*: StateDump
     postState*: JsonNode
+    status*   : string
 
   TestVMState = ref object of BaseVMState
 
@@ -169,6 +170,8 @@ proc writeResultToStdout(stateRes: seq[StateResult]): Result[void, string] =
       z["state"] = %(res.state)
     if res.postState.isNil.not:
       z["postState"] = res.postState
+    if res.status.len > 0:
+      z["status"] = %(res.status)
     n.add(z)
 
   try:
@@ -215,7 +218,7 @@ proc runExecution(ctx: var StateContext,
                   receipt: Opt[TxoReceipt],
                   txBytes: openArray[byte]): Result[StateResult, string] =
   let
-    com     = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
+    com     = ctx.com
     stream  = newFileStream(stderr)
     tracer  = if conf.jsonEnabled:
                 newJsonTracer(stream, ctx.tracerFlags, conf.pretty)
@@ -249,7 +252,7 @@ proc runExecution(ctx: var StateContext,
       fork : ctx.forkStr
     ))
 
-  var callResult = vmState.processTransaction(ctx.tx, sender).valueOr(TxResult())
+  let txRes = vmState.processTransaction(ctx.tx, sender)
   coinbaseStateClearing(vmState, ctx.header.coinbase)
 
   let stateRoot = vmState.readOnlyLedger.getStateRoot()
@@ -259,11 +262,12 @@ proc runExecution(ctx: var StateContext,
     ctx.verifyReceipt(generatedReceipt, receipt.value, ctx.tx, txBytes)
 
   let res = StateResult(
-    name : ctx.name,
-    pass : ctx.error.len == 0,
-    root : stateRoot,
-    fork : ctx.forkStr,
-    error: ctx.error
+    name  : ctx.name,
+    pass  : ctx.error.len == 0,
+    root  : stateRoot,
+    fork  : ctx.forkStr,
+    error : ctx.error,
+    status: if txRes.isErr: txRes.error else: "ok",
   )
 
   if conf.dumpEnabled:
@@ -299,9 +303,10 @@ proc parseTx(ctx: var StateContext, txo: Txo, subTest: SubTest): Result[void, st
   except RlpError as exc:
     return err(exc.msg)
 
-func prepareFork(ctx: var StateContext, forkName: string): Result[void, string] =
+proc prepareFork(ctx: var StateContext, forkName: string): Result[void, string] =
   ctx.forkStr = forkName
-  ctx.chainConfig = ? getChainConfig(forkName)
+  let chainConfig = ? getChainConfig(forkName)
+  ctx.com = CommonRef.new(newCoreDbRef DefaultDbMemory, chainConfig)
   inc ctx.index
   ok()
 

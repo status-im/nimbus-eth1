@@ -46,6 +46,7 @@ type
     Amsterdam
     BPO2ToAmsterdamAtTime15k
     Bogota
+    AmsterdamToBogotaAtTime15k
 
   LogLevel* = enum
     Silent
