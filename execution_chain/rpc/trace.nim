@@ -26,7 +26,8 @@ import
   ../common/common,
   ../core/tx_pool,
   ../core/chain/forked_chain,
-  ../core/executor
+  ../core/executor,
+  ../core/eip7702
 
 func blockRewardWei(fork: EVMFork): UInt256 =
   func eth(n: int): UInt256 {.compileTime.} =
@@ -40,6 +41,28 @@ func blockRewardWei(fork: EVMFork): UInt256 =
   elif fork < FkParis:          w2
   else:                         0.u256
 
+func zeroFeeArgs(args: TransactionArgs): bool =
+  args.gasPrice.get(0.Quantity).uint64 == 0 and
+    args.maxFeePerGas.get(0.Quantity).uint64 == 0 and
+    args.maxPriorityFeePerGas.get(0.Quantity).uint64 == 0
+
+proc settleCallFees(vmState: BaseVMState, args: TransactionArgs,
+                    header: Header, gasUsed: GasInt) =
+  if zeroFeeArgs(args):
+    return
+  let
+    baseFee  = header.baseFeePerGas.get(0.u256)
+    gasPrice = args.gasPrice.get(0.Quantity).uint64.u256
+    effPrice =
+      if gasPrice > 0.u256:
+        gasPrice
+      else:
+        min(args.maxPriorityFeePerGas.get(0.Quantity).uint64.u256 + baseFee,
+            args.maxFeePerGas.get(0.Quantity).uint64.u256)
+  if effPrice > baseFee:
+    vmState.ledger.addBalance(header.coinbase,
+                              (effPrice - baseFee) * gasUsed.u256)
+
 proc parseTraceTypes(types: seq[string]): set[TraceTypeFlag] =
   for t in types:
     case t
@@ -48,28 +71,36 @@ proc parseTraceTypes(types: seq[string]): set[TraceTypeFlag] =
     of "vmTrace":   result.incl TraceTypeFlag.ttVmTrace
     else: discard
 
-func matchesFilter(t: TraceObject, f: TraceFilterRequest): bool =
-  if f.fromAddress.isSome:
-    let froms = f.fromAddress.get
-    if froms.len > 0:
-      let actionFrom =
-        case t.action.kind
-        of takCall:    t.action.callAction.`from`
-        of takCreate:  t.action.createAction.`from`
-        of takSuicide: t.action.suicideAction.address
-        of takReward:  t.action.rewardAction.author
-      if actionFrom notin froms:
-        return false
-  if f.toAddress.isSome:
-    let tos = f.toAddress.get
-    if tos.len > 0:
-      case t.action.kind
-      of takCall:
-        if t.action.callAction.to notin tos:
-          return false
+func filterAddrs(t: TraceObject): (Opt[Address], Opt[Address]) =
+  case t.action.kind
+  of takCall:
+    (Opt.some(t.action.callAction.`from`), Opt.some(t.action.callAction.to))
+  of takCreate:
+    let created =
+      if t.result.isSome and t.result.get.kind == trkCreate:
+        t.result.get.createResult.address
       else:
-        return false
-  true
+        Opt.none(Address)
+    (Opt.some(t.action.createAction.`from`), created)
+  of takSuicide:
+    (Opt.some(t.action.suicideAction.address),
+     Opt.some(t.action.suicideAction.refundAddress))
+  of takReward:
+    (Opt.none(Address), Opt.some(t.action.rewardAction.author))
+
+func matchesFilter(t: TraceObject, f: TraceFilterRequest): bool =
+  let
+    froms = f.fromAddress.get(@[])
+    tos   = f.toAddress.get(@[])
+    (fromA, toA) = filterAddrs(t)
+    fromHit = fromA.isSome and fromA.get in froms
+    toHit   = toA.isSome and toA.get in tos
+  if f.mode.get("intersection") == "union":
+    if froms.len == 0 and tos.len == 0:
+      return true
+    (froms.len > 0 and fromHit) or (tos.len > 0 and toHit)
+  else:
+    (froms.len == 0 or fromHit) and (tos.len == 0 or toHit)
 
 proc actionToJson(action: TraceAction): JsonNode =
   result = newJObject()
@@ -269,11 +300,16 @@ proc replayTx(com: CommonRef, chain: ForkedChainRef, blk: Block,
     let sender = tx.recoverSenderCached().expect("valid signature")
     if idx == txIndex:
       vmState.tracer = tracerInst
+      tracerInst.idxPrefix = $txIndex & "-"
       if ttStateDiff in traceTypes:
         tracerInst.preSnap(vmState.ledger, sender)
         tracerInst.preSnap(vmState.ledger, blk.header.coinbase)
         if tx.to.isSome:
           tracerInst.preSnap(vmState.ledger, tx.to.get)
+        for auth in tx.authorizationList:
+          let authAddr = authority(auth).valueOr:
+            continue
+          tracerInst.preSnap(vmState.ledger, authAddr)
     discard vmState.processTransaction(tx, sender)
     if idx == txIndex:
       break
@@ -342,15 +378,20 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       defer:
         vmState.dispose()
         txFrame.dispose()
+      if zeroFeeArgs(args):
+        vmState.blockCtx.baseFeePerGas = 0
       if ttStateDiff in flags:
         tracerInst.preSnap(vmState.ledger, args.`from`.get(default(Address)))
+        tracerInst.preSnap(vmState.ledger, header.coinbase)
         if args.to.isSome:
           tracerInst.preSnap(vmState.ledger, args.to.get)
       let callRes = rpcCallEvm(args, header, vmState).valueOr:
         raise invalidParams(error)
+      settleCallFees(vmState, args, header, callRes.gasUsed)
+      vmState.ledger.persist()
       tracerInst.finalizeStateDiff(vmState.ledger)
       let res = newJObject()
-      res["output"] = newJString(callRes.output.to0xHex)
+      res["output"] = newJString(tracerInst.output.to0xHex)
       res["stateDiff"] =
         if ttStateDiff in flags: stateDiffToJson(tracerInst.stateDiff)
         else: newJNull()
@@ -391,17 +432,22 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
           tracerInst = newParityTracer(flags)
           vmState    = BaseVMState.new(
             Header(number: header.number - 1), header, com, txFrame, tracerInst)
+        if zeroFeeArgs(args):
+          vmState.blockCtx.baseFeePerGas = 0
         if ttStateDiff in flags:
           tracerInst.preSnap(vmState.ledger, args.`from`.get(default(Address)))
+          tracerInst.preSnap(vmState.ledger, header.coinbase)
           if args.to.isSome:
             tracerInst.preSnap(vmState.ledger, args.to.get)
         let callRes = rpcCallEvm(args, header, vmState)
-        tracerInst.finalizeStateDiff(vmState.ledger)
+        if callRes.isOk:
+          settleCallFees(vmState, args, header, callRes.get.gasUsed)
         vmState.ledger.persist()
+        tracerInst.finalizeStateDiff(vmState.ledger)
         vmState.dispose()
         let entry = newJObject()
         entry["output"] = newJString(
-          if callRes.isOk: callRes.get.output.to0xHex else: "0x")
+          if callRes.isOk: tracerInst.output.to0xHex else: "0x")
         entry["stateDiff"] =
           if ttStateDiff in flags: stateDiffToJson(tracerInst.stateDiff)
           else: newJNull()
@@ -553,6 +599,9 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       res
 
     proc trace_filter(filterReq: TraceFilterRequest): JsonNode {.raises: [RpcResponseError].} =
+      if filterReq.mode.isSome and
+         filterReq.mode.get notin ["intersection", "union"]:
+        raise invalidParams("unknown filter mode")
       let
         fromTag    = filterReq.fromBlock.get(blockId("latest"))
         toTag      = filterReq.toBlock.get(blockId("latest"))

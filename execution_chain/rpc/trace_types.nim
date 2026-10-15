@@ -138,6 +138,7 @@ type
     toBlock*:     Opt[BlockTag]
     fromAddress*: Opt[seq[Address]]
     toAddress*:   Opt[seq[Address]]
+    mode*:        Opt[string]
     after*:       Opt[int]
     count*:       Opt[int]
 
