@@ -23,7 +23,6 @@ import
 export
   KvtDbRef,
   KvtError,
-  KvtTxRef,
   isValid
 
 # End

@@ -51,9 +51,7 @@ proc newCom(env: TestEnv): CommonRef =
 
 # Helper: store a key-value pair directly in the KVT backend
 proc putBe(kvt: KvtDbRef, key, value: openArray[byte]) =
-  let batch = kvt.putBegFn().expect("putBegFn")
-  kvt.putKvpFn(batch, key, value)
-  kvt.putEndFn(batch).expect("putEndFn")
+  kvt.put(key, value).expect("ok")
 
 # Helper: check if a key exists in the KVT backend
 proc hasBe(kvt: KvtDbRef, key: openArray[byte]): bool =

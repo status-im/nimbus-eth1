@@ -35,6 +35,7 @@ type
     txFrame = 16
     balTail = 17
     firstBlockHash = 18
+    blockDataRefs = 19
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -90,6 +91,11 @@ func balTailKey*(): DbKey {.inline.} =
 
 func txFrameKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(txFrame)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = 32
+
+func blockDataRefsKey*(h: Hash32): DbKey {.inline.} =
+  result.data[0] = byte ord(blockDataRefs)
   result.data[1 .. 32] = h.data
   result.dataEndPos = 32
 

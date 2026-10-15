@@ -137,6 +137,24 @@ proc close(env: TestEnv) =
   waitFor env.client.close()
   waitFor env.server.closeWait()
 
+proc setupFixtureNode(): (RpcHttpServer, RpcHttpClient) =
+  ## A node whose base is the fixture block, as era import leaves it. The FC
+  ## serves blocks from disk only at or below base.
+  let
+    com = setupCom(setupConfig().computeNetworkParams())
+    txFrame = com.db.baseTxFrame().txFrameBegin()
+  txFrame.persistFixtureBlock()
+  txFrame.checkpoint(getBlockHeader4514995().number, skipSnapshot = true)
+  com.db.persist(txFrame)
+
+  let server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
+    echo "Failed to create rpc server: ", error
+    quit(QuitFailure)
+  setupServerAPI(newServerAPI(TxPoolRef.new(ForkedChainRef.init(com))),
+    server, new AccountsManager)
+  server.start()
+  (server, setupClient(server.localAddress[0].port))
+
 func makeTx(
     env: var TestEnv,
     signerKey: PrivateKey,
@@ -302,7 +320,6 @@ proc generateBlock(env: var TestEnv) =
     com = env.com
     xp  = env.txPool
     am =  env.am
-    txFrame = com.db.baseTxFrame()
     acc = am[].getAccount(signer).tryGet()
     tx1 = env.makeTx(acc.privateKey, Opt.some(zeroAddress), 1.u256, 30_000_000_000'u64)
     tx2 = env.makeTx(acc.privateKey, Opt.some(zeroAddress), 2.u256, 30_000_000_100'u64)
@@ -332,8 +349,6 @@ proc generateBlock(env: var TestEnv) =
     quit(QuitFailure)
 
   xp.removeNewBlockTxs(blk)
-
-  txFrame.persistFixtureBlock()
 
   env.txHash = tx1.computeRlpHash
   env.contractTxHash = tx3.computeRlpHash
@@ -390,6 +405,7 @@ proc rpcMain*() =
       client = env.client
       node = env.node
       com = env.com
+      (fixtureServer, fixtureClient) = setupFixtureNode()
 
     test "web3_clientVersion":
       let res = await client.web3_clientVersion()
@@ -1045,7 +1061,7 @@ proc rpcMain*() =
         blockHash: Opt.some(testHash),
         topics: @[]
       )
-      let logs = await client.eth_getLogs(filterOptions)
+      let logs = await fixtureClient.eth_getLogs(filterOptions)
 
       check:
         len(logs) == 54
@@ -1074,7 +1090,7 @@ proc rpcMain*() =
         ]
       )
 
-      let logs = await client.eth_getLogs(filterOptions)
+      let logs = await fixtureClient.eth_getLogs(filterOptions)
 
       check:
         len(logs) == 1
@@ -1100,7 +1116,7 @@ proc rpcMain*() =
         ]
       )
 
-      let logs = await client.eth_getLogs(filterOptions)
+      let logs = await fixtureClient.eth_getLogs(filterOptions)
 
       check:
         len(logs) == 2
@@ -1263,6 +1279,8 @@ proc rpcMain*() =
       check bn == w3Qty(0'u64)
 
     env.close()
+    waitFor fixtureClient.close()
+    waitFor fixtureServer.closeWait()
 
   suite "Remote Procedure Calls - Cancun":
     var env = setupEnv(Cancun)

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -352,3 +352,54 @@ suite "Async EVM":
 
     for f in futs:
       check (waitFor f).isOk()
+
+  test "Call contract - block hashes fetched by a call do not outlive it":
+    # Runs BLOCKHASH only when storage slot 0 is set, so it first runs in the
+    # last pass of the fetch loop, which ends before storing the hash it
+    # fetched. The result then shows what the call saw from earlier calls.
+    #   PUSH1 0 SLOAD PUSH1 10 JUMPI PUSH1 0 DUP1 RETURN
+    #   JUMPDEST PUSH1 10 NUMBER SUB BLOCKHASH PUSH1 0 MSTORE PUSH1 32 PUSH1 0 RETURN
+    const condCode = "0x600054600a57600080f35b600a43034060005260206000f3"
+
+    for optimisticStateFetch in [true, false]:
+      let
+        blockHashCase = testCases[0]
+        testState = setupTestEvmState(blockHashCase)
+        evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
+        header = Header(
+          number: blockHashCase.blockNumber.hexToUInt256().truncate(uint64),
+          timestamp: 1_746_612_312.EthTime, # pragueTime: Opt.some(1_746_612_311.EthTime)
+          gasLimit: EVM_CALL_GAS_CAP,
+        )
+        blockHashTx = TransactionArgs(
+          to: Opt.some(Address.fromHex(blockHashCase.txArgs.to)),
+          input: Opt.some(blockHashCase.txArgs.input.hexToSeqByte()),
+        )
+        condAddress = Address.fromHex("0x00000000000000000000000000000000000c0de0")
+        condTx = TransactionArgs(to: Opt.some(condAddress))
+        # The call runs as the next block: blockhash(block.number - 10)
+        number = header.number + 1 - 10
+        reorgHash = Hash32.fromHex(
+          "0x2222222222222222222222222222222222222222222222222222222222222222")
+      testState.setAccount(condAddress, Account.init(0, 0.u256))
+      testState.setCode(condAddress, condCode.hexToSeqByte())
+      testState.setStorage(condAddress, 0.u256, 1.u256)
+
+      let fresh =
+        (waitFor evm.call(header, condTx, optimisticStateFetch)).expect("success")
+
+      # Fetches the block hash
+      check (waitFor evm.call(header, blockHashTx, optimisticStateFetch)).expect(
+        "success"
+      ).output == blockHashCase.expected.output.hexToSeqByte()
+
+      # After a reorg, no call may see the hash fetched before it
+      testState.setBlockHash(number, reorgHash)
+      let afterReorg =
+        (waitFor evm.call(header, condTx, optimisticStateFetch)).expect("success")
+      check:
+        afterReorg.output == fresh.output
+        afterReorg.output != blockHashCase.expected.output.hexToSeqByte()
+      check (waitFor evm.call(header, blockHashTx, optimisticStateFetch)).expect(
+        "success"
+      ).output == @(reorgHash.data)

@@ -100,6 +100,13 @@ type
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
 
+    holdCode*: bool
+      ## Keep the code `persist` would write in `heldCode` until
+      ## `storeHeldCode`. Database writes are immediate and outlive the frame,
+      ## so callers set this when the block may still be dropped.
+
+    heldCode: Table[Hash32, CodeBytesRef]
+
     collectWitness*: bool
 
     witnessKeys: WitnessTable
@@ -356,8 +363,20 @@ proc persistMode(acc: AccountRef): PersistMode =
     if IsNew notin acc.flags:
       result = Remove
 
+proc cachedCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
+  ## Code from the cache, or code held back from the database
+  let code = ledger.code.get(codeHash)
+  if code.isSome() or ledger.heldCode.len == 0:
+    return code
+  ledger.heldCode.withValue(codeHash, held):
+    return Opt.some(held[])
+  Opt.none(CodeBytesRef)
+
 proc persistCode(acc: AccountRef, ledger: LedgerRef) =
   if acc.code.len != 0 and not acc.code.persisted:
+    if ledger.holdCode:
+      ledger.heldCode[acc.statement.codeHash] = acc.code
+      return
     let rc = ledger.txFrame.put(
       contractHashKey(acc.statement.codeHash).toOpenArray, acc.code.bytes())
     if rc.isErr:
@@ -460,7 +479,7 @@ template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
   if acc.code == nil:
     if acc.statement.codeHash == EMPTY_CODE_HASH:
       return 0
-    acc.code = ledger.code.get(acc.statement.codeHash).valueOr:
+    acc.code = ledger.cachedCode(acc.statement.codeHash).valueOr:
       # On a cache miss, we don't fetch the code - instead, we fetch just the
       # length - should the code itself be needed, it will typically remain
       # cached and easily accessible in the database layer - this is to prevent
@@ -616,7 +635,7 @@ proc getCode*(ledger: LedgerRef,
   if acc.code.isNil:
     acc.code =
       if acc.statement.codeHash != EMPTY_CODE_HASH:
-        ledger.code.get(acc.statement.codeHash).valueOr:
+        ledger.cachedCode(acc.statement.codeHash).valueOr:
           var rc = ledger.txFrame.get(contractHashKey(acc.statement.codeHash).toOpenArray)
           if rc.isErr:
             # A non-empty code hash with no code in the database: record a fatalError
@@ -648,7 +667,7 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
   if acc.original.code.isNil:
     acc.original.code =
       if acc.original.statement.codeHash != EMPTY_CODE_HASH:
-        ledger.code.get(acc.original.statement.codeHash).valueOr:
+        ledger.cachedCode(acc.original.statement.codeHash).valueOr:
           var rc = ledger.txFrame.get(contractHashKey(acc.original.statement.codeHash).toOpenArray)
           if rc.isErr:
             warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=($$rc.error)
@@ -1026,6 +1045,16 @@ proc persist*(ledger: LedgerRef,
     ledger.clearCollapsedSiblings()
     ledger.clearDeployedCodeHashes()
     ledger.clearBlockHashesCache()
+
+proc storeHeldCode*(ledger: LedgerRef): Result[void, string] =
+  ## Write the code `holdCode` kept back, once its block is accepted.
+  for codeHash, code in ledger.heldCode:
+    if not code.persisted:
+      ledger.txFrame.put(contractHashKey(codeHash).toOpenArray, code.bytes()).isOkOr:
+        return err("storeHeldCode(): " & $$error)
+      code.persisted = true
+  ledger.heldCode.clear()
+  ok()
 
 iterator addresses*(ledger: LedgerRef): Address =
   # make sure all savePoint already committed

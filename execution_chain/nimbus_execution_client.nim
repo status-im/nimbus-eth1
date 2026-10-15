@@ -66,6 +66,11 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
       warn "Loading block DAG from database", msg=error
   else:
     warn "Skipped loading of block DAG from database", deserializeFcState = config.deserializeFcState
+  # The snapshot is stale after the first write, drop it before any. A clean
+  # shutdown saves a new one.
+  fc.baseTxFrame.invalidateFcSnapshot().isOkOr:
+    fatal "Cannot drop the block DAG snapshot", msg = $error
+    quit(QuitFailure)
 
   nimbus.fc = fc
   # Setup history expiry and portal

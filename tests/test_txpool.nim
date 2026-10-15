@@ -20,6 +20,7 @@ import
   ./transaction/blobs,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
+  ../execution_chain/db/storage_types,
   ../execution_chain/core/chain,
   ../execution_chain/core/eip4844,
   ../execution_chain/[conf, transaction, constants],
@@ -1439,3 +1440,37 @@ suite "TxPool packing order":
     check bundle.blk.transactions[0].txType == TxEip7702
     check bundle.blk.transactions[1].nonce == 1
     xp.checkImportBlock(bundle)
+
+suite "TxPool contract code storage":
+  let
+    env = initEnv(Cancun)
+    xp = env.xp
+    mx = env.sender
+    db = env.com.db.baseTxFrame()
+
+  xp.prevRandao = prevRandao
+  xp.feeRecipient = feeRecipient
+  xp.timestamp = EthTime.now()
+
+  test "contract code reaches the database only with an accepted block":
+    const
+      # PUSH1 0x2a PUSH1 0 SSTORE STOP
+      runtimeCode = hexToSeqByte("0x602a60005500")
+      # Store the runtime code in memory and return it
+      initCode = hexToSeqByte("0x65602a600055006000526006601af3")
+    let
+      codeKey = contractHashKey(keccak256(runtimeCode))
+      tc = BaseTx(gasLimit: 200000, payload: initCode)
+
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(5), 0))
+    let bundle = xp.checkAssembleBlock(1)
+    # The built block may never be imported
+    check not db.hasKey(codeKey.toOpenArray)
+
+    var badBlk = bundle.blk
+    badBlk.header.stateRoot = default(Hash32)
+    check (waitFor xp.chain.importBlock(badBlk)).isErr
+    check not db.hasKey(codeKey.toOpenArray)
+
+    xp.checkImportBlock(bundle, 0)
+    check db.hasKey(codeKey.toOpenArray)
