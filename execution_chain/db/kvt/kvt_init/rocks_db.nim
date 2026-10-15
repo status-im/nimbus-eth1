@@ -20,6 +20,7 @@ import
   chronicles,
   rocksdb,
   results,
+  ../../storage_types,
   ../kvt_desc,
   ./init_common,
   ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put]
@@ -137,12 +138,12 @@ proc delRangeKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelRangeKvpFn =
 
 # -------------
 
-proc writeKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): WriteKvpFn =
+proc delBatchKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelBatchKvpFn =
   result =
-    proc(batch: KvtBatch): Result[void, KvtError] =
-      db.rdb.put(batch, cf).isOkOr:
+    proc(keys: openArray[DbKey]): Result[void, KvtError] =
+      db.rdb.del(keys, cf).isOkOr:
         when extraTraceMessages:
-          debug "writeKvpFn() failed", error=($error)
+          debug "delBatchKvpFn() failed", error=($error)
         return err(error[0])
 
       ok()
@@ -181,8 +182,7 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
 
   db.delKvpFn = delKvpFn(be, cf)
   db.delRangeKvpFn = delRangeKvpFn(be, cf)
-
-  db.writeKvpFn = writeKvpFn(be, cf)
+  db.delBatchKvpFn = delBatchKvpFn(be, cf)
 
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be

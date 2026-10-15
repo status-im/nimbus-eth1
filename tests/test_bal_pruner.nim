@@ -278,31 +278,22 @@ suite "Block access list pruner tests":
 
     check kvt.getBalTailBe() == BlockNumber(7)
 
-  test "a batch of block access lists is deleted with its tail in one write":
+  test "a batch of block access lists is deleted in one write":
     let
       com = env.newCom()
       kvt = com.db.kvt
       hashes = com.buildChain(numBlocks = 10, firstBalBlock = 1)
-      backendPut = kvt.putKvpFn
       backendDel = kvt.delKvpFn
 
-    # The first cycle stores its start tail with a write of its own
-    kvt.setBalTailBe(BlockNumber(1))
-
-    var singleWrites = 0
-    kvt.putKvpFn = proc(key, val: openArray[byte]): Result[void, KvtError] =
-      inc singleWrites
-      backendPut(key, val)
+    var singleDeletes = 0
     kvt.delKvpFn = proc(key: openArray[byte]): Result[void, KvtError] =
-      inc singleWrites
+      inc singleDeletes
       backendDel(key)
-    defer:
-      kvt.putKvpFn = backendPut
-      kvt.delKvpFn = backendDel
+    defer: kvt.delKvpFn = backendDel
 
     check (waitFor BalPrunerRef.init(com).prune(
       BlockNumber(10), headSlotFor(5))) == 5
-    check singleWrites == 0
+    check singleDeletes == 0
 
     for i in 1 .. 5:
       check not kvt.hasBal(hashes[i])

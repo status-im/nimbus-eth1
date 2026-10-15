@@ -63,12 +63,12 @@ proc deleteBlockBodyAndReceiptsBe*(kvt: KvtDbRef, header: Header) =
 proc deleteBlockAccessListsBe*(
     kvt: KvtDbRef, blockHashes: openArray[Hash32], tail: BlockNumber
 ) =
-  # One write, so the tail never moves without its deletes
-  var batch: KvtBatch
+  var keys = newSeqOfCap[DbKey](blockHashes.len)
   for blockHash in blockHashes:
-    batch.del(blockHashToBlockAccessListKey(blockHash).toOpenArray)
-  batch.put(balTailKey().toOpenArray, tail.toBytesLE())
-  kvt.write(batch).expect("delete block access lists")
+    keys.add blockHashToBlockAccessListKey(blockHash)
+  kvt.del(keys).expect("delete block access lists")
+  # After the deletes: a crash in between only repeats them on the next run
+  kvt.put(balTailKey().toOpenArray, tail.toBytesLE()).expect("no error")
 
 # ------------------------------------------------------------------------------
 # Direct-backend progress tracking

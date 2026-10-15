@@ -21,7 +21,7 @@ import
   ../execution_chain/db/opts,
   ../execution_chain/db/storage_types,
   ../execution_chain/db/kvt,
-  ../execution_chain/db/kvt/[kvt_desc, kvt_init/memory_only, kvt_utils]
+  ../execution_chain/db/kvt/[kvt_init/memory_only, kvt_utils]
 
 suite "Kvt":
   setup:
@@ -65,32 +65,19 @@ suite "Kvt":
 
     db.close()
 
-  test "Batch write - write":
-    check db.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
-
-    var batch: KvtBatch
-    batch.del([byte 0, 1, 1])
-    batch.put([byte 0, 1, 2], [byte 0, 1, 5])
-
-    check:
-      db.write(batch).isOk()
-      not db.hasKey([byte 0, 1, 1])
-      db.get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 5]
-
-    db.close()
-
-  test "Batch write - an invalid entry writes nothing":
-    check db.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
-
-    var batch: KvtBatch
-    batch.del([byte 0, 1, 1])
-    batch.put([byte 0, 1, 2], [byte 0, 1, 5])
-    batch.put([byte 0, 1, 3], default(seq[byte]))
+  test "Batch delete - del":
+    let keys = [
+      genericHashKey(keccak256([byte 1])),
+      genericHashKey(keccak256([byte 2])),
+      genericHashKey(keccak256([byte 3]))]
+    for key in keys:
+      check db.put(key.toOpenArray, [byte 0, 1]).isOk()
 
     check:
-      db.write(batch).error == DataInvalid
-      db.get([byte 0, 1, 1]).expect("entry") == @[byte 0, 1, 4]
-      not db.hasKey([byte 0, 1, 2])
+      db.del([keys[0], keys[1]]).isOk()
+      not db.hasKey(keys[0].toOpenArray)
+      not db.hasKey(keys[1].toOpenArray)
+      db.hasKey(keys[2].toOpenArray)
 
     db.close()
 
@@ -275,11 +262,8 @@ suite "Kvt block hash cache":
 
     check db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
 
-    var batch: KvtBatch
-    batch.del(blockNumberToHashKey(BlockNumber(1)).toOpenArray)
-
     check:
-      db.kvt.write(batch).isOk()
+      db.kvt.del([blockNumberToHashKey(BlockNumber(1))]).isOk()
       db.baseTxFrame().getBlockHash(BlockNumber(1)).isErr()
 
     db.close()
@@ -294,14 +278,16 @@ suite "Kvt on RocksDB":
     db.close()
     removeDir(path)
 
-  test "Batch write - write":
-    check db.kvt.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
-
-    var batch: KvtBatch
-    batch.del([byte 0, 1, 1])
-    batch.put([byte 0, 1, 2], [byte 0, 1, 5])
+  test "Batch delete - del":
+    let keys = [
+      genericHashKey(keccak256([byte 1])),
+      genericHashKey(keccak256([byte 2])),
+      genericHashKey(keccak256([byte 3]))]
+    for key in keys:
+      check db.kvt.put(key.toOpenArray, [byte 0, 1]).isOk()
 
     check:
-      db.kvt.write(batch).isOk()
-      not db.kvt.hasKey([byte 0, 1, 1])
-      db.kvt.get([byte 0, 1, 2]).expect("entry") == @[byte 0, 1, 5]
+      db.kvt.del([keys[0], keys[1]]).isOk()
+      not db.kvt.hasKey(keys[0].toOpenArray)
+      not db.kvt.hasKey(keys[1].toOpenArray)
+      db.kvt.hasKey(keys[2].toOpenArray)

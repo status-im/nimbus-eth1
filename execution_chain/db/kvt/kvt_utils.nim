@@ -114,39 +114,17 @@ proc del*(
 
 # ------------
 
-proc put*(
-    batch: var KvtBatch;              # Batch to add to
-    key: openArray[byte];             # Key of database record to store
-    data: openArray[byte];            # Value of database record to store
-      ) =
-  ## Add a put to `batch`, applied by `write`.
-  batch.ops.add((@key, Opt.some(@data)))
-
 proc del*(
-    batch: var KvtBatch;              # Batch to add to
-    key: openArray[byte];             # Key of database record to delete
-      ) =
-  ## Add a delete to `batch`, applied by `write`.
-  batch.ops.add((@key, Opt.none(seq[byte])))
-
-proc write*(
     db: KvtDbRef;                     # Database
-    batch: KvtBatch;                  # Puts and deletes to apply
+    keys: openArray[DbKey];           # Keys of database records to delete
       ): Result[void,KvtError] =
-  ## Apply all puts and deletes of `batch` in one atomic step and invalidate
-  ## any cached block hash it deletes. An entry `put` or `del` would reject
-  ## fails the whole batch before anything is written.
-  for op in batch.ops:
-    if op.key.len == 0:
-      return err(KeyInvalid)
-    if op.val.isSome and op.val.get().len == 0:
-      return err(DataInvalid)
-
-  ?db.writeKvpFn(batch)
+  ## Delete the values in one atomic step and invalidate any cached block
+  ## hash among them.
+  ?db.delBatchKvpFn(keys)
   when compileOption("threads"):
-    for op in batch.ops:
-      if op.val.isNone and op.key.isBlockNumberToHashKey:
-        db.blockHashes.del(op.key.blockNumberFromHashKey)
+    for key in keys:
+      if key.toOpenArray.isBlockNumberToHashKey:
+        db.blockHashes.del(key.toOpenArray.blockNumberFromHashKey)
   ok()
 
 # ------------

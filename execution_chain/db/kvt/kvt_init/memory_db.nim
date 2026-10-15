@@ -29,6 +29,7 @@ import
   std/[tables, sets],
   results,
   stew/byteutils,
+  ../../storage_types,
   ./init_common,
   ../kvt_desc
 
@@ -126,18 +127,11 @@ proc delRangeKvpFn(db: MemBackendRef): DelRangeKvpFn =
 
 # -------------
 
-proc writeKvpFn(db: MemBackendRef): WriteKvpFn =
+proc delBatchKvpFn(db: MemBackendRef): DelBatchKvpFn =
   result =
-    proc(batch: KvtBatch): Result[void, KvtError] =
-      for op in batch.ops:
-        if op.key.len == 0:
-          return err(KeyInvalid)
-
-      for op in batch.ops:
-        if op.val.isSome:
-          db.tab[op.key] = op.val.get()
-        else:
-          db.tab.del(op.key)
+    proc(keys: openArray[DbKey]): Result[void, KvtError] =
+      for key in keys:
+        db.tab.del(@(key.toOpenArray))
 
       ok()
 
@@ -173,8 +167,7 @@ proc memoryBackend*: KvtDbRef =
 
   db.delKvpFn = delKvpFn(be)
   db.delRangeKvpFn = delRangeKvpFn(be)
-
-  db.writeKvpFn = writeKvpFn(be)
+  db.delBatchKvpFn = delBatchKvpFn(be)
 
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be

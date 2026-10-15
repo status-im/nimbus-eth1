@@ -15,6 +15,7 @@
 
 import
   results,
+  ../../../storage_types,
   ../../kvt_desc,
   ./rdb_desc
 
@@ -53,19 +54,15 @@ proc put*(
     return err((errSym,error))
   ok()
 
-proc put*(
+proc del*(
     rdb: RdbInst;
-    batch: KvtBatch;
+    keys: openArray[DbKey];
     cf: static[KvtCFs]): Result[void,(KvtError,string)] =
   let wb = rdb.baseDb.db.openWriteBatch(rdb.store[cf].handle())
   defer: wb.close()
-  for op in batch.ops:
-    if op.val.isSome:
-      wb.put(op.key, op.val.get()).isOkOr:
-        return err((RdbBeDriverPutError, error))
-    else:
-      wb.delete(op.key).isOkOr:
-        return err((RdbBeDriverDelError, error))
+  for key in keys:
+    wb.delete(key.toOpenArray).isOkOr:
+      return err((RdbBeDriverDelError, error))
   rdb.baseDb.db.write(wb).isOkOr:
     return err((RdbBeDriverWriteError, error))
   ok()
