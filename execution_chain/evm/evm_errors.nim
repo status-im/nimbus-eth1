@@ -32,6 +32,7 @@ type
     PrcInvalidParam
     PrcValidationError
     GasIntOverflow
+    NonceOverflow
     InvalidInstruction
     StaticContext
     InvalidJumpDest

@@ -21,6 +21,9 @@ func init*(m: var GasMeter, startGas: GasInt, stateGas: GasInt) =
   m.stateGasLeft = stateGas
   m.executionGasUsed = 0
 
+func init*(_: type GasMeter, executionGas: GasInt): GasMeter =
+  result.init(executionGas, 0)
+
 template consumeGas*(
     gasMeter: var GasMeter; amount: GasInt; reason: static string): EvmResultVoid =
   # consumeGas is a hotspot in the vm due to it being called for every

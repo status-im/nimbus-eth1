@@ -66,7 +66,7 @@ type
     storage:   Table[UInt256, UInt256]
     code: CodeBytesRef
 
-  AccountRef = ref object
+  AccountRef* = ref object
     statement: CoreDbAccount
     accPath: Hash32
     flags: AccountFlags
@@ -1090,6 +1090,69 @@ func getAccessList*(ledger: LedgerRef): transactions.AccessList =
   doAssert(ledger.savePoint.parentSavePoint.isNil)
   ledger.savePoint.accessList.getAccessList()
 
+func copyAccessList*(ledger: LedgerRef): ac_access_list.AccessList =
+  ledger.savePoint.accessList
+
+func restoreAccessList*(ledger: LedgerRef, accessList: sink ac_access_list.AccessList) =
+  ledger.savePoint.accessList = move(accessList)
+
+func copySelfDestruct*(ledger: LedgerRef): HashSet[Address] =
+  ledger.savePoint.selfDestruct
+
+func restoreSelfDestruct*(ledger: LedgerRef, selfDestruct: sink HashSet[Address]) =
+  ledger.savePoint.selfDestruct = move(selfDestruct)
+
+proc getLiveAccount*(ledger: LedgerRef, address: Address): AccountRef =
+  ledger.getAccount(address, shouldCreate = false)
+
+proc getDirtyAccount*(ledger: LedgerRef, address: Address): AccountRef =
+  result = ledger.getAccount(address, shouldCreate = false)
+  if result.isNil.not and Dirty notin result.flags:
+    return nil
+
+iterator dirtyAccounts*(ledger: LedgerRef): (Address, AccountRef) =
+  var sp = ledger.savePoint
+  while sp != nil:
+    for address, acc in sp.dirty:
+      yield (address, acc)
+    sp = sp.parentSavePoint
+
+# ------------------------------------------------------------------------------
+# Public AccountRef read-only methods
+# ------------------------------------------------------------------------------
+
+func originalStatement*(acc: AccountRef): lent CoreDbAccount =
+  acc.original.statement
+
+func statement*(acc: AccountRef): lent CoreDbAccount =
+  acc.statement
+
+func balanceChanged*(acc: AccountRef): bool =
+  acc.statement.balance != acc.original.statement.balance
+
+func nonceChanged*(acc: AccountRef): bool =
+  acc.statement.nonce != acc.original.statement.nonce
+
+func codeChanged*(acc: AccountRef): bool =
+  CodeChanged in acc.flags
+
+func storageChanged*(acc: AccountRef): bool =
+  StorageChanged in acc.flags
+
+func codeChangedToSomething*(acc: AccountRef): bool =
+  acc.original.statement.codeHash == EMPTY_CODE_HASH and
+    acc.statement.codeHash != EMPTY_CODE_HASH
+
+func slots*(acc: AccountRef): seq[UInt256] =
+  for key in acc.overlayStorage.keys:
+    result.add key
+
+func storage*(acc: AccountRef, slot: UInt256): UInt256 =
+  acc.overlayStorage.getOrDefault(slot)
+
+func originalStorage*(acc: AccountRef, slot: UInt256): UInt256 =
+  acc.original.storage.getOrDefault(slot)
+
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
 # ------------------------------------------------------------------------------
@@ -1109,6 +1172,8 @@ proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAc
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase ledger, address)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase ledger, address)
+proc getLiveAccount*(ledger: ReadOnlyLedger, address: Address): AccountRef = getLiveAccount(distinctBase ledger, address)
+proc getDirtyAccount*(ledger: ReadOnlyLedger, address: Address): AccountRef = getDirtyAccount(distinctBase ledger, address)
 
 # ------------------------------------------------------------------------------
 # End
