@@ -89,17 +89,23 @@ template checkBlockGasCapacity*(
     tx: Transaction;
     intrinsic: IntrinsicGas;
     fail: untyped) =
-  let
-    txGasLimit = tx.gasLimit
-    executionGasAvailable = vmState.blockCtx.gasLimit - vmState.blockExecutionGasUsed
-    stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
-    want = min(TX_MAX_GAS_LIMIT.GasInt, txGasLimit)
+  let txGasLimit = tx.gasLimit
 
-  if want > executionGasAvailable:
-    fail("execution gas used exceeds limit, want: " & $want & ", available: " & $executionGasAvailable)
+  if vmState.fork >= FkAmsterdam:
+    let
+      executionGasAvailable = vmState.blockCtx.gasLimit - vmState.blockExecutionGasUsed
+      stateGasAvailable = vmState.blockCtx.gasLimit - vmState.blockStateGasUsed
+      want = min(TX_MAX_GAS_LIMIT.GasInt, txGasLimit)
 
-  if txGasLimit > stateGasAvailable:
-    fail("state gas used exceeds limit, want: " & $txGasLimit & ", available: " & $stateGasAvailable)
+    if want > executionGasAvailable:
+      fail("execution gas used exceeds limit, want: " & $want & ", available: " & $executionGasAvailable)
+
+    if txGasLimit > stateGasAvailable:
+      fail("state gas used exceeds limit, want: " & $txGasLimit & ", available: " & $stateGasAvailable)
+  else:
+    let gasAvailable = vmState.blockCtx.gasLimit - vmState.cumulativeGasUsed
+    if txGasLimit > gasAvailable:
+      fail("gas used exceeds limit, want: " & $txGasLimit & ", available: " & $gasAvailable)
 
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
