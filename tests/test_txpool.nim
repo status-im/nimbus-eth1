@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[math, times, importutils],
+  std/[math, times, importutils, sequtils],
   eth/common/keys,
   results,
   unittest2,
@@ -26,6 +26,7 @@ import
   ../execution_chain/core/tx_pool,
   ../execution_chain/core/tx_pool/tx_desc {.all.},
   ../execution_chain/core/tx_pool/tx_evictor,
+  ../execution_chain/transaction/call_types,
   ../execution_chain/core/pooled_txs,
   ../execution_chain/common/common,
   ../execution_chain/utils/utils,
@@ -1044,6 +1045,60 @@ suite "TxPool test suite":
       tip0 = txs[0].effectiveGasTip(baseFee)
       tip1 = txs[1].effectiveGasTip(baseFee)
     check tip0 >= tip1
+
+  test "Pre-Amsterdam tx gas limit is checked against floor-inclusive block gas used":
+    let
+      env = initEnv(Prague)
+      xp = env.xp
+      mx = env.sender
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+
+    let
+      floorTxCount = 3
+      blockGasLimit = xp.vmState.blockCtx.gasLimit
+      sample = mx.makeTx(BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: 1_000_000,
+        recipient: Opt.some(recipient214),
+        payload: newSeqWith(20_000, 0xff'u8),
+      ), mx.getAccount(0), 0)
+      intrinsic = sample.tx.intrinsicGas(Prague, mx.getAccount(0).address)
+      floorBlockGas = floorTxCount.GasInt * intrinsic.floorDataGas
+      executionBlockGas = floorTxCount.GasInt * intrinsic.execution
+      probeGasLimit = blockGasLimit - floorBlockGas + 1
+
+    check probeGasLimit <= blockGasLimit - executionBlockGas
+
+    for i in 0 ..< floorTxCount:
+      xp.checkAddTx(mx.makeTx(BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: intrinsic.floorDataGas,
+        gasTip: 10.gwei,
+        gasFee: 30.gwei,
+        recipient: Opt.some(recipient214),
+        payload: newSeqWith(20_000, 0xff'u8),
+      ), mx.getAccount(i), 0))
+
+    let probe = mx.makeTx(BaseTx(
+      txType: Opt.some(TxEip1559),
+      gasLimit: probeGasLimit,
+      gasTip: 2.gwei,
+      gasFee: 30.gwei,
+      recipient: Opt.some(recipient214),
+    ), mx.getAccount(floorTxCount), 0)
+    xp.checkAddTx(probe)
+
+    let bundle = xp.checkAssembleBlock(floorTxCount)
+    check bundle.blk.header.gasUsed == floorBlockGas
+    check probe.tx notin bundle.blk.transactions
+    xp.checkImportBlock(bundle, 1)
+
+    let next = xp.checkAssembleBlock(1)
+    check next.blk.transactions[0] == probe.tx
+    xp.checkImportBlock(next, 0)
 
 suite "TxPool BAL post-Amsterdam":
   # Regression test for PR #4148: tx_packer left an outer beginCallFrame in
