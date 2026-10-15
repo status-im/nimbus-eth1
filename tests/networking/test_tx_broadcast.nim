@@ -28,7 +28,7 @@ import
   ../../execution_chain/core/pooled_txs,
   ../../execution_chain/sync/wire_protocol,
   ../../execution_chain/conf,
-  ../../hive_integration/tx_sender,
+  ../transaction/tx_sender,
   ./stubloglevel
 
 # No explicit kzg trusted-setup load here: the kzg binding lazy-loads a
@@ -539,7 +539,7 @@ suite "Tx broadcast queue":
 
       # Make tickerLoop take its cleanup branch promptly: a short (but not-yet-
       # finished) cleanupTimer is kept and fires quickly; a long brUpdateTimer
-      # never wins the `one()` race. tickerLoop runs synchronously up to its
+      # never wins the `race()`. tickerLoop runs synchronously up to its
       # first await, so these assignments are seen before the timers are read.
       env.wire.cleanupTimer = sleepAsync(chronos.milliseconds(50))
       env.wire.brUpdateTimer = sleepAsync(chronos.hours(1))

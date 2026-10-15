@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -21,6 +21,17 @@ const
   # Note: These Min/Max values must be updated as new protocol versions are supported/removed
   localSupportedVersionMin* = 2'u8
   localSupportedVersionMax* = 2'u8
+
+func read*(rlp: var Rlp, T: type PortalEnrField): T {.raises: [RlpError].} =
+  # We use `rlp` encoded list as it allows us to add more items at the end in
+  # the future upgrades. The implementation should take that into consideration.
+  # https://github.com/ethereum/portal-network-specs/blob/master/portal-wire-protocol.md#enr-record
+  rlp.consumeList(RlpListMode.IgnoreAdditionalElements):
+    let
+      pvMin = rlp.read(uint8)
+      pvMax = rlp.read(uint8)
+      chainId = rlp.read(ChainId)
+  T(pvMin: pvMin, pvMax: pvMax, chainId: chainId)
 
 func init*(T: type PortalEnrField, pvMin: uint8, pvMax: uint8, chainId: ChainId): T =
   T(pvMin: pvMin, pvMax: pvMax, chainId: chainId)
@@ -61,7 +72,7 @@ func highestCommonPortalVersionAndChain*(
   portalField.highestCommonPortalVersionAndChain(supportedPortalField)
 
 func highestCommonPortalVersionAndChain*(
-    node: Node, supportedPortalField: PortalEnrField
+    node: DiscoveryNode, supportedPortalField: PortalEnrField
 ): Result[uint8, string] =
   ## Return highest common portal protocol version of both nodes, but only if chainIds match
   node.record.highestCommonPortalVersionAndChain(supportedPortalField)

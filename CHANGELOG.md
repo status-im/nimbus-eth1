@@ -1,7 +1,41 @@
+2026-09-29 v0.4.2
+=================
+
+The Nimbus Ethereum client `v0.4.2` beta and Nimbus verified proxy are `high-urgency` for Sepolia, due to its 6th October Glamsterdam fork activation, and `low-urgency` for other networks. The unified client and consensus client components also support QUIC, which might require additional network configuration.
+
+### Improvements
+
+- Schedule Sepolia Glamsterdam activation:
+  https://github.com/status-im/nimbus-eth1/pull/4836
+  https://github.com/status-im/nimbus-eth1/pull/4838
+
+- Improve INFO logging:
+  https://github.com/status-im/nimbus-eth1/pull/4857
+
+- Use cached code for `CREATE` and `CREATE2`-based deployments:
+  https://github.com/status-im/nimbus-eth1/pull/4779
+
+### Fixes
+
+- Fix Sepolia fork id:
+  https://github.com/status-im/nimbus-eth1/pull/4807
+
+- Fix unbounded peer count:
+  https://github.com/status-im/nimbus-eth1/pull/4748
+
+- Use shared NAT config for the light unified client:
+  https://github.com/status-im/nimbus-eth1/pull/4823
+
+- Fix requests for blocks created before verified proxy launch:
+  https://github.com/status-im/nimbus-eth1/pull/4837
+
+- Fix verified proxy pending or unknown transaction downscoring:
+  https://github.com/status-im/nimbus-eth1/pull/4834
+
 2026-09-13 v0.4.1
 =================
 
-The Nimbus Ethereum client `v0.4.1` beta and Nimbus verified proxy are `medium-urgency` releases which improve performance and compatibility.
+The Nimbus Ethereum client `v0.4.1` beta and Nimbus verified proxy are `medium-urgency` releases which improve performance and compatibility. The unified client supports a `--light` parameter which runs a light consensus layer with a full execution layer, while a new `lightClient` subcommand provides standalone access to the consensus layer light client.
 
 ### Improvements
 

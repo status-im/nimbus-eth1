@@ -21,12 +21,12 @@ type
     SnapReady                      ## Wait for download state
     SnapDownload                   ## Download and cache initial state data
     SnapDownloadFinish             ## Wait for sync before proceeding
+    SnapDownloadCommit             ## Get ready for BAL forward
     SnapBalsFetch                  ## Bring state forward using BALs
     SnapBalsFetchFinish            ## Wait for sync before proceeding
     SnapStateForward               ## Apply BALs and advance state
     SnapAssembleMpt                ## Assemble Aristo database
-    # ..                           ## TBD ..
-    SnapStop                       ## TBD ..
+    SnapStop                       ## End of snap sync
 
   ErrorType* = enum
     ## For `FetchError` return code object/tuple
@@ -63,44 +63,51 @@ const
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
+  threadSwitchTimeSlot* = chronos.milliseconds(300)
+    ## For some long running jobs, a pseudo thread switch is forced using
+    ## nano-seep wait. This is the time between wto of these nano-seep
+    ## directives.
+
+  # -----------------
+
   noPeersLogWaitInterval* = chronos.seconds(50)
     ## Reduce logging noise
 
   noHeadersLogWaitInterval* = chronos.seconds(120)
     ## Reduce logging noise
 
+  triggeredHeadersLogWaitInterval* = chronos.seconds(120)
+    ## Reduce logging noise
+
   maxHeadersLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 
-  lockedBalsLogWaitInterval* = chronos.seconds(30)
+  beaconSyncIdleLogWaitInterval* = chronos.seconds(10)
+    ## Reduce logging noise
+
+  noBalSupportLogWaitInterval* = chronos.seconds(30)
     ## Reduce logging noise
 
   # ---------
-
-  daemonWaitResumeFailInterval* = chronos.seconds(5)
-    ## Need some extra time when initialised too early.
 
   daemonWaitClearFailInterval* = chronos.seconds(10)
     ## Something failed in `SnapClear` state, e.g. starting header
     ## download (just avoiding some extra polling.)
 
-  daemonWaitReadyInterval* = chronos.seconds(5)
-    ## Some polling interval time waiting until the system gets into download
-    ## state when the the FCU modue hash provides a finalised header and there
-    ## are eth/xx download peers available.
+  daemonWaitReadyDwnldFailInterval* = chronos.seconds(15)
+    ## Header download trigger failed
 
-  daemonWaitReadyFailInterval* = chronos.seconds(10)
-    ## Something failed in `SnapReady` state, e.g. starting header
-    ## download (just avoiding some extra polling.)
+  daemonWaitReadyInitFailInterval* = chronos.seconds(5)
+    ## Snap download init failed. System is not ready yet.
 
   daemonWaitDownloadInterval* = chronos.seconds(2)
     ## Poll waiting for peers downloading snap data. The polling cycle also
     ## triggers some metrics updates.
 
-  daemonWaitDownloadFinishInterval* = chronos.seconds(1)
-    ## Poll waiting for all peers to have stopped
-
   daemonWaitBalsFetchInterval* = chronos.seconds(5)
+    ## Poll waiting for some peer to download BALs
+
+  daemonWaitHeaderStopInterval* = chronos.seconds(5)
     ## Poll waiting for some peer to download BALs
 
   # ---------
@@ -116,6 +123,13 @@ const
   peerWaitExhaustedInterval* = chronos.milliseconds(1200)
     ## Suspend peer until the download state has been forwarded. This timeout
     ## will be regularly polled for the updated state.
+
+  peerWaitBalsSnap1Interval* = chronos.milliseconds(300)
+    ## Suspend snap/1 peer for BALs download emulation when snap/2 peers
+    ## are available.
+
+  peerWaitBalsNoDataInterval* = chronos.milliseconds(300)
+    ## Suspend  peer for BALs download if there were no available.
 
   peerWaitBalsLockedInterval* = chronos.milliseconds(300)
     ## Only one peer can download BALs. This constatnt is the polling timr
@@ -135,14 +149,24 @@ const
     ## these intervals are sparsely filled and there will be returned not
     ## more than ~1k accounts.
 
-  nFinHeadSupportWindowSize* = 128
-    ## If the FCU update finalised header is more than that distance apart
-    ## form the pivot state block number, a BAL download and forward cycle
-    ## will be triggerd.
+  nStateDownloadWindowSize* = 128
+    ## This value is for metrics/logging only. The effective state download
+    ## window is stated below.
 
-  nFinHeadSupportWindowTopMargin* = 45
+  nFinHeadSupportWindowSize* = 57                   # ~45% of 128
+    ## If the FCU finalised header is more than that distance apart from
+    ## the pivot state block number, a BAL download and forward cycle will
+    ## be triggerd. The download window ranges
+    ## ::
+    ##    finalised-head - nFinHeadSupportWindowSize .. finalised-head
+    ##
+    ## Providing a shorter interval than 128 will stop starting new download
+    ## sessions while running current downloading sessions until the peers
+    ## stop replying or there is no more work left.
+
+  nFinHeadSupportWindowTopMargin* = 40
     ## Top (or right end) acceptance margin for the download window. The
-    ## state of the patrtial MPT representation is forwarded until it falls
+    ## state of the partial MPT representation is forwarded until it falls
     ## in the range
     ## ::
     ##    finalised-head - nFinHeadSupportWindowTopMargin .. finalised-head
@@ -186,9 +210,6 @@ const
   nProcStorageErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
 
-  nFetchStorageSlotsMax* = 1024
-    ## Maximal size of storage slots downloaded in a single message.
-
   # -----------
 
   fetchCodeBatchMax* = 1024
@@ -206,11 +227,6 @@ const
   nProcCodesErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
 
-  nFetchByteCodesMax* = 128
-    ## Maximal sise of byte codes downloaded in a single message. Note
-    ## that the snap/1 protocol description recommends someting about
-    ## 80-100 items for a 515K byte limit.
-
   # -----------
 
   ethBalFetchCapacity* = 10
@@ -219,6 +235,9 @@ const
 
   nFetchBalEthPeersMax* = 5
     ## Try at most this many `eth` peers for fetchinga block access lists.
+
+  nFetchBalSnapSizeMax* = 2 * 1024 * 1024
+    ## Maximal response size for a BAL request
 
   fetchBalRlpxTimeout* = chronos.seconds(50)
     ## Timeout cap for the `RLPx` handlers, either `snap` or `eth`
@@ -243,6 +262,14 @@ const
 
   nProcBalDefaultBatchMax* = 1000
     ## Default maximum number of BALs for a single auto downloading session.
+
+  # -----------
+
+  nCoreDbImportPersistBatch* = 512 * 1024
+    ## When importing accounts, storage, and contract codes the caches are
+    ## regularly saved to disk after this many items have benn processed.
+    ## This constant defines a memory/time trade off. The lower the value,
+    ## the less memory is used.
 
 static:
   doAssert 0 < nConsHeadCachedDeltaMin

@@ -12,14 +12,12 @@ import
   ./eest_runner,
   ./eest_evmstate
 
+from ./eest_shared_releases import eestReleases
+
 const
   baseFolder = "tests/fixtures"
   suiteName = "Evmstate Test"
   eestType = "state_tests"
-  eestReleases = [
-    "eest_mainnet",
-    "eest_devnet",
-  ]
 
 const skipFiles = [
   ""

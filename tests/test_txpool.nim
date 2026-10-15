@@ -11,21 +11,23 @@
 {.push raises: [].}
 
 import
-  std/[math, times, importutils],
+  std/[math, times, importutils, sequtils],
   eth/common/keys,
   results,
   unittest2,
   chronos,
-  ../hive_integration/tx_sender,
-  ../hive_integration/blobs,
+  ./transaction/tx_sender,
+  ./transaction/blobs,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/ledger,
+  ../execution_chain/db/storage_types,
   ../execution_chain/core/chain,
   ../execution_chain/core/eip4844,
   ../execution_chain/[conf, transaction, constants],
   ../execution_chain/core/tx_pool,
   ../execution_chain/core/tx_pool/tx_desc {.all.},
   ../execution_chain/core/tx_pool/tx_evictor,
+  ../execution_chain/transaction/call_types,
   ../execution_chain/core/pooled_txs,
   ../execution_chain/common/common,
   ../execution_chain/utils/utils,
@@ -1045,6 +1047,60 @@ suite "TxPool test suite":
       tip1 = txs[1].effectiveGasTip(baseFee)
     check tip0 >= tip1
 
+  test "Pre-Amsterdam tx gas limit is checked against floor-inclusive block gas used":
+    let
+      env = initEnv(Prague)
+      xp = env.xp
+      mx = env.sender
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+
+    let
+      floorTxCount = 3
+      blockGasLimit = xp.vmState.blockCtx.gasLimit
+      sample = mx.makeTx(BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: 1_000_000,
+        recipient: Opt.some(recipient214),
+        payload: newSeqWith(20_000, 0xff'u8),
+      ), mx.getAccount(0), 0)
+      intrinsic = sample.tx.intrinsicGas(Prague, mx.getAccount(0).address)
+      floorBlockGas = floorTxCount.GasInt * intrinsic.floorDataGas
+      executionBlockGas = floorTxCount.GasInt * intrinsic.execution
+      probeGasLimit = blockGasLimit - floorBlockGas + 1
+
+    check probeGasLimit <= blockGasLimit - executionBlockGas
+
+    for i in 0 ..< floorTxCount:
+      xp.checkAddTx(mx.makeTx(BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: intrinsic.floorDataGas,
+        gasTip: 10.gwei,
+        gasFee: 30.gwei,
+        recipient: Opt.some(recipient214),
+        payload: newSeqWith(20_000, 0xff'u8),
+      ), mx.getAccount(i), 0))
+
+    let probe = mx.makeTx(BaseTx(
+      txType: Opt.some(TxEip1559),
+      gasLimit: probeGasLimit,
+      gasTip: 2.gwei,
+      gasFee: 30.gwei,
+      recipient: Opt.some(recipient214),
+    ), mx.getAccount(floorTxCount), 0)
+    xp.checkAddTx(probe)
+
+    let bundle = xp.checkAssembleBlock(floorTxCount)
+    check bundle.blk.header.gasUsed == floorBlockGas
+    check probe.tx notin bundle.blk.transactions
+    xp.checkImportBlock(bundle, 1)
+
+    let next = xp.checkAssembleBlock(1)
+    check next.blk.transactions[0] == probe.tx
+    xp.checkImportBlock(next, 0)
+
 suite "TxPool BAL post-Amsterdam":
   # Regression test for PR #4148: tx_packer left an outer beginCallFrame in
   # vmExecGrabItem with no matching commit/rollback, so per-tx BAL changes
@@ -1375,3 +1431,101 @@ suite "TxPool blob retention":
 
     # Old blob still served => the replaced item is still alive in blobTab.
     check xp.getBlobAndProofV1(oldHash).isNone
+
+suite "TxPool packing order":
+  test "a sender's next tx is only offered once the previous one is in":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      tc = BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: 75000,
+        recipient: Opt.some(recipient214),
+        amount: 1.u256,
+      )
+
+    for i in 0 ..< 2:
+      let acc = mx.getAccount(i)
+      for n in 0 ..< 3:
+        xp.checkAddTx(mx.makeTx(tc, acc, n.AccountNonce))
+
+    # Nothing gets executed here, so no account nonce moves: only the first tx
+    # of each sender is offered, the later ones could never be included
+    var offered: seq[AccountNonce]
+    for item in xp.byPriceAndNonce:
+      offered.add item.nonce
+    check offered == @[0'u64, 0]
+
+  test "nonce bumped by an EIP-7702 authorization moves on to the next tx":
+    let
+      env = initEnv(Prague)
+      xp = env.xp
+      mx = env.sender
+      accA = mx.getAccount(0)
+      accB = mx.getAccount(1)
+      tcA = BaseTx(
+        txType: Opt.some(TxEip1559),
+        gasLimit: 75000,
+        gasTip: 1.gwei,
+        recipient: Opt.some(recipient214),
+        amount: 1.u256,
+      )
+      # Higher tip, so it is packed first. Its authorization is signed by A
+      # for A's current nonce, which bumps A's nonce to 1.
+      tcB = BaseTx(
+        txType: Opt.some(TxEip7702),
+        gasLimit: 75000,
+        gasTip: 10.gwei,
+        recipient: Opt.some(recipient214),
+        amount: 1.u256,
+        authorizationList: @[mx.makeAuth(accA, 0)],
+      )
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+
+    xp.checkAddTx(mx.makeTx(tcA, accA, 0))
+    xp.checkAddTx(mx.makeTx(tcA, accA, 1))
+    xp.checkAddTx(mx.makeTx(tcB, accB, 0))
+
+    # A's nonce-0 tx went stale when B's tx landed, A's nonce-1 tx did not
+    let bundle = xp.checkAssembleBlock(2)
+    check bundle.blk.transactions[0].txType == TxEip7702
+    check bundle.blk.transactions[1].nonce == 1
+    xp.checkImportBlock(bundle)
+
+suite "TxPool contract code storage":
+  let
+    env = initEnv(Cancun)
+    xp = env.xp
+    mx = env.sender
+    db = env.com.db.baseTxFrame()
+
+  xp.prevRandao = prevRandao
+  xp.feeRecipient = feeRecipient
+  xp.timestamp = EthTime.now()
+
+  test "contract code reaches the database only with an accepted block":
+    const
+      # PUSH1 0x2a PUSH1 0 SSTORE STOP
+      runtimeCode = hexToSeqByte("0x602a60005500")
+      # Store the runtime code in memory and return it
+      initCode = hexToSeqByte("0x65602a600055006000526006601af3")
+    let
+      codeKey = contractHashKey(keccak256(runtimeCode))
+      tc = BaseTx(gasLimit: 200000, payload: initCode)
+
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(5), 0))
+    let bundle = xp.checkAssembleBlock(1)
+    # The built block may never be imported
+    check not db.hasKey(codeKey.toOpenArray)
+
+    var badBlk = bundle.blk
+    badBlk.header.stateRoot = default(Hash32)
+    check (waitFor xp.chain.importBlock(badBlk)).isErr
+    check not db.hasKey(codeKey.toOpenArray)
+
+    xp.checkImportBlock(bundle, 0)
+    check db.hasKey(codeKey.toOpenArray)

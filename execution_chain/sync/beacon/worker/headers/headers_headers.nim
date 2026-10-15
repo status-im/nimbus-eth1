@@ -79,7 +79,7 @@ template headersFetch*(
 
     # Commit blocks received (and revert lower unused block numbers)
     ctx.headersUnprocCommit(iv, iv.minPt, iv.maxPt - nHeaders)
-    bodyRc = rc
+    bodyRc = typeof(bodyRc).ok(rc.value)
 
   bodyRc # return
 

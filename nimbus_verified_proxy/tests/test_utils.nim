@@ -22,6 +22,7 @@ import
   ../../execution_chain/common/common,
   ../engine/types,
   ../engine/engine,
+  ../engine/header_store,
   ../engine/rpc_frontend,
   ./test_api_backend
 
@@ -112,6 +113,12 @@ proc preLoadTestBeaconState*(t: TestApiState) =
   t.loadOptimistic(optimistic)
   t.loadFinality(finality)
 
+proc setAnchor*(
+    engine: RpcVerificationEngine, header: Header, hash: Hash32, trust: HeaderTrust
+) =
+  engine.headerStore.put(header, hash, trust)
+  engine.headerStore.putHash(hash, trust)
+
 proc setupTestBeacon*(engine: RpcVerificationEngine, testState: TestApiState) =
   testState.preLoadTestBeaconState()
   engine.registerBackend(initTestBeaconBackend(testState), fullBeaconCapabilities)
@@ -137,5 +144,10 @@ proc initTestEngine*(
 
   engine.registerBackend(initTestExecutionBackend(testState), fullExecutionCapabilities)
   engine.setupTestBeacon(testState)
+
+  try:
+    ?(waitFor engine.syncOnce())
+  except CancelledError as e:
+    return err((UnavailableDataError, "test engine sync cancelled: " & e.msg, UNTAGGED))
 
   ok((engine, engine.getExecutionApiFrontend()))

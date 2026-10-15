@@ -75,8 +75,11 @@ suite "Stateless: Witness Verification":
 
     check:
       headersRes.isOk()
-      headersRes[].len() == 3
-      headersRes[][0] == header1
-      headersRes[][1] == header2
-      headersRes[][2] == header3
+      headersRes[].headers.len() == 3
+      headersRes[].headers[0] == header1
+      headersRes[].headers[1] == header2
+      headersRes[].headers[2] == header3
+      headersRes[].hashes == @[
+        header1.computeRlpHash(), header2.computeRlpHash(), header3.computeRlpHash()
+      ]
     check executionWitness.verifyState(stateRoot).isOk()

@@ -107,7 +107,7 @@ proc captureOpImpl(ctx: JsonTracer, c: Computation, pc: int,
     if c.msg.depth < ctx.storageKeys.len:
       var ledger = c.vmState.ledger
       for key in ctx.storage(c.msg.depth):
-        let value = ledger.getStorage(c.msg.contractAddress, key)
+        let value = ledger.getStorage(c.msg.currentTarget, key)
         storage[key.encodeHex] = %(value.encodeHex)
     res["storage"] = storage
 

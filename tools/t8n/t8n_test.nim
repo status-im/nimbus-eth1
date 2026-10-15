@@ -13,7 +13,9 @@
 import
   std/[os, osproc, strutils, json, tables],
   unittest2,
-  ./[types]
+  stint,
+  results,
+  ./types
 
 type
   T8nInput = object
@@ -87,6 +89,25 @@ template exit(jsc: var JsonComparator, msg: string) =
   jsc.error = msg
   return false
 
+func parseU256(x: string): Opt[UInt256] =
+  if x.len < 2:
+    return Opt.none(UInt256)
+  if x[0] != '0' or x[1] notin {'x', 'X'}:
+    return Opt.none(UInt256)
+  ok(UInt256.fromHex(x))
+
+func compareHexIntOrString(a: string, b: string): bool =
+  block cmpInt:
+    let
+      aa = parseU256(a).valueOr:
+        break cmpInt
+      bb = parseU256(b).valueOr:
+        break cmpInt
+    return aa == bb
+
+  # compare as string
+  a == b
+
 func cmp(jsc: var JsonComparator; a, b: JsonNode, path: string): bool =
   ## Check two nodes for equality
   if a.isNil:
@@ -100,7 +121,7 @@ func cmp(jsc: var JsonComparator; a, b: JsonNode, path: string): bool =
     result = true
     case a.kind
     of JString:
-      if a.str != b.str:
+      if not compareHexIntOrString(a.str, b.str):
         jsc.exit("STRING A($1) != B($2)" % [a.str, b.str])
     of JInt:
       if a.num != b.num:

@@ -25,7 +25,9 @@ type
 
     gHeaderBal = 10                                 # group, not used as column
     cHeader                                         # header chain by block num
+    cLastHeader                                     # last header reference
     cBal                                            # block access lists
+    cLastBal                                        # last bal reference
 
     gMissingTables = 20                             # group, not used as column
     cMissingIntv                                    # missing accounts/slots

@@ -368,7 +368,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
       return false
 
   if boa.enableLogs:
-    let logs = asmResult.logEntries
+    let logs = move vmState.txLogs
     if logs.len != boa.logs.len:
       error "different logs len", expected=boa.logs.len, actual=logs.len
       return false

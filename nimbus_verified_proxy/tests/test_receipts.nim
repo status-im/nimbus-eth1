@@ -36,9 +36,8 @@ suite "test receipts verification":
 
     ts.loadBlockReceipts(blk, rxs)
     ts.loadReceipt(rxs[0].transactionHash, rxs[0])
-    check:
-      engine.headerStore.add(convHeader(blk), blk.hash).isOk()
-      engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+    engine.setAnchor(convHeader(blk), blk.hash, Finalized)
 
     var verified = waitFor frontend.eth_getBlockReceipts(numberTag)
     check:
@@ -46,11 +45,6 @@ suite "test receipts verification":
       verified.get().get() == rxs
 
     verified = waitFor frontend.eth_getBlockReceipts(finalTag)
-    check:
-      verified.isOk()
-      verified.get().get() == rxs
-
-    verified = waitFor frontend.eth_getBlockReceipts(earliestTag)
     check:
       verified.isOk()
       verified.get().get() == rxs
@@ -76,15 +70,13 @@ suite "test receipts verification":
       logs = getLogsFromJson("nimbus_verified_proxy/tests/data/logs.json")
       numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: blk.number)
       finalTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "finalized")
-      earliestTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "earliest")
       latestTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "latest")
-      tags = [numberTag, finalTag, earliestTag, latestTag]
+      tags = [numberTag, finalTag, latestTag]
 
     # update block tags because getLogs (uses)-> getReceipts (uses)-> getHeader
     ts.loadBlockReceipts(blk, rxs)
-    check:
-      engine.headerStore.add(convHeader(blk), blk.hash).isOk()
-      engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+    engine.setAnchor(convHeader(blk), blk.hash, Finalized)
 
     for tag in tags:
       let filterOptions = FilterOptions(
@@ -150,9 +142,8 @@ suite "test receipts verification":
     # update block tags because getLogs (uses)-> getReceipts (uses)-> getHeader
     ts.loadBlockReceipts(blk, rxs)
 
-    check:
-      engine.headerStore.add(convHeader(blk), blk.hash).isOk()
-      engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+    engine.setAnchor(convHeader(blk), blk.hash, Finalized)
 
     # filter options without any tags would test resolving default "latest"
     let filterOptions = FilterOptions(

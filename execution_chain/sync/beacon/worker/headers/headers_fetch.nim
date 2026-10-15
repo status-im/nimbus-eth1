@@ -98,7 +98,7 @@ template fetchHeadersReversed*(
   ## From the ethXX argument peer implied by `buddy` fetch a list of headers
   ## in reversed order.
   ##
-  var bodyRc = Opt[seq[Header]].err()
+  var bodyRc = Result[seq[Header],ErrorType].err(EGeneric)
   block body:
     const
       sendInfo = trEthSendSendingGetBlockHeaders
@@ -135,6 +135,7 @@ template fetchHeadersReversed*(
     else:
       elapsed = rc.error.elapsed
       block evalError:
+        bodyRc = typeof(bodyRc).err(rc.error.excp)
         case rc.error.excp:
         of EGeneric, ESyncerTermination:
           break evalError
@@ -149,6 +150,9 @@ template fetchHeadersReversed*(
             hash, ela=elapsed.toStr, state=($buddy.syncState), error=rc.errStr,
             nErrors=buddy.nErrors.fetch.hdr
           break body                               # return err()
+        of EUnusedForFetch:
+          # Not allowed here -- internal error
+          raiseAssert "Unexpected fetch error " & $rc.error.excp
 
         # Debug message for other errors
         debug recvInfo & " error", peer, req=($ivReq), nReq=req.maxResults,
@@ -181,6 +185,7 @@ template fetchHeadersReversed*(
 
         # Slow response, definitely not fast enough
         discard buddy.maybeSlowPeerError(elapsed, BlockNumber ivReq.maxPt)
+        bodyRc = typeof(bodyRc).err(ENoDataAvailable)
 
       trace recvInfo & " error", peer, nReq=req.maxResults, hash, nResp=h.len,
         ela, state, nErrors=buddy.nErrors.fetch.hdr
@@ -193,6 +198,7 @@ template fetchHeadersReversed*(
       trace recvInfo & " error", peer, nReq=req.maxResults, hash,
         reqMaxPt=ivReq.maxPt, respMaxPt=h[0].number, nResp=h.len,
         ela, state, nErrors=buddy.nErrors.fetch.hdr
+      bodyRc = typeof(bodyRc).err(EValidationError)
       break body
     if h[0].number == BlockNumber(0):
       # Should not happen. The zero block number was observed on `bal-devnet-7`
@@ -201,6 +207,7 @@ template fetchHeadersReversed*(
       buddy.hdrFetchRegisterError(forceZombie=true)
       trace recvInfo & " error, zero block number", peer, nReq=req.maxResults,
         hash, nResp=h.len, ela, state, nErrors=buddy.nErrors.fetch.hdr
+      bodyRc = typeof(bodyRc).err(EValidationError)
       break body
 
     # Update download statistics

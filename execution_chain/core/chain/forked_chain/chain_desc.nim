@@ -50,8 +50,8 @@ type
       # A map of block hash to a block.
 
     base*        : BlockRef
-      # The base block, the last block stored in database.
-      # Any blocks newer than base is kept in memory.
+      # The last block whose Aristo state is persisted. Newer state frames
+      # stay in memory; headers and bodies are already in shared KVT.
 
     baseQueue*   : Deque[BlockRef]
       # Queue of blocks that will become base.
@@ -59,6 +59,10 @@ type
       # Then consumed by the `processQueue` async worker.
 
     lastBaseLogTime*: EthTime
+
+    lastFcuTime*: EthTime
+      # Time of the latest forkchoice update request from the `CL`, zero if
+      # none was received yet. Only used for status logging.
 
     persistedCount*: uint
       # Count how many blocks persisted when `baseQueue`
@@ -72,9 +76,6 @@ type
       # Candidate heads of candidate chains
 
     quarantine*  : Quarantine
-
-    txRecords    : Table[Hash32, (Hash32, uint64)]
-      # A map of transsaction hashes to block hash and block number.
 
     baseTxFrame* : CoreDbTxRef
       # Frame that skips all in-memory state that ForkedChain holds - used to
@@ -133,10 +134,6 @@ type
 # ------------------------------------------------------------------------------
 # These functions are private to ForkedChainRef
 # ------------------------------------------------------------------------------
-
-func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
-  ## Avoid clash with `forked_chain.txRecords()`
-  c.txRecords
 
 func tryUpdatePendingFCU*(c: ForkedChainRef, finHash: Hash32, number: uint64): bool =
   c.pendingFCU = zeroHash32

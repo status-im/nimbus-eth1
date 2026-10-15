@@ -133,7 +133,7 @@ type
     of ping:
       pingTarget* {.
         argument, desc: "ENR URI of the node to a send ping message", name: "node"
-      .}: Node
+      .}: DiscoveryNode
     of findNodes:
       distance* {.
         defaultValue: 255,
@@ -144,13 +144,13 @@ type
       # information, see: https://github.com/status-im/nim-confutils/issues/15
       findNodesTarget* {.
         argument, desc: "ENR URI of the node to send a findNodes message", name: "node"
-      .}: Node
+      .}: DiscoveryNode
     of findContent:
       findContentTarget* {.
         argument,
         desc: "ENR URI of the node to send a findContent message",
         name: "node"
-      .}: Node
+      .}: DiscoveryNode
 
 proc parseCmdArg*(T: type enr.Record, p: string): T =
   let res = enr.Record.fromURI(p)
@@ -162,18 +162,18 @@ proc parseCmdArg*(T: type enr.Record, p: string): T =
 proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type Node, p: string): T =
+proc parseCmdArg*(T: type DiscoveryNode, p: string): T =
   let res = enr.Record.fromURI(p)
   if res.isErr:
     raise newException(ValueError, "Invalid ENR: " & $res.error)
 
-  let n = Node.fromRecord(res.value)
+  let n = DiscoveryNode.fromRecord(res.value)
   if n.address.isNone():
     raise newException(ValueError, "ENR without address")
 
   n
 
-proc completeCmdArg*(T: type Node, val: string): seq[string] =
+proc completeCmdArg*(T: type DiscoveryNode, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type PrivateKey, p: string): T =

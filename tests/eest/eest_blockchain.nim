@@ -19,10 +19,10 @@ import
   web3/eth_api_types,
   web3/engine_api_types,
   web3/primitives,
-  web3/conversions,
-  web3/execution_types,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
+  ../../execution_api/conversions,
+  ../../execution_api/execution_types,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/beacon/beacon_engine,
@@ -30,7 +30,7 @@ import
   ../../execution_chain/stateless/stateless_execution,
   ../../execution_chain/stateless/stateless_guest,
   ../../execution_chain/stateless/stateless_host,
-  ../../hive_integration/engine_client,
+  ../../execution_api/engine_client,
   ./eest_helpers,
   ./bal_parser
 
@@ -52,7 +52,7 @@ proc parseWitness(node: JsonNode): Opt[ExecutionWitness] =
   else:
     Opt.none(ExecutionWitness)
 
-proc parseBAL(node: JsonNode): Opt[BlockAccessListRef] =
+proc parseBAL(node: JsonNode, parallelEnabled: bool): Opt[BlockAccessListRef] =
   const deepValidationExceptions =
     ["INVALID_BAL_MISSING_ACCOUNT", "INVALID_BLOCK_ACCESS_LIST"]
 
@@ -66,6 +66,11 @@ proc parseBAL(node: JsonNode): Opt[BlockAccessListRef] =
     if doNotParseBAL(node["expectException"].getStr):
       return Opt.none(BlockAccessListRef)
 
+  if parallelEnabled and "blockAccessList" in node:
+    let bal = new(BlockAccessListRef)
+    bal[] = balFromJson(node["blockAccessList"])
+    return Opt.some(bal)
+
   if "rlp_decoded" in node:
     # Only need shallow validation
     let inner = node["rlp_decoded"]
@@ -74,14 +79,14 @@ proc parseBAL(node: JsonNode): Opt[BlockAccessListRef] =
       bal[] = balFromJson(inner["blockAccessList"])
       return Opt.some(bal)
 
-proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
+proc parseBlocks*(node: JsonNode, parallelEnabled: bool): seq[BlockDesc] =
   for x in node:
     try:
       let blockRLP = hexToSeqByte(x["rlp"].getStr)
       let blk = rlp.decode(blockRLP, EthBlock)
       result.add BlockDesc(
         blk: blk,
-        bal: parseBAL(x),
+        bal: parseBAL(x, parallelEnabled),
         badBlock: "expectException" in x,
         witness: parseWitness(x),
         statelessInputBytes:
@@ -124,10 +129,8 @@ const
   # executor. The generated witness legitimately differs from these, so the
   # comparison falls back to the subset check instead of the strict one.
   mutatedWitnessFiles = [
-    "validation_state_extra_unused_trie_node.json",
-    "validation_state_unsorted_but_complete.json",
-    "validation_codes_extra_unused_bytecode.json",
-    "validation_codes_unsorted_but_complete.json",
+    "validation_state_complete_witness_still_validates.json",
+    "validation_codes_complete_witness_still_validates.json",
     "witness_headers_extra_unused_older_ancestor.json",
   ]
 
@@ -174,10 +177,11 @@ proc compare(
 proc runTest(
     env: TestEnv,
     unit: BlockchainUnitEnv,
+    parallelEnabled = false,
     statelessEnabled = false,
     strictWitness = true,
 ): Future[Result[void, string]] {.async.} =
-  let blocks = parseBlocks(unit.blocks)
+  let blocks = parseBlocks(unit.blocks, parallelEnabled)
   var latestStateRoot = unit.genesisBlockHeader.stateRoot
 
   for blk in blocks:
@@ -281,8 +285,7 @@ proc runTest(
         # deliberately mutate the witness (see mutatedWitnessFiles), the
         # generated witness must only be a subset of the test vector witness.
         if input.new_payload_request != fixtureInput.new_payload_request or
-            input.chain_id != fixtureInput.chain_id or
-            input.public_keys != fixtureInput.public_keys:
+            input.chain_id != fixtureInput.chain_id:
           return err("Host-built stateless input does not match the test vector")
         ?compare(generatedWitness, fixtureInput.witness, strict = strictWitness)
 
@@ -336,7 +339,10 @@ proc processFile*(
         )
 
         let testResult = waitFor env.runTest(
-          testUnit, statelessEnabled, strictWitness = fileName notin mutatedWitnessFiles
+          testUnit,
+          parallelEnabled,
+          statelessEnabled,
+          strictWitness = fileName notin mutatedWitnessFiles
         )
         check testResult == Result[void, string].ok()
 

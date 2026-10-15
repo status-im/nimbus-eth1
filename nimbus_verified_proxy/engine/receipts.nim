@@ -71,7 +71,7 @@ proc getReceipts*(
     engine: RpcVerificationEngine, blockTag: types.BlockTag
 ): Future[EngineResult[seq[ReceiptObject]]] {.async: (raises: [CancelledError]).} =
   let
-    header = ?(await engine.getHeader(blockTag))
+    header = ?(await engine.getVerifiedHeader(blockTag))
     # all other tags are automatically resolved while getting the header
     numberTag = types.BlockTag(
       kind: BlockIdentifierKind.bidNumber, number: Quantity(header.number)
@@ -83,7 +83,8 @@ proc getReceipts*(
     engine: RpcVerificationEngine, blockHash: Hash32
 ): Future[EngineResult[seq[ReceiptObject]]] {.async: (raises: [CancelledError]).} =
   let
-    header = ?(await engine.getHeader(blockHash))
+    header =
+      ?(await engine.getVerifiedHeader(types.BlockTag(kind: bidHash, hash: blockHash)))
     numberTag = types.BlockTag(
       kind: BlockIdentifierKind.bidNumber, number: Quantity(header.number)
     )
@@ -92,14 +93,31 @@ proc getReceipts*(
 
 proc resolveFilterTags*(
     engine: RpcVerificationEngine, filter: FilterOptions
-): EngineResult[FilterOptions] =
+): Future[EngineResult[FilterOptions]] {.async: (raises: [CancelledError]).} =
   if filter.blockHash.isSome():
     return ok(filter)
   let
     fromBlock = filter.fromBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
     toBlock = filter.toBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
-    fromBlockNumberTag = ?engine.resolveBlockTag(fromBlock)
-    toBlockNumberTag = ?engine.resolveBlockTag(toBlock)
+
+  if fromBlock.kind == bidHash or toBlock.kind == bidHash:
+    # untagged(-1) so the relevant backend can be tagged
+    return err(
+      (
+        InvalidDataError, "a log filter range cannot be bounded by a block hash",
+        UNTAGGED,
+      )
+    )
+
+  let
+    # both ends of the range resolve against the same anchors
+    anchors = ?engine.snapshotAnchors()
+    fromHeader = ?(await engine.getVerifiedHeader(fromBlock, Opt.some(anchors)))
+    toHeader = ?(await engine.getVerifiedHeader(toBlock, Opt.some(anchors)))
+    fromBlockNumberTag =
+      types.BlockTag(kind: bidNumber, number: Quantity(fromHeader.number))
+    toBlockNumberTag =
+      types.BlockTag(kind: bidNumber, number: Quantity(toHeader.number))
 
   return ok(
     FilterOptions(
@@ -134,10 +152,20 @@ proc verifyLogs*(
           distinctBase(rxs[txIdx].logs[0].logIndex.get())
         rxLog = rxs[txIdx].logs[logIdx]
 
+      var inFilterRange: bool
+      if filter.blockHash.isSome():
+        inFilterRange = lg.blockHash.get() == filter.blockHash.get()
+      else:
+        let number = lg.blockNumber.valueOr:
+          return
+            err((VerificationError, "a returned log has no block number", UNTAGGED))
+
+        inFilterRange =
+          number >= filter.fromBlock.get().number and
+          number <= filter.toBlock.get().number
+
       if rxLog.address != lg.address or rxLog.data != lg.data or
-          rxLog.topics != lg.topics or
-          lg.blockNumber.get() < filter.fromBlock.get().number or
-          lg.blockNumber.get() > filter.toBlock.get().number or
+          rxLog.topics != lg.topics or not inFilterRange or
           (not match(toLog(lg), filter.address, filter.topics)):
         # untagged(-1) so that the relevant backend can be tagged
         return err((VerificationError, "one of the returned logs is invalid", UNTAGGED))
@@ -148,7 +176,7 @@ proc getLogs*(
     engine: RpcVerificationEngine, filter: FilterOptions
 ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
   let
-    resolvedFilter = ?engine.resolveFilterTags(filter)
+    resolvedFilter = ?(await engine.resolveFilterTags(filter))
     (backend, backendIdx) = ?(engine.executionBackendFor(GetLogs))
     logObjs = ?((await backend.eth_getLogs(resolvedFilter)).tagBackend(backendIdx))
 

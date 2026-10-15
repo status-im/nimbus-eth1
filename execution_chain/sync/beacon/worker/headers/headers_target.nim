@@ -103,8 +103,16 @@ template headersTargetActivate*(
         trace info & ": Peer failed on syncer target", peer,
           targetHash=trg.hash.short, isFinal=trg.isFinal,
           failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
-          nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
-        ctx.pool.initTarget = Opt.some(trg)                # restore target
+          nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState),
+          `error`=error
+        if error == ENoDataAvailable:
+          # This error can appear with an unsolicited block hash. Not
+          # removing this target will send the syncer in an endles loop
+          # trying to fetch the same item time and again.
+          ctx.pool.failedPeers.clear()                     # clear target
+          ctx.pool.initTarget = Opt.none(InitTarget)       # not restoring trg
+        else:
+          ctx.pool.initTarget = Opt.some(trg)              # restore target
 
       else:
         # Collect problematic peers for detecting cul-de-sac syncing
@@ -116,8 +124,8 @@ template headersTargetActivate*(
             targetHash=trg.hash.short, isFinal=trg.isFinal,
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.nSyncPeers(),
             nErrors=buddy.nErrors.fetch.hdr
-          ctx.pool.failedPeers.clear()
-          # not restoring target
+          ctx.pool.failedPeers.clear()                     # clear target
+          ctx.pool.initTarget = Opt.none(InitTarget)       # not restoring trg
 
         else:
           trace info & ": Peer repeatedly failed", peer,

@@ -26,8 +26,8 @@ const
   GetTrieNodesMsg*        = 6'u64                   # snap1 only
   TrieNodesMsg*           = 7'u64                   # snap1 only
 
-  GetBlockAccessListsMsg* = 6'u64                   # overlays `GetTrieNodesMsg`
-  BlockAccessListsMsg*    = 7'u64                   # overlays `TrieNodesMsg`
+  GetBlockAccessListsMsg* = 8'u64                   # snap2 only
+  BlockAccessListsMsg*    = 9'u64                   # snap2 only
 
 
 defineProtocol(PROTO = snap1,
@@ -63,15 +63,9 @@ proc accountRange*(
       ): Future[void]
       {.async: (raises: [CancelledError,EthP2PError], raw: true).} =
   if responder.supports(snap1):
-    if proof.len == 0:
-      snap1.rlpxSendMessage(responder, AccountRangeMsg, accounts)
-    else:
-      snap1.rlpxSendMessage(responder, AccountRangeMsg, accounts, proof)
+    snap1.rlpxSendMessage(responder, AccountRangeMsg, accounts, proof)
   else:
-    if proof.len == 0:
-      snap2.rlpxSendMessage(responder, AccountRangeMsg, accounts)
-    else:
-      snap2.rlpxSendMessage(responder, AccountRangeMsg, accounts, proof)
+    snap2.rlpxSendMessage(responder, AccountRangeMsg, accounts, proof)
 
 
 proc getStorageRanges*(
@@ -95,10 +89,10 @@ proc storageRanges*(
     proof: seq[ProofNode];
       ): Future[void]
       {.async: (raises: [CancelledError,EthP2PError], raw: true).} =
-  if proof.len == 0:
-    snap1.rlpxSendMessage(responder, StorageRangesMsg, slots)
-  else:
+  if responder.supports(snap1):
     snap1.rlpxSendMessage(responder, StorageRangesMsg, slots, proof)
+  else:
+    snap2.rlpxSendMessage(responder, StorageRangesMsg, slots, proof)
 
 
 proc getByteCodes*(
@@ -151,7 +145,7 @@ proc trieNodes*(
 
 proc getBlockAccessLists*(
     peer: Peer;
-    req: BlockAccessListsRequest;
+    req: SnapBalRequest;
     timeout = defaultTimeout;
       ): Future[Opt[BlockAccessListsPacket]]
       {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
@@ -159,7 +153,7 @@ proc getBlockAccessLists*(
     raiseAssert "'getBlockAccessLists' function not available for snap1"
   else:
     snap2.rlpxSendRequest(peer, timeout, GetBlockAccessListsMsg,
-      req.blockHashes)
+      req.blockHashes, req.bytes)
 
 proc blockAccessLists*(
     responder: Responder;

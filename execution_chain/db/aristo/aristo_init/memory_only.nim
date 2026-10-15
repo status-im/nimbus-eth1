@@ -14,6 +14,7 @@
 {.push raises: [].}
 
 import
+  ../../opts,
   ../aristo_desc,
   ./init_common,
   ./memory_db
@@ -27,7 +28,9 @@ proc init*(T: type AristoDbRef, enableCaches: static bool = false): T =
   ##
   let db = memoryBackend()
   when enableCaches:
-    db.initInstance(accLeavesLruSize = ACC_LRU_SIZE, stoLeavesLruSize = ACC_LRU_SIZE)[]
+    db.initInstance(
+      accLeavesLruSize = defaultAccLeafCacheSize,
+      stoLeavesLruSize = defaultStoLeafCacheSize)[]
   else:
     db.initInstance(accLeavesLruSize = 0, stoLeavesLruSize = 0)[]
   db

@@ -22,22 +22,39 @@ import
 proc storeCachedHeaders(
     ctx: SnapCtxRef;
     leastBn: BlockNumber;
-    topBn: BlockNumber;
+    finHeader: Header;
     info: static[string];
       ) =
   var count = 0
-  for header in ctx.hdrCache.incrFrom():
-    # Range is leastBn .. topBn
-    if leastBn <= header.number:
-      if topBn < header.number:
-        break
-      ctx.pool.cacheDB.putHeader(header, info).isOkOr:
-        return
-      count.inc
+  if leastBn == 1:
+    # If the header chain links to Genesis, only the last finalised header
+    # needs to be stored. BAL download starts not before the first finalised
+    # entry.
+    ctx.pool.cacheDB.putHeader(finHeader, info).isOkOr:
+      return
+    count.inc
+  else:
+    # The whole sub-chain is needed. Each header potentially refers to a
+    # BAL to be fetched.
+    for header in ctx.hdrCache.incrFrom():
+      # Range is leastBn .. topBn
+      if leastBn <= header.number:
+        if finHeader.number < header.number:
+          break
+        ctx.pool.cacheDB.putHeader(header, info).isOkOr:
+          return
+        count.inc
+  # Set a flag when Amsterdam was reached
+  if not ctx.pool.balSupported:
+    ctx.pool.cacheDB.lastHeader(info).isErrOr:
+      if ctx.chain.com.isAmsterdamOrLater(value.timestamp):
+        ctx.pool.balSupported = true                # so state download ok, now
   ctx.pool.lastConsNum = ctx.hdrCache.head.number
-  trace info & ": Registered headers", leastBn, topBn, count,
+  chronicles.info info & ": Registered headers", leastBn,
+    finHeader=finHeader.number, count,
     lastConsHead=ctx.pool.lastConsNum,
-    consHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState)
+    consHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState),
+    onAmsterdamOrLater=ctx.pool.balSupported
 
 proc stateNum(ctx: SnapCtxRef): BlockNumber =
   # Get block number from saved state (if any)
@@ -93,9 +110,7 @@ proc headerDownloadTrigger*(
   let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
   if consHeadNum < ctx.pool.lastConsNum + nConsHeadCachedDeltaMin - 1 and
      not ctx.pool.beaconTarget:                     # maybe manual target set?
-    let now = Moment.now()
-    if ctx.pool.lastNoHdrsLog + noHeadersLogWaitInterval < now:
-      ctx.pool.lastNoHdrsLog = now
+    ctx.pool.lastNoHdrsLog.logCtrl(noHeadersLogWaitInterval):
       trace info & ": Not enough headers to download yet", firstHeader=firstNum,
         lastConsHead=ctx.pool.lastConsNum, consHead=consHeadNum,
         syncState=($ctx.syncState)
@@ -105,9 +120,9 @@ proc headerDownloadTrigger*(
   proc storeTopHeaderCB(state: BeaconNotifierState) =
     case state:
     of ok:
-      let finNum = ctx.hdrCache.finNum.get(otherwise = 0)
-      if firstNum <= finNum:
-        ctx.storeCachedHeaders(firstNum, finNum, info)
+      let rc = ctx.hdrCache.finHeader()
+      if rc.isOk and firstNum <= rc.value.number:
+        ctx.storeCachedHeaders(firstNum, rc.value, info)
       else:
         trace info & ": No finalised header for now"
     of reset:
@@ -138,10 +153,16 @@ proc headerDownloadTrigger*(
     return err(error)
 
   ctx.pool.headersSynced = false                    # mark ongoing header update
-  trace info & ": Triggered headers downloading", firstNum,
-    syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
-    nEthPeers=ctx.nEthPeers()
+  ctx.pool.lastTrggHdrsLog.logCtrl(triggeredHeadersLogWaitInterval):
+    trace info & ": Triggered headers downloading", firstNum,
+      syncState=($ctx.syncState), nSyncPeers=ctx.nSyncPeers(),
+      nEthPeers=ctx.nEthPeers()
   ok()
+
+proc headerDownloadCancel*(ctx: SnapCtxRef) =
+  ## Terminate any ongoing download
+  discard ctx.pool.beaconSync.singleReset()
+  ctx.pool.headersSynced = true
 
 # ------------------------------------------------------------------------------
 # End

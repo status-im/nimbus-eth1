@@ -34,6 +34,8 @@ type
     prunerState = 15
     txFrame = 16
     balTail = 17
+    firstBlockHash = 18
+    blockDataRefs = 19
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -92,6 +94,11 @@ func txFrameKey*(h: Hash32): DbKey {.inline.} =
   result.data[1 .. 32] = h.data
   result.dataEndPos = 32
 
+func blockDataRefsKey*(h: Hash32): DbKey {.inline.} =
+  result.data[0] = byte ord(blockDataRefs)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = 32
+
 func slotHashToSlotKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(slotHashToSlot)
   result.data[1 .. 32] = h.data()
@@ -140,6 +147,10 @@ func blockHashToBlockAccessListKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(blockAccessList)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
+
+func firstBlockHashKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(firstBlockHash)
+  result.dataEndPos = 1
 
 template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))

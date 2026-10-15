@@ -64,9 +64,9 @@ const
     trSnapRecvReceived & " trieNodes"
 
   trSnapSendSendingGetBals* =
-    trSnapSendSending & " getBlockAccessLists (0x06)" # same as `GetTrieNodes`
+    trSnapSendSending & " getBlockAccessLists (0x06)"
   trSnapSendReplyingBals* =
-    trSnapSendReplying & " blockAccessLists (0x07)"   # same as `trieNodes`
+    trSnapSendReplying & " blockAccessLists (0x07)"
   trSnapRecvReceivedBals* =
     trSnapRecvReceived & " blockAccessLists"
 
@@ -116,8 +116,8 @@ proc getStorageRangesUserHandler[PROTO](
       accountHashes  = (if request.accountHashes.len == 0: "n/a"
                         else: "[" & request.accountHashes[0].short & ",..]"),
       nAccountHashes = request.accountHashes.len,
-      startingHash   = request.startingHash.short,
-      limitHash      = request.limitHash.short,
+      startingHash   = request.startingHash.to(Hash32).short,
+      limitHash      = request.limitHash.to(Hash32).short,
       responseBytes  = request.responseBytes
 
   # Get storage ranges from application handler
@@ -194,7 +194,7 @@ proc getTrieNodesUserHandler(
 
 proc getBlockAccessListsUserHandler[PROTO](
     response: Responder;
-    req: BlockAccessListsRequest;
+    req: SnapBalRequest;
       ) {.async: (raises: [CancelledError, EthP2PError]).} =
   let
     peer = response.peer
@@ -220,7 +220,8 @@ proc getAccountRangeThunk[PROTO](
     data: Rlp;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
-  PROTO.rlpxWithPacketResponder(AccountRangeRequest, peer, data):
+  PROTO.rlpxWithPacketResponder(AccountRangeRequest, peer, data,
+      [rootHash, startingHash, limitHash, responseBytes]):
     await getAccountRangeUserHandler[PROTO](response, packet)
 
 proc accountRangeThunk[PROTO](
@@ -237,7 +238,8 @@ proc getStorageRangesThunk[PROTO](
     data: Rlp;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
-  PROTO.rlpxWithPacketResponder(StorageRangesRequest, peer, data):
+  PROTO.rlpxWithPacketResponder(StorageRangesRequest, peer, data,
+      [rootHash, accountHashes, startingHash, limitHash, responseBytes]):
     await getStorageRangesUserHandler[PROTO](response, packet)
 
 proc storageRangesThunk[PROTO](
@@ -254,7 +256,7 @@ proc getByteCodesThunk[PROTO](
     data: Rlp;
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
-  PROTO.rlpxWithPacketResponder(ByteCodesRequest, peer, data):
+  PROTO.rlpxWithPacketResponder(ByteCodesRequest, peer, data, [hashes, bytes]):
     await getByteCodesUserHandler[PROTO](response, packet)
 
 proc byteCodesThunk[PROTO](
@@ -272,7 +274,8 @@ proc getTrieNodesThunk(
       ): Future[void]
       {.async: (raises: [CancelledError, EthP2PError]).} =
   ## Supported by `snap1` only
-  snap1.rlpxWithPacketResponder(TrieNodesRequest, peer, data):
+  snap1.rlpxWithPacketResponder(TrieNodesRequest, peer, data,
+      [rootHash, paths, bytes]):
     await getTrieNodesUserHandler(response, packet)
 
 proc trieNodesThunk(
@@ -289,9 +292,9 @@ proc getBlockAccessListsThunk[PROTO](
     peer: Peer;
     data: Rlp;
       ) {.async: (raises: [CancelledError, EthP2PError]).} =
-  PROTO.rlpxWithPacketResponder(seq[Hash32], peer, data):
-    await getBlockAccessListsUserHandler[PROTO](response,
-      BlockAccessListsRequest(blockHashes: packet))
+  PROTO.rlpxWithPacketResponder(SnapBalRequest, peer, data,
+      [blockHashes, bytes]):
+    await getBlockAccessListsUserHandler[PROTO](response, packet)
 
 proc blockAccessListsThunk[PROTO](
     peer: Peer;
@@ -337,7 +340,7 @@ proc snap2Registration() =
   registerCommonThunk(protocol, snap2)
 
   registerMsg(protocol, GetBlockAccessListsMsg, "getBlockAccessLists",
-    getBlockAccessListsThunk[snap2], BlockAccessListsRequest)
+    getBlockAccessListsThunk[snap2], SnapBalRequest)
   registerMsg(protocol, BlockAccessListsMsg, "blockAccessLists",
     blockAccessListsThunk[snap2], BlockAccessListsPacket)
 

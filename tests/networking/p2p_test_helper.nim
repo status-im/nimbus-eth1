@@ -50,7 +50,8 @@ var nextPort = 30303
 func localAddress*(port: int): enode.Address =
   enode.Address(udpPort: Port(port), tcpPort: Port(port), ip: parseIpAddress("127.0.0.1"))
 
-proc setupTestNode(rng: ref HmacDrbgContext): EthereumNode {.gcsafe.} =
+proc setupTestNode(
+    rng: ref HmacDrbgContext, maxPeers: int): EthereumNode {.gcsafe.} =
   # Don't create new RNG every time in production code!
   let keys1 = KeyPair.random(rng[])
   var node = newEthereumNode(
@@ -59,6 +60,7 @@ proc setupTestNode(rng: ref HmacDrbgContext): EthereumNode {.gcsafe.} =
     Opt.some(Port(nextPort)),
     Opt.some(Port(nextPort)),
     networkId = 1.u256,
+    maxPeers = maxPeers,
     bindUdpPort = Port(nextPort),
     bindTcpPort = Port(nextPort),
     rng = rng)
@@ -66,10 +68,10 @@ proc setupTestNode(rng: ref HmacDrbgContext): EthereumNode {.gcsafe.} =
 
   node
 
-proc newTestEnv*(): TestEnv =
+proc newTestEnv*(maxPeers = 25): TestEnv =
   let
     rng    = newRng()
-    node   = setupTestNode(rng)
+    node   = setupTestNode(rng, maxPeers)
     config = envConfig()
     params = config.computeNetworkParams()
     com    = makeCom(params)

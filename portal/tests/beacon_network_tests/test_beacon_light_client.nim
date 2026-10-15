@@ -49,11 +49,11 @@ procSuite "Beacon Light Client":
       lcNode2 = newLCNode(rng, 20303, networkData, Opt.some(bootstrapBlockRoot))
 
     check:
-      lcNode1.portalProtocol().addNode(lcNode2.localNode()) == Added
-      lcNode2.portalProtocol().addNode(lcNode1.localNode()) == Added
+      lcNode1.portalProtocol().addNode(lcNode2.localNode().toNode()) == Added
+      lcNode2.portalProtocol().addNode(lcNode1.localNode().toNode()) == Added
 
-      (await lcNode1.portalProtocol().ping(lcNode2.localNode())).isOk()
-      (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
+      (await lcNode1.portalProtocol().ping(lcNode2.localNode().toNode())).isOk()
+      (await lcNode2.portalProtocol().ping(lcNode1.localNode().toNode())).isOk()
 
     let
       bootstrapKey = LightClientBootstrapKey(blockHash: bootstrapBlockRoot)

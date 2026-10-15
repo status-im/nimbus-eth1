@@ -18,8 +18,8 @@ import std/[os, strutils], stew/[assign2, ptrops]
 ## The zkVM implements these primitives natively, at a fraction of the proving
 ## cost of the same computation expressed in RISC-V.
 ##
-## TODO: bind the rest. The header also declares secp256k1_verify and
-## bls12-381, which the guest currently computes in RISC-V.
+## TODO: bind the rest. The one function left is secp256k1_verify, which no
+## Ethereum precompile calls for.
 ##
 ## Every function returns `ZKVM_EOK` or `ZKVM_EFAIL`, but which of the two a
 ## bad *input* gets is per function: secp256r1 reports a rejected signature as
@@ -61,12 +61,30 @@ type
   ZkvmBytes64 {.importc: "zkvm_bytes_64", header: zkvmAccelHdr.} = object
     data: array[64, byte]
 
+  ZkvmBytes96 {.importc: "zkvm_bytes_96", header: zkvmAccelHdr.} = object
+    data: array[96, byte]
+
   ZkvmBytes128 {.importc: "zkvm_bytes_128", header: zkvmAccelHdr.} = object
     data: array[128, byte]
+
+  ZkvmBytes192 {.importc: "zkvm_bytes_192", header: zkvmAccelHdr.} = object
+    data: array[192, byte]
 
   ZkvmBn254PairingPair {.importc: "zkvm_bn254_pairing_pair", header: zkvmAccelHdr.} = object
     g1: ZkvmBytes64
     g2: ZkvmBytes128
+
+  ZkvmBls12G1MsmPair {.importc: "zkvm_bls12_381_g1_msm_pair", header: zkvmAccelHdr.} = object
+    point: ZkvmBytes96
+    scalar: ZkvmBytes32
+
+  ZkvmBls12G2MsmPair {.importc: "zkvm_bls12_381_g2_msm_pair", header: zkvmAccelHdr.} = object
+    point: ZkvmBytes192
+    scalar: ZkvmBytes32
+
+  ZkvmBls12PairingPair {.importc: "zkvm_bls12_381_pairing_pair", header: zkvmAccelHdr.} = object
+    g1: ZkvmBytes96
+    g2: ZkvmBytes192
 
 # Only success needs a name: the header defines any non-zero as failure.
 const ZKVM_EOK = ZkvmStatus(0)
@@ -131,6 +149,34 @@ proc c_zkvm_kzg_point_eval(
   proof: ptr ZkvmBytes48,
   verified: ptr bool,
 ): ZkvmStatus {.importc: "zkvm_kzg_point_eval", header: zkvmAccelHdr.}
+
+proc c_zkvm_bls12_g1_add(
+  p1: ptr ZkvmBytes96, p2: ptr ZkvmBytes96, output: ptr ZkvmBytes96
+): ZkvmStatus {.importc: "zkvm_bls12_g1_add", header: zkvmAccelHdr.}
+
+proc c_zkvm_bls12_g1_msm(
+  pairs: ptr ZkvmBls12G1MsmPair, num_pairs: csize_t, output: ptr ZkvmBytes96
+): ZkvmStatus {.importc: "zkvm_bls12_g1_msm", header: zkvmAccelHdr.}
+
+proc c_zkvm_bls12_g2_add(
+  p1: ptr ZkvmBytes192, p2: ptr ZkvmBytes192, output: ptr ZkvmBytes192
+): ZkvmStatus {.importc: "zkvm_bls12_g2_add", header: zkvmAccelHdr.}
+
+proc c_zkvm_bls12_g2_msm(
+  pairs: ptr ZkvmBls12G2MsmPair, num_pairs: csize_t, output: ptr ZkvmBytes192
+): ZkvmStatus {.importc: "zkvm_bls12_g2_msm", header: zkvmAccelHdr.}
+
+proc c_zkvm_bls12_pairing(
+  pairs: ptr ZkvmBls12PairingPair, num_pairs: csize_t, verified: ptr bool
+): ZkvmStatus {.importc: "zkvm_bls12_pairing", header: zkvmAccelHdr.}
+
+proc c_zkvm_bls12_map_fp_to_g1(
+  field_element: ptr ZkvmBytes48, output: ptr ZkvmBytes96
+): ZkvmStatus {.importc: "zkvm_bls12_map_fp_to_g1", header: zkvmAccelHdr.}
+
+proc c_zkvm_bls12_map_fp2_to_g2(
+  field_element: ptr ZkvmBytes96, output: ptr ZkvmBytes192
+): ZkvmStatus {.importc: "zkvm_bls12_map_fp2_to_g2", header: zkvmAccelHdr.}
 
 # ------------------------------------------------------------------------------
 # Nim-facing wrappers
@@ -364,3 +410,139 @@ proc verifyKzgProofRaw*(
   ) == ZKVM_EOK, "zkvm_kzg_point_eval failed"
 
   verified
+
+proc bls12G1Add*(p1, p2: openArray[byte], output: var array[96, byte]): bool =
+  ## EIP-2537 G1 addition over unpadded `x ‖ y`, 48 bytes each.
+  ##
+  ## All BLS wrappers here take the accelerator's encoding, not the EIP's
+  ## 16-byte-padded one: the caller strips the padding, because only it can
+  ## reject non-zero pad bytes the accelerator never sees.
+  ##
+  ## `false` is a rejected point as well as a failed accelerator. The vendor
+  ## checks field and curve here, and no subgroup, as EIP-2537 defines.
+  if p1.len != 96 or p2.len != 96:
+    return false
+
+  var a, b, res: ZkvmBytes96
+  assign(a.data, p1)
+  assign(b.data, p2)
+
+  if c_zkvm_bls12_g1_add(addr a, addr b, addr res) != ZKVM_EOK:
+    return false
+
+  output = res.data
+  true
+
+proc bls12G1Msm*(pairs: openArray[byte], output: var array[96, byte]): bool =
+  ## EIP-2537 G1 multi-scalar multiplication over `pairs`, each a 96-byte point
+  ## followed by its 32-byte big-endian scalar.
+  ##
+  ## `false` as above and here the vendor does check the subgroup, which this
+  ## precompile requires.
+  if pairs.len == 0 or pairs.len mod 128 != 0:
+    return false
+
+  let count = pairs.len div 128
+  var
+    buf = newSeq[ZkvmBls12G1MsmPair](count)
+    res: ZkvmBytes96
+  copyMem(addr buf[0], baseAddr(pairs), pairs.len)
+
+  if c_zkvm_bls12_g1_msm(addr buf[0], csize_t(count), addr res) != ZKVM_EOK:
+    return false
+
+  output = res.data
+  true
+
+proc bls12G2Add*(p1, p2: openArray[byte], output: var array[192, byte]): bool =
+  ## EIP-2537 G2 addition over unpadded `x_c0 ‖ x_c1 ‖ y_c0 ‖ y_c1`.
+  ##
+  ## `false` as above, field and curve checks, no subgroup check.
+  if p1.len != 192 or p2.len != 192:
+    return false
+
+  var a, b, res: ZkvmBytes192
+  assign(a.data, p1)
+  assign(b.data, p2)
+
+  if c_zkvm_bls12_g2_add(addr a, addr b, addr res) != ZKVM_EOK:
+    return false
+
+  output = res.data
+  true
+
+proc bls12G2Msm*(pairs: openArray[byte], output: var array[192, byte]): bool =
+  ## EIP-2537 G2 multi-scalar multiplication, each pair a 192-byte point
+  ## followed by its 32-byte scalar.
+  ##
+  ## `false` as above, subgroup included.
+  if pairs.len == 0 or pairs.len mod 224 != 0:
+    return false
+
+  let count = pairs.len div 224
+  var
+    buf = newSeq[ZkvmBls12G2MsmPair](count)
+    res: ZkvmBytes192
+  copyMem(addr buf[0], baseAddr(pairs), pairs.len)
+
+  if c_zkvm_bls12_g2_msm(addr buf[0], csize_t(count), addr res) != ZKVM_EOK:
+    return false
+
+  output = res.data
+  true
+
+proc bls12Pairing*(pairs: openArray[byte], verified: var bool): bool =
+  ## EIP-2537 pairing check, each a 96-byte G1 point followed by a
+  ## 192-byte G2 point. `verified` says whether the product is one.
+  ##
+  ## `false` as above, subgroup included for both groups.
+  if pairs.len == 0 or pairs.len mod 288 != 0:
+    return false
+
+  let count = pairs.len div 288
+  var buf = newSeq[ZkvmBls12PairingPair](count)
+  copyMem(addr buf[0], baseAddr(pairs), pairs.len)
+
+  if c_zkvm_bls12_pairing(addr buf[0], csize_t(count), addr verified) != ZKVM_EOK:
+    return false
+
+  true
+
+proc bls12MapFpToG1*(fieldElement: openArray[byte], output: var array[96, byte]): bool =
+  ## EIP-2537 map of a 48-byte Fp element to G1.
+  ##
+  ## `false` is an element at or above the modulus as well as a failed
+  ## accelerator.
+  if fieldElement.len != 48:
+    return false
+
+  var
+    fe: ZkvmBytes48
+    res: ZkvmBytes96
+  assign(fe.data, fieldElement)
+
+  if c_zkvm_bls12_map_fp_to_g1(addr fe, addr res) != ZKVM_EOK:
+    return false
+
+  output = res.data
+  true
+
+proc bls12MapFp2ToG2*(
+    fieldElement: openArray[byte], output: var array[192, byte]
+): bool =
+  ## EIP-2537 map of a 96-byte Fp2 element, `c0 ‖ c1`, to G2.
+  ##
+  ## `false` as above.
+  if fieldElement.len != 96:
+    return false
+
+  var
+    fe: ZkvmBytes96
+    res: ZkvmBytes192
+  assign(fe.data, fieldElement)
+
+  if c_zkvm_bls12_map_fp2_to_g2(addr fe, addr res) != ZKVM_EOK:
+    return false
+
+  output = res.data
+  true

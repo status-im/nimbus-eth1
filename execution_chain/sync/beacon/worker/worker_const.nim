@@ -40,7 +40,18 @@ type
     ECatchableError                ## Exception
     ECancelledError                ## Exception
 
+    # The following symbols are not used in fetch functions (see below
+    # the symbol set `EUnusedForFetch`.)
+    ENoDataAvailable               ## Empty response (often ignored)
+    EValidationError               ## B ogus data
+
 const
+  EUnusedForFetch* = {ENoDataAvailable .. EValidationError}
+    ## Shortcut for `case..of` directive. These error symbols are not used
+    ## for fetching data via the `snap` or `eth` wire protocol.
+
+  # -----------------
+
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
 
@@ -56,6 +67,9 @@ const
 
   syncUpdateLogWaitInterval* = chronos.seconds(30)
     ## Control log chatter for update messages
+
+  statusLogInterval* = chronos.seconds(60)
+    ## Periodic chain status message (issued even when idle)
 
   workerIdleWaitInterval* = chronos.seconds(1)
   workerIdleLongWaitInterval* = chronos.seconds(5)

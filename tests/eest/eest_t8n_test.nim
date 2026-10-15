@@ -12,14 +12,12 @@ import
   ./eest_runner,
   ./eest_t8n
 
+from ./eest_shared_releases import eestReleases
+
 const
   baseFolder = "tests/fixtures"
   suiteName = "Transition Tool Test"
   eestType = "blockchain_tests"
-  eestReleases = [
-    "eest_mainnet",
-    "eest_devnet",
-  ]
 
 const skipFiles = [
   "",

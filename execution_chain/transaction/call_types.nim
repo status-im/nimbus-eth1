@@ -25,16 +25,17 @@ export types
 type
   # Standard call parameters.
   CallParams* = object
-    vmState*:   BaseVMState             # Chain, database, state, block, fork.
-    gasPrice*:  GasInt                  # Gas price for this tx.
-    sender*:    addresses.Address       # Sender account.
-    isCreate*:  bool                    # True if this is a contract creation.
-    tx*:        ptr Transaction
-    intrinsic*: IntrinsicGas
+    vmState*          : BaseVMState       # Chain, database, state, block, fork.
+    effectiveGasPrice*: GasInt            # Gas price for this tx.
+    sender*           : addresses.Address # Sender account.
+    isCreate*         : bool              # True if this is a contract creation.
+    tx*               : ptr Transaction
+    intrinsic*        : IntrinsicGas
 
   # Standard call result.
   CallResult* = object of RootObj
     error*:           string            # Something if the call failed.
+    status*:          StatusCode        # EVM status code when the call failed.
     gasUsed*:         GasInt            # Gas used by the tx.
     contractAddress*: addresses.Address # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
@@ -42,10 +43,8 @@ type
   DebugCallResult* = object of CallResult
     stack*:      seq[UInt256]           # EVM stack on return (for test only).
     memory*:     EvmMemory              # EVM memory on return (for test only).
-    logEntries*: seq[Log]
 
-  LogResult* = object
-    logEntries*: seq[Log]
+  TxResult* = object
     gasUsed*: GasInt
     blockExecutionGasUsed*: GasInt
     blockStateGasUsed*: GasInt
@@ -72,7 +71,7 @@ const
   TOTAL_COST_FLOOR_PER_TOKEN_EIP7976 = 16
   TX_VALUE_COST = 6000
 
-func intrinsicGas*(tx: Transaction, hardFork: HardFork, gasLimit: GasInt, sender: Address): IntrinsicGas =
+func intrinsicGas*(tx: Transaction, hardFork: HardFork, sender: Address): IntrinsicGas =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).

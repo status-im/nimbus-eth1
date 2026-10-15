@@ -11,7 +11,6 @@
 
 import
   ./web3_eth_conv,
-  web3/execution_types,
   eth/common/eth_types_rlp,
   eth/trie/ordered_trie
 

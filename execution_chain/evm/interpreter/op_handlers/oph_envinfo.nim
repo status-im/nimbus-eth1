@@ -33,7 +33,7 @@ import
 
 func addressOp(cpt: VmCpt): EvmResultVoid =
   ## 0x30, Get address of currently executing account.
-  cpt.stack.push cpt.msg.contractAddress
+  cpt.stack.push cpt.msg.currentTarget
 
 # ------------------
 

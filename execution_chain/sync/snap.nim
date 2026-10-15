@@ -37,9 +37,10 @@ proc addSnapSyncProtocol(desc: SnapSyncRef; PROTO: type) =
   ## Add protocol and call back filter & init functions for ethXX
   proc initWorker(worker: SyncPeerRef[SnapCtxData,SnapPeerData]) =
     when PROTO is snap1:
-      discard
+      worker.only.snapVersion = 1
     elif PROTO is snap2:
       worker.only.supportsBal = true
+      worker.only.snapVersion = 2
     else:
       {.error: "Unsupported snap/?? version".}
 
@@ -109,6 +110,7 @@ proc config*(
   desc.addSnapSyncProtocol(snap1)
 
   desc.ctx.pool.baseDir = dataDir
+  desc.ctx.pool.newCoreDb = SnapCoreDb2Ref()        # shared state
 
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
@@ -119,6 +121,11 @@ proc configResume*(desc: SnapSyncRef; resume = true) =
   ## in no-resume mode.
   doAssert not desc.ctx.isNil
   desc.ctx.pool.contPrevSession = true
+
+proc sharedState*(desc: SnapSyncRef): SnapCoreDb2Ref =
+  ## Return snap state object so its can be monotored when the snap
+  ## download has finished.
+  desc.ctx.pool.newCoreDb
 
 proc start*(desc: SnapSyncRef; bcSyncRef: BeaconSyncRef): bool =
   ## Starting beacon sync in stand-by mode and then snap sync.

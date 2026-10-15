@@ -111,7 +111,7 @@ proc selfDestructEIP161Op(cpt: VmCpt): EvmResultVoid =
   let
     beneficiary = ? cpt.stack.popAddress()
     isDead      = not cpt.accountExistsOrAlive(beneficiary)
-    balance     = cpt.getBalance(cpt.msg.contractAddress)
+    balance     = cpt.getBalance(cpt.msg.currentTarget)
     condition   = isDead and not balance.isZero
     gasCost     = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
@@ -139,7 +139,7 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   let
     isDead = not cpt.accountExistsOrAlive(beneficiary)
-    balance = cpt.getBalance(cpt.msg.contractAddress)
+    balance = cpt.getBalance(cpt.msg.currentTarget)
     condition = isDead and not balance.isZero
 
   var gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
@@ -173,7 +173,7 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
 
   let
     isNewAccount = not cpt.accountExistsOrAlive(beneficiary)
-    balance = cpt.getBalance(cpt.msg.contractAddress)
+    balance = cpt.getBalance(cpt.msg.currentTarget)
     condition = isNewAccount and not balance.isZero
 
   var gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)

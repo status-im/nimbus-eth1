@@ -56,8 +56,18 @@ suite "Eth1 discovery ENR":
     disc.updateForkId(forkId)
 
     let
-      record = disc.getEnr().get()
-      ethBytes = record.get("eth", seq[byte]).value()
-      decoded = rlp.decode(ethBytes, array[1, ForkId])
+      ethBytes = disc.getEnr().get().get("eth", seq[byte]).value()
+      decoded = decodeEthEntry(ethBytes)
+    check decoded == Opt.some(forkId)
 
-    check decoded[0] == forkId
+  test "`eth` entry ignores additional list elements":
+    let forkId = ForkId(hash: [0x01'u8, 0x02, 0x03, 0x04].to(Bytes4), next: 42'u64)
+
+    check decodeEthEntry(rlp.encode((forkId, 7'u64, @[byte 1, 2]))) == Opt.some(forkId)
+
+  test "`eth` entry with an empty list is rejected":
+    check decodeEthEntry(@[byte 0xc0]).isNone()
+
+  test "`eth` entry with an invalid fork id is rejected":
+    let invalidForkId = (@[byte 0x01, 0x02, 0x03], 42'u64)
+    check decodeEthEntry(rlp.encode((invalidForkId,))).isNone()

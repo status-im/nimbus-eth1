@@ -75,8 +75,10 @@ const
     (number: 1735372'u64, time: 1761017183'u64, id: (hash: 0xe2ae4999'u32, next: 1761017184'u64)), # Last Osaka time
     (number: 1735372'u64, time: 1761017184'u64, id: (hash: 0x56078a1e'u32, next: 1761607008'u64)), # First BPO1 time
     (number: 1735372'u64, time: 1761607007'u64, id: (hash: 0x56078a1e'u32, next: 1761607008'u64)), # Last BPO1 time
-    (number: 1735372'u64, time: 1761607008'u64, id: (hash: 0x268956b6'u32, next: 0'u64)),          # First BPO2 time
-    (number: 1735372'u64, time: 1761607009'u64, id: (hash: 0x268956b6'u32, next: 0'u64)),          # Future BPO2 time
+    (number: 1735372'u64, time: 1761607008'u64, id: (hash: 0x268956b6'u32, next: 1791294816'u64)), # First BPO2 time
+    (number: 1735372'u64, time: 1791294815'u64, id: (hash: 0x268956b6'u32, next: 1791294816'u64)), # Last BPO2 time
+    (number: 1735372'u64, time: 1791294816'u64, id: (hash: 0x6c1d9423'u32, next: 0'u64)),          # First Amsterdam time
+    (number: 1735372'u64, time: 1791294817'u64, id: (hash: 0x6c1d9423'u32, next: 0'u64)),          # Future Amsterdam time
   ]
 
   HoodiNetIDs = [
@@ -88,8 +90,10 @@ const
     (number: 123'u64, time: 1762365719'u64, id: (hash: 0xE7E0E7FF'u32, next: 1762365720'u64)), # Last Osaka time
     (number: 123'u64, time: 1762365720'u64, id: (hash: 0x3893353E'u32, next: 1762955544'u64)), # First BPO1 time
     (number: 123'u64, time: 1762955543'u64, id: (hash: 0x3893353E'u32, next: 1762955544'u64)), # Last BPO1 time
-    (number: 123'u64, time: 1762955544'u64, id: (hash: 0x23AA1351'u32, next: 0'u64)),          # First BPO2 time
-    (number: 123'u64, time: 1762955545'u64, id: (hash: 0x23AA1351'u32, next: 0'u64)),          # Future BPO2 time
+    (number: 123'u64, time: 1762955544'u64, id: (hash: 0x23AA1351'u32, next: 1793036568'u64)), # First BPO2 time
+    (number: 123'u64, time: 1793036567'u64, id: (hash: 0x23AA1351'u32, next: 1793036568'u64)), # Last BPO2 time
+    (number: 123'u64, time: 1793036568'u64, id: (hash: 0x3d068b59'u32, next: 0'u64)),          # First Amsterdam time
+    (number: 123'u64, time: 1793036569'u64, id: (hash: 0x3d068b59'u32, next: 0'u64)),          # Future Amsterdam time
   ]
 
 template runComputeForkIdTest(network: untyped, name: string) =

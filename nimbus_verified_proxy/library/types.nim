@@ -14,6 +14,8 @@ type
     config*: string
     stop*: bool
     pendingCalls*: int
+    engine*: RpcVerificationEngine
+    opEngine*: RpcVerificationEngine
     frontend*: ExecutionApiFrontend
     opFrontend*: ExecutionApiFrontend
 

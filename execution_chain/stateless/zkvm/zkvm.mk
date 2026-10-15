@@ -18,6 +18,7 @@
 #   ZKVM_LD       linker script
 #   ZKVM_GLUE     C sources for the platform layer
 #   ZKVM_CHECKS   targets that must pass before building, optional
+#   ZKVM_POST_CHECK  shell command run on the linked ELF, optional
 
 ZKVM ?= zisk
 
@@ -52,8 +53,14 @@ ZKVM_NIM_CC := --cc:gcc --gcc.exe:"$(ZKVM_GCC)" --gcc.linkerexe:"$(ZKVM_GCC)"
 #                     vendor archive's. Keeps the C library.
 #   -g0               nothing debugs the guest through DWARF, and it is most of
 #                     the file: 52M with it, 6.9M without.
+#   --whole-archive   mechanism 2 of the accelerated-memory-operations
+#                     standard: the vendor's memcpy/memmove/memset/memcmp must
+#                     win symbol resolution over the C library's, and archive
+#                     order does not decide that reliably. --gc-sections drops
+#                     what is not used, so the ELF is unchanged in size and
+#                     step count.
 ZKVM_PASSC := -D_POSIX_THREADS=1 $(ZKVM_ARCH) -ffunction-sections -fdata-sections -g0
-ZKVM_PASSL = $(ZKVM_ARCH) -nostdlib -nostartfiles -Wl,--build-id=none -Wl,--gc-sections -T $(ZKVM_LD) -L$(ZKVM_SYSROOT_LIBDIR) -L$(ZKVM_LIBGCC_DIR) $(ZKVM_LIB) -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group
+ZKVM_PASSL = $(ZKVM_ARCH) -nostdlib -nostartfiles -Wl,--build-id=none -Wl,--gc-sections -T $(ZKVM_LD) -L$(ZKVM_SYSROOT_LIBDIR) -L$(ZKVM_LIBGCC_DIR) -Wl,--whole-archive $(ZKVM_LIB) -Wl,--no-whole-archive -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group
 
 check_zkvm_gcc:
 	@printf 'int main(void){return 0;}' | $(ZKVM_GCC) $(ZKVM_ARCH) -c -x c - -o /dev/null 2>/dev/null || { \
@@ -61,6 +68,26 @@ check_zkvm_gcc:
 		echo "  Point ZKVM_GCC at an xPack riscv-none-elf-gcc, or put it on PATH."; exit 1; }
 
 ZKVM_ELF := build/stateless_guest_$(ZKVM).elf
+
+# Checks that the vendor's memcpy/memmove/memset/memcmp are the ones in the
+# ELF, not the C library's:
+# https://github.com/eth-act/zkevm-standards/blob/master/standards/accelerated-memory-operations/README.md
+#
+# Compares symbol size, so it needs to know nothing about any implementation.
+# A vendor that exports none of them is skipped and uses the toolchain's.
+ZKVM_NM = $(patsubst %gcc,%nm,$(ZKVM_GCC))
+ZKVM_POST_CHECK ?= for s in memcpy memmove memset memcmp; do \
+	want=$$($(ZKVM_NM) -S --defined-only $(ZKVM_LIB) 2>/dev/null \
+		| awk -v s=$$s '$$4==s && $$3=="T" {print $$2; exit}'); \
+	[ -n "$$want" ] || continue; \
+	got=$$($(ZKVM_NM) -S --defined-only $(ZKVM_ELF) \
+		| awk -v s=$$s '$$4==s {print $$2; exit}'); \
+	[ "$$want" = "$$got" ] || { \
+		echo "ERROR: $$s in $(ZKVM_ELF) is not the one $(ZKVM_LIB) exports"; \
+		echo "  (size $$got, expected $$want). Something ahead of it in the"; \
+		echo "  link defined it first, so the accelerated version was dropped."; \
+		exit 1; }; \
+	done
 
 # nim-eth and nim-ssz-serialization take their hash implementation from a
 # backend module on the search path: `keccak_external` and `sha256_external`,
@@ -74,4 +101,5 @@ stateless_guest_zkvm: | build deps check_zkvm_gcc $(ZKVM_CHECKS)
 		--passL:"$(ZKVM_PASSL) $(ZKVM_EXTRA_PASSL)" \
 		$(foreach g,$(ZKVM_GLUE),--compile:"$(g)") \
 		-o:$(ZKVM_ELF) "execution_chain/stateless/stateless_guest.nim"
+	@$(ZKVM_POST_CHECK)
 	@echo "built $(ZKVM_ELF)"

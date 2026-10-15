@@ -23,7 +23,6 @@ import
   ./utils,
   ./genesis_params,
   ./header_store,
-  ./blocks,
   ./evm
 
 from eth/common/blocks import EMPTY_UNCLE_HASH
@@ -52,74 +51,6 @@ proc applyPenalty*(engine: RpcVerificationEngine, e: ErrorTuple) =
       discard
   except KeyError:
     debug "Penalty skipped, unknown backend", backendIdx = idx
-
-proc downloadAndStoreFinalized(
-    engine: RpcVerificationEngine, blockHash: Hash32
-) {.async: (raises: []).} =
-  let (backend, backendIdx) = engine.executionBackendFor(GetBlockByHash).valueOr:
-    warn "No execution backend available for finalized header download",
-      blockHash = blockHash
-    return
-
-  let blk =
-    try:
-      (await backend.eth_getBlockByHash(blockHash, false)).valueOr:
-        engine.applyPenalty(
-          (BackendFetchError, "failed to download finalized header", backendIdx)
-        )
-        warn "Failed to download finalized header",
-          blockHash = blockHash, backendIdx = backendIdx
-        return
-    except CancelledError:
-      return
-
-  let header = convHeader(blk)
-
-  if header.computeBlockHash != blockHash:
-    engine.applyPenalty(
-      (VerificationError, "finalized header hash mismatch", backendIdx)
-    )
-    error "Finalized header hash mismatch",
-      expected = blockHash, computed = header.computeBlockHash, backendIdx = backendIdx
-    return
-
-  let res = engine.headerStore.updateFinalized(header, blockHash)
-  if res.isErr():
-    error "finalized header update error", err = res.error()
-
-proc downloadAndStoreOptimistic(
-    engine: RpcVerificationEngine, blockHash: Hash32
-) {.async: (raises: []).} =
-  let (backend, backendIdx) = engine.executionBackendFor(GetBlockByHash).valueOr:
-    warn "No execution backend available for optimistic header download",
-      blockHash = blockHash
-    return
-
-  let blk =
-    try:
-      (await backend.eth_getBlockByHash(blockHash, false)).valueOr:
-        engine.applyPenalty(
-          (BackendFetchError, "failed to download optimistic header", backendIdx)
-        )
-        warn "Failed to download optimistic header",
-          blockHash = blockHash, backendIdx = backendIdx
-        return
-    except CancelledError:
-      return
-
-  let header = convHeader(blk)
-
-  if header.computeBlockHash != blockHash:
-    engine.applyPenalty(
-      (VerificationError, "optimistic header hash mismatch", backendIdx)
-    )
-    error "Optimistic header hash mismatch",
-      expected = blockHash, computed = header.computeBlockHash, backendIdx = backendIdx
-    return
-
-  let res = engine.headerStore.add(header, blockHash)
-  if res.isErr():
-    error "optimistic header update error", err = res.error()
 
 func convLCHeader*(lcHeader: ForkyLightClientHeader): Result[Header, string] =
   when lcHeader is altair.LightClientHeader:
@@ -178,13 +109,11 @@ proc initCore*(
     accountCacheLen: int,
     codeCacheLen: int,
     storageCacheLen: int,
-    anchor: BlockTag = blockId("finalized"),
 ): EngineResult[T] =
   randomize()
 
   let engine = RpcVerificationEngine(
     chainId: chainId,
-    anchor: anchor,
     maxBlockWalk: maxBlockWalk,
     maxWindowJumps: maxWindowJumps,
     headerStore: HeaderStore.new(headerStoreLen),
@@ -261,23 +190,16 @@ proc init*(
       elif lcDataFork == LightClientDataFork.Gloas:
         info "New LC finalized header",
           execution_block_hash = forkyStore.finalized_header.execution_block_hash
-        waitFor engine.downloadAndStoreFinalized(
-          forkyStore.finalized_header.execution_block_hash.asBlockHash
+        engine.headerStore.putHash(
+          forkyStore.finalized_header.execution_block_hash.asBlockHash, Finalized
         )
       elif lcDataFork > LightClientDataFork.Altair:
         info "New LC finalized header",
           finalized_header = shortLog(forkyStore.finalized_header)
 
-        let header = convLCHeader(forkyStore.finalized_header).valueOr:
-          error "finalized header conversion error", err = error
-          return
-
-        let res = engine.headerStore.updateFinalized(
-          header, forkyStore.finalized_header.execution.block_hash.asBlockHash
+        engine.headerStore.putHash(
+          forkyStore.finalized_header.execution.block_hash.asBlockHash, Finalized
         )
-
-        if res.isErr():
-          error "finalized header update error", err = res.error()
       else:
         error "pre-bellatrix light client headers do not have the execution payload header"
 
@@ -291,23 +213,16 @@ proc init*(
       elif lcDataFork == LightClientDataFork.Gloas:
         info "New LC optimistic header",
           execution_block_hash = forkyStore.optimistic_header.execution_block_hash
-        waitFor engine.downloadAndStoreOptimistic(
-          forkyStore.optimistic_header.execution_block_hash.asBlockHash
+        engine.headerStore.putHash(
+          forkyStore.optimistic_header.execution_block_hash.asBlockHash, Optimistic
         )
       elif lcDataFork > LightClientDataFork.Altair:
         info "New LC optimistic header",
           optimistic_header = shortLog(forkyStore.optimistic_header)
 
-        let header = convLCHeader(forkyStore.optimistic_header).valueOr:
-          error "optimistic header conversion error", err = error
-          return
-
-        let res = engine.headerStore.add(
-          header, forkyStore.optimistic_header.execution.block_hash.asBlockHash
+        engine.headerStore.putHash(
+          forkyStore.optimistic_header.execution.block_hash.asBlockHash, Optimistic
         )
-
-        if res.isErr():
-          error "optimistic header update error", err = res.error()
       else:
         error "pre-bellatrix light client headers do not have the execution payload header"
 
@@ -363,6 +278,25 @@ proc isSynced*(engine: RpcVerificationEngine): bool =
   # the signing slot for sync committees. So we allow some room
   engine.getLCOptimisticSlot() + 1 >= current
 
+proc requireSynced*(engine: RpcVerificationEngine): EngineResult[void] =
+  let notSynced = err(
+    (
+      UnavailableDataError,
+      "light client doesn't know the current and next sync committees, sync first",
+      UNTAGGED,
+    )
+  )
+
+  if engine.getBeaconTime == nil or not engine.isLCStoreInitialized() or
+      not engine.isLCNextSyncCommitteeKnown():
+    return notSynced
+
+  let current = engine.getBeaconTime().slotOrZero(engine.timeParams)
+  if engine.getLCFinalizedSlot().sync_committee_period != current.sync_committee_period:
+    return notSynced
+
+  ok()
+
 proc processObject[T: SomeForkedLightClientObject](
     engine: RpcVerificationEngine, obj: T, endpoint: static string
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
@@ -391,9 +325,19 @@ proc processObject[T: SomeForkedLightClientObject](
     warn "Received invalid LC value", endpoint = endpoint
     return err((VerificationError, "invalid LC value", UNTAGGED))
 
+func syncInterval*(engine: RpcVerificationEngine): Duration =
+  engine.timeParams.SLOT_DURATION
+
 proc syncOnce*(
     engine: RpcVerificationEngine
 ): Future[EngineResult[void]] {.async: (raises: [CancelledError]).} =
+  await engine.syncLock.acquire()
+  defer:
+    try:
+      engine.syncLock.release()
+    except AsyncLockError:
+      discard
+
   if engine.lcProcessor == nil:
     return err((UnavailableDataError, "beacon not initialized", UNTAGGED))
 
@@ -475,7 +419,7 @@ proc syncOnce*(
     debug "Fetching LC finality update", finalized, current
 
     let
-      (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconOptimistic))
+      (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconFinality))
       finRes = ?((await backend.getLightClientFinalityUpdate()).tagBackend(backendIdx))
     ?((await engine.processObject(finRes, "finality")).tagBackend(backendIdx))
 

@@ -48,8 +48,6 @@ func SendRPC(url string, method string, params string) (json.RawMessage, error) 
 		return nil, fmt.Errorf("http error: %s", resp.Status)
 	}
 
-	// the library expects the JSON-RPC response envelope verbatim; error
-	// members are surfaced by the library, not the transport
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err

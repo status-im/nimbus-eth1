@@ -49,6 +49,26 @@ void wasmCall(char *name, char *params, CallBackProc cb, void *userData) {
 }
 
 EMSCRIPTEN_KEEPALIVE
+void wasmEthSync(CallBackProc cb, void *userData) {
+    nvp_eth_sync(g_ctx, cb, userData);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasmEthSyncInterval(CallBackProc cb, void *userData) {
+    nvp_eth_syncInterval(g_ctx, cb, userData);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasmOpSync(CallBackProc cb, void *userData) {
+    nvp_op_sync(g_ctx, cb, userData);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasmOpSyncInterval(CallBackProc cb, void *userData) {
+    nvp_op_syncInterval(g_ctx, cb, userData);
+}
+
+EMSCRIPTEN_KEEPALIVE
 int wasmProcessTasks(void) {
     if (g_ctx == NULL) return RET_CANCELLED;
     return processVerifProxyTasks(g_ctx);

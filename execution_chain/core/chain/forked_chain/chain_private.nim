@@ -18,7 +18,8 @@ import
   ../../../evm/types,
   ../../../evm/state,
   ../../../stateless/[witness_generation, witness_verification, stateless_execution],
-  ./chain_branch
+  ./chain_branch,
+  ./chain_db
 
 proc writeBaggage*(
     c: ForkedChainRef,
@@ -32,8 +33,8 @@ proc writeBaggage*(
   template header(): Header =
     blk.header
 
-  var txHashes =
-    txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
+  var txHashes = txFrame.persistTransactions(
+    header.number, header.txRoot, blk.transactions, txHashToBlock = false)
   txFrame.persistReceipts(header.receiptsRoot, receipts)
   discard txFrame.persistUncles(blk.uncles)
 
@@ -93,6 +94,8 @@ proc getVmState(
     txFrame,
     enableBalTracker = enableBalTracker,
   )
+  # Code is stored with the block's other data, once the block is accepted
+  vmState.ledger.holdCode = true
   vmState
 
 proc processBlock*(
@@ -175,15 +178,22 @@ proc processBlock*(
 
     ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
 
+  ?vmState.ledger.storeHeldCode()
+
   # We still need to write header to database
   # because validateUncles still need it
-  ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
+  txFrame.writeBlockOwnershipData(header, blkHash)
+  # Lookups by number and by tx hash on disk cover the persisted chain only,
+  # they are written when the block becomes base (`writeCanonicalMappings`)
+  ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory,
+    numberToHash = false)
 
   var txHashes = c.writeBaggage(
     blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
 
   vmState.receipts.setLen(0)
-  vmState.allLogs.setLen(0)
+  vmState.receiptBlooms.setLen(0)
+  vmState.blockLogs.setLen(0)
 
   # Cache for the next block - the ledger caches stay warm on linear import
   c.vmState = vmState

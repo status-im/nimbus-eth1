@@ -136,7 +136,8 @@ template headersCollect*(buddy: BeaconPeerRef; info: static[string]) =
           stashedOK = true
           if ctx.pool.lastSyncUpdLog + syncUpdateLogWaitInterval < Moment.now():
             chronicles.info "Headers stashed", nStashed,
-              nUnpoc=ctx.nUnprocStr(),
+              nUnproc=ctx.nUnprocStr(),
+              dangling=ctx.hdrCache.antecedent.number,
               nStagedQ=ctx.hdr.staged.len,
               eta=ctx.pool.syncEta.avg.toStr,
               base=ctx.chain.baseNumber,
@@ -182,7 +183,8 @@ template headersCollect*(buddy: BeaconPeerRef; info: static[string]) =
       if 0 < nStashed:
         # Note that `nStashed` might have been reset above.
         chronicles.info "Headers stashed", nStashed,
-          nUnpoc=ctx.nUnprocStr(),
+          nUnproc=ctx.nUnprocStr(),
+          dangling=ctx.hdrCache.antecedent.number,
           nStagedQ=ctx.hdr.staged.len,
           eta=ctx.pool.syncEta.avg.toStr,
           base=ctx.chain.baseNumber,
@@ -279,7 +281,8 @@ proc headersUnstage*(buddy: BeaconPeerRef; info: static[string]): bool =
 
   if 0 < nStashed:
     chronicles.info "Headers stashed", nStashed,
-      nUnpoc=ctx.nUnprocStr(),
+      nUnproc=ctx.nUnprocStr(),
+      dangling=ctx.hdrCache.antecedent.number,
       nStagedQ=ctx.hdr.staged.len,
       nUnstaged,
       eta=ctx.pool.syncEta.avg.toStr,

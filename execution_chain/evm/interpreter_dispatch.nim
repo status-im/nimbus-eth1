@@ -73,11 +73,11 @@ proc beforeExecCall(c: Computation): bool =
       if c.balTrackerEnabled:
         c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
         ledger.subBalance(c.msg.sender, c.msg.value)
-        c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-        ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
+        c.vmState.balTracker.trackAddBalanceChange(c.msg.currentTarget, c.msg.value)
+        ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       else:
         ledger.subBalance(c.msg.sender, c.msg.value)
-        ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
+        ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
 
     if c.fork >= FkAmsterdam:
       # EIP-7708: Emit transfer log for ETH-tx or contract call and CALL op code
@@ -91,7 +91,7 @@ proc afterExecCall(c: Computation) =
   ## also see: https://github.com/ethereum/EIPs/issues/716
 
   if c.isError or c.fork >= FkByzantium:
-    if c.msg.contractAddress == RIPEMD_ADDR:
+    if c.msg.currentTarget == RIPEMD_ADDR:
       # Special case to account for geth+parity bug
       c.vmState.ledger.ripemdSpecial()
 
@@ -102,19 +102,19 @@ proc beforeExecCreate(c: Computation): bool =
     if c.balTrackerEnabled:
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
       ledger.subBalance(c.msg.sender, c.msg.value)
-      c.vmState.balTracker.trackAddBalanceChange(c.msg.contractAddress, c.msg.value)
-      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
-      ledger.clearStorage(c.msg.contractAddress)
+      c.vmState.balTracker.trackAddBalanceChange(c.msg.currentTarget, c.msg.value)
+      ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
+      ledger.clearStorage(c.msg.currentTarget)
       if c.fork >= FkSpurious:
-        c.vmState.balTracker.trackIncNonceChange(c.msg.contractAddress)
-        ledger.incNonce(c.msg.contractAddress)
+        c.vmState.balTracker.trackIncNonceChange(c.msg.currentTarget)
+        ledger.incNonce(c.msg.currentTarget)
     else:
       ledger.subBalance(c.msg.sender, c.msg.value)
-      ledger.addBalance(c.msg.contractAddress, c.msg.value, checkEmptyAccount = c.fork < FkParis)
-      ledger.clearStorage(c.msg.contractAddress)
+      ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
+      ledger.clearStorage(c.msg.currentTarget)
       if c.fork >= FkSpurious:
         # EIP161 nonce incrementation
-        ledger.incNonce(c.msg.contractAddress)
+        ledger.incNonce(c.msg.currentTarget)
 
   if c.fork >= FkAmsterdam:
     # EIP-7708: Emit transfer log for contract creation and CREATE op code
@@ -145,7 +145,7 @@ proc beforeExec(c: Computation): bool =
       c,
       msgToOp(c.msg),
       c.msg.sender,
-      c.msg.contractAddress,
+      c.msg.currentTarget,
       c.msg.data,
       c.msg.gas,
       c.msg.value,

@@ -685,7 +685,7 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
           when lcDataFork > LightClientDataFork.None:
             db.putBootstrap(contentId, content, forkyObject.header.beacon.slot)
       of lightClientUpdate:
-        let updates = decodeSsz(content, ForkedLightClientUpdateBytesList).valueOr:
+        let updates = common_types.decodeSsz(content, ForkedLightClientUpdateBytesList).valueOr:
           return
 
         # Lot of assumptions here:

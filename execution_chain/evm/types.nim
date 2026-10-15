@@ -38,10 +38,10 @@ type
     slotNumber*       : uint64
 
   TxContext* = object
-    origin*     : Address
-    gasPrice*   : GasInt
-    blobBaseFee*: UInt256
-    tx*         : ptr Transaction
+    origin*           : Address
+    effectiveGasPrice*: GasInt
+    blobBaseFee*      : UInt256
+    tx*               : ptr Transaction
 
   BaseVMState* = ref object of RootObj
     com*              : CommonRef
@@ -54,14 +54,16 @@ type
     hardFork*         : HardFork
     tracer*           : TracerRef
     receipts*         : seq[StoredReceipt]
+    receiptBlooms*    : seq[Bloom]
     cumulativeGasUsed*: GasInt
     blockExecutionGasUsed*: GasInt
     blockStateGasUsed*: GasInt
     authStateGasUsed* : int64
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
-    allLogs*          : seq[Log] # EIP-6110
-    gasRefunded*      : int64    # Global gasRefunded counter
+    txLogs*           : seq[Log]
+    blockLogs*        : seq[Log] # EIP-6110
+    refundCounter*    : int64    # Global refundCounter counter
     balTracker*       : BlockAccessListTrackerRef
 
   Computation* = ref object
@@ -101,7 +103,7 @@ type
     burnsGas*  : bool
 
   GasMeter* = object
-    gasRefunded*: int64
+    refundCounter*: int64
     executionGasLeft*: GasInt
     stateGasLeft*: GasInt
     stateGasUsed*: int64
@@ -127,7 +129,7 @@ type
     gas*:              GasInt
     stateGasReservoir*:GasInt
     sender*:           Address
-    contractAddress*:  Address
+    currentTarget*:    Address
     codeAddress*:      Address
     delegateTo*:       Address
     value*:            UInt256

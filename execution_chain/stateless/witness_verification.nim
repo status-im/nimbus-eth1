@@ -74,26 +74,34 @@ func validateKeys*(witness: Witness, expectedKeys: WitnessTable): Result[void, s
 
   ok()
 
+type VerifiedHeaders* = object
+  headers*: seq[Header]
+  hashes*: seq[Hash32]
+
 # https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/stateless.py#L255
 func verifyHeaders*(
     witness: ExecutionWitness, header: Header
-): Result[seq[Header], string] =
+): Result[VerifiedHeaders, string] =
   if witness.headers.len() < 1:
     return err("At least one header (the parent) is required in the witness")
   if witness.headers.len() > 256:
     return err("Too many headers in witness")
 
-  # Rlp decode the headers in the witness
-  var headers: seq[Header]
+  # Rlp decode the headers in the witness and hash them as provided
+  var verified = VerifiedHeaders(
+    headers: newSeqOfCap[Header](witness.headers.len()),
+    hashes: newSeqOfCap[Hash32](witness.headers.len()),
+  )
   for h in witness.headers:
     try:
-      headers.add(rlp.decode(h.asSeq(), Header))
+      verified.headers.add(rlp.decode(h.asSeq(), Header))
     except RlpError as e:
       return err("Failed to decode header in witness: " & e.msg)
+    verified.hashes.add(keccak256(h.asSeq()))
 
   # Validate that a sequence of encoded headers forms a contiguous chain
-  for i in 1..<headers.len:
-    if headers[i].parentHash != keccak256(witness.headers[i - 1].asSeq()):
+  for i in 1 ..< verified.headers.len:
+    if verified.headers[i].parentHash != verified.hashes[i - 1]:
       return err("Witness headers are not contiguous")
 
   # The last provided header must be the parent of the block being validated.
@@ -105,10 +113,10 @@ func verifyHeaders*(
   #
   # Note that execution-specs does the same check inside execute_block via
   # validate_header().
-  if keccak256(witness.headers[^1].asSeq()) != header.parentHash:
+  if verified.hashes[^1] != header.parentHash:
     return err("Parent header is required in the witness")
 
-  ok(headers)
+  ok(verified)
 
 func verifyState*(
     witness: ExecutionWitnessWithKeys, preStateRoot: Hash32

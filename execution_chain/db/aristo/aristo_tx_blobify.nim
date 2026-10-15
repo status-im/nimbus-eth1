@@ -80,7 +80,7 @@
 ##  respectively. The path prefix (`pfx: NibblesBuf`) is encoded as a hex-prefix byte sequence appended 
 ##  before the type byte.
 ## 
-##  Maximum vtx_blob size: 117 bytes (`MAX_VERTEX_BLOB_SIZE`).
+##  Maximum vtx_blob size: 118 bytes (`MAX_VERTEX_BLOB_SIZE`).
 ## 
 ##  ### leaf_blob (accLeaves / stoLeaves)
 ## 

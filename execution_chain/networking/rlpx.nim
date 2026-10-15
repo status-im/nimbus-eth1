@@ -37,7 +37,7 @@ import
   ./devp2p_wire,
   ./p2p_metrics,
   ./rlpx/[auth, rlpxcrypt],
-  ./discoveryv4/kademlia
+  ./p2p_node
 
 const
   maxMsgSize = 1024 * 1024 * 16
@@ -48,6 +48,28 @@ const
 
   connectionTimeout = 10.seconds
 
+  peerPingInterval = 15.seconds
+    ## Send a devp2p ping to a peer that has been quiet for this long, so as to
+    ## find out whether the connection is still alive.
+
+  peerIdleTimeout = 60.seconds
+    ## Disconnect a peer that has not sent anything for this long. Without it, a
+    ## connection whose remote end silently went away - NAT timeout, crashed
+    ## peer, blackholed route - is kept open forever: there is no TCP keepalive
+    ## on the socket and nothing else in the stack ever closes it.
+
+  peerLivenessInterval = 5.seconds
+    ## How often peers are examined for the above two conditions.
+
+  disconnectSendTimeout = 2.seconds
+    ## How long to spend delivering the disconnect reason before closing the
+    ## connection anyway. The disconnecting peer occupies a pool slot until it
+    ## returns.
+
+  transportCloseDelay = 2.seconds
+    ## How long the connection stays open after the disconnect message, so the
+    ## peer can read it before it's closed.
+
 # TODO: chronicles re-export here is added for the error
 # "undeclared identifier: 'activeChroniclesStream'", when the code using p2p
 # does not import chronicles. Need to resolve this properly.
@@ -55,18 +77,6 @@ export options, rlp, chronicles, protocol_dsl
 
 logScope:
   topics = "p2p rlpx"
-
-include p2p_tracing
-
-when tracingEnabled:
-  import eth/common/eth_types_json_serialization
-
-  export
-    # XXX: This is a work-around for a Nim issue.
-    # See a more detailed comment in p2p_tracing.nim
-    init,
-    writeValue,
-    getOutput
 
 chronicles.formatIt(Peer):
   $(it.remote)
@@ -222,6 +232,7 @@ proc recvMsg(
   var msgBody: seq[byte]
   try:
     msgBody = await peer.transport.recvMsg()
+    peer.lastReceived = Moment.now()
 
     trace "Received message",
       remote = peer.remote,
@@ -286,23 +297,13 @@ proc dispatchMessages(peer: Peer) {.async: (raises: []).} =
 # Rlpx Implementation
 #------------------------------------------------------------------------------
 
-proc removePeer(network: EthereumNode, peer: Peer) =
-  # It is necessary to check if peer.remote still exists. The connection might
-  # have been dropped already from the peers side.
-  # E.g. when receiving a p2p.disconnect message from a peer, a race will happen
-  # between which side disconnects first.
-  if network.peerPool != nil and not peer.remote.isNil and
-      peer.remote in network.peerPool.connectedNodes:
-    network.peerPool.connectedNodes.del(peer.remote)
-    rlpx_connected_peers.dec()
-
-    # Note: we need to do this check as disconnect (and thus removePeer)
-    # currently can get called before the dispatcher is initialized.
-    if not peer.dispatcher.isNil:
-      for observer in network.peerPool.observers.values:
-        if not observer.onPeerDisconnected.isNil:
-          if observer.protocols.len == 0 or peer.supports(observer.protocols):
-            observer.onPeerDisconnected(peer)
+proc closeAfter(
+    transport: RlpxTransport, delay: Duration
+) {.async: (raises: []).} =
+  ## Close the connection once the peer has had a chance to read the
+  ## disconnect message.
+  await noCancel sleepAsync(delay)
+  await noCancel transport.closeWait()
 
 proc disconnect*(
     peer: Peer, reason: DisconnectionReason, notifyRemote = false
@@ -320,6 +321,9 @@ proc disconnect*(
       debug "Peer disconnected", remote = peer.remote, clientId = peer.clientId, reason
 
     peer.connectionState = Disconnecting
+
+    if not peer.keepAlive.isNil and not peer.keepAlive.finished:
+      peer.keepAlive.cancelSoon()
 
     # Do this first so sub-protocols have time to clean up and stop sending
     # before this node closes transport to remote peer
@@ -342,26 +346,25 @@ proc disconnect*(
       await callDisconnectHandlers(peer, reason)
 
     if notifyRemote and not peer.transport.closed:
-      proc waitAndClose(
-          transport: RlpxTransport, time: Duration
-      ) {.async: (raises: []).} =
-        await noCancel sleepAsync(time)
-        await noCancel peer.transport.closeWait()
-
       try:
         await peer.sendDisconnectMsg(DisconnectionReasonList(value: reason))
-      except CatchableError as e:
+          .wait(disconnectSendTimeout)
+      except AsyncTimeoutError:
+        trace "Timed out delivering disconnect message", peer
+      except EthP2PError as e:
         trace "Failed to deliver disconnect message",
           peer, err = e.msg, errName = e.name
+      except CancelledError:
+        # closing below still has to run, cancellation stops here
+        trace "Cancelled while delivering disconnect message", peer
 
-      # Give the peer a chance to disconnect
-      asyncSpawn peer.transport.waitAndClose(2.seconds)
+      asyncSpawn peer.transport.closeAfter(transportCloseDelay)
     elif not peer.transport.closed:
       peer.transport.close()
 
-    logDisconnectedPeer peer
     peer.connectionState = Disconnected
-    removePeer(peer.network, peer)
+    if peer.network.peerPool != nil:
+      peer.network.peerPool.removePeer(peer)
 
 proc initPeerState(
     peer: Peer, h: HelloPacket
@@ -385,6 +388,52 @@ proc initPeerState(
 
   peer.lastReqId = Opt.some(0u64)
   peer.initPeerStates peer.dispatcher.activeProtocols
+
+proc keepAliveLoop(peer: Peer) {.async: (raises: [CancelledError]).} =
+  ## Reap connections whose remote end has gone away without closing the socket.
+  ## Nothing else does this: `dispatchMessages` blocks in `recvMsg` forever and
+  ## peers that the syncer has no slot for are never written to either, so a
+  ## dead connection is never noticed.
+  ##
+  ## Every exit closes the transport. Some paths reach it already closed - a
+  ## failed send runs the full disconnect inside `sendMsg` - but this loop is
+  ## the peer's only reaper, so it must not depend on an invariant held in
+  ## another module. `close` is idempotent.
+  var ping: Future[void].Raising([CancelledError, EthP2PError])
+
+  defer:
+    if not ping.isNil and not ping.finished:
+      ping.cancelSoon()
+
+  while peer.connectionState == Connected:
+    await sleepAsync(peerLivenessInterval)
+
+    if not ping.isNil and ping.finished:
+      if ping.failed:
+        # A failed send has already run the full disconnect, so the loop ends
+        # on the state check below.
+        trace "Failed to send ping", remote = peer.remote, err = ping.error.msg
+      ping = nil
+
+    let idle = Moment.now() - peer.lastReceived
+    if idle >= peerIdleTimeout:
+      debug "Peer timed out, closing connection",
+        remote = peer.remote, clientId = peer.clientId, idle
+      break
+
+    # A live peer answers with a pong, which resets `lastReceived`. The send is
+    # deliberately not awaited: a peer that has stopped reading fills our send
+    # buffer, and awaiting would stretch the tick by however long the write
+    # blocks - `peerLivenessInterval` has to remain the period at which the
+    # peer is examined, not the gap between examinations. At most one ping is
+    # in flight, and one that never reaches the wire needs no handling of its
+    # own: `lastReceived` stops advancing, so the idle check above reaps it.
+    if idle >= peerPingInterval and ping.isNil:
+      ping = peer.ping()
+
+  # Closing the transport makes the pending read in `dispatchMessages` fail,
+  # which runs the regular disconnect path - handlers, pool removal, metrics.
+  peer.transport.close()
 
 proc postHelloSteps(
     peer: Peer, h: HelloPacket
@@ -428,6 +477,8 @@ proc postHelloSteps(
       ClientQuitting, "messageProcessingLoop ended while connecting"
     )
   peer.connectionState = Connected
+  peer.lastReceived = Moment.now()
+  peer.keepAlive = keepAliveLoop(peer)
 
 template setSnappySupport(peer: Peer, hello: HelloPacket) =
   peer.snappyEnabled = hello.version >= devp2pSnappyVersion.uint64
@@ -495,7 +546,6 @@ proc rlpxConnect*(
 ): Future[Result[Peer, RlpxError]] {.async: (raises: [CancelledError]).} =
   # TODO move logging elsewhere - the aim is to have exactly _one_ debug log per
   #      connection attempt (success or failure) to not spam the logs
-  initTracing(devp2pInfo, node.protocols)
   logScope:
     remote
   trace "Connecting to peer"
@@ -528,8 +578,6 @@ proc rlpxConnect*(
     except TransportError as exc:
       debug "Connect transport error", err = exc.msg
       return err(TransportConnectError)
-
-  logConnectedPeer peer
 
   # RLPx p2p capability handshake: After the initial handshake, both sides of
   # the connection must send either Hello or a Disconnect message.
@@ -595,8 +643,6 @@ proc rlpxAccept*(
 ): Future[Peer] {.async: (raises: [CancelledError, EthP2PError]).} =
   # TODO move logging elsewhere - the aim is to have exactly _one_ debug log per
   #      connection attempt (success or failure) to not spam the logs
-  initTracing(devp2pInfo, node.protocols)
-
   let
     peer = Peer(network: node, disconnectPeer: disconnect, inbound: true)
     deadline = sleepAsync(connectionTimeout)
@@ -646,10 +692,18 @@ proc rlpxAccept*(
 
   peer.remote = newNode(ENode(pubkey: peer.transport.pubkey, address: address))
 
-  logAcceptedPeer peer
-
   logScope:
     remote = peer.remote
+
+  # Enforce `--max-peers` on incoming connections. Without this the node accepts
+  # every dial-in on the network and, since nothing ever closes an established
+  # connection, keeps it until the process exits.
+  if node.peerPool.isFull:
+    debug "Too many peers, rejecting incoming connection",
+      numPeers = node.peerPool.len, maxPeers = node.peerPool.maxPeers
+    await peer.disconnect(TooManyPeers, notifyRemote = true)
+    rlpx_accept_failure.inc(labelValues = [$TooManyPeers])
+    return nil
 
   let response =
     try:
@@ -683,32 +737,35 @@ proc rlpxAccept*(
 
   # In case there is an outgoing connection started with this peer we give
   # precedence to that one and we disconnect here with `AlreadyConnected`
-  if peer.remote in node.peerPool.connectedNodes or
-      peer.remote in node.peerPool.connectingNodes:
+  if peer.remote in node.peerPool or
+      peer.remote in node.connectingNodes:
     trace "Duplicate connection in rlpxAccept"
     rlpx_accept_failure.inc(labelValues = [$AlreadyConnected])
     return nil
 
-  node.peerPool.connectingNodes.incl(peer.remote)
+  node.connectingNodes.incl(peer.remote)
 
   try:
     await postHelloSteps(peer, response)
   except PeerDisconnected as exc:
-    node.peerPool.connectingNodes.excl(peer.remote)
+    node.connectingNodes.excl(peer.remote)
     debug "Disconnect while accepting", reason = exc.reason, err = exc.msg
     rlpx_accept_failure.inc(labelValues = [$exc.reason])
     return nil
   except UselessPeerError as exc:
-    node.peerPool.connectingNodes.excl(peer.remote)
+    node.connectingNodes.excl(peer.remote)
     debug "Useless peer while accepting", err = exc.msg
 
     rlpx_accept_failure.inc(labelValues = [$UselessPeer])
     return nil
   except EthP2PError as exc:
-    node.peerPool.connectingNodes.excl(peer.remote)
+    node.connectingNodes.excl(peer.remote)
     trace "P2P error during accept", err = exc.msg
     rlpx_accept_failure.inc(labelValues = [$exc.name])
     return nil
+  except CancelledError as exc:
+    node.connectingNodes.excl(peer.remote)
+    raise exc
 
   debug "Peer accepted", capabilities = response.capabilities, peer=peer.clientId
 

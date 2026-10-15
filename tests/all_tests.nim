@@ -20,6 +20,7 @@ import
     test_async_evm,
     test_filters,
     test_forked_chain,
+    test_forked_chain_blockhash,
     test_forkid,
     test_genesis,
     test_getproof_json,

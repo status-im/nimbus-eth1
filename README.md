@@ -35,10 +35,10 @@ For more detailed write-ups on the development progress, follow the
 
 *Experimental*
 
-Users of the [Nix package manager](https://nixos.org/nix/download.html) can install all prerequisites simply by running:
+Users of the [Nix package manager](https://nixos.org/download/) can install all prerequisites simply by running:
 
 ``` bash
-nix-shell default.nix
+nix develop
 ```
 
 ### Build & Develop

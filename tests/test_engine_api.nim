@@ -13,13 +13,13 @@ import
   eth/common,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
-  web3/engine_api,
-  web3/conversions,
-  web3/execution_types,
   unittest2
 
 import
   eth/common/keys,
+  ../execution_api/conversions,
+  ../execution_api/execution_types,
+  ../execution_api/execution_api,
   ../execution_chain/rpc,
   ../execution_chain/conf,
   ../execution_chain/common,
@@ -28,8 +28,9 @@ import
   ../execution_chain/core/tx_pool,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/beacon/beacon_engine,
+  ../execution_chain/beacon/api_handler,
   ../execution_chain/beacon/web3_eth_conv,
-  ../hive_integration/engine_client,
+  ../execution_api/engine_client,
    ./shared_data/eip8282data
 
 type
@@ -39,6 +40,7 @@ type
     client : RpcHttpClient
     chain  : ForkedChainRef
     txPool : TxPoolRef
+    beaconEngine: BeaconEngineRef
 
   NewPayloadV4Params* = object
     payload*: ExecutionPayload
@@ -145,18 +147,20 @@ proc setupEnv(envFork: HardFork = MergeFork,
     client : client,
     chain  : chain,
     txPool : txPool,
+    beaconEngine: beaconEngine,
   )
 
 proc close(env: TestEnv) =
   waitFor env.client.close()
   waitFor env.server.closeWait()
+  waitFor env.beaconEngine.stop()
   waitFor env.chain.stopProcessingQueue()
 
 proc runBasicCycleTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -170,7 +174,7 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
     payload = ? client.getPayload(Version.V1, fcuRes.payloadId.get)
     npRes = ? client.newPayloadV1(payload.executionPayload)
 
-  discard ? client.forkchoiceUpdated(Version.V1, ForkchoiceStateV1(
+  discard ? client.forkchoiceUpdated(Version.V1, ForkchoiceState(
     headBlockHash: npRes.latestValidHash.get
   ))
   let bn = ? client.blockNumber()
@@ -193,6 +197,12 @@ proc makeSignedTx(env: TestEnv, nonce: AccountNonce = 0): Transaction =
   )
   signTransaction(tx, testSenderKey, eip155 = true)
 
+proc waitForLatestBuild(env: TestEnv, id: Bytes8) =
+  # getPayload serves the newest *finished* build, so let the rebuild that the
+  # last fcU scheduled complete before asking for the payload.
+  while not env.beaconEngine.payloadBuildFinished(id).get(true):
+    poll()
+
 proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
   # Calling forkchoiceUpdated repeatedly with identical payload attributes must
   # rebuild the payload from a fresh transaction environment each time. This
@@ -208,7 +218,7 @@ proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -242,7 +252,8 @@ proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
   let
     fcuRes2 = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
     id2     = fcuRes2.payloadId.get
-    payload2 = ? client.getPayload(Version.V1, id2)
+  env.waitForLatestBuild(id2)
+  let payload2 = ? client.getPayload(Version.V1, id2)
 
   if payload2.executionPayload.transactions.len != numTxs:
     return err("Rebuild dropped txs: expected " & $numTxs & " txs, got " &
@@ -264,6 +275,143 @@ proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc runStaleFirstBuildTest(env: TestEnv): Result[void, string] =
+  # CLs send forkchoiceUpdated with the same payload attributes more than once
+  # per proposal: early (right after importing the parent, pool still empty)
+  # and again shortly before getPayload. Each fcU must rebuild, and getPayload
+  # must serve the newest finished build: the older one while the rebuild is
+  # still in flight, the rebuild once it is done. Otherwise the node keeps
+  # proposing the early, empty payload.
+  const numTxs = 3
+  let
+    ben = env.beaconEngine
+    header = env.chain.latestHeader
+    update = ForkchoiceStateV1(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    # No withdrawals: the handler is driven directly (below), so the attrs
+    # must already be V1-shaped for a pre-Shanghai fcU V1.
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+    )
+
+  # Drive the engine handler directly (not over HTTP) so the event loop only
+  # runs the builder when the test lets it.
+  template fcU(): Bytes8 =
+    let res = try:
+        waitFor ben.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
+      except CatchableError as exc:
+        return err("forkchoiceUpdated failed: " & exc.msg)
+    res.payloadId.valueOr:
+      return err("Expected payloadId in fcU response")
+
+  template txsServed(id: Bytes8): int =
+    let bundle = (waitFor ben.getPayloadBundle(id)).valueOr:
+      return err("getPayloadBundle returned none")
+    bundle.payload.transactions.len
+
+  # Early fcU with an empty pool; nothing built yet, so getPayload waits for
+  # this first build.
+  let id = fcU()
+  if txsServed(id) != 0:
+    return err("Expected the early build to be empty")
+
+  # Txs arrive between the early fcU and the proposal.
+  for nonce in 0 ..< numTxs:
+    env.txPool.addTx(env.makeSignedTx(nonce.AccountNonce)).isOkOr:
+      return err("Failed to add tx " & $nonce & " to pool: " & $error)
+
+  # Pre-proposal fcU with identical attributes schedules a rebuild.
+  if fcU() != id:
+    return err("Identical attributes must map to the same payloadId")
+
+  # Rebuild still in flight: the older build is served without waiting.
+  if txsServed(id) != 0:
+    return err("Expected the older build while the rebuild is in flight")
+  if ben.payloadBuildFinished(id) != Opt.some(false):
+    return err("getPayload must not wait for an in-flight rebuild")
+
+  # Rebuild done: it replaces the older build.
+  env.waitForLatestBuild(id)
+  let served = txsServed(id)
+  if served != numTxs:
+    return err("Stale payload served: expected " & $numTxs & " txs, got " &
+      $served)
+
+  ok()
+
+proc runBackgroundBuildTest(env: TestEnv): Result[void, string] =
+  # forkchoiceUpdated must schedule the payload build in the background and
+  # respond with the payloadId immediately; getPayload awaits the result.
+  const numTxs = 3
+  let
+    ben = env.beaconEngine
+    header = env.chain.latestHeader
+    update = ForkchoiceStateV1(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    # No withdrawals: the handler is driven directly (below), so the attrs
+    # must already be V1-shaped for a pre-Shanghai fcU V1.
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+    )
+
+  for nonce in 0 ..< numTxs:
+    env.txPool.addTx(env.makeSignedTx(nonce.AccountNonce)).isOkOr:
+      return err("Failed to add tx " & $nonce & " to pool: " & $error)
+
+  # Drive the engine handler directly (not over HTTP) so that we can observe
+  # the build state right after the fcU response future completes.
+  let fcuRes = try:
+      waitFor ben.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
+    except CatchableError as exc:
+      return err("forkchoiceUpdated failed: " & exc.msg)
+
+  if fcuRes.payloadId.isNone:
+    return err("Expected payloadId in fcU response")
+
+  # The fcU response completed before the builder ran: the build future must
+  # still be pending (the worker parks on idleAsync before assembling, and the
+  # event loop hasn't been driven since waitFor returned).
+  let
+    id = fcuRes.payloadId.get
+    finished = ben.payloadBuildFinished(id).valueOr:
+      return err("No build tracked for payloadId")
+  if finished:
+    return err("Payload build completed before fcU response was returned")
+
+  let bundle = (waitFor ben.getPayloadBundle(id)).valueOr:
+    return err("getPayloadBundle returned none")
+
+  if bundle.payload.transactions.len != numTxs:
+    return err("Expected " & $numTxs & " txs in payload, got: " &
+      $bundle.payload.transactions.len)
+
+  ok()
+
+proc runUnknownPayloadTest(env: TestEnv): Result[void, string] =
+  # getPayload for a payloadId that was never scheduled must fail with
+  # the unknown-payload error code.
+  let
+    client = env.client
+    id = Bytes8([1'u8, 2, 3, 4, 5, 6, 7, 8])
+    res = client.getPayload(Version.V1, id)
+
+  if res.isOk:
+    return err("getPayload should fail for unknown payloadId")
+
+  if $engineApiUnknownPayload notin res.error:
+    return err("expect error code " & $engineApiUnknownPayload &
+      ", got: " & res.error)
+
+  ok()
+
 proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
   # Regression: when two VALID sibling payloads exist at the same height, the
   # payload built for a forkchoiceUpdated carrying attributes must sit on the
@@ -275,7 +423,7 @@ proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
     client = env.client
     genesisHeader = ? client.latestHeader()
     genesisHash = genesisHeader.computeBlockHash
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: genesisHash
     )
     time = getTime().toUnix
@@ -314,7 +462,7 @@ proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
       suggestedFeeRecipient: default(Address),
       withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
     )
-    updateC = ForkchoiceStateV1(
+    updateC = ForkchoiceState(
       headBlockHash: payloadA.blockHash,
       finalizedBlockHash: genesisHash,
     )
@@ -334,7 +482,7 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -411,7 +559,7 @@ proc genesisShouldCanonicalTest(env: TestEnv): Result[void, string] =
     return err("lastestValidHash should not empty")
 
   let
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: params.payload.blockHash,
       safeBlockHash: params.payload.parentHash,
       finalizedBlockHash: params.payload.parentHash,
@@ -481,7 +629,7 @@ proc newPayloadV5UndecodableBAL(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -556,7 +704,7 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
   let
     client = env.client
     header = ? client.latestHeader()
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -607,6 +755,63 @@ proc payloadAttrV4PreserveWithdrawalsTest(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc getPayloadBodiesByHashV2ReturnsBALForBlocksWithoutWD(env: TestEnv): Result[void, string] =
+  let
+    client = env.client
+    header = ? client.latestHeader()
+    update = ForkchoiceState(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+      withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+      parentBeaconBlockRoot: Opt.some(default(Hash32)),
+      slotNumber:            Opt.some(w3Qty(9'u64)),
+      targetGasLimit:        Opt.some(w3Qty(60_000_000'u64)),
+    )
+
+  let
+    fcuRes = ? client.forkchoiceUpdated(Version.V4, update, Opt.some(attr))
+    bundle = ? client.getPayload(Version.V6, fcuRes.payloadId.get)
+
+  var payload = bundle.executionPayload
+
+  # An undecodable blockAccessList is an invalid block, not an invalid request,
+  # so it is reported as an invalid payload status.
+  let res = client.newPayloadV5(
+    payload,
+    Opt.some(newSeq[Hash32]()),
+    Opt.some(default(Hash32)),
+    bundle.executionRequests)
+
+  if res.isErr:
+    return err("res should not error: " & res.error)
+
+  if res.get.status != PayloadExecutionStatus.valid:
+    return err("res.status should be equal to PayloadExecutionStatus.valid")
+
+  if res.get.latestValidHash.isNone:
+    return err("latestValidHash should have some value")
+
+  if res.get.latestValidHash.get != payload.blockHash:
+    return err("latestValidHash should be equal to: " & $payload.blockHash)
+
+  let bodies = ? client.getPayloadBodiesByHashV2(@[payload.blockHash])
+
+  if bodies.len != 1:
+    return err("bodies len should == 1")
+
+  if bodies[0].isNone:
+    return err("bodies at[0] should have something")
+
+  if bodies[0].value.blockAccessList.isNone:
+    return err("bodies should have BAL")
+
+  ok()
+
 const testList = [
   TestSpec(
     name: "Basic cycle",
@@ -619,9 +824,24 @@ const testList = [
     testProc: runPayloadRebuildTest
   ),
   TestSpec(
+    name: "Repeated fcU rebuilds, getPayload serves newest finished build",
+    fork: MergeFork,
+    testProc: runStaleFirstBuildTest
+  ),
+  TestSpec(
     name: "Payload built on fcU head, not last imported sibling",
     fork: MergeFork,
     testProc: runSiblingHeadPayloadTest
+  ),
+  TestSpec(
+    name: "Payload built in background, fcU responds first",
+    fork: MergeFork,
+    testProc: runBackgroundBuildTest
+  ),
+  TestSpec(
+    name: "getPayload with unknown payloadId",
+    fork: MergeFork,
+    testProc: runUnknownPayloadTest
   ),
   TestSpec(
     name: "newPayloadV4",
@@ -663,6 +883,11 @@ const testList = [
     name: "PayloadAttributesV4 preserve withdrawals",
     fork: Amsterdam,
     testProc: payloadAttrV4PreserveWithdrawalsTest
+  ),
+  TestSpec(
+    name: "getPayloadBodiesByHashV2 returns BAL for blocks without withdrawals",
+    fork: Amsterdam,
+    testProc: getPayloadBodiesByHashV2ReturnsBALForBlocksWithoutWD
   ),
   ]
 

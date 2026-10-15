@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -137,7 +137,7 @@ method captureOpEnd*(ctx: LegacyTracer, c: Computation,
       if c.msg.depth < ctx.storageKeys.len:
         var ledger = c.vmState.ledger
         for key in ctx.storage(c.msg.depth):
-          let value = ledger.getStorage(c.msg.contractAddress, key)
+          let value = ledger.getStorage(c.msg.currentTarget, key)
           storage[key.dumpHex] = %(value.dumpHex)
         j["storage"] = storage
 

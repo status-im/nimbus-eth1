@@ -21,7 +21,7 @@ import
 
 proc snapGetBals*(
     buddy: SnapPeerRef;
-    req: BlockAccessListsRequest;
+    req: SnapBalRequest;
       ): Future[Result[FetchBalData,SnapErrorEx]]
       {.async: (raises: []).} =
   ## Wrapper around `getBlockAccessLists()`

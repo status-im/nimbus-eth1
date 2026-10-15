@@ -23,17 +23,15 @@ proc callParams*(tx: Transaction,
                  sender: Address,
                  vmState: BaseVMState,
                  intrinsic: IntrinsicGas): CallParams =
-  # Is there a nice idiom for this kind of thing? Should I
-  # just be writing this as a bunch of assignment statements?
   let
     baseFee = vmState.blockCtx.baseFeePerGas
   CallParams(
-    vmState:   vmState,
-    gasPrice:  tx.effectiveGasPrice(baseFee),
-    sender:    sender,
-    isCreate:  tx.contractCreation,
-    tx:        tx.addr,
-    intrinsic: intrinsic
+    vmState          : vmState,
+    effectiveGasPrice: tx.effectiveGasPrice(baseFee),
+    sender           : sender,
+    isCreate         : tx.contractCreation,
+    tx               : tx.addr,
+    intrinsic        : intrinsic
   )
 
 proc txCallEvm*(tx: Transaction,
@@ -46,7 +44,7 @@ proc txCallEvm*(tx: Transaction,
   when discardResult:
     discard runComputation(call, VoidResult)
   else:
-    runComputation(call, LogResult)
+    runComputation(call, TxResult)
 
 proc testCallEvm*(tx: Transaction,
                   sender: Address,

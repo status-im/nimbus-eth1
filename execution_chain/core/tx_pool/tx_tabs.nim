@@ -117,11 +117,17 @@ iterator byPriceAndNonce*(senderTab: TxSenderTab,
   ## together by price, always comparing only the head transaction from each account.
   ## This is done via a heap to keep it fast.
   ##
+  ## The caller is expected to execute every yielded transaction against
+  ## `ledger`. A sender's next transaction is only offered once the account
+  ## nonce has moved past the yielded one; if it did not move, the transaction
+  ## was not included and none of the sender's later ones can be either.
+  ##
   ## @param baseFee Provide a baseFee to exclude txs with a lower gasPrice
   ##
 
   template getHeadAndPushTo(sn, byPrice, nonce) =
-    let rc = sn.list.ge(nonce)
+    # Transactions after a nonce gap cannot be included, skip them
+    let rc = sn.list.eq(nonce)
     if rc.isOk:
       let item = rc.get.data
       if item.validBlobItem(fork, sn, idTab, blobTab):
@@ -156,17 +162,17 @@ iterator byPriceAndNonce*(senderTab: TxSenderTab,
     # Retrieve the next best transaction by price.
     let best = byPrice.pop()
 
-    # Push in its place the next transaction from the same account.
-    let sn = senderTab.getOrDefault(best.sender)
-    if sn.isNil.not:
-      # This algorithm will automatically reject
-      # transaction with nonce gap(best.nonce + 1)
-      # EVM will reject this kind transaction too, but
-      # why do expensive EVM call when we can do it cheaply here.
-      # We don't remove transactions with gap like we do with transactions
-      # of lower nonce? because they might be  packed by future blocks
-      # when the gap is filled. Worst case is they will expired and get purged by
-      # `removeExpiredTxs`
-      sn.getHeadAndPushTo(byPrice, best.nonce + 1)
-
     yield best
+
+    # Push in its place the transaction for the account nonce `best` left
+    # behind. The nonce moved past `best` if it was included, or if an EIP-7702
+    # authorization in another transaction bumped it and made `best` stale.
+    # Otherwise `best` was not included, so the sender is done for this block.
+    # Transactions with a nonce gap are not removed like the stale ones above:
+    # they might be packed by future blocks once the gap is filled. Worst case
+    # they expire and get purged by `removeExpiredTxs`.
+    let nonce = ledger.getNonce(best.sender)
+    if nonce > best.nonce:
+      let sn = senderTab.getOrDefault(best.sender)
+      if sn.isNil.not:
+        sn.getHeadAndPushTo(byPrice, nonce)

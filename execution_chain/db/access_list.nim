@@ -20,7 +20,8 @@ type
   SlotSet = HashSet[UInt256]
 
   AccessList* = object
-    slots: Table[Address, SlotSet]
+    addresses  : HashSet[Address]
+    storageKeys: Table[Address, SlotSet]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -35,48 +36,61 @@ func toStorageKeys(slots: SlotSet): seq[Bytes32] =
 # ------------------------------------------------------------------------------
 
 func contains*(al: AccessList, address: Address): bool {.inline.} =
-  address in al.slots
+  address in al.addresses
 
 # returnValue: (addressPresent, slotPresent)
-func contains*(al: var AccessList, address: Address, slot: UInt256): bool =
-  al.slots.withValue(address, val):
-    result = slot in val[]
+func contains*(al: AccessList, address: Address, slot: UInt256): bool =
+  al.storageKeys.withValue(address, val):
+    return slot in val
 
 proc mergeAndReset*(al, other: var AccessList) =
   # move values in `other` to `al`
-  al.slots.mergeAndReset(other.slots)
+  al.addresses.mergeAndReset(other.addresses)
+  al.storageKeys.mergeAndReset(other.storageKeys)
 
 proc add*(al: var AccessList, address: Address) =
-  if address notin al.slots:
-    al.slots[address] = HashSet[UInt256]()
+  al.addresses.incl address
 
 proc add*(al: var AccessList, address: Address, slot: UInt256) =
-  al.slots.withValue(address, val):
+  al.storageKeys.withValue(address, val):
     val[].incl slot
   do:
-    al.slots[address] = toHashSet([slot])
+    al.storageKeys[address] = toHashSet([slot])
 
 proc clear*(al: var AccessList) {.inline.} =
-  al.slots.clear()
+  al.addresses.clear()
+  al.storageKeys.clear()
 
 func getAccessList*(al: AccessList): transactions.AccessList =
-  for address, slots in al.slots:
+  for address, slots in al.storageKeys:
     result.add transactions.AccessPair(
       address    : address,
       storageKeys: slots.toStorageKeys,
     )
+  for address in al.addresses:
+    if address notin al.storageKeys:
+      result.add transactions.AccessPair(
+        address: address,
+      )
 
-func equal*(al: AccessList, other: var AccessList): bool =
-  if al.slots.len != other.slots.len:
+func equal*(al: AccessList, other: AccessList): bool =
+  if al.addresses.len != other.addresses.len:
     return false
 
-  for address, slots in al.slots:
-    other.slots.withValue(address, otherSlots):
-      if slots.len != otherSlots[].len:
+  if al.storageKeys.len != other.storageKeys.len:
+    return false
+
+  for address in al.addresses:
+    if address notin other.addresses:
+      return false
+
+  for address, otherSlots in other.storageKeys:
+    al.storageKeys.withValue(address, thisSlots):
+      if otherSlots.len != thisSlots.len:
         return false
 
-      for slot in slots:
-        if slot notin otherSlots[]:
+      for slot in otherSlots:
+        if slot notin thisSlots:
           return false
     do:
       return false
