@@ -34,16 +34,17 @@ type
     mrNone, mrStored, mrWindow
 
   PendingOp = object
-    active:   bool
-    op:       Op
-    vmOp:     VmTraceOp
-    storeKey: UInt256
-    storeVal: UInt256
-    isStore:  bool
-    memKind:  MemReadKind
-    memOff:   int
-    memLen:   int
-    memData:  seq[byte]
+    active:       bool
+    op:           Op
+    vmOp:         VmTraceOp
+    storeKey:     UInt256
+    storeVal:     UInt256
+    isStore:      bool
+    emptySubOk:   bool
+    memKind:      MemReadKind
+    memOff:       int
+    memLen:       int
+    memData:      seq[byte]
 
   ParityFrame = object
     action:        TraceAction
@@ -118,6 +119,12 @@ func parityError(comp: Computation): Opt[string] =
 func isReverted(comp: Computation): bool =
   (not comp.isSuccess) and (not comp.error.isNil) and
     comp.error.status == StatusCode.Revert
+
+func opName(op: Op): string =
+  case op
+  of Sha3:      "KECCAK256"
+  of ChainIdOp: "CHAINID"
+  else:         toUpperAscii($op)
 
 func pushCount(op: Op): int =
   case op
@@ -275,6 +282,9 @@ method captureEnter*(ctx: ParityTracer, comp: Computation, op: Op,
     ctx.frames.add ParityFrame(skip: true, resultIdx: -1)
     return
 
+  if ttVmTrace in ctx.traceTypes and ctx.frames[^1].pending.active:
+    ctx.frames[^1].pending.vmOp.cost += comp.msg.gas
+
   let childAddr = ctx.frames[^1].traceAddr & @[ctx.frames[^1].childIndex]
   inc ctx.frames[^1].childIndex
 
@@ -372,8 +382,11 @@ method captureOpStart*(ctx: ParityTracer, comp: Computation,
     var pending = PendingOp(
       active: true,
       op:     op,
-      vmOp:   VmTraceOp(pc: pc, op: toUpperAscii($op),
+      vmOp:   VmTraceOp(pc: pc, op: opName(op),
                         idx: ctx.frames[^1].idxPrefix & $ctx.frames[^1].opIdx))
+    if op in {Call, CallCode, DelegateCall, StaticCall} and comp.stack.len >= 2:
+      let target = comp.stack[^2, Address].valueOr(Address.default)
+      pending.emptySubOk = not isPrecompile(comp.fork, target)
     inc ctx.frames[^1].opIdx
     case op
     of Mstore:
@@ -468,6 +481,8 @@ method captureOpEnd*(ctx: ParityTracer, comp: Computation,
 
   var vmOp  = pending.vmOp
   vmOp.ex   = Opt.some(ex)
+  if pending.emptySubOk and vmOp.sub.isNone:
+    vmOp.sub = Opt.some(VmTrace())
   ctx.frames[^1].vmTrace.ops.add vmOp
   ctx.frames[^1].pending.active = false
 
@@ -481,8 +496,11 @@ method captureExit*(ctx: ParityTracer, comp: Computation,
     return
 
   if ttVmTrace in ctx.traceTypes and ctx.frames.len > 0:
+    var subTrace = subFrame.vmTrace
+    if subFrame.pending.active:
+      subTrace.ops.add subFrame.pending.vmOp
     if ctx.frames[^1].pending.active:
-      ctx.frames[^1].pending.vmOp.sub = Opt.some(subFrame.vmTrace)
+      ctx.frames[^1].pending.vmOp.sub = Opt.some(subTrace)
 
   ctx.applyResult(subFrame, comp, output, gasUsed)
 
