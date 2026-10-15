@@ -282,7 +282,8 @@ method captureEnter*(ctx: ParityTracer, comp: Computation, op: Op,
     ctx.frames.add ParityFrame(skip: true, resultIdx: -1)
     return
 
-  if ttVmTrace in ctx.traceTypes and ctx.frames[^1].pending.active:
+  if ttVmTrace in ctx.traceTypes and ctx.frames[^1].pending.active and
+     ctx.frames[^1].pending.op in {Create, Create2}:
     ctx.frames[^1].pending.vmOp.cost += comp.msg.gas
 
   let childAddr = ctx.frames[^1].traceAddr & @[ctx.frames[^1].childIndex]
@@ -384,9 +385,8 @@ method captureOpStart*(ctx: ParityTracer, comp: Computation,
       op:     op,
       vmOp:   VmTraceOp(pc: pc, op: opName(op),
                         idx: ctx.frames[^1].idxPrefix & $ctx.frames[^1].opIdx))
-    if op in {Call, CallCode, DelegateCall, StaticCall} and comp.stack.len >= 2:
-      let target = comp.stack[^2, Address].valueOr(Address.default)
-      pending.emptySubOk = not isPrecompile(comp.fork, target)
+    if op in {Call, CallCode, DelegateCall, StaticCall}:
+      pending.emptySubOk = true
     inc ctx.frames[^1].opIdx
     case op
     of Mstore:
