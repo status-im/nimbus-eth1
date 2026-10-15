@@ -162,6 +162,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
 
     of SnapStateForward:
       ctx.stateForward(info).isOkOr:
+        # FIXME: some smart error handling here?
         break body
 
       # Prepare for next download cyle
