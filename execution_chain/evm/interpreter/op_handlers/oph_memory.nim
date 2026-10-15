@@ -74,12 +74,7 @@ func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
   let jt = jumpTarget.truncate(int)
   c.code.pc = jt
 
-  let nextOpcode = c.code.peek
-  if nextOpcode != JumpDest:
-    return err(opErr(InvalidJumpDest))
-
-  # Jump destination must be a valid opcode
-  if not c.code.isValidOpcode(jt):
+  if not c.code.isValidJumpdest(jt):
     return err(opErr(InvalidJumpDest))
 
   ok()
