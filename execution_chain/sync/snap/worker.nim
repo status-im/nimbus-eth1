@@ -152,6 +152,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       ctx.downloadCommit(info).isOkOr:              # write back ranges to DB
         # FIXME: any useful error handling here?
         error info & ": Error storing progress", `error`=error
+      await ctx.statsStateLog info                  # FIXME, will go away
 
     of SnapBalsFetch:
       discard ctx.headerDownloadTrigger(info)       # see `SnapDownload`
@@ -176,6 +177,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         ctx.pool.resetReq = true                    # not much else possible
 
     of SnapStop:
+      await ctx.statsStateLog info                  # FIXME, will go away
       ctx.accountDownloadMetricsReset()             # cosmetics
 
       # Done, terminate
