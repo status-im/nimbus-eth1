@@ -20,6 +20,7 @@ import
   json_serialization,
   json_serialization/pkg/results,
   ../../execution_chain/common/chain_config,
+  ../../execution_chain/utils/utils,
   ../../tools/t8n/[
     helpers,
     types,
@@ -35,6 +36,8 @@ type
     rlp*: seq[byte]
     blockAccessList*: Opt[JsonString]
     expectException*: Opt[string]
+    transactions*   : seq[TxObject]
+    receipts*       : Opt[JsonString]
 
   BCData* = object
     blocks*: seq[BCBlock]
@@ -179,7 +182,7 @@ template validateField(F: untyped, body: untyped = noAction) =
 
 template debugState() =
   try:
-    let expectedAlloc = Fixture.decode(bcdata.postState, GenesisAlloc)
+    let expectedAlloc = Fixture.decode(bcData.postState, GenesisAlloc)
     debugEcho "got state: ",
       @@(res.alloc).pretty,
       ", expected state: ",
@@ -220,30 +223,37 @@ template debugRequests() =
 template debugExcessBlobGas() =
   debugEcho "from header excessBlobGas: ", header.excessBlobGas
 
-proc prettyBAL(bal: Opt[JsonString]): string =
-  if bal.isNone:
+proc prettyJSON(node: Opt[JsonString]): string =
+  if node.isNone:
     return "none"
   try:
-    parseJson(bal.value.string).pretty
+    parseJson(node.value.string).pretty
   except CatchableError as exc:
     "error: " & exc.msg
 
 template debugBlockAccessList() =
-  let expectedBal = bal.prettyBAL()
+  let expectedBal = bcBlock.blockAccessList.prettyJSON()
   debugEcho "got blockAccessList: ",
     @@(res.result.blockAccessList).pretty,
     ", expected blockAccessList: ",
     expectedBal
 
+template debugReceipts() =
+  let expectedReceipts = bcBlock.receipts.prettyJSON()
+  debugEcho "got receipts: ",
+    @@(res.result.receipts).pretty,
+    ", expected receipts: ",
+    expectedReceipts
+
 proc compareResult(res: ExecOutput,
                    header: Header,
-                   bcdata: BCData,
+                   bcData: BCData,
                    filePath: string,
                    unitIndex: int,
-                   bal: Opt[JsonString]): Result[void, string] =
+                   bcBlock: BCBlock): Result[void, string] =
   validateField(stateRoot, debugState)
   validateField(transactionsRoot)
-  validateField(receiptsRoot)
+  validateField(receiptsRoot, debugReceipts)
   validateField(logsBloom)
   validateField(gasUsed)
   validateField(withdrawalsRoot)
@@ -252,6 +262,32 @@ proc compareResult(res: ExecOutput,
   validateField(excessBlobGas, debugExcessBlobGas)
   validateField(requestsHash, debugRequests)
   validateField(blockAccessListHash, debugBlockAccessList)
+
+  ok()
+
+proc validateTransactions(txs: openArray[TxObject], blk: Block): Result[void, string] =
+  # This function purpose is to test `parseTxJson`
+  # Although `parseTxJson` itself is not used by eest_t8n
+  var transactions: seq[Transaction]
+  for i, n in txs:
+    let
+      tx = ? parseTxJson(n, MainNet)
+      txHash = tx.computeRlpHash()
+      expected = blk.transactions[i].computeRlpHash()
+
+    if txHash != expected:
+      return err("txHash mismatch: " & $txHash &
+        ", want: " & $expected)
+
+    transactions.add tx
+
+  let
+    txRoot = calcTxRoot(transactions)
+    expected = blk.header.transactionsRoot
+
+  if txRoot != expected:
+    return err("txRoot mismatch: " & $txRoot &
+      ", want: " & $expected)
 
   ok()
 
@@ -270,6 +306,8 @@ proc runTest(bcdata: BCData, filePath: string, unitIndex: int): Result[void, str
   for i, currBlock in blocks:
     if bcdata.blocks[i].expectException.isSome:
       continue
+
+    ? validateTransactions(bcdata.blocks[i].transactions, currBlock)
 
     let
       conf = T8NConf(
@@ -294,7 +332,7 @@ proc runTest(bcdata: BCData, filePath: string, unitIndex: int): Result[void, str
         bcdata,
         filePath,
         unitIndex,
-        bcdata.blocks[i].blockAccessList)
+        bcdata.blocks[i])
 
     prevBlock = currBlock
     prevAlloc = move(res.alloc)
