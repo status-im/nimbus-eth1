@@ -49,7 +49,7 @@ suite "test verified blocks":
       engine.headerStore.clear()
 
   test "convHeader hashes a header with Amsterdam fields":
-    # sepolia block 0xb5cccc, carrying blockAccessListHash and slotNumber
+    # sepolia block 0xb505b0, carrying blockAccessListHash and slotNumber
     let blk =
       getBlockFromJson("nimbus_verified_proxy/tests/data/sepolia_amsterdam.json")
 
