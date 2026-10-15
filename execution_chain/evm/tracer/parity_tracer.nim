@@ -51,6 +51,8 @@ type
     traceAddr:     seq[int]
     childIndex:    int
     createAddress: EthAddress
+    actionGas:     GasInt
+    opIdx:         int
     resultIdx:     int
     skip:          bool
     vmTrace:       VmTrace
@@ -186,6 +188,7 @@ proc applyResult(ctx: ParityTracer, frame: ParityFrame, comp: Computation,
   let error    = parityError(comp)
   let isRevert = comp.isReverted
   let isHalt   = error.isSome and not isRevert
+  let used     = if gasUsed > frame.actionGas: GasInt(0) else: gasUsed
 
   let traceResult =
     if isHalt:
@@ -193,20 +196,22 @@ proc applyResult(ctx: ParityTracer, frame: ParityFrame, comp: Computation,
     elif isRevert:
       Opt.some TraceResult(kind: trkCall,
         callResult: TraceCallResult(
-          gasUsed: Quantity(gasUsed),
+          gasUsed: Quantity(used),
           output:  @output))
     else:
       case frame.actionKind
       of takCall:
         Opt.some TraceResult(kind: trkCall,
           callResult: TraceCallResult(
-            gasUsed: Quantity(gasUsed),
+            gasUsed: Quantity(used),
             output:  @output))
       of takCreate:
+        let codeRef  = comp.vmState.ledger.getCode(frame.createAddress)
+        let deployed = if codeRef.isNil: @[] else: @(codeRef.bytes())
         Opt.some TraceResult(kind: trkCreate,
           createResult: TraceCreateResult(
-            gasUsed: Quantity(gasUsed),
-            code:    @output,
+            gasUsed: Quantity(used),
+            code:    deployed,
             address: Opt.some(frame.createAddress)))
       else:
         Opt.none(TraceResult)
@@ -220,6 +225,7 @@ method captureStart*(ctx: ParityTracer, comp: Computation,
                      create: bool, input: openArray[byte],
                      gasLimit: GasInt, value: UInt256) {.gcsafe.} =
   let frameGas = comp.msg.gas
+  let target   = if create: comp.msg.currentTarget else: to
   let action =
     if create:
       TraceAction(kind: takCreate,
@@ -241,13 +247,14 @@ method captureStart*(ctx: ParityTracer, comp: Computation,
 
   if ttStateDiff in ctx.traceTypes:
     ctx.snapAccount(comp, sender)
-    ctx.snapAccount(comp, to)
+    ctx.snapAccount(comp, target)
 
   var frame = ParityFrame(
     action:        action,
     actionKind:    if create: takCreate else: takCall,
     traceAddr:     @[],
-    createAddress: to)
+    createAddress: target,
+    actionGas:     frameGas)
   ctx.addSkeleton(frame)
   ctx.frames.add frame
 
@@ -273,6 +280,7 @@ method captureEnter*(ctx: ParityTracer, comp: Computation, op: Op,
       (comp.msg.currentTarget, comp.msg.codeAddress)
     else:
       (sender, to)
+  let target = if isCreate: comp.msg.currentTarget else: actTo
 
   let action =
     if isCreate:
@@ -280,7 +288,7 @@ method captureEnter*(ctx: ParityTracer, comp: Computation, op: Op,
         createAction: TraceCreateAction(
           `from`:         actFrom,
           gas:            Quantity(gasLimit),
-          init:           @input,
+          init:           comp.code.bytes,
           value:          value,
           creationMethod: if op == Create2: "create2" else: "create"))
     else:
@@ -295,16 +303,14 @@ method captureEnter*(ctx: ParityTracer, comp: Computation, op: Op,
 
   if ttStateDiff in ctx.traceTypes:
     ctx.snapAccount(comp, actFrom)
-    if not isCreate:
-      ctx.snapAccount(comp, actTo)
-    else:
-      ctx.snapAccount(comp, to)
+    ctx.snapAccount(comp, target)
 
   var frame = ParityFrame(
     action:        action,
     actionKind:    if isCreate: takCreate else: takCall,
     traceAddr:     childAddr,
-    createAddress: to)
+    createAddress: target,
+    actionGas:     gasLimit)
   ctx.addSkeleton(frame)
   ctx.frames.add frame
 
@@ -356,7 +362,8 @@ method captureOpStart*(ctx: ParityTracer, comp: Computation,
     var pending = PendingOp(
       active: true,
       op:     op,
-      vmOp:   VmTraceOp(pc: pc))
+      vmOp:   VmTraceOp(pc: pc, op: toUpperAscii($op), idx: $ctx.frames[^1].opIdx))
+    inc ctx.frames[^1].opIdx
     case op
     of Mstore:
       if comp.stack.len >= 2:
@@ -485,7 +492,11 @@ method captureEnd*(ctx: ParityTracer, comp: Computation,
     else:
       ctx.vmTrace = Opt.some(frame.vmTrace)
 
-  ctx.output = @output
+  if frame.actionKind == takCreate and comp.isSuccess:
+    let codeRef = comp.vmState.ledger.getCode(frame.createAddress)
+    ctx.output = if codeRef.isNil: @[] else: @(codeRef.bytes())
+  else:
+    ctx.output = @output
 
   ctx.applyResult(frame, comp, output, gasUsed)
 

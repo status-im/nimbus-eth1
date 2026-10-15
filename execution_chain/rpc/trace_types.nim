@@ -124,6 +124,8 @@ type
   VmTraceOp* = object
     pc*:   int
     cost*: GasInt
+    op*:   string
+    idx*:  string
     ex*:   Opt[VmTraceOpEx]
     sub*:  Opt[VmTrace]
 
