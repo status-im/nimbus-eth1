@@ -131,7 +131,7 @@ proc afterExecCreate(c: Computation) =
     # right cases, particularly important with EVMC where it must be cleared.
     # The top frame has no caller, so a successful top-level create keeps
     # its code as the result for RPC and tracers.
-    if c.msg.depth > 0 or not c.isSuccess:
+    if c.msg.depth > 0 or c.isError:
       c.output.reset()
 
 const MsgKindToOp: array[CallKind, Op] =
