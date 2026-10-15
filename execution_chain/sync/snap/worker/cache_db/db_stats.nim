@@ -63,7 +63,12 @@ proc getAccStats(
     return (stats.number, ctx.accUnproc.totalRatio, ctx.accUnproc.chunks())
   (stats.number, stats.ranges.total().per256(),stats.ranges.chunks())
 
-proc nMissPartStoRanges(db: CacheDbRef, info: static[string]): (int,int) =
+proc nMissPartStoRanges(
+    db: CacheDbRef;
+    timer: TimerDataRef;
+    info: static[string];
+      ): Future[(int,int)]
+      {.async: (raises: []).} =
   for w in db.walkStoMissingIntv():
     if 0 < w.error.len:
       error info & ": Error walking flat storage ranges", error=w.error
@@ -72,6 +77,8 @@ proc nMissPartStoRanges(db: CacheDbRef, info: static[string]): (int,int) =
       result[0].inc                                 # full rng => empty sub-MPT
     else:
       result[1].inc                                 # partial range
+
+    timer.yieldThread()
 
 proc nFlatBlobs(db: CacheDbRef, info: static[string]): int =
   let n = db.nFlatCode(info).valueOr:
@@ -91,9 +98,11 @@ proc nFlatSlots(db: CacheDbRef, info: static[string]): int =
 proc statsWalk(
     db: CacheDbRef;
     peer: string;
+    timer: TimerDataRef;
     info: static[string];
     shallowCheck = false;
-      ): Opt[FlatStatsWalk] =
+      ): Future[Opt[FlatStatsWalk]]
+      {.async: (raises: []).} =
   var stats: FlatStatsWalk
   for w in db.walkFlatAcc():
     if 0 < w.error.len:
@@ -177,13 +186,17 @@ proc statsWalk(
           nSlots.inc
         stats.nStoSlot += nSlots
 
+    timer.yieldThread()
+
   ok(stats)
 
 proc codeStatsWalk(
     db: CacheDbRef;
     peer: string;
+    timer: TimerDataRef;
     info: static[string];
-      ): Opt[FlatStatsWalk] =
+      ): Future[Opt[FlatStatsWalk]]
+      {.async: (raises: []).} =
   var stats: FlatStatsWalk
   for w in db.walkFlatAcc():
     if 0 < w.error.len:
@@ -218,6 +231,8 @@ proc codeStatsWalk(
             error info & ": Error missing contract code on cache DB",
               peer, accPath=w.accPath.toStr
 
+    timer.yieldThread()
+
   ok(stats)
 
 # ----------------
@@ -227,7 +242,7 @@ proc statsStateImpl(
     peer: Opt[Peer];
     logNoise: LogNoise;
     info: static[string];
-      ) =
+      ) {.async: (raises: []).} =
   ## Collect statistics
   const
     info2 = info & ": Download state stats"
@@ -237,11 +252,13 @@ proc statsStateImpl(
     db = ctx.pool.cacheDB
     (number, accMissRngPc, nAccMissRngChunk) = ctx.getAccStats info
     nFlatSlots = db.nFlatSlots info
+  var
+    timer = TimerDataRef(time: Moment.now())
 
   case logNoise:
   of codeOnly:
     let
-      stats = db.codeStatsWalk(peer, info).valueOr:
+      stats = (await db.codeStatsWalk(peer, timer, info)).valueOr:
         chronicles.info info & ": Error collecting stats", peer
         return
 
@@ -273,7 +290,7 @@ proc statsStateImpl(
       ela=(Moment.now() - start).toStr
 
   of minimal:
-    let stats = db.statsWalk(peer, info, shallowCheck=true).valueOr:
+    let stats = (await db.statsWalk(peer, timer, info, shallowCheck=true)).valueOr:
       chronicles.info info & ": Error collecting stats", peer
       return
 
@@ -296,11 +313,11 @@ proc statsStateImpl(
 
   of check, full:
     let
-      stats = db.statsWalk(peer, info, shallowCheck=false).valueOr:
+      stats = (await db.statsWalk(peer, timer, info, shallowCheck=false)).valueOr:
         chronicles.info info & ": Error collecting stats", peer
         return
 
-      (nEmptyStoMpt, nPartStoMpt) = db.nMissPartStoRanges info
+      (nEmptyStoMpt, nPartStoMpt) = (await db.nMissPartStoRanges(timer, info))
       nStoSlot = stats.nStoSlot
 
       nStoMpt = stats.nStoSubMpt
@@ -390,15 +407,15 @@ proc statsStateLog*(
     ctx: SnapCtxRef;
     info: static[string];
     logNoise = LogNoise.check;
-      ) =
-  ctx.statsStateImpl(Opt.none(Peer), logNoise, info)
+      ) {.async: (raises: []).} =
+  await ctx.statsStateImpl(Opt.none(Peer), logNoise, info)
 
 proc statsStateLog*(
     buddy: SnapPeerRef;
     info: static[string];
     logNoise = LogNoise.check;
-      ) =
-  buddy.ctx.statsStateImpl(Opt.some(buddy.peer), logNoise, info)
+      ) {.async: (raises: []).} =
+  await buddy.ctx.statsStateImpl(Opt.some(buddy.peer), logNoise, info)
 
 # ------------------------------------------------------------------------------
 # End

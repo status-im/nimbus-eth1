@@ -37,9 +37,10 @@ proc addSnapSyncProtocol(desc: SnapSyncRef; PROTO: type) =
   ## Add protocol and call back filter & init functions for ethXX
   proc initWorker(worker: SyncPeerRef[SnapCtxData,SnapPeerData]) =
     when PROTO is snap1:
-      discard
+      worker.only.snapVersion = 1
     elif PROTO is snap2:
       worker.only.supportsBal = true
+      worker.only.snapVersion = 2
     else:
       {.error: "Unsupported snap/?? version".}
 

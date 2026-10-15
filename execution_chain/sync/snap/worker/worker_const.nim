@@ -21,6 +21,7 @@ type
     SnapReady                      ## Wait for download state
     SnapDownload                   ## Download and cache initial state data
     SnapDownloadFinish             ## Wait for sync before proceeding
+    SnapDownloadCommit             ## Get ready for BAL forward
     SnapBalsFetch                  ## Bring state forward using BALs
     SnapBalsFetchFinish            ## Wait for sync before proceeding
     SnapStateForward               ## Apply BALs and advance state
@@ -61,6 +62,13 @@ const
 
   twoHundredYears* = chronos.days(365 * 200 + 48)
     ## Large Duration constant considered sort of infinite.
+
+  threadSwitchTimeSlot* = chronos.milliseconds(300)
+    ## For some long running jobs, a pseudo thread switch is forced using
+    ## nano-seep wait. This is the time between wto of these nano-seep
+    ## directives.
+
+  # -----------------
 
   noPeersLogWaitInterval* = chronos.seconds(50)
     ## Reduce logging noise
@@ -141,16 +149,24 @@ const
     ## these intervals are sparsely filled and there will be returned not
     ## more than ~1k accounts.
 
-  nFinHeadSupportWindowSize* = 108                  # ~84% of 128
-    ## If the FCU update finalised header is more than that distance apart
-    ## form the pivot state block number, a BAL download and forward cycle
-    ## will be triggerd. The download window ranges
+  nStateDownloadWindowSize* = 128
+    ## This value is for metrics/logging only. The effective state download
+    ## window is stated below.
+
+  nFinHeadSupportWindowSize* = 57                   # ~45% of 128
+    ## If the FCU finalised header is more than that distance apart from
+    ## the pivot state block number, a BAL download and forward cycle will
+    ## be triggerd. The download window ranges
     ## ::
     ##    finalised-head - nFinHeadSupportWindowSize .. finalised-head
+    ##
+    ## Providing a shorter interval than 128 will stop starting new download
+    ## sessions while running current downloading sessions until the peers
+    ## stop replying or there is no more work left.
 
   nFinHeadSupportWindowTopMargin* = 40
     ## Top (or right end) acceptance margin for the download window. The
-    ## state of the patrtial MPT representation is forwarded until it falls
+    ## state of the partial MPT representation is forwarded until it falls
     ## in the range
     ## ::
     ##    finalised-head - nFinHeadSupportWindowTopMargin .. finalised-head
@@ -194,9 +210,6 @@ const
   nProcStorageErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
 
-  nFetchStorageSlotsMax* = 1024
-    ## Maximal size of storage slots downloaded in a single message.
-
   # -----------
 
   fetchCodeBatchMax* = 1024
@@ -213,11 +226,6 @@ const
 
   nProcCodesErrThreshold* = 4
     ## Similar to `nProcAccountErrThreshold`
-
-  nFetchByteCodesMax* = 128
-    ## Maximal sise of byte codes downloaded in a single message. Note
-    ## that the snap/1 protocol description recommends someting about
-    ## 80-100 items for a 515K byte limit.
 
   # -----------
 
@@ -257,9 +265,11 @@ const
 
   # -----------
 
-  nCoreDbImportPersistBatch* = 1024 * 1024
+  nCoreDbImportPersistBatch* = 512 * 1024
     ## When importing accounts, storage, and contract codes the caches are
     ## regularly saved to disk after this many items have benn processed.
+    ## This constant defines a memory/time trade off. The lower the value,
+    ## the less memory is used.
 
 static:
   doAssert 0 < nConsHeadCachedDeltaMin
