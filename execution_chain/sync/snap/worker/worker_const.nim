@@ -173,11 +173,6 @@ const
     ##
     ## (providing a hysteresis.)
 
-  nConsHeadCachedDeltaMin* = 20
-    ## If the block number difference between FCU update finalised header and
-    ## cached header is larger than this contant, a beacon header fetch cycle
-    ## is triggered to fill up the cache.
-
   # -----------
 
   fetchAccountSnapTimeout* = chronos.seconds(120)
@@ -229,7 +224,7 @@ const
 
   # -----------
 
-  ethBalFetchCapacity* = 10
+  ethFetchBalCapacity* = 10
     ## Register first hash of last BAL request for error handling
     ## support.
 
@@ -272,7 +267,6 @@ const
     ## the less memory is used.
 
 static:
-  doAssert 0 < nConsHeadCachedDeltaMin
   doAssert 0 < nFinHeadSupportWindowTopMargin
 
 # End
