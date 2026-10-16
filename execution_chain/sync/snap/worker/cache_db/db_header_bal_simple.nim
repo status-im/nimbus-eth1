@@ -70,6 +70,15 @@ proc lastHeaderNumber*(
     error info.failedToFetch "last Header number", `error`=estr
     return err()
 
+proc lastBlockHash*(
+    db: CacheDbRef;
+    info: static[string];
+      ): Opt[Hash32] =
+  db.lastBlockHash().valueOr:
+    let estr = if 0 < error.len: error else: "no headers yet"
+    error info.failedToFetch "last block hash", `error`=estr
+    return err()
+
 proc putHeader*(
     db: CacheDbRef;
     header: Header;
