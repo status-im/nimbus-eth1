@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos],
   ../../../../beacon,
-  ../../[cache_db, worker_desc]
+  ../../[cache_db, helpers, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -111,7 +111,8 @@ proc headerDownloadTrigger*(
       if rc.isOk and firstNum <= rc.value.number:
         ctx.storeCachedHeaders(firstNum, rc.value, info)
       else:
-        trace info & ": No finalised header for now"
+        trace info & ": No finalised header for now",
+          finHash=ctx.hdrCache.latestFinHash().toStr
     of reset:
       error info & ": Header chain wrong branch => reset"
       ctx.pool.resetReq = true

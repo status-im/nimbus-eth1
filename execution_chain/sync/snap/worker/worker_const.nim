@@ -100,11 +100,11 @@ const
   daemonWaitReadyInitFailInterval* = chronos.seconds(5)
     ## Snap download init failed. System is not ready yet.
 
-  daemonWaitDownloadInterval* = chronos.seconds(2)
+  daemonWaitDownloadInterval* = chronos.seconds(1)
     ## Poll waiting for peers downloading snap data. The polling cycle also
     ## triggers some metrics updates.
 
-  daemonWaitBalsFetchInterval* = chronos.seconds(5)
+  daemonWaitBalsFetchInterval* = chronos.seconds(1)
     ## Poll waiting for some peer to download BALs
 
   daemonWaitHeaderStopInterval* = chronos.seconds(5)
