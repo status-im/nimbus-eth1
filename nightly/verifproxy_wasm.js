@@ -6793,6 +6793,8 @@ var dynCall_jiii = Module["dynCall_jiii"] = (a0, a1, a2, a3) => (dynCall_jiii = 
 
 var dynCall_j = Module["dynCall_j"] = a0 => (dynCall_j = Module["dynCall_j"] = wasmExports["dynCall_j"])(a0);
 
+var dynCall_vjii = Module["dynCall_vjii"] = (a0, a1, a2, a3, a4) => (dynCall_vjii = Module["dynCall_vjii"] = wasmExports["dynCall_vjii"])(a0, a1, a2, a3, a4);
+
 var dynCall_iiji = Module["dynCall_iiji"] = (a0, a1, a2, a3, a4) => (dynCall_iiji = Module["dynCall_iiji"] = wasmExports["dynCall_iiji"])(a0, a1, a2, a3, a4);
 
 var dynCall_ijiii = Module["dynCall_ijiii"] = (a0, a1, a2, a3, a4, a5) => (dynCall_ijiii = Module["dynCall_ijiii"] = wasmExports["dynCall_ijiii"])(a0, a1, a2, a3, a4, a5);
