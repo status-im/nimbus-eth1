@@ -737,6 +737,26 @@ proc rpcMain*() =
       except RpcResponseError as exc:
         check exc.code == -32000
 
+    test "eth_call contract creation returns the created code":
+      # PUSH4 0xdeadbeef PUSH1 0 MSTORE PUSH1 4 PUSH1 28 RETURN
+      let ec = TransactionArgs(
+        `from`: Opt.some(signer),
+        gas: Opt.some(w3Qty(100000'u)),
+        input: Opt.some(hexToSeqByte("63deadbeef6000526004601cf3")))
+      let res = await client.eth_call(ec, "latest")
+      check res == hexToSeqByte("deadbeef")
+
+    test "eth_estimateGas rejected contract code is not error data":
+      # PUSH4 0xef000000 PUSH1 0 MSTORE PUSH1 4 PUSH1 28 RETURN
+      let ec = TransactionArgs(
+        `from`: Opt.some(signer),
+        input: Opt.some(hexToSeqByte("63ef0000006000526004601cf3")))
+      try:
+        discard await client.eth_estimateGas(ec)
+        check false
+      except RpcResponseError as exc:
+        check exc.data == JsonString("\"0x\"")
+
     test "eth_estimateGas":
       let ec = TransactionArgs(
         `from`: Opt.some(signer),
