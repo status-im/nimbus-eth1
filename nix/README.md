@@ -9,7 +9,7 @@ nix develop
 
 ## Building
 
-To build a beacon node you can use:
+To build the execution client you can use:
 ```sh
 nix build '.?submodules=1#nimbus_execution_client'
 ```
@@ -19,12 +19,12 @@ https://github.com/NixOS/nix/issues/4423
 
 It can be also done without even cloning the repo:
 ```sh
-nix build 'github:status-im/nimbus-eth2?submodules=1#'
+nix build 'github:status-im/nimbus-eth1?submodules=1#nimbus_execution_client'
 ```
-The trailing `#` is required due to [URI parsing bug in Nix](https://github.com/NixOS/nix/issues/6633).
+The trailing `#nimbus_execution_client` selects the execution-client package from `flake.nix`.
 
 ## Running
 
 ```sh
-nix run 'github:status-im/nimbus-eth2?submodules=1#'
+nix run 'github:status-im/nimbus-eth1?submodules=1#nimbus_execution_client'
 ```
