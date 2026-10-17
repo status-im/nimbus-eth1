@@ -100,8 +100,8 @@ template fetchStorage*(
       fetchReq = StorageRangesRequest(
         rootHash:      stateRoot.Hash32,
         accountHashes: accounts.to(seq[Hash32]),
-        startingHash:  ivReq.minPt.to(Hash32),
-        limitHash:     ivReq.maxPt.to(Hash32),
+        startingHash:  ivReq.minPt.to(Hash32).SnapStartHash,
+        limitHash:     ivReq.maxPt.to(Hash32).SnapLimitHash,
         responseBytes: fetchStorageSnapBytesLimit)
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = stateRoot.toStr        # logging only

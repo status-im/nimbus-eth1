@@ -434,18 +434,18 @@ proc parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
 proc completeCmdArg*(T: type enr.Record, val: string): seq[string] =
   return @[]
 
-proc parseCmdArg*(T: type Node, p: string): T {.raises: [ValueError].} =
+proc parseCmdArg*(T: type DiscoveryNode, p: string): T {.raises: [ValueError].} =
   let res = enr.Record.fromURI(p)
   if res.isErr():
     raise newException(ValueError, "Invalid ENR: " & $res.error)
 
-  let n = Node.fromRecord(res.value)
+  let n = DiscoveryNode.fromRecord(res.value)
   if n.address.isNone():
     raise newException(ValueError, "ENR without address")
 
   n
 
-proc completeCmdArg*(T: type Node, val: string): seq[string] =
+proc completeCmdArg*(T: type DiscoveryNode, val: string): seq[string] =
   return @[]
 
 proc parseCmdArg*(T: type PrivateKey, p: string): T {.raises: [ValueError].} =

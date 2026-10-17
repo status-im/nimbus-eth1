@@ -31,6 +31,10 @@ import
   results,
   stew/assign2
 
+from ../../transaction/call_types import intrinsicGas, IntrinsicGas
+
+const optimisticPrefetchMinTxs {.intdefine.} = 5
+
 type
   OptimisticPrefetchCtx* = object
     com: CommonRef
@@ -38,9 +42,11 @@ type
     parent: Header
     blockCtx: BlockContext
     cancelled: Atomic[bool]
+    currentIndex: Atomic[int]
 
   OptimisticTxEntry* = object
     tx: ptr Transaction
+    txIndex: int
     sender: Address
     senderReady: Atomic[bool]
 
@@ -64,6 +70,7 @@ type
   BalParallelTxEntry = object
     tx: ptr Transaction
     txIndex: int
+    intrinsic: IntrinsicGas
     gasUsed: GasInt
     blockExecutionGasUsed: GasInt
     blockStateGasUsed: GasInt
@@ -73,9 +80,15 @@ type
     error: SharedString
     preempted: bool
 
+template isStale(ctx: ptr OptimisticPrefetchCtx, txIndex: int): bool =
+  ctx[].cancelled.load(moAcquire) or ctx[].currentIndex.load(moAcquire) >= txIndex
+
 proc recoverAndPrefetchTask*(
     ctx: ptr OptimisticPrefetchCtx, e: ptr OptimisticTxEntry
 ): bool {.nimcall.} =
+  if not ctx.isNil() and ctx.isStale(e[].txIndex):
+    return true
+
   # Recover the sender from the signature. `default(Address)` signals sig
   # check failure.
   let sender = e[].tx[].recoverSenderCached().valueOr(default(Address))
@@ -83,7 +96,7 @@ proc recoverAndPrefetchTask*(
   e[].senderReady.store(true, moRelease)
 
   # When ctx is non-nil, optimistic state prefetch is enabled
-  if ctx.isNil() or sender == default(Address) or ctx[].cancelled.load(moAcquire):
+  if ctx.isNil() or sender == default(Address) or ctx.isStale(e[].txIndex):
     return true
 
   # Create the ledger without triggering a ref count increment on the txFrame
@@ -140,7 +153,8 @@ template withSenderParallel*(
 
   # Skip optimistic state prefetch when block access list prefetch is running
   # to avoid prefetching the same state twice.
-  if vmState.com.optimisticStatePrefetchEnabled() and
+  if txs.len >= optimisticPrefetchMinTxs and
+      vmState.com.optimisticStatePrefetchEnabled() and
       not vmState.com.balStatePrefetchEnabled(vmState.blockCtx.timestamp, bal):
     ctx.parent = vmState.parent
     ctx.blockCtx = vmState.blockCtx
@@ -150,6 +164,7 @@ template withSenderParallel*(
     # use locking on the frame data structures.
     ctx.txFrame = vmState.ledger.txFrame.parent()
     ctx.cancelled.store(false, moRelease)
+    ctx.currentIndex.store(0, moRelease)
     ctxPtr = ctx.addr
 
   # Spawn one task per transaction that recovers the sender and, when ctxPtr
@@ -157,6 +172,7 @@ template withSenderParallel*(
   # allows the task to start early, while we still haven't processed subsequent txs.
   for i, e in entries.mpairs():
     e.tx = txs[i].addr
+    e.txIndex = i
     let entryPtr = e.addr
     futs[i] = vmState.com.taskpool.spawn recoverAndPrefetchTask(ctxPtr, entryPtr)
 
@@ -165,10 +181,14 @@ template withSenderParallel*(
       template tx(): untyped =
         txs[txIndex]
 
-      # Wait until the worker has published the sender.
-      while not e.senderReady.load(moAcquire):
-        cpuRelax()
-      let sender {.inject.} = e.sender
+      if not ctxPtr.isNil():
+        ctxPtr[].currentIndex.store(txIndex, moRelease)
+
+      let sender {.inject.} =
+        if e.senderReady.load(moAcquire):
+          e.sender
+        else:
+          tx.recoverSenderCached().valueOr(default(Address))
 
       body
   finally:
@@ -405,11 +425,14 @@ proc processTxTask(
       BlockAccessListTrackerRef.init(ledger.ReadOnlyLedger, ctx[].sharedBuilder)
     vmState.balTracker.setBlockAccessIndex(e[].txIndex + 1)
 
-  let txResult = vmState.processTransaction(e[].tx[], sender, persist = false).valueOr:
+  let intrinsic = e[].tx[].intrinsicGas(vmState.hardFork, sender)
+  let txResult = vmState.processTransaction(e[].tx[], sender,
+                   intrinsic = Opt.some(intrinsic), persist = false).valueOr:
     e[].error = SharedString.init(error)
     ctx[].cancelled.store(true, moRelease)
     return false
 
+  e[].intrinsic = intrinsic
   e[].gasUsed = txResult.gasUsed
   e[].blockExecutionGasUsed = vmState.blockExecutionGasUsed
   e[].blockStateGasUsed = vmState.blockStateGasUsed
@@ -490,7 +513,7 @@ proc processTransactionsParallel*(
         ctx.cancelled.store(true, moRelease)
         return err("Error processing tx with index " & $i & ":" & msg)
 
-      check2dGasInclusion(vmState, transactions[i].gasLimit, fail)
+      checkBlockGasCapacity(vmState, transactions[i], entries[i].intrinsic, fail)
 
     vmState.cumulativeGasUsed += entries[i].gasUsed
     vmState.blockExecutionGasUsed += entries[i].blockExecutionGasUsed
@@ -520,13 +543,6 @@ proc processTransactionsParallel*(
     if not skipReceipts:
       vmState.receipts[i] =
         vmState.makeReceipt(transactions[i].txType)
-
-  let maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.hardFork)
-  if vmState.blobGasUsed > maxBlobGasPerBlock:
-    return err(
-      "blobGasUsed " & $vmState.blobGasUsed & " exceeds maximum allowance " &
-        $maxBlobGasPerBlock
-    )
 
   applyBlockAccessListState(vmState.ledger, balRef[], n)
   ok()

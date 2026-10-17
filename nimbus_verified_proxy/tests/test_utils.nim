@@ -22,6 +22,7 @@ import
   ../../execution_chain/common/common,
   ../engine/types,
   ../engine/engine,
+  ../engine/header_store,
   ../engine/rpc_frontend,
   ./test_api_backend
 
@@ -111,6 +112,12 @@ proc preLoadTestBeaconState*(t: TestApiState) =
   t.loadUpdate(updates[0], lcPeriod)
   t.loadOptimistic(optimistic)
   t.loadFinality(finality)
+
+proc setAnchor*(
+    engine: RpcVerificationEngine, header: Header, hash: Hash32, trust: HeaderTrust
+) =
+  engine.headerStore.put(header, hash, trust)
+  engine.headerStore.putHash(hash, trust)
 
 proc setupTestBeacon*(engine: RpcVerificationEngine, testState: TestApiState) =
   testState.preLoadTestBeaconState()

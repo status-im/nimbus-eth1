@@ -115,7 +115,7 @@ proc setupVMState(com: CommonRef;
     fork = com.toHardFork(pos.timestamp)
     gasLimit = getGasLimit(com, parent, pos.targetGasLimit)
 
-  BaseVMState.new(
+  result = BaseVMState.new(
     parent   = parent,
     blockCtx = BlockContext(
       timestamp    : pos.timestamp,
@@ -131,6 +131,9 @@ proc setupVMState(com: CommonRef;
     txFrame = parentFrame.txFrameBegin(),
     com     = com,
     enableBalTracker = com.isAmsterdamOrLater(pos.timestamp))
+  # A built block may never be imported. Import runs it again and stores the
+  # code then
+  result.ledger.holdCode = true
 
 template append(tab: var TxSenderTab, sn: TxSenderNonceRef) =
   tab[item.sender] = sn
@@ -189,9 +192,6 @@ func baseFee*(xp: TxPoolRef): GasInt =
   ## Getter, baseFee for the next bock header. This value is auto-generated
   ## when a new insertion point is set via `head=`.
   xp.vmState.blockCtx.baseFeePerGas
-
-func gasLimit(xp: TxPoolRef): GasInt =
-  xp.vmState.blockCtx.gasLimit
 
 func excessBlobGas(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
@@ -419,7 +419,7 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   let
     sender = ptx.tx.recoverSenderCached().valueOr:
       return err(txErrorInvalidSignature)
-    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, xp.gasLimit, sender)
+    intrinsic = ptx.tx.intrinsicGas(xp.hardFork, sender)
 
   validateTxBasic(
     xp.com,

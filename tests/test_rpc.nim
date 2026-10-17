@@ -137,6 +137,24 @@ proc close(env: TestEnv) =
   waitFor env.client.close()
   waitFor env.server.closeWait()
 
+proc setupFixtureNode(): (RpcHttpServer, RpcHttpClient) =
+  ## A node whose base is the fixture block, as era import leaves it. The FC
+  ## serves blocks from disk only at or below base.
+  let
+    com = setupCom(setupConfig().computeNetworkParams())
+    txFrame = com.db.baseTxFrame().txFrameBegin()
+  txFrame.persistFixtureBlock()
+  txFrame.checkpoint(getBlockHeader4514995().number, skipSnapshot = true)
+  com.db.persist(txFrame)
+
+  let server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
+    echo "Failed to create rpc server: ", error
+    quit(QuitFailure)
+  setupServerAPI(newServerAPI(TxPoolRef.new(ForkedChainRef.init(com))),
+    server, new AccountsManager)
+  server.start()
+  (server, setupClient(server.localAddress[0].port))
+
 func makeTx(
     env: var TestEnv,
     signerKey: PrivateKey,
@@ -302,7 +320,6 @@ proc generateBlock(env: var TestEnv) =
     com = env.com
     xp  = env.txPool
     am =  env.am
-    txFrame = com.db.baseTxFrame()
     acc = am[].getAccount(signer).tryGet()
     tx1 = env.makeTx(acc.privateKey, Opt.some(zeroAddress), 1.u256, 30_000_000_000'u64)
     tx2 = env.makeTx(acc.privateKey, Opt.some(zeroAddress), 2.u256, 30_000_000_100'u64)
@@ -332,8 +349,6 @@ proc generateBlock(env: var TestEnv) =
     quit(QuitFailure)
 
   xp.removeNewBlockTxs(blk)
-
-  txFrame.persistFixtureBlock()
 
   env.txHash = tx1.computeRlpHash
   env.contractTxHash = tx3.computeRlpHash
@@ -390,6 +405,7 @@ proc rpcMain*() =
       client = env.client
       node = env.node
       com = env.com
+      (fixtureServer, fixtureClient) = setupFixtureNode()
 
     test "web3_clientVersion":
       let res = await client.web3_clientVersion()
@@ -407,12 +423,12 @@ proc rpcMain*() =
 
     test "net_listening":
       let res = await client.net_listening()
-      let listening = node.peerPool.connectedNodes.len < env.conf.maxPeers
+      let listening = node.numPeers < env.conf.maxPeers
       check res == listening
 
     test "net_peerCount":
       let res = await client.net_peerCount()
-      let peerCount = node.peerPool.connectedNodes.len
+      let peerCount = node.numPeers
       check res == w3Qty(peerCount)
 
     test "admin_nodeInfo":
@@ -429,7 +445,7 @@ proc rpcMain*() =
 
     test "admin_peers":
       let peers = await client.admin_peers()
-      check peers.len == node.peerPool.connectedNodes.len
+      check peers.len == node.numPeers
 
       # If there are peers, verify the structure matches Geth specification
       for peer in peers:
@@ -463,7 +479,7 @@ proc rpcMain*() =
     test "eth_syncing":
       let res = await client.eth_syncing()
       if res.syncing == false:
-        let syncing = node.peerPool.connectedNodes.len > 0
+        let syncing = node.numPeers > 0
         check syncing == false
       else:
         let progress = com.beaconSyncerProgress()
@@ -721,6 +737,26 @@ proc rpcMain*() =
       except RpcResponseError as exc:
         check exc.code == -32000
 
+    test "eth_call contract creation returns the created code":
+      # PUSH4 0xdeadbeef PUSH1 0 MSTORE PUSH1 4 PUSH1 28 RETURN
+      let ec = TransactionArgs(
+        `from`: Opt.some(signer),
+        gas: Opt.some(w3Qty(100000'u)),
+        input: Opt.some(hexToSeqByte("63deadbeef6000526004601cf3")))
+      let res = await client.eth_call(ec, "latest")
+      check res == hexToSeqByte("deadbeef")
+
+    test "eth_estimateGas rejected contract code is not error data":
+      # PUSH4 0xef000000 PUSH1 0 MSTORE PUSH1 4 PUSH1 28 RETURN
+      let ec = TransactionArgs(
+        `from`: Opt.some(signer),
+        input: Opt.some(hexToSeqByte("63ef0000006000526004601cf3")))
+      try:
+        discard await client.eth_estimateGas(ec)
+        check false
+      except RpcResponseError as exc:
+        check exc.data == JsonString("\"0x\"")
+
     test "eth_estimateGas":
       let ec = TransactionArgs(
         `from`: Opt.some(signer),
@@ -765,6 +801,56 @@ proc rpcMain*() =
       check:
         call.string == latestCall.string
         accessList.string == latestAccessList.string
+
+    test "blob fee without blob hashes and empty blob hashes are rejected":
+      const
+        missingHashes = "blob transaction missing blob hashes"
+        loneBlobFee = "maxFeePerBlobGas specified without blobVersionedHashes"
+      let
+        base = %*{
+          "from": signer.to0xHex,
+          "to": contractAddress.to0xHex,
+          "gas": "0x30000",
+        }
+        hash = "0x0100000000000000000000000000000000000000000000000000000000000000"
+      var
+        loneCap = base.copy()
+        nullHashesCap = base.copy()
+        emptyHashes = base.copy()
+        emptyHashesCap = base.copy()
+        oneHashCap = base.copy()
+      loneCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+      nullHashesCap["blobVersionedHashes"] = newJNull()
+      nullHashesCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+      emptyHashes["blobVersionedHashes"] = %[]
+      emptyHashesCap["blobVersionedHashes"] = %[]
+      emptyHashesCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+      oneHashCap["blobVersionedHashes"] = %[%hash]
+      oneHashCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+
+      for (args, msg) in [(loneCap, loneBlobFee), (nullHashesCap, loneBlobFee),
+                          (emptyHashes, missingHashes), (emptyHashesCap, loneBlobFee)]:
+        try:
+          discard await client.call("eth_call", %[args, %"latest"], EthJson)
+          check false
+        except RpcResponseError as exc:
+          check exc.code == -32000
+          check EthJson.decode(exc.data.string, string) == "rpcCallEvm error: " & msg
+        try:
+          discard await client.call("eth_estimateGas", %[args, %"latest"], EthJson)
+          check false
+        except RpcResponseError as exc:
+          check exc.code == 3
+          check exc.msg == msg
+
+      let
+        call = await client.call("eth_call", %[oneHashCap, %"latest"], EthJson)
+        gas = await client.call("eth_estimateGas", %[oneHashCap, %"latest"], EthJson)
+        al = parseJson(
+          (await client.call("eth_createAccessList", %[oneHashCap, %"latest"], EthJson)).string)
+      check EthJson.decode(call.string, seq[byte]) == hexToSeqByte("deadbeef")
+      check EthJson.decode(gas.string, Quantity).uint64 > 21000'u64
+      check al{"error"}.isNil or al["error"].kind == JNull
 
     test "eth_estimateGas includes EIP-7702 authorization intrinsic cost":
       let
@@ -1045,7 +1131,7 @@ proc rpcMain*() =
         blockHash: Opt.some(testHash),
         topics: @[]
       )
-      let logs = await client.eth_getLogs(filterOptions)
+      let logs = await fixtureClient.eth_getLogs(filterOptions)
 
       check:
         len(logs) == 54
@@ -1074,7 +1160,7 @@ proc rpcMain*() =
         ]
       )
 
-      let logs = await client.eth_getLogs(filterOptions)
+      let logs = await fixtureClient.eth_getLogs(filterOptions)
 
       check:
         len(logs) == 1
@@ -1100,7 +1186,7 @@ proc rpcMain*() =
         ]
       )
 
-      let logs = await client.eth_getLogs(filterOptions)
+      let logs = await fixtureClient.eth_getLogs(filterOptions)
 
       check:
         len(logs) == 2
@@ -1263,6 +1349,8 @@ proc rpcMain*() =
       check bn == w3Qty(0'u64)
 
     env.close()
+    waitFor fixtureClient.close()
+    waitFor fixtureServer.closeWait()
 
   suite "Remote Procedure Calls - Cancun":
     var env = setupEnv(Cancun)

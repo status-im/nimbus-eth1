@@ -289,7 +289,7 @@ proc exec(ctx: TransContext,
     if vmState.balTrackerEnabled:
       vmState.balTracker.setBlockAccessIndex(includedTx.len + 1)
 
-    var rc = vmState.processTransaction(tx, sender)
+    let rc = vmState.processTransaction(tx, sender)
 
     if conf.traceEnabled.isSome:
       ? closeTrace(vmState, closeStream)

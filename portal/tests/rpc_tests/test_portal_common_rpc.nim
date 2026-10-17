@@ -139,7 +139,7 @@ procSuite "Portal Common JSON-RPC API":
       testNodeId = testHistoryNode.localNode.id
 
     # Add the node first as false if not found
-    discard tc.historyNode.portalProtocol.addNode(testHistoryNode.localNode)
+    discard tc.historyNode.portalProtocol.addNode(testHistoryNode.localNode.toNode())
 
     let jsonBytes = await tc.client.call(
       "portal_historyDeleteEnr", %[testNodeId.toBytesBE().to0xHex()], EthJson
@@ -157,7 +157,7 @@ procSuite "Portal Common JSON-RPC API":
     testHistoryNode.start()
 
     # Add the test node to the main node's routing table first
-    discard tc.historyNode.portalProtocol.addNode(testHistoryNode.localNode)
+    discard tc.historyNode.portalProtocol.addNode(testHistoryNode.localNode.toNode())
 
     let params = newJArray()
     params.add(%testHistoryNode.localNode.record.toURI())

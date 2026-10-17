@@ -12,7 +12,7 @@
 
 import
   std/[strutils, tables],
-  stew/byteutils,
+  stew/[byteutils, assign2],
   stint,
   json_serialization,
   json_serialization/pkg/results,
@@ -95,18 +95,29 @@ proc readValue*(r: var JsonReader[Fixture], val: var TransContext)
     of "txs"    : r.readValue(val.txsJson)
     of "txsRlp" : r.readValue(val.txsRlp)
 
-proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
+proc parseTxJson*(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
   template required(field) =
     const fName = astToStr(field)
     if txo.field.isNone:
       return err("missing required field '" & fName & "' in transaction")
     tx.field = txo.field.get
 
-  template required(field, alias) =
-    const fName = astToStr(field)
-    if txo.field.isNone:
-      return err("missing required field '" & fName & "' in transaction")
-    tx.alias = txo.field.get
+  template required(field, src) =
+    const srcName = astToStr(src)
+    if txo.src.isNone:
+      return err("missing required field '" & srcName & "' in transaction")
+    tx.field = txo.src.get
+
+  template required(field, src1, src2) =
+    const
+      src1Name = astToStr(src1)
+      src2Name = astToStr(src2)
+    if txo.src1.isNone and txo.src2.isNone:
+      return err("missing required field '" & src1Name & "' or '" & src2Name & "' in transaction")
+    if txo.src1.isSome:
+      tx.field = txo.src1.value
+    else:
+      tx.field = txo.src2.value
 
   template optional(field) =
     if txo.field.isSome:
@@ -115,10 +126,18 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
   var tx: Transaction
   tx.txType = txo.`type`.get(0'u64).TxType
   required(nonce)
-  required(gas, gasLimit)
+  required(gasLimit, gas, gasLimit)
   required(value)
-  required(input, payload)
-  tx.to = txo.to
+  required(payload, input, data)
+  if txo.to.isSome:
+    if txo.to.value.len == 0:
+      tx.to = Opt.none(Address)
+    else:
+      if txo.to.value.len != 20:
+        return err("Invalid transaction 'to' address")
+      var address {.noinit.}: Address
+      assign(address.data, txo.to.value)
+      tx.to = Opt.some(address)
 
   case tx.txType
   of TxLegacy:
@@ -139,7 +158,7 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
     required(maxFeePerGas)
     optional(accessList)
     required(maxFeePerBlobGas)
-    required(blobVersionedHashes, versionedHashes)
+    required(versionedHashes, blobVersionedHashes)
   of TxEip7702:
     required(chainId)
     required(maxPriorityFeePerGas)
@@ -157,9 +176,9 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
       return err($error)
     ok(signTransaction(tx, secretKey, eip155))
   else:
-    required(v, V)
-    required(r, R)
-    required(s, S)
+    required(V, v)
+    required(R, r)
+    required(S, s)
     ok(tx)
 
 func readNestedTx(rlp: var Rlp, chainId: ChainId): Result[Transaction, string] =
@@ -253,9 +272,12 @@ func `@@`*[T](x: seq[T]): JsonNode
 func to0xHex(x: UInt256): string =
   "0x" & x.toHex
 
-func `@@`(x: uint64 | int64 | int): JsonNode =
-  let hex = x.toHex.stripLeadingZeros
-  %("0x" & hex.toLowerAscii)
+func `@@`(x: uint64 | uint8 | int64 | int): JsonNode =
+  let
+    hex = x.toHex.stripLeadingZeros
+    output = if hex.len mod 2 == 0: "0x" & hex
+             else: "0x0" & hex
+  %(output.toLowerAscii)
 
 func `@@`(x: UInt256): JsonNode =
   %("0x" & x.toHex)
@@ -321,7 +343,7 @@ func `@@`(x: TxReceipt): JsonNode =
     "transactionIndex" : @@(x.transactionIndex)
   }
   if x.txType > TxLegacy:
-    result["type"] = %("0x" & toHex(x.txType.int, 1))
+    result["type"] = @@(x.txType.int)
 
 func `@@`(x: RejectedTx): JsonNode =
   %{

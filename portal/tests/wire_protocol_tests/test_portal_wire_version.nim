@@ -73,6 +73,21 @@ suite "Portal Wire Protocol Version":
       version.isOk()
       version.get() == 1'u8
 
+  test "ENR with supported Portal version (additional list elements)":
+    let
+      localPortalEnrField = PortalEnrField.init(0'u8, 1'u8, 1.chainId())
+      portalEnrField = rlp.encode((1'u8, 3'u8, 1.chainId(), 7'u64))
+
+      customEnrFields = [toFieldPair(portalEnrKey, portalEnrField)]
+      enr = Record.init(1, pk, ip, port, port, port, customEnrFields).expect(
+          "Valid ENR init"
+        )
+
+    let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
+    check:
+      version.isOk()
+      version.get() == 1'u8
+
   test "ENR with multiple supported Portal versions":
     let
       localPortalEnrField = PortalEnrField.init(0'u8, 2'u8, 1.chainId())

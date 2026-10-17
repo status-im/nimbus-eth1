@@ -8,99 +8,148 @@
 {.used.}
 {.push raises: [], gcsafe.}
 
-import unittest2, eth/rlp, eth/common/[hashes, headers], ../engine/header_store
+import
+  unittest2,
+  eth/rlp,
+  eth/common/[hashes, headers, eth_types_rlp],
+  ../engine/header_store
+
+proc chainOf(count: int): seq[Header] =
+  var
+    headers: seq[Header]
+    parentHash = default(Hash32)
+
+  for i in 0 ..< count:
+    let header = Header(number: BlockNumber(i), parentHash: parentHash)
+    parentHash = header.computeBlockHash
+    headers.add(header)
+
+  headers
 
 suite "test proxy header store":
   test "get from empty store":
     let store = HeaderStore.new(1)
-    check store.get(default(Hash32)).isNone()
-    check store.get(default(BlockNumber)).isNone()
-    check store.latest.isNone()
-    check store.latestHash.isNone()
+    check store.get(default(Hash32), Optimistic).isNone()
+    check store.get(default(BlockNumber), Optimistic).isNone()
+    check store.getHash(Optimistic).isNone()
+    check store.getHash(Safe).isNone()
+    check store.getHash(Finalized).isNone()
     check store.len == 0
     check store.isEmpty()
 
-  test "get from a non-pruned semi-filled store":
-    let store = HeaderStore.new(10)
-    for i in 0 ..< 5:
-      let h = Header(number: BlockNumber(i))
-      discard store.add(h, h.computeRlpHash)
+  test "anchor hashes are kept per trust level":
+    let
+      store = HeaderStore.new(10)
+      headers = chainOf(3)
 
-    check store.len == 5
-    check store.get(BlockNumber(0)).isSome()
-    check store.latest.isSome()
-    check store.latest.get().number == 4
-    check store.latestHash.isSome()
-    check (not store.isEmpty())
+    for h in headers:
+      store.put(h, h.computeBlockHash, Optimistic)
 
-  test "header store auto pruning":
-    let store = HeaderStore.new(10)
-    for i in 0 ..< 10:
-      let h = Header(number: BlockNumber(i))
-      discard store.add(h, h.computeRlpHash)
+    store.putHash(headers[2].computeBlockHash, Optimistic)
+    store.putHash(headers[1].computeBlockHash, Safe)
+    store.putHash(headers[0].computeBlockHash, Finalized)
 
-    check store.get(BlockNumber(0)).isSome()
+    check store.getHash(Optimistic) == Opt.some(headers[2].computeBlockHash)
+    check store.getHash(Safe) == Opt.some(headers[1].computeBlockHash)
+    check store.getHash(Finalized) == Opt.some(headers[0].computeBlockHash)
 
-    let h10 = Header(number: BlockNumber(10))
-    discard store.add(h10, h10.computeRlpHash)
+  test "a get only hits at or above the requested trust":
+    let
+      store = HeaderStore.new(10)
+      header = Header(number: BlockNumber(1))
+      hash = header.computeBlockHash
 
-    check store.latest.isSome()
-    check store.latest.get().number == 10
-    check store.get(BlockNumber(0)).isNone()
+    store.put(header, hash, Optimistic)
 
-  test "duplicate addition should not work":
-    let store = HeaderStore.new(10)
-    for i in 0 ..< 11:
-      let h = Header(number: BlockNumber(i))
-      discard store.add(h, h.computeRlpHash)
+    check store.get(hash, Optimistic).isSome()
+    check store.get(hash, Safe).isNone()
+    check store.get(hash, Finalized).isNone()
 
-    let h10 = Header(number: BlockNumber(10))
-    discard store.add(h10, h10.computeRlpHash)
+    store.put(header, hash, Safe)
 
-    check store.latest.isSome()
-    check store.latest.get.number == 10
-    check store.get(BlockNumber(1)).isSome()
+    check store.get(hash, Safe).isSome()
+    check store.get(hash, Finalized).isNone()
 
-    let h11 = Header(number: BlockNumber(11))
-    discard store.add(h11, h11.computeRlpHash)
+  test "a put never lowers the trust of a cached header":
+    let
+      store = HeaderStore.new(10)
+      header = Header(number: BlockNumber(1))
+      hash = header.computeBlockHash
 
-    check store.latest.isSome()
-    check store.latest.get.number == 11
-    check store.get(BlockNumber(1)).isNone()
+    store.put(header, hash, Finalized)
+    store.put(header, hash, Optimistic)
 
-  test "earliest":
-    let store = HeaderStore.new(10)
-    for i in 0 ..< 15:
-      let h = Header(number: BlockNumber(i))
-      discard store.add(h, h.computeRlpHash)
+    check store.get(hash, Finalized).isSome()
 
-      check:
-        store.earliest.isSome()
+  test "the number index only serves finalized entries":
+    let
+      store = HeaderStore.new(10)
+      header = Header(number: BlockNumber(7))
+      hash = header.computeBlockHash
 
-        # last index(9) + 1 because the header store holds on to the evicted value as the earliest
-        store.earliest.get().number == uint64(max((i - 10), 0))
+    store.put(header, hash, Safe)
 
-  test "update finalized":
-    let store = HeaderStore.new(10)
-    for i in 0 ..< 10:
-      let h = Header(number: BlockNumber(i))
-      discard store.add(h, h.computeRlpHash)
+    check store.get(BlockNumber(7), Optimistic).isNone()
+    check store.getHash(BlockNumber(7), Optimistic).isNone()
 
-    let hf0 = Header(number: BlockNumber(0))
-    discard store.updateFinalized(hf0, hf0.computeRlpHash)
+    store.put(header, hash, Finalized)
 
-    check store.len == 10
-    check store.get(BlockNumber(0)).isSome()
-    check store.finalized.isSome()
-    check store.finalizedHash.isSome()
-    check store.earliest.isSome()
-    check store.earliestHash.isSome()
-    check store.earliestHash.get() == store.finalizedHash.get()
-    check store.earliest.get() == store.finalized.get()
+    check store.get(BlockNumber(7), Finalized).isSome()
+    check store.getHash(BlockNumber(7), Finalized) == Opt.some(hash)
 
-    let hf1 = Header(number: BlockNumber(1))
-    discard store.updateFinalized(hf1, hf1.computeRlpHash)
+  test "finalizing an anchor does not promote cached entries":
+    let
+      store = HeaderStore.new(10)
+      headers = chainOf(5)
 
-    check store.earliest.get() != store.finalized.get()
-    check store.earliestHash.get() != store.finalizedHash.get()
-    check store.finalized.get().number == 1
+    for h in headers:
+      store.put(h, h.computeBlockHash, Optimistic)
+
+    store.putHash(headers[4].computeBlockHash, Finalized)
+
+    check store.getHash(Finalized) == Opt.some(headers[4].computeBlockHash)
+
+    for h in headers:
+      check store.get(h.computeBlockHash, Optimistic).isSome()
+      check store.get(h.computeBlockHash, Finalized).isNone()
+      check store.getHash(h.number, Finalized).isNone()
+
+  test "a header cached without trust is only served at None":
+    let
+      store = HeaderStore.new(10)
+      header = Header(number: BlockNumber(3))
+      hash = header.computeBlockHash
+
+    store.put(header, hash, None)
+
+    check store.get(hash, None).isSome()
+    check store.get(hash, Optimistic).isNone()
+
+  test "the number index is dropped when its header is evicted":
+    let
+      store = HeaderStore.new(2)
+      headers = chainOf(3)
+
+    for h in headers:
+      store.put(h, h.computeBlockHash, Finalized)
+
+    check store.len == 2
+    check store.getHash(headers[0].number, Finalized).isNone()
+    check store.getHash(headers[2].number, Finalized) ==
+      Opt.some(headers[2].computeBlockHash)
+
+  test "clear drops both the cache and the anchors":
+    let
+      store = HeaderStore.new(10)
+      header = Header(number: BlockNumber(1))
+      hash = header.computeBlockHash
+
+    store.put(header, hash, Finalized)
+    store.putHash(hash, Finalized)
+
+    store.clear()
+
+    check store.isEmpty()
+    check store.getHash(Finalized).isNone()
+    check store.get(hash, Optimistic).isNone()
+    check store.get(BlockNumber(1), Finalized).isNone()

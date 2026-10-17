@@ -39,7 +39,7 @@ proc suggestGasPrice*(
 ): Future[EngineResult[GasInt]] {.async: (raises: [CancelledError]).} =
   const minGasPrice = 1.GasInt
   let
-    blk = ?(await engine.getBlock(blockId("latest"), true))
+    blk = ?(await engine.getVerifiedBlock(blockId("latest"), true))
     txs = ?blk.transactions.toTransactions()
 
   var prices = newSeqOfCap[GasInt](64)
@@ -53,7 +53,7 @@ proc suggestMaxPriorityGasPrice*(
     engine: RpcVerificationEngine
 ): Future[EngineResult[GasInt]] {.async: (raises: [CancelledError]).} =
   let
-    blk = ?(await engine.getBlock(blockId("latest"), true))
+    blk = ?(await engine.getVerifiedBlock(blockId("latest"), true))
     txs = ?blk.transactions.toTransactions()
 
   var prices = newSeqOfCap[GasInt](64)

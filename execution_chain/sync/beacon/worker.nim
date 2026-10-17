@@ -61,7 +61,7 @@ proc statusLog(ctx: BeaconCtxRef) =
     syncState=($ctx.pool.syncState),
     eta=ctx.pool.syncEta.avg.toStr,
     nSyncPeers=ctx.nSyncPeers(),
-    nPeers=ctx.node.peerPool.connectedNodes.len,
+    nPeers=ctx.node.numPeers,
     lastFcu=ctx.lastFcuStr()
 
 # ------------------------------------------------------------------------------
@@ -123,7 +123,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
       ctx.pool.lastNoPeersLog = now
       debug info & ": No sync peers yet",
         ela=(now - ctx.pool.lastPeerSeen).toStr,
-        nOtherPeers=ctx.node.peerPool.connectedNodes.len
+        nOtherPeers=ctx.node.numPeers
 
 
 template runDaemon*(ctx: BeaconCtxRef; info: static[string]): Duration =

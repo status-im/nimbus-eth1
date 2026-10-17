@@ -36,7 +36,7 @@ suite "test verified blocks":
         getBlockFromJson("nimbus_verified_proxy/tests/data/" & blockName & ".json")
 
       ts.loadBlock(blk)
-      check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
+      engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
 
       let verifiedBlk = waitFor frontend.eth_getBlockByHash(blk.hash, true)
 
@@ -60,9 +60,8 @@ suite "test verified blocks":
     engine.headerStore.clear()
 
     ts.loadBlock(blk)
-    check:
-      engine.headerStore.add(convHeader(blk), blk.hash).isOk()
-      engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+    engine.setAnchor(convHeader(blk), blk.hash, Finalized)
 
     var verifiedBlk = waitFor frontend.eth_getBlockByNumber(numberTag, true)
     check:
@@ -84,7 +83,7 @@ suite "test verified blocks":
       verifiedBlk.isOk()
       blk == verifiedBlk.get()
 
-  test "check block walk":
+  test "blocks below the anchor are walked when no archive backend is configured":
     ts.clear()
     engine.headerStore.clear()
 
@@ -99,69 +98,61 @@ suite "test verified blocks":
 
       ts.loadBlock(blk)
       if i == sourceBlockNum:
-        check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
-        check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+        engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+        engine.setAnchor(convHeader(blk), blk.hash, Finalized)
+
+    # the walk reaches at most maxBlockWalk blocks below the anchor
+    for i in targetBlockNum + 1 ..< sourceBlockNum:
+      let
+        blk = getBlockFromJson("nimbus_verified_proxy/tests/data/" & $i & ".json")
+        tag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(i))
+        verifiedBlk = waitFor frontend.eth_getBlockByNumber(tag, true)
+
+      check:
+        verifiedBlk.isOk()
+        blk == verifiedBlk.get()
 
     let
-      unreachableTargetTag =
+      farTag =
         BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(targetBlockNum))
-      reachableTargetTag = BlockTag(
-        kind: BlockIdentifierKind.bidNumber, number: Quantity(targetBlockNum + 1)
-      )
-
-    let verifiedBlkUnreachable =
-      waitFor frontend.eth_getBlockByNumber(unreachableTargetTag, true)
+      farBlk = waitFor frontend.eth_getBlockByNumber(farTag, true)
 
     check:
-      verifiedBlkUnreachable.isErr()
-      verifiedBlkUnreachable.error.errType == FrontendError
+      farBlk.isErr()
+      farBlk.error.errType == FrontendError
 
-    let verifiedBlkReachable =
-      waitFor frontend.eth_getBlockByNumber(reachableTargetTag, true)
-
-    check:
-      verifiedBlkReachable.isOk()
-
-  test "check block walk starts from the anchor block":
+  test "blocks below the anchor need an EIP-2935 proof with an archive backend":
     ts.clear()
     engine.headerStore.clear()
 
     let
-      finalizedBlockNum = 22431080
-      latestBlockNum = 22431088
+      targetBlockNum = 22431080
+      sourceBlockNum = 22431090
 
-    for i in finalizedBlockNum .. latestBlockNum:
+    for i in targetBlockNum .. sourceBlockNum:
       let
         filename = "nimbus_verified_proxy/tests/data/" & $i & ".json"
         blk = getBlockFromJson(filename)
 
       ts.loadBlock(blk)
-      if i == finalizedBlockNum:
-        check engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
-      if i == latestBlockNum:
-        check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
+      if i == sourceBlockNum:
+        engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+        engine.setAnchor(convHeader(blk), blk.hash, Finalized)
 
-    for i in finalizedBlockNum + 1 ..< latestBlockNum:
+    # with an archive backend the walk is skipped in favour of EIP-2935, which
+    # is not active on the test fixtures
+    engine.state = EngineState(archive: true)
+    defer:
+      engine.state = EngineState(archive: false)
+
+    for i in targetBlockNum ..< sourceBlockNum:
       let
         tag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(i))
         verifiedBlk = waitFor frontend.eth_getBlockByNumber(tag, true)
 
       check:
         verifiedBlk.isErr()
-        verifiedBlk.error.errType == FrontendError
-
-    engine.anchor = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "safe")
-
-    for i in finalizedBlockNum + 1 ..< latestBlockNum:
-      let
-        tag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(i))
-        verifiedBlk = waitFor frontend.eth_getBlockByNumber(tag, true)
-
-      check:
-        verifiedBlk.isOk()
-
-    # reset anchor
-    engine.anchor = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "finalized")
+        verifiedBlk.error.errType == UnavailableDataError
 
   test "check block related API methods":
     ts.clear()
@@ -173,7 +164,7 @@ suite "test verified blocks":
       hash = blk.hash
 
     ts.loadBlock(blk)
-    check engine.headerStore.add(convHeader(blk), blk.hash).isOk()
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
 
     let
       uncleCountByHash = waitFor frontend.eth_getUncleCountByBlockHash(hash)

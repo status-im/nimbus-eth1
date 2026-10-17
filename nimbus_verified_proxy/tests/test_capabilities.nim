@@ -12,17 +12,15 @@ import
   unittest2,
   stint,
   results,
+  chronos,
   web3/[eth_api, eth_api_types],
   eth/common/[base, times, eth_types_rlp],
-  ../engine/blocks,
   ../engine/engine,
   ../engine/header_store,
   ../engine/types,
   ./test_api_backend
 
-const
-  WINDOW_JUMP = 8190'u64 # HISTORY_SERVE_WINDOW - 1, mirrors blocks.nim
-  FORK_TIME = 1_746_612_311'u64 # mainnet Prague, arbitrary reference point
+const FORK_TIME = 1_746_612_311'u64 # mainnet Prague, arbitrary reference point
 
 proc newEngine(): RpcVerificationEngine =
   RpcVerificationEngine
@@ -41,7 +39,12 @@ proc newEngine(): RpcVerificationEngine =
 
 proc addHeader(engine: RpcVerificationEngine, number: uint64, timestamp: uint64) =
   let header = Header(number: base.BlockNumber(number), timestamp: EthTime(timestamp))
-  discard engine.headerStore.add(header, header.computeBlockHash)
+  engine.headerStore.put(header, header.computeBlockHash, Finalized)
+  engine.headerStore.putHash(header.computeBlockHash, Optimistic)
+  engine.headerStore.putHash(header.computeBlockHash, Finalized)
+
+proc earliest(engine: RpcVerificationEngine): Opt[Hash32] =
+  engine.headerStore.getEarliestHash()
 
 suite "archive backend capability routing":
   let
@@ -103,54 +106,40 @@ suite "private transaction backend capability routing":
       engine.executionBackendFor(SendRawTransaction).expect("general present")
     check idx == 0
 
-suite "earliest servable block":
+suite "earliest anchor":
   const head = 10_000_000'u64
 
-  test "no fork time configured falls back to header store earliest":
+  test "the first finalized anchor becomes the earliest":
     let engine = newEngine()
-    engine.eip2935ForkTime = Opt.none(EthTime)
     engine.addHeader(head - 50, FORK_TIME + 100)
+
+    check engine.earliest() == engine.headerStore.getHash(Finalized)
+
+  test "later finalized anchors don't move the earliest":
+    let engine = newEngine()
+    engine.addHeader(head - 50, FORK_TIME + 100)
+
+    let first = engine.earliest()
+
     engine.addHeader(head, FORK_TIME + 200)
 
-    check engine.earliestServableBlock().expect("has headers") ==
-      base.BlockNumber(head - 50)
+    check:
+      engine.earliest() == first
+      engine.headerStore.getHash(Finalized) != first
 
-  test "head older than fork time falls back to header store earliest":
+  test "an optimistic anchor alone leaves the earliest unset":
     let engine = newEngine()
-    engine.eip2935ForkTime = Opt.some(EthTime(FORK_TIME))
-    engine.addHeader(head - 50, FORK_TIME - 200)
-    engine.addHeader(head, FORK_TIME - 100)
+    let header = Header(number: base.BlockNumber(head), timestamp: EthTime(FORK_TIME))
 
-    check engine.earliestServableBlock().expect("has headers") ==
-      base.BlockNumber(head - 50)
+    engine.headerStore.put(header, header.computeBlockHash, Optimistic)
+    engine.headerStore.putHash(header.computeBlockHash, Optimistic)
 
-  test "post-fork without archive reaches back exactly one window":
+    check engine.earliest().isNone()
+
+  test "clear drops the earliest anchor":
     let engine = newEngine()
-    engine.eip2935ForkTime = Opt.some(EthTime(FORK_TIME))
-    engine.state = EngineState(archive: false)
     engine.addHeader(head, FORK_TIME + 100)
 
-    check engine.earliestServableBlock().expect("has latest") ==
-      base.BlockNumber(head - WINDOW_JUMP)
+    engine.headerStore.clear()
 
-  test "post-fork with archive reaches back maxWindowJumps windows":
-    let engine = newEngine()
-    engine.eip2935ForkTime = Opt.some(EthTime(FORK_TIME))
-    engine.state = EngineState(archive: true)
-    engine.addHeader(head, FORK_TIME + 100)
-
-    check engine.earliestServableBlock().expect("has latest") ==
-      base.BlockNumber(head - WINDOW_JUMP * engine.maxWindowJumps)
-
-  test "chain shorter than the reach clamps to zero instead of underflowing":
-    let engine = newEngine()
-    engine.eip2935ForkTime = Opt.some(EthTime(FORK_TIME))
-    engine.state = EngineState(archive: true)
-    engine.addHeader(5000, FORK_TIME + 100)
-
-    check engine.earliestServableBlock().expect("has latest") == base.BlockNumber(0)
-
-  test "no latest header yields an error":
-    let engine = newEngine()
-    engine.eip2935ForkTime = Opt.some(EthTime(FORK_TIME))
-    check engine.earliestServableBlock().isErr()
+    check engine.earliest().isNone()

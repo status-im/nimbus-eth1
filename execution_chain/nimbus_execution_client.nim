@@ -66,6 +66,11 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
       warn "Loading block DAG from database", msg=error
   else:
     warn "Skipped loading of block DAG from database", deserializeFcState = config.deserializeFcState
+  # The snapshot is stale after the first write, drop it before any. A clean
+  # shutdown saves a new one.
+  fc.baseTxFrame.invalidateFcSnapshot().isOkOr:
+    fatal "Cannot drop the block DAG snapshot", msg = $error
+    quit(QuitFailure)
 
   nimbus.fc = fc
   # Setup history expiry and portal
@@ -145,18 +150,20 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
   # Add eth peer service protocol capabilities.
   nimbus.ethWire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
 
-  # Add snap sync service if enabled. This server is currently a dummy only
-  # and will never be fully functional. The costs of implementing the 128
-  # blocks sevice window is too expensive. What could be provided is a BAL
-  # download facility.
+  # Add snap sync service if enabled. Only `snap/2` `GetBlockAccessLists` is
+  # served. State requests (`GetAccountRange`, `GetStorageRanges`,
+  # `GetByteCodes`, `GetTrieNodes`) get empty replies: serving them for the
+  # last 128 blocks needs hash-ordered range reads, which other clients do from
+  # a flat state store. Aristo stores trie vertices by vertex ID, so each range
+  # would be a trie walk with one lookup per vertex, too costly to serve.
   if config.snapSyncEnabled:
-    nimbus.snapWire = nimbus.ethNode.addSnapHandlerCapability()
+    nimbus.snapWire = nimbus.ethNode.addSnapHandlerCapability(fc)
 
   # Connect directly to the static nodes
   let staticPeers = config.getStaticPeers()
   if staticPeers.len > 0:
     nimbus.peerManager = PeerManagerRef.new(
-      nimbus.ethNode.peerPool,
+      nimbus.ethNode,
       config.reconnectInterval,
       config.reconnectMaxRetry,
       staticPeers
@@ -556,9 +563,6 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
         quit(QuitFailure)
     except CancelledError:
       raiseAssert "Never cancelled"
-  defer:
-    if metricsServer.isSome():
-      waitFor metricsServer.stopMetricsServer()
 
   when compileOption("threads"):
     let
@@ -590,6 +594,10 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
         quit(QuitFailure)
 
   defer:
+    # Stopping the metrics server runs the event loop, which resumes any task
+    # that outlived `closeWait`. Close the database only after that.
+    if metricsServer.isSome():
+      waitFor metricsServer.stopMetricsServer()
     com.db.close()
 
   case config.cmd

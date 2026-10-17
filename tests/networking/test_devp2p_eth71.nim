@@ -598,8 +598,9 @@ suite "eth/70 GetReceipts continuation":
 
   proc seedReceiptBlock(env: TestEnv, num: uint64,
                         receipts: seq[StoredReceipt]): Hash32 =
-    ## Persist a header + receipts straight into the database so
-    ## receiptsByBlockHash can find them without importing a real block.
+    ## Persist a canonical header + receipts straight into the database, so
+    ## receiptsByBlockHash can find them once `wireAtBase` covers them,
+    ## without importing a real block.
     let
       root = makeHash(int(10_000 + num))
       blockHash = makeHash(int(20_000 + num))
@@ -608,12 +609,22 @@ suite "eth/70 GetReceipts continuation":
     env.chain.baseTxFrame.persistReceipts(root, receipts)
     blockHash
 
+  proc wireAtBase(env: TestEnv, base: uint64): EthWireRef =
+    ## Persist the seeded block `base` as the base, as era import leaves it.
+    ## The FC serves blocks from disk only at or below base.
+    let
+      com = env.chain.com
+      txFrame = com.db.baseTxFrame().txFrameBegin()
+    txFrame.checkpoint(base, skipSnapshot = true)
+    com.db.persist(txFrame)
+    EthWireRef(chain: ForkedChainRef.init(com))
+
   test "large block is served in resumable chunks":
     let
       env = newTestEnv()
-      wire = EthWireRef(chain: env.chain)
       receipts = makeReceipts(5, bigLogSize)
       blockHash = env.seedReceiptBlock(1000, receipts)
+      wire = env.wireAtBase(1000)
 
     # First request: only two receipts fit, block is cut mid-list.
     let first = wire.getStoredReceipts70(StoredReceipts70Request(
@@ -643,11 +654,11 @@ suite "eth/70 GetReceipts continuation":
   test "continuation cursor covering the whole first block yields an empty positional entry":
     let
       env = newTestEnv()
-      wire = EthWireRef(chain: env.chain)
       large = makeReceipts(5, bigLogSize)
       small = makeReceipts(2, 100)
       largeHash = env.seedReceiptBlock(1001, large)
       smallHash = env.seedReceiptBlock(1002, small)
+      wire = env.wireAtBase(1002)
 
     # The requester already has all 5 receipts of the first block and asks
     # for the rest starting at that block (geth's TestGetLargeReceipts flow).
@@ -664,11 +675,11 @@ suite "eth/70 GetReceipts continuation":
   test "mid-response cut across blocks sets lastBlockIncomplete":
     let
       env = newTestEnv()
-      wire = EthWireRef(chain: env.chain)
       small = makeReceipts(2, 100)
       large = makeReceipts(5, bigLogSize)
       smallHash = env.seedReceiptBlock(1003, small)
       largeHash = env.seedReceiptBlock(1004, large)
+      wire = env.wireAtBase(1004)
 
     let resp = wire.getStoredReceipts70(StoredReceipts70Request(
       firstBlockReceiptIndex: 0, blockHashes: @[smallHash, largeHash]))
@@ -683,11 +694,11 @@ suite "eth/70 GetReceipts continuation":
   test "unknown block stops serving to preserve positional correspondence":
     let
       env = newTestEnv()
-      wire = EthWireRef(chain: env.chain)
       small = makeReceipts(2, 100)
       small2 = makeReceipts(3, 100)
       smallHash = env.seedReceiptBlock(1005, small)
       small2Hash = env.seedReceiptBlock(1006, small2)
+      wire = env.wireAtBase(1006)
 
     let resp = wire.getStoredReceipts70(StoredReceipts70Request(
       firstBlockReceiptIndex: 0,

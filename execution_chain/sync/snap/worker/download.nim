@@ -61,17 +61,38 @@ proc downloadReady(
   w.codeDone = not ?adb.hasMissingBlob(info) and not ?adb.hasCodeLock(info)
   ok(w)
 
+proc setFirstPivotFromFinNumber(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): Opt[BlockNumber] =
+  ## Opportunistically fetch the pivot number from an ongoing first sync
+  ## and use it to set the pivot.
+  if ctx.pool.pivotNum == 0 and                     # => forwardNum == 0
+     not ctx.pool.headersSynced:
+    ctx.hdrCache.finHeader().isErrOr:
+      if ctx.chain.com.isAmsterdamOrLater(value.timestamp):
+        # Store header. So the pivot has a target on the DB. Note that this
+        # same header might also be stored independently by the header
+        # downloader.
+        ctx.pool.cacheDB.putHeader(value, info).isErrOr:
+          debug info & ": Opportunistically accept pivot", pivot=value.number
+          ctx.pool.balSupported = true              # so state download ok, now
+          return Opt.some(value.number)
+  Opt.none(BlockNumber)
+
 proc startDownloading(
     ctx: SnapCtxRef;
+    pivotNum: Opt[BlockNumber];
     info: static[string];
       ): Opt[void] =
   let
     adb = ctx.pool.cacheDB
-    number = ?adb.lastHeaderNumber(info)        # => err() unless headers
+    number = if pivotNum.isSome(): pivotNum.unsafeGet()
+             else: ?adb.lastHeaderNumber(info)      # => err() unless headers
     accRng = ItemKeyRangeSet.init ItemKeyRangeMax
-  ?adb.putAccMissingIntv(number, accRng, info)  # new state
+  ?adb.putAccMissingIntv(number, accRng, info)      # new state
   ctx.accUnproc.init ItemKeyRangeMax
-  ctx.pool.pivotNum = number                    # set pivot
+  ctx.pool.pivotNum = number                        # set pivot
   if 0 < ctx.pool.pivotNum:
     debug info & ": Start downloading accounts",
       pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
@@ -109,6 +130,7 @@ proc downloadInit*(
     ctx: SnapCtxRef;
     info: static[string];
       ): Opt[void] =
+  let firstPivot = ctx.setFirstPivotFromFinNumber(info)
   if not ctx.accUnproc.synced():
     ?ctx.verifyAmsterdamOrLater(info)
 
@@ -124,30 +146,47 @@ proc downloadInit*(
         debug info & ": Continue downloading accounts",
           pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
     else:
-      ?ctx.startDownloading(info)
+      ?ctx.startDownloading(firstPivot, info)
 
     ctx.accUnproc.synced = true
 
   elif ctx.pool.pivotNum == 0:                      # delayed intialisation?
-    ?ctx.startDownloading(info)
+    ?ctx.startDownloading(firstPivot, info)
 
   ctx.accountDownloadMetricsUpdate()
   ok()
 
-proc downloadCommit*(
+template downloadCommit*(
     ctx: SnapCtxRef;
     info: static[string];
-      ): Result[void,ErrorType] =
+      ): auto =
+  ## Async template
+  ##
   ## Finish downloading.
   ##
-  # This directive should come after storing `accountDownloadCommit()`
-  # updates. It will update the tables and delete partial MPTs.
-  ?ctx.storageDownloadCommit(info)
-  ?ctx.codeDownloadCommit(info)
+  # This directive should come last after storing state data when all peers
+  # are idle (i.e. synchronised.) It will update the tables and delete partial
+  # MPTs.
+  var bodyRc = Result[void,ErrorType].ok()
+  block body:
+    var timer = TimerDataRef(time: Moment.now())
 
-  ?ctx.accountDownloadCommit(info)
+    ctx.storageDownloadCommit(timer, info).isOkOr:
+      bodyRc = typeof(bodyRc).err(error)
+      break body
 
-  ok()
+    ctx.codeDownloadCommit(timer, info).isOkOr:
+      bodyRc = typeof(bodyRc).err(error)
+      break body
+
+    ctx.accountDownloadCommit(info).isOkOr:
+      bodyRc = typeof(bodyRc).err(error)
+      break body
+
+    chronicles.info info & ": Ready for state update"
+    # End `block body`
+
+  bodyRc
 
 template downloadState*(
     buddy: SnapPeerRef;
@@ -269,33 +308,48 @@ template downloadBals*(
 
   bodyRc
 
-proc downloadResume*(ctx: SnapCtxRef; info: static[string]): Opt[void] =
+template downloadResume*(
+    ctx: SnapCtxRef;
+    info: static[string];
+      ): auto =
+  ## Async template
+  ##
   ## Attempt to resume an interrupted download session
-  let adb = ctx.pool.cacheDB
+  ##
+  var bodyRc = Opt[void].err()
+  block body:
+    let adb = ctx.pool.cacheDB
 
-  # Cannot have lock entries
-  for _ in adb.walkStoLock:
-    return err()
-  for _ in adb.walkCodeLock:
-    return err()
+    # Cannot have lock entries
+    for _ in adb.walkStoLock:
+      break body                                    # failed immediately
+    for _ in adb.walkCodeLock:
+      break body                                    # failed immediately
 
-  # Clean up as best as possible
-  var accPaths: seq[Hash32]
+    # Clean up as best as possible
+    var
+      accPaths: seq[Hash32]
+      timer = TimerDataRef(time: Moment.now())
 
-  # Collect paths for partial storage sub-MPTs and contract codes
-  for w in adb.walkStoMissingIntv:
-    if 0 < w.error.len:
-      error info & ": Error walking missing storage list", `error`=w.error
-      return err()
-    accPaths.add w.accPath
-  for key in adb.walkMissingBlob:
-    accPaths.add key
+    # Collect paths for partial storage sub-MPTs and contract codes
+    for w in adb.walkStoMissingIntv:
+      if 0 < w.error.len:
+        error info & ": Error walking missing storage list", `error`=w.error
+        break body                                  # failed
+      accPaths.add w.accPath
+      timer.yieldThread()
+    for key in adb.walkMissingBlob:
+      accPaths.add key
 
-  # Delete all accounts for partial sub-MPTs and contract codes.
-  for accPath in accPaths:
-    ctx.deleteAccount(accPath, info).isOkOr:
-      return err()
-  ok()
+    # Delete all accounts for partial sub-MPTs and contract codes.
+    for accPath in accPaths:
+      ctx.deleteAccount(accPath, timer, info).isOkOr:
+        break body                                  # failed
+
+    bodyRc = typeof(bodyRc).ok()
+    # End `block body`
+
+  bodyRc
 
 # ------------------------------------------------------------------------------
 # End

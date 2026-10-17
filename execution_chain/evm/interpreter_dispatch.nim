@@ -129,7 +129,10 @@ proc afterExecCreate(c: Computation) =
     # Contract code should never be returned to the caller.  Only data from
     # `REVERT` is returned after a create.  Clearing in this branch covers the
     # right cases, particularly important with EVMC where it must be cleared.
-    c.output.reset()
+    # The top frame has no caller, so a successful top-level create keeps
+    # its code as the result for RPC and tracers.
+    if c.msg.depth > 0 or c.isError:
+      c.output.reset()
 
 const MsgKindToOp: array[CallKind, Op] =
   [Call, DelegateCall, CallCode, Create, Create2]
