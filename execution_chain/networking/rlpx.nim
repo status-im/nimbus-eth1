@@ -695,11 +695,11 @@ proc rlpxAccept*(
   logScope:
     remote = peer.remote
 
-  # Enforce `--max-peers` on incoming connections. Without this the node accepts
-  # every dial-in on the network and, since nothing ever closes an established
-  # connection, keeps it until the process exits.
-  if node.peerPool.isFull:
-    debug "Too many peers, rejecting incoming connection",
+  # Drop early when incoming peers already hold their share of `maxPeers`.
+  # `addPeer` would reject the peer at later stage, but checking here
+  # avoids running a handshake.
+  if node.peerPool.isInboundFull:
+    debug "No room for incoming peers, rejecting connection",
       numPeers = node.peerPool.len, maxPeers = node.peerPool.maxPeers
     await peer.disconnect(TooManyPeers, notifyRemote = true)
     rlpx_accept_failure.inc(labelValues = [$TooManyPeers])

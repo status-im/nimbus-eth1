@@ -98,11 +98,13 @@ proc processIncoming(server: StreamServer,
   try:
     var node = getUserData[EthereumNode](server)
     let peer = await node.rlpxAccept(remote)
-    if not peer.isNil:
-      trace "Connection established (incoming)", peer
-      if node.peerPool != nil:
-        node.connectingNodes.excl(peer.remote)
-        node.peerPool.addPeer(peer)
+    if not peer.isNil and node.peerPool != nil:
+      node.connectingNodes.excl(peer.remote)
+      if node.peerPool.addPeer(peer):
+        trace "Connection established (incoming)", peer
+      else:
+        trace "No room left, dropping incoming peer", peer
+        await peer.disconnect(TooManyPeers, notifyRemote = true)
   except EthP2PError as exc:
     error "processIncoming", msg=exc.msg
   except CancelledError:
@@ -202,8 +204,11 @@ proc connectToNode*(
     node: EthereumNode, n: Node) {.async: (raises: [CancelledError]).} =
   let peer = await node.dialPeer(n)
   if not peer.isNil:
-    trace "Connection established (outgoing)", peer
-    node.peerPool.addPeer(peer)
+    if node.peerPool.addPeer(peer):
+      trace "Connection established (outgoing)", peer
+    else:
+      trace "No room left, dropping dialed peer", peer
+      await peer.disconnect(TooManyPeers, notifyRemote = true)
 
 proc connectToNode*(
     node: EthereumNode, n: ENode) {.async: (raises: [CancelledError]).} =
@@ -222,7 +227,7 @@ proc createConnectionWorker(
 proc lookupPeers(node: EthereumNode) {.async: (raises: [CancelledError]).} =
   ## Look for more peers while the pool has room for them and hand the nodes
   ## that discovery came up with to the connection workers.
-  if node.peerPool.dialTargetReached():
+  if node.peerPool.isFull:
     return
 
   for n in await node.discovery.lookupRandomNode():

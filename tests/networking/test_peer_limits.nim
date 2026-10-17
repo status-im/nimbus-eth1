@@ -105,6 +105,41 @@ procSuite "Peer limits":
     await first.close()
     await listener.close()
 
+  asyncTest "Incoming connections cannot take the slots reserved for dialing":
+    ## `maxPeers = 3` leaves `3 - 3 div 3 = 2` slots for incoming peers, so the
+    ## third dial-in is refused while the pool still has room, and that room is
+    ## still there for a connection the listener makes itself.
+    var
+      listener = newTestEnv(maxPeers = 3)
+      first = newTestEnv()
+      second = newTestEnv()
+      third = newTestEnv()
+      target = newTestEnv()
+
+    listener.node.startListening()
+    target.node.startListening()
+
+    check (await first.node.rlpxConnect(newNode(listener.node.toENode()))).isOk()
+    check (await second.node.rlpxConnect(newNode(listener.node.toENode()))).isOk()
+    check await listener.node.waitForPeers(2, 5.seconds)
+
+    # Incoming peers now use both of their slots
+    let thirdRes = await third.node.rlpxConnect(newNode(listener.node.toENode()))
+    check thirdRes.isErr()
+    if thirdRes.isErr():
+      check thirdRes.error == TooManyPeersError
+    check listener.node.numPeers == 2
+
+    # The listener can still use the free slot to dial out
+    await listener.node.connectToNode(newNode(target.node.toENode()))
+    check listener.node.numPeers == 3
+
+    await target.close()
+    await third.close()
+    await second.close()
+    await first.close()
+    await listener.close()
+
   asyncTest "Silent peers are reaped by the liveness monitor":
     ## The reaper exists to stop sockets accumulating, so leaving the pool is
     ## not the assertion that matters - the fd going away is. Checks the whole
