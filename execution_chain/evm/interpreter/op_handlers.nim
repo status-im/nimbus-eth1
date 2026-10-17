@@ -24,7 +24,7 @@ import
   ./op_handlers/[oph_defs,
                  oph_arithmetic, oph_hash, oph_envinfo, oph_blockdata,
                  oph_memory, oph_push, oph_dup, oph_swap, oph_log,
-                 oph_create, oph_call, oph_sysops, oph_eip8024]
+                 oph_create, oph_call, oph_sysops, oph_eip8024, oph_eip8141]
 
 const
   allHandlersList = [
@@ -42,6 +42,7 @@ const
     (VmOpExecCall,       "Call"),
     (VmOpExecSysOp,      "SysOp"),
     (VmOpExecEIP8024,    "EIP-8024"),
+    (VmOpExecEIP8141,    "EIP-8141"),
   ]
 
 # ------------------------------------------------------------------------------

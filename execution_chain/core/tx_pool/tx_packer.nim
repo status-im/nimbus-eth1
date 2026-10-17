@@ -272,9 +272,10 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
     vmState.receiptBlooms.setLen(inx + receiptsExtensionSize)
 
   vmState.blockLogs.addDepositLogs(vmState.txLogs, vmState.com.depositContractAddress)
+  # calc logs bloom first, because makeReceipt will swallow vmState.txLogs
+  vmState.receiptBlooms[inx] = calcLogsBloom(vmState.txLogs)
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
-  vmState.receiptBlooms[inx] = calcLogsBloom(vmState.receipts[inx].logs)
-
+  
   pst.packedTxs.add item
   pst.numBlobPerBlock += item.tx.versionedHashes.len
   pst.blockValue += rc.value.txFee

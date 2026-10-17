@@ -20,6 +20,7 @@ import
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,
+  ../../execution_chain/core/tx_pool/tx_desc,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
   ../../execution_api/engine_client,
@@ -138,6 +139,7 @@ proc close*(env: TestEnv) =
       waitFor env.server.get().closeWait()
     if env.beaconEngine.isNil.not:
       waitFor env.beaconEngine.stop()
+      env.beaconEngine.txPool.dispose()
     waitFor env.chain.stopProcessingQueue()
     env.chain.com.db.close()
     if env.taskpool != nil:
