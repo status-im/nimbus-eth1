@@ -10,7 +10,6 @@
 {.push raises: [].}
 
 import
-  std/strutils,
   eth/rlp,
   chronos,
   ./protocol_registry,
@@ -173,11 +172,8 @@ proc sendDisconnectMsgThunk(peer: Peer; data: Rlp) {.
       # TODO This is a temporary log message at warning level to aid in
       #      debugging in pre-release versions - it should be removed before
       #      release
-      # TODO Nethermind sends BreachOfProtocol on network id mismatch:
-      #      https://github.com/NethermindEth/nethermind/issues/7727
-      if not peer.clientId.startsWith("Nethermind"):
-        warn "TODO Peer sent BreachOfProtocol error!",
-          remote = peer.remote, clientId = peer.clientId
+      warn "TODO Peer sent BreachOfProtocol error!",
+        remote = peer.remote, clientId = peer.clientId
     else:
       trace "disconnect message received", reason = packet.reason.value, peer = peer.remote
     await peer.disconnectPeer(peer, packet.reason.value, false)

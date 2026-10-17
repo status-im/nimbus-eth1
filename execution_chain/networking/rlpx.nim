@@ -224,6 +224,24 @@ proc invokeThunk*(
   else:
     await msgInfo.thunk(peer, msgData)
 
+func uncompressedDisconnectReason(
+    msgId: uint64, payload: var Rlp
+): Opt[DisconnectionReason] =
+  ## Some clients (hi reth) still send the disconnect message uncompressed
+  ## after the hello exchange.
+  if msgId != msgIdDisconnect:
+    return Opt.none(DisconnectionReason)
+
+  # `Rlp` owns its buffer, so read in place and rewind rather than copy it.
+  let start = payload.position
+  defer:
+    payload.position = start
+
+  try:
+    Opt.some(payload.read(DisconnectionReasonList).value)
+  except RlpError:
+    Opt.none(DisconnectionReason)
+
 proc recvMsg(
     peer: Peer
 ): Future[tuple[msgId: uint64, msgRlp: Rlp]] {.
@@ -245,24 +263,42 @@ proc recvMsg(
     let msgId = tmp.read(uint64)
 
     if peer.snappyEnabled and tmp.hasData():
-      let decoded =
-        snappy.decode(msgBody.toOpenArray(tmp.position, msgBody.high), maxMsgSize)
-      if decoded.len == 0:
-        if msgId == 0x01 and msgBody.len > 1 and msgBody.len < 16 and msgBody[1] == 0xc1:
-          # Nethermind sends its TooManyPeers uncompressed but we want to be nice!
-          # https://github.com/NethermindEth/nethermind/issues/7726
-          debug "Trying to decode disconnect uncompressed",
-            remote = peer.remote, clientId = peer.clientId, data = toHex(msgBody)
-        else:
-          await peer.disconnectAndRaise(
-            BreachOfProtocol, "Could not decompress snappy data"
-          )
+      # `snappy.decode` returns nothing for a stream it cannot read, for one
+      # that would decode to more than `maxMsgSize`, and for one that holds no
+      # data at all. Only the declared length tells those apart, and a message
+      # with no data is legal: it compresses to a single zero byte.
+      let decodedLen =
+        snappy.uncompressedLen(msgBody.toOpenArray(tmp.position, msgBody.high))
+
+      if decodedLen == Opt.some(0'u64):
+        tmp = rlpFromBytes(default(seq[byte]))
+      elif decodedLen.isSome and decodedLen.unsafeGet > maxMsgSize.uint64:
+        await peer.disconnectAndRaise(
+          BreachOfProtocol,
+          "Snappy message of " & $decodedLen.unsafeGet & " bytes exceeds the " &
+            $maxMsgSize & " byte limit, msgId " & $msgId,
+        )
       else:
-        trace "Decoded message",
-          remote = peer.remote,
-          clientId = peer.clientId,
-          decoded = toHex(decoded.toOpenArray(0, min(255, decoded.high)))
-        tmp = rlpFromBytes(decoded)
+        let decoded =
+          snappy.decode(msgBody.toOpenArray(tmp.position, msgBody.high), maxMsgSize)
+        if decoded.len > 0:
+          trace "Decoded message",
+            remote = peer.remote,
+            clientId = peer.clientId,
+            decoded = toHex(decoded.toOpenArray(0, min(255, decoded.high)))
+          tmp = rlpFromBytes(decoded)
+        else:
+          let reason = uncompressedDisconnectReason(msgId, tmp)
+          if reason.isSome:
+            debug "Reading disconnect message uncompressed",
+              remote = peer.remote, clientId = peer.clientId,
+              reason = reason.get(), data = toHex(msgBody)
+          else:
+            await peer.disconnectAndRaise(
+              BreachOfProtocol,
+              "Could not decompress snappy data, msgId " & $msgId &
+                ", compressed size " & $(msgBody.len - tmp.position),
+            )
 
     return (msgId, tmp)
   except TransportError as exc:
@@ -310,10 +346,8 @@ proc disconnect*(
 ) {.async: (raises: []).} =
   if reason == BreachOfProtocol:
     # TODO remove warning after all protocol breaches have been investigated
-    # TODO https://github.com/NethermindEth/nethermind/issues/7727
-    if not peer.clientId.startsWith("Nethermind"):
-      warn "TODO disconnecting peer because of protocol breach",
-        remote = peer.remote, clientId = peer.clientId
+    warn "TODO disconnecting peer because of protocol breach",
+      remote = peer.remote, clientId = peer.clientId
   if peer.connectionState notin {Disconnecting, Disconnected}:
     if peer.connectionState == Connected:
       # Only log peers that successfully completed the full connection setup -
@@ -530,10 +564,15 @@ proc helloHandshake(
 
       return response
     of msgIdDisconnect: # Disconnection requested by peer
-      # TODO distinguish their reason from ours
-      let reason = msgData.read(DisconnectionReasonList).value
+      # There is no hello yet, so no client id to identify the peer by. Report
+      # the node id and the raw payload instead.
+      let
+        payload = toHex(msgData.rawData)
+        reason = msgData.read(DisconnectionReasonList).value
       await peer.disconnectAndRaise(
-        reason, "Peer disconnecting during hello: " & $reason
+        reason,
+        "Peer disconnecting during hello: " & $reason & ", nodeId " &
+          toHex(peer.transport.pubkey.toRaw()) & ", payload " & payload,
       )
     else:
       # No other messages may be sent until a Hello is received.
