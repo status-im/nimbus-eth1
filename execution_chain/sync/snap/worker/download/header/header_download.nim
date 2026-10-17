@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos],
   ../../../../beacon,
-  ../../[cache_db, worker_desc]
+  ../../[cache_db, helpers, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -94,27 +94,14 @@ proc headerDownloadTrigger*(
     #       clean up.
     return ok()                                     # nothing to do
 
-  # A beacon header fetch cycle is not triggered unless there are enough
-  # expected headers available to fetch.
-  #
-  # When downloading headers, the CL head of the canonical chain is targeted,
-  # but the downloaded chain is only used up until the finalised head, which
-  # is not available as a target (because there is the has only which is
-  # resolved when downloading the chain.)
-  #
-  # So what is needed is an increase in the finalised head which is not
-  # directly available. But is is mostly not far away from the CL head. So
-  # an increase in the latter one is taken as a proxy for guessing whether
-  # there is a chance that the finalised head has increased, enough.
-  #
-  let consHeadNum = ctx.hdrCache.latestConsHeadNumber()
-  if consHeadNum < ctx.pool.lastConsNum + nConsHeadCachedDeltaMin - 1 and
-     not ctx.pool.beaconTarget:                     # maybe manual target set?
-    ctx.pool.lastNoHdrsLog.logCtrl(noHeadersLogWaitInterval):
-      trace info & ": Not enough headers to download yet", firstHeader=firstNum,
-        lastConsHead=ctx.pool.lastConsNum, consHead=consHeadNum,
-        syncState=($ctx.syncState)
-    return ok()
+  # Check whether the finalised hash has changed, at all. There is no point
+  # fetching headers, otherwise.
+  ctx.pool.cacheDB.lastBlockHash(info).isErrOr:
+    if value == ctx.hdrCache.latestFinHash():
+      ctx.pool.lastNoHdrsLog.logCtrl(noHeadersLogWaitInterval):
+        debug info & ": Finalised CL hash has not changed, yet",
+          syncState=($ctx.syncState)
+      return ok()
 
   # Define event handler to complete beacon syncer download
   proc storeTopHeaderCB(state: BeaconNotifierState) =
@@ -124,7 +111,8 @@ proc headerDownloadTrigger*(
       if rc.isOk and firstNum <= rc.value.number:
         ctx.storeCachedHeaders(firstNum, rc.value, info)
       else:
-        trace info & ": No finalised header for now"
+        trace info & ": No finalised header for now",
+          finHash=ctx.hdrCache.latestFinHash().toStr
     of reset:
       error info & ": Header chain wrong branch => reset"
       ctx.pool.resetReq = true

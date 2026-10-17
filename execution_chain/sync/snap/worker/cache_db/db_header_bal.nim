@@ -26,6 +26,13 @@
 ##   + col:      `cLastHeader`
 ##   + number:   `BlockNumber`
 ##
+## + block hashes
+##   + key1: <col>
+##   + value: <hash>
+##   where
+##   + col:      `cBlockHash`
+##   + hash:     `Hash32`
+##
 ## * block access lists:
 ##   + key9: <col>
 ##   + value: <bal>
@@ -67,14 +74,28 @@ proc getHeader*(db: CacheDbRef, number: BlockNumber): OptHeaderResult =
   ok Opt.some(hdr)
 
 proc getBlockHash*(db: CacheDbRef, number: BlockNumber): OptHashResult =
+  # Try child header
   db.getHeader(number + 1).isErrOr:
     if value.isSome():
       return ok Opt.some(value.unsafeGet.parentHash)
+  # Try cached block hash
+  let data = db.get9(cBlockHash, number).valueOr:
+    return err(error)
+  if 0 < data.len:
+    var hash = data.decodeHash32().valueOr:
+      return err(error)
+    return ok Opt.some(move hash)
+  # Get header and compute block hash
   let hdr = db.getHeader(number).valueOr:
     return err(error)
   if hdr.isNone():
     return ok Opt.none(Hash32)
-  ok Opt.some(hdr.unsafeGet.computeBlockHash)
+  var hash = hdr.unsafeGet.computeBlockHash
+  # Store block hash for later use
+  db.put9(cBlockHash, number, hash.encodeHash32()).isOkOr:
+    return err(error)
+  # That's it
+  ok Opt.some(move hash)
 
 proc lastHeader*(db: CacheDbRef): OptHeaderResult =
   let data = db.get1(cLastHeader).valueOr:
@@ -89,6 +110,13 @@ proc lastHeaderNumber*(db: CacheDbRef): OptNumberResult =
   if data.len != 8:
     return ok(Opt.none(BlockNumber))
   ok(Opt.some(uint64.fromBytesBE data))
+
+proc lastBlockHash*(db: CacheDbRef): OptHashResult =
+  let data = db.lastHeaderNumber().valueOr:
+    return err(error)
+  if data.isNone():
+    return ok Opt.none(Hash32)
+  db.getBlockHash(data.unsafeGet())
 
 proc putHeader*(db: CacheDbRef, header: Header): PutResult =
   db.put9(cHeader, header.number, header.encodeHeader()).isOkOr:

@@ -207,13 +207,25 @@ func blocksFinishNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc singleRunStart*(ctx: BeaconCtxRef): Opt[void] =
+proc singleRunStart*(
+    ctx: BeaconCtxRef;
+    baseHeader: Header;
+    notify: BeaconNotifier;
+      ): Opt[void] =
   if ctx.pool.syncState == idle:
     # The header cache notifier event is triggered once, and then it blocks
     # (aka edge trigger event.) If there was one while in stand-by mode, the
     # event has been irretrievably missed. So the header cache needs to be
     # cleared.
     ctx.hdrCache.clear()
+    ctx.pool.standByMode = false                    # leave stand-by mode
+    ctx.pool.stopBase = Opt.some(baseHeader)        # set stop header
+    ctx.pool.stopNotifier = notify                  # register notifier
+
+    # Trigger last cached FCU update
+    ctx.hdrCache.headTargetUpdate(
+      ctx.hdrCache.latestConsHead(),
+      ctx.hdrCache.latestFinHash())
     return ok()
   err()
 
