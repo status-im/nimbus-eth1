@@ -21,7 +21,7 @@ EEST_MAINNET_ARCHIVE="fixtures.tar.gz"
 EEST_MAINNET_URL="https://github.com/ethereum/execution-specs/releases/download/tests%40${EEST_MAINNET_VERSION}/${EEST_MAINNET_ARCHIVE}"
 
 # --- Devnet Release ---
-EEST_DEVNET_NAME="tests-bogota-devnet"
+EEST_DEVNET_NAME="tests-frames-devnet"
 EEST_DEVNET_VERSION="v1.0.0"
 EEST_DEVNET_DIR="${FIXTURES_DIR}/eest_devnet"
 EEST_DEVNET_ARCHIVE="fixtures_bogota-devnet.tar.gz"
