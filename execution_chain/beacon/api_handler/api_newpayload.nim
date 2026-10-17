@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[].}
+
 import
   results,
   chronicles,
@@ -15,13 +17,13 @@ import
   web3/primitives,
   json_rpc/errors,
   ../../core/tx_pool,
+  ../../core/focil,
+  ../../db/ledger,
   ../web3_eth_conv,
   ../beacon_engine,
   ../payload_conv,
   ./api_utils,
   ./api_witness
-
-{.push gcsafe, raises:[].}
 
 logScope:
   topics = "beacon engine"
@@ -198,15 +200,25 @@ func validateExecutionRequest(
     previousRequestType = requestType.int
   Opt.none(PayloadStatus)
 
+proc getValidIL(inclusionList: Opt[InclusionList],
+                txFrame: CoreDbTxRef, blk: Block): Opt[bool] =
+  if inclusionList.isNone:
+    return Opt.none(bool)
+
+  let
+    decodedIL = decodeIL(inclusionList.value)
+    ledger = LedgerRef.init(txFrame)
+  Opt.some(validateInclusionList(ledger, decodedIL, blk))
+
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
                  executionRequests = Opt.none(seq[seq[byte]]),
+                 inclusionList = Opt.none(InclusionList),
                  withWitness = false):
                    Future[PayloadStatus] {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
-
   trace "Engine API request received",
     meth = "newPayload",
     number = payload.blockNumber,
@@ -225,6 +237,11 @@ proc newPayload*(ben: BeaconEngineRef,
     let res = validateExecutionRequest(executionRequests.value, apiVersion)
     if res.isSome:
       return res.value
+
+  if apiVersion >= Version.V6:
+    if inclusionList.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": inclusionList is expected from execution payload")
 
   let
     com = ben.com
@@ -276,7 +293,7 @@ proc newPayload*(ben: BeaconEngineRef,
       number = header.number, hash = blockHash.short
     return
       if withWitness:
-        validStatus(blockHash, ben.collectWitness(blk))
+        validStatus(blockHash, witness = ben.collectWitness(blk))
       else:
         validStatus(blockHash)
 
@@ -358,8 +375,11 @@ proc newPayload*(ben: BeaconEngineRef,
     gasUsed = header.gasUsed,
     blobGas = header.blobGasUsed.get(0'u64)
 
+  let
+    validIL = getValidIL(inclusionList, chain.latestTxFrame(), blk)
+
   return
     if withWitness:
-      validStatus(blockHash, ben.collectWitness(blk))
+      validStatus(blockHash, validIL, ben.collectWitness(blk))
     else:
-      validStatus(blockHash)
+      validStatus(blockHash, validIL)
