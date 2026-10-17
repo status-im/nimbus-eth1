@@ -98,8 +98,8 @@ func peek*(c: var CodeStream): Op =
 func updatePc*(c: var CodeStream, value: int) =
   c.pc = min(value, len(c))
 
-func isValidOpcode*(c: CodeStream, position: int): bool =
-  c.code.isValidOpcode(position)
+func isValidJumpdest*(c: CodeStream, position: int): bool =
+  c.code.isValidJumpdest(position)
 
 func bytes*(c: CodeStream): lent seq[byte] =
   c.code.bytes()
