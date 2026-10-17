@@ -102,6 +102,7 @@ proc toTransaction*(vmState: BaseVMState,
     sender:               args.sender,
     frames:               args.frames.get(@[]),
     signatures:           args.signatures.get(@[]),
+    nonceKeys:            args.nonceKeys.get(@[]),
   ))
 
 {.pop.}
