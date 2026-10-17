@@ -230,38 +230,51 @@ template queueAndDownload(
 # Public function
 # ------------------------------------------------------------------------------
 
-proc codeDownloadCommit*(
+template codeDownloadCommit*(
     ctx: SnapCtxRef;
+    timer: TimerDataRef;
     info: static[string];
-      ): Result[void,ErrorType] =
+      ): auto =
+  ## Async template
+  ##
   ## Get ready for state forward procedure using BAL.
   ##
   ## In particular, for missing contract codes and lock records, its
   ## correspnding accounts are deleted.
   ##
-  if not ctx.accUnproc.synced():
-    error info & ": Cannot commit unsynced accounts ranges"
-    return err(ENoDataAvailable)
+  var bodyRc = Result[void,ErrorType].err(EGeneric)
+  block body:
+    if not ctx.accUnproc.synced():
+      error info & ": Cannot commit unsynced accounts ranges"
+      bodyRc = typeof(bodyRc).err(ENoDataAvailable)
+      break body
 
-  let adb = ctx.pool.cacheDB
+    let adb = ctx.pool.cacheDB
 
-  # Collect paths for missing contract codes.
-  var accPaths: seq[Hash32]
-  for key in adb.walkMissingBlob:
-    accPaths.add key
+    # Collect paths for missing contract codes.
+    var accPaths: seq[Hash32]
+    for key in adb.walkMissingBlob:
+      accPaths.add key
+      timer.yieldThread()
 
-  # Collect stale code locks (if any)
-  let nMissCode = accPaths.len
-  for key in adb.walkCodeLock:
-    accPaths.add key
+    # Collect stale code locks (if any)
+    let nMissCode {.inject.} = accPaths.len
+    for key in adb.walkCodeLock:
+      accPaths.add key
 
-  for accPath in accPaths:
-    ctx.deleteAccount(accPath, info).isOkOr:
-      return err(ECacheError)
+    for accPath in accPaths:
+      ctx.deleteAccount(accPath, timer, info).isOkOr:
+        bodyRc = typeof(bodyRc).err(ECacheError)
+        break body
 
-  chronicles.info info & ": Cleared missing contract codes",
-    nMissCode, nCodeLock=(accPaths.len-nMissCode)
-  ok()
+    if 0 < accPaths.len:
+      chronicles.info info & ": Cleared missing contract codes",
+        nMissCode, nCodeLock=(accPaths.len-nMissCode)
+
+    bodyRc = typeof(bodyRc).ok()
+    # End `block body`
+
+  bodyRc
 
 template codeDownload*(
     buddy: SnapPeerRef;                             # Snap peer

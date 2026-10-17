@@ -47,6 +47,16 @@ proc allDownloaded(ctx: SnapCtxRef; info: static[string]): Opt[void] =
 proc finHeadNum(ctx: SnapCtxRef; info: static[string]): BlockNumber =
   ctx.pool.cacheDB.lastHeaderNumber(info).valueOr: 0
 
+proc updateDownloadMetrics(ctx: SnapCtxRef, info: static[string]) =
+  let finHeadNum = ctx.finHeadNum info
+  if nStateDownloadWindowSize < finHeadNum:         # so `0 < leftEnd`
+    let leftEnd = finHeadNum - nStateDownloadWindowSize
+    if leftEnd <= ctx.pool.pivotNum:
+      let w = (ctx.pool.pivotNum - leftEnd).float   # still within window
+      metrics.set(nec_snap_download_window, w / nStateDownloadWindowSize.float)
+    else:
+      metrics.set(nec_snap_download_window, 0)      # outside download window
+
 template consHeadNum(ctx: SnapCtxRef): BlockNumber =
   ctx.hdrCache.latestConsHeadNumber()
 
@@ -90,6 +100,11 @@ proc readyNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   # whether snap syncer book keeping has been set up.
   # is inialised
   if not ctx.pool.headersSynced:
+    # Special case for an opportunistic first run where the pivot is taken
+    # from an ongoing first header sync.
+    if 0 < ctx.pool.pivotNum and
+       ctx.pool.forwardNum == 0:
+      return SnapDownload
     return SnapReady
   if not ctx.accUnproc.synced():
     return SnapReady
@@ -151,21 +166,23 @@ proc downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   if ctx.pool.resetReq:                             # Oops, something failed
     return SnapClear
 
-  # Check whether one should BAL fetch and forward the downloaded partial
-  # state when the finalised head has increased too far so that the `pivot`
-  # falls outside the download range
+  # When initiating state downloading, the `pivot` was set to the latest value
+  # of the ever increasing `finHeadNum`. State downloading proceeds as long
+  # as it is within a range
   # ::
   #    finHeadNum - nFinHeadSupportWindowSize .. finHeadNum
   #
-  # i.e. the `pivotNum` is smaller than the left end of the above range.
-  #
-  # This can be re-phrased as checking whether the ever increading `finHead`
-  # is still in the `pivot` window
+  # To check whether the pivot falls out of this range, it is enough check
+  # whether
   # ::
-  #    pivotNum .. pivotNum + nFinHeadSupportWindowSize
+  #    pivot < finHeadNum - nFinHeadSupportWindowSize
   #
-  # The constant `nFinHeadSupportWindowSize` is of size 128 and possibly
-  # some slack added.
+  # holds (as `finHeadNum` only increases over time.)
+  #
+  # The constant `nFinHeadSupportWindowSize` is of size not larger than 128
+  # to make up for some slack. Using a shorter interval than 128 will stop
+  # starting new download sessions while running current downloading sessions
+  # until the peers stop replying or there is no more work left.
   #
   let
     finHeadNum = ctx.finHeadNum info
@@ -174,21 +191,24 @@ proc downloadNext(ctx: SnapCtxRef, info: static[string]): SnapState =
     ctx.poolMode = true
     return SnapDownloadFinish                       # => sync peers
 
-  if finHeadNum != 0:
-    let dw = (pvTop - finHeadNum).float / nFinHeadSupportWindowSize.float
-    metrics.set(nec_snap_download_window, dw)
-
   ctx.allDownloaded(info).isErrOr:                  # download is complete?
     ctx.poolMode = true
     return SnapDownloadFinish                       # => sync peers
+
+  ctx.updateDownloadMetrics info                    # metrics update
   SnapDownload                                      # keep downloading
 
 proc downloadFinishNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.poolMode:                                  # wait for peers to sync
+    ctx.updateDownloadMetrics info                  # metrics update
     return SnapDownloadFinish
-  metrics.set(nec_snap_download_window, 0)          # download window done
 
+  metrics.set(nec_snap_download_window, 0)          # download window done
+  SnapDownloadCommit
+
+proc downloadCommitNext(ctx: SnapCtxRef, info: static[string]): SnapState =
+  ## State transition handler
   # Make sure that a BAL is available for the current pivot.
   if ctx.pool.forwardNum == 0:
     return SnapBalsFetch
@@ -242,7 +262,10 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   #               |    |        download <--------'       |
   #               |    |           |                      |
   #               |    |           v                      |
-  #               |    `---- downloadFinish               |
+  #               |    |     downloadFinish               |
+  #               |    |           |                      |
+  #               |    |           v                      |
+  #               |    `---- downloadCommit               |
   #               |                |                      |
   #               |                v                      |
   #               `----------> assembleMpt ---------------'
@@ -264,6 +287,8 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
       ctx.downloadNext info
     of SnapDownloadFinish:
       ctx.downloadFinishNext info
+    of SnapDownloadCommit:
+      ctx.downloadCommitNext info
     of SnapBalsFetch:
       ctx.balsFetchNext info
     of SnapBalsFetchFinish:
@@ -282,7 +307,8 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   ctx.pool.syncState = newState
 
   case newState:
-  of SnapReady, SnapDownload, SnapDownloadFinish, SnapAssembleMpt:
+  of SnapReady, SnapDownload, SnapDownloadFinish, SnapDownloadCommit,
+     SnapAssembleMpt:
     chronicles.info info & ": State changed", prevState, newState,
       pivot=ctx.pool.pivotNum, finHead=ctx.finHeadNum(info),
       consHead=ctx.consHeadNum(), nSyncPeers=ctx.nSyncPeers()

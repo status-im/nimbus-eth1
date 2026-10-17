@@ -16,33 +16,52 @@ import
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc deleteAccount*(
+template deleteAccount*(
     ctx: SnapCtxRef;
     accPath: Hash32;
+    timer: TimerDataRef;
     info: static[string];
-      ): Opt[void] =
-  let
-    adb = ctx.pool.cacheDB
-    accPt = accPath.to(ItemKey)
+      ): auto =
+  var bodyRc = Opt[void].err()
+  block body:
+    let
+      adb = ctx.pool.cacheDB
+      accPt = accPath.to(ItemKey)
 
-  if not ctx.accUnproc.synced:                      # not on in-memeory cache?
-    var accState = ?adb.getAccMissingIntv(info)
-    discard accState.ranges.merge(accPt, accPt)     # update bookkeeping
-    ?adb.putAccMissingIntv(accState, info)          # update on cache DB
-  elif ctx.accUnproc.borrowed.chunks == 0:          # clean accounts registry?
-    discard ctx.accUnproc.unprocessed.merge(accPt, accPt)
-  else:
-    error info & ": Cannot update dirty unprocessed ranges"
-    return err()
+    if not ctx.accUnproc.synced:                    # not on in-memeory cache?
+      var accState = adb.getAccMissingIntv(info).valueOr:
+        break body                                  # -> failed
+      discard accState.ranges.merge(accPt, accPt)   # update bookkeeping
+      adb.putAccMissingIntv(accState, info).isOkOr: # update on cache DB
+        break body                                  # -> failed
+    elif ctx.accUnproc.borrowed.chunks == 0:        # clean accounts registry?
+      discard ctx.accUnproc.unprocessed.merge(accPt, accPt)
+    else:
+      error info & ": Cannot update dirty unprocessed ranges"
+      break body                                    # failed
 
-  ?adb.delFlatAcc(accPath, info)                    # remove account record
-  ?adb.delStoMissingIntv(accPath, info)             # delete storage accounting
-  ?adb.delStoLock(accPath, info)                    # delete storage lock
-  ?adb.delFlatSlot(accPath, info)                   # delete all slots
-  ?adb.delMissingBlob(accPath, info)                # delete code accounting
-  ?adb.delCodeLock(accPath, info)                   # delete code lock
-  ?adb.delFlatCode(accPath, info)                   # delete contract code
-  ok()
+    adb.delFlatAcc(accPath, info).isOkOr:           # remove account record
+      break body                                    # -> failed
+    adb.delStoMissingIntv(accPath, info).isOkOr:    # delete storage accounting
+      break body                                    # -> failed
+    adb.delStoLock(accPath, info).isOkOr:           # delete storage lock
+      break body                                    # -> failed
+    adb.delMissingBlob(accPath, info).isOkOr:       # delete code accounting
+      break body                                    # -> failed
+    adb.delCodeLock(accPath, info).isOkOr:          # delete code lock
+      break body                                    # -> failed
+    adb.delFlatCode(accPath, info).isOkOr:          # delete contract code
+      break body                                    # -> failed
+
+    for slotKey in adb.walkFlatSlotKey(accPath):    # delete all slots
+      adb.delFlatSlot(accPath, slotKey, info).isOkOr:
+        break body                                  # -> failed
+      timer.yieldThread()
+
+    bodyRc = typeof(bodyRc).ok()
+    # End `block body`
+
+  bodyRc
 
 func isFullRange*(itrs: ItemKeyRangeSet): bool =
   # Defensive encoding of a full range check. Solely testing `total; == 0`

@@ -76,7 +76,7 @@ proc start*(buddy: SnapPeerRef; info: static[string]): bool =
 
   debug info & ": New peer", peer, nSyncPeers=ctx.nSyncPeers(),
     peerType=buddy.only.peerType, clientId=buddy.peer.clientId,
-    supportsBal=buddy.only.supportsBal, nSnap2Peers=ctx.pool.nSnap2Peers
+    snapVersion=buddy.only.snapVersion, nSnap2Peers=ctx.pool.nSnap2Peers
   true
 
 proc stop*(buddy: SnapPeerRef; info: static[string]) =
@@ -144,18 +144,26 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       discard ctx.headerDownloadTrigger(info)
       bodyRc = daemonWaitDownloadInterval           # parallel peer action
 
-    of SnapDownloadFinish:
+    of SnapDownloadFinish:                          # wait for sync
       discard
+
+    of SnapDownloadCommit:
+      # FIXME: The directive `downloadCommit()` needs to be async-ified.
+      ctx.downloadCommit(info).isOkOr:              # write back ranges to DB
+        # FIXME: any useful error handling here?
+        error info & ": Error storing progress", `error`=error
+      await ctx.statsStateLog info                  # FIXME, will go away
 
     of SnapBalsFetch:
       discard ctx.headerDownloadTrigger(info)       # see `SnapDownload`
       bodyRc = daemonWaitBalsFetchInterval          # parallel peer action
 
-    of SnapBalsFetchFinish:
+    of SnapBalsFetchFinish:                         # wait for sync
       discard
 
     of SnapStateForward:
       ctx.stateForward(info).isOkOr:
+        # FIXME: some smart error handling here?
         break body
 
       # Prepare for next download cyle
@@ -169,6 +177,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         ctx.pool.resetReq = true                    # not much else possible
 
     of SnapStop:
+      await ctx.statsStateLog info                  # FIXME, will go away
       ctx.accountDownloadMetricsReset()             # cosmetics
 
       # Done, terminate
@@ -220,16 +229,6 @@ proc runPool*(
   ##
   ## Note that this function does not run in `async` mode.
   ##
-  let ctx = buddy.ctx
-
-  case ctx.pool.syncState:
-  of SnapDownloadFinish:
-    ctx.downloadCommit(info).isOkOr:                # write back ranges to DB
-      error info & ": Error storing progress", `error`=error
-  else:
-    discard
-
-  ctx.statsStateLog info                            # print statistics
   true                                              # stop
 
 template runPeer*(

@@ -697,6 +697,14 @@ func finNum*(hc: HeaderChainRef): Opt[BlockNumber] =
   ##
   hc.session.finNum
 
+proc finHeader*(hc: HeaderChainRef): Opt[Header] =
+  ## Header of finalised FCU hash if it could be resolved by chaining headers
+  ## using the `put()` directive.
+  ##
+  if hc.session.finNum.isSome():
+    return hc.get(hc.session.finNum.unsafeGet())
+  err()
+
 # --------------------
 
 func latestConsHead*(hc: HeaderChainRef): Header =

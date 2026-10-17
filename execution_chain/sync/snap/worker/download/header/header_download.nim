@@ -22,28 +22,39 @@ import
 proc storeCachedHeaders(
     ctx: SnapCtxRef;
     leastBn: BlockNumber;
-    topBn: BlockNumber;
+    finHeader: Header;
     info: static[string];
       ) =
   var count = 0
-  for header in ctx.hdrCache.incrFrom():
-    # Range is leastBn .. topBn
-    if leastBn <= header.number:
-      if topBn < header.number:
-        break
-      ctx.pool.cacheDB.putHeader(header, info).isOkOr:
-        return
-      count.inc
+  if leastBn == 1:
+    # If the header chain links to Genesis, only the last finalised header
+    # needs to be stored. BAL download starts not before the first finalised
+    # entry.
+    ctx.pool.cacheDB.putHeader(finHeader, info).isOkOr:
+      return
+    count.inc
+  else:
+    # The whole sub-chain is needed. Each header potentially refers to a
+    # BAL to be fetched.
+    for header in ctx.hdrCache.incrFrom():
+      # Range is leastBn .. topBn
+      if leastBn <= header.number:
+        if finHeader.number < header.number:
+          break
+        ctx.pool.cacheDB.putHeader(header, info).isOkOr:
+          return
+        count.inc
   # Set a flag when Amsterdam was reached
   if not ctx.pool.balSupported:
     ctx.pool.cacheDB.lastHeader(info).isErrOr:
       if ctx.chain.com.isAmsterdamOrLater(value.timestamp):
-        ctx.pool.balSupported = true
+        ctx.pool.balSupported = true                # so state download ok, now
   ctx.pool.lastConsNum = ctx.hdrCache.head.number
-  chronicles.info info & ": Registered headers", leastBn, topBn, count,
+  chronicles.info info & ": Registered headers", leastBn,
+    finHeader=finHeader.number, count,
     lastConsHead=ctx.pool.lastConsNum,
     consHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState),
-    balSupported=ctx.pool.balSupported
+    onAmsterdamOrLater=ctx.pool.balSupported
 
 proc stateNum(ctx: SnapCtxRef): BlockNumber =
   # Get block number from saved state (if any)
@@ -109,9 +120,9 @@ proc headerDownloadTrigger*(
   proc storeTopHeaderCB(state: BeaconNotifierState) =
     case state:
     of ok:
-      let finNum = ctx.hdrCache.finNum.get(otherwise = 0)
-      if firstNum <= finNum:
-        ctx.storeCachedHeaders(firstNum, finNum, info)
+      let rc = ctx.hdrCache.finHeader()
+      if rc.isOk and firstNum <= rc.value.number:
+        ctx.storeCachedHeaders(firstNum, rc.value, info)
       else:
         trace info & ": No finalised header for now"
     of reset:

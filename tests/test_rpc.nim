@@ -737,6 +737,26 @@ proc rpcMain*() =
       except RpcResponseError as exc:
         check exc.code == -32000
 
+    test "eth_call contract creation returns the created code":
+      # PUSH4 0xdeadbeef PUSH1 0 MSTORE PUSH1 4 PUSH1 28 RETURN
+      let ec = TransactionArgs(
+        `from`: Opt.some(signer),
+        gas: Opt.some(w3Qty(100000'u)),
+        input: Opt.some(hexToSeqByte("63deadbeef6000526004601cf3")))
+      let res = await client.eth_call(ec, "latest")
+      check res == hexToSeqByte("deadbeef")
+
+    test "eth_estimateGas rejected contract code is not error data":
+      # PUSH4 0xef000000 PUSH1 0 MSTORE PUSH1 4 PUSH1 28 RETURN
+      let ec = TransactionArgs(
+        `from`: Opt.some(signer),
+        input: Opt.some(hexToSeqByte("63ef0000006000526004601cf3")))
+      try:
+        discard await client.eth_estimateGas(ec)
+        check false
+      except RpcResponseError as exc:
+        check exc.data == JsonString("\"0x\"")
+
     test "eth_estimateGas":
       let ec = TransactionArgs(
         `from`: Opt.some(signer),
@@ -781,6 +801,56 @@ proc rpcMain*() =
       check:
         call.string == latestCall.string
         accessList.string == latestAccessList.string
+
+    test "blob fee without blob hashes and empty blob hashes are rejected":
+      const
+        missingHashes = "blob transaction missing blob hashes"
+        loneBlobFee = "maxFeePerBlobGas specified without blobVersionedHashes"
+      let
+        base = %*{
+          "from": signer.to0xHex,
+          "to": contractAddress.to0xHex,
+          "gas": "0x30000",
+        }
+        hash = "0x0100000000000000000000000000000000000000000000000000000000000000"
+      var
+        loneCap = base.copy()
+        nullHashesCap = base.copy()
+        emptyHashes = base.copy()
+        emptyHashesCap = base.copy()
+        oneHashCap = base.copy()
+      loneCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+      nullHashesCap["blobVersionedHashes"] = newJNull()
+      nullHashesCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+      emptyHashes["blobVersionedHashes"] = %[]
+      emptyHashesCap["blobVersionedHashes"] = %[]
+      emptyHashesCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+      oneHashCap["blobVersionedHashes"] = %[%hash]
+      oneHashCap["maxFeePerBlobGas"] = %"0x3b9aca00"
+
+      for (args, msg) in [(loneCap, loneBlobFee), (nullHashesCap, loneBlobFee),
+                          (emptyHashes, missingHashes), (emptyHashesCap, loneBlobFee)]:
+        try:
+          discard await client.call("eth_call", %[args, %"latest"], EthJson)
+          check false
+        except RpcResponseError as exc:
+          check exc.code == -32000
+          check EthJson.decode(exc.data.string, string) == "rpcCallEvm error: " & msg
+        try:
+          discard await client.call("eth_estimateGas", %[args, %"latest"], EthJson)
+          check false
+        except RpcResponseError as exc:
+          check exc.code == 3
+          check exc.msg == msg
+
+      let
+        call = await client.call("eth_call", %[oneHashCap, %"latest"], EthJson)
+        gas = await client.call("eth_estimateGas", %[oneHashCap, %"latest"], EthJson)
+        al = parseJson(
+          (await client.call("eth_createAccessList", %[oneHashCap, %"latest"], EthJson)).string)
+      check EthJson.decode(call.string, seq[byte]) == hexToSeqByte("deadbeef")
+      check EthJson.decode(gas.string, Quantity).uint64 > 21000'u64
+      check al{"error"}.isNil or al["error"].kind == JNull
 
     test "eth_estimateGas includes EIP-7702 authorization intrinsic cost":
       let

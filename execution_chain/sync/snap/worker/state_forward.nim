@@ -11,61 +11,197 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, eth/common],
+  pkg/[chronicles, chronos, eth/common],
   pkg/stew/[byteutils, interval_set],
-  ./[helpers, cache_db, worker_desc],
-  ./state_forward/forward_apply
+  ./[helpers, cache_db, worker_desc]
 
 logScope:
   topics = "snap sync"
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+template applySlotChanges(
+    adb: CacheDbRef;
+    accPath: Hash32;
+    slots: seq[SlotChanges];
+    timer: TimerDataRef;
+    info: static[string];
+      ): auto =
+  ## Async template
+  ##
+  ## Apply BAL to storage slots. This assumes to have partial storage sub-MPTs
+  ## cleared. But it would matter if there were a stray one as it would still
+  ## be partial and be cleared later.
+  ##
+  var bodyRc = Opt[void].err()
+  block body:
+    for w in slots:
+      if w.changes.len != 0:
+        let
+          slotKey = w.slot.computeSlotKey()
+          slotValue = w.changes[^1].newValue
+        if slotValue == 0:
+          adb.delFlatSlot(accPath, slotKey, info).isOkOr:
+            break body                              # err()
+        else:
+          adb.putFlatSlot(accPath, slotKey, slotValue, info).isOkOr:
+            break body                              # err()
+      timer.yieldThread()
+
+    bodyRc = typeof(bodyRc).ok()
+    # End `block body`
+  bodyRc
+
+template applyCodeChange(
+    adb: CacheDbRef;
+    accPath: Hash32;
+    code: openArray[CodeChange];
+    info: static[string];
+      ): auto =
+  ## Apply BAL to contract code
+  ##
+  var bodyRc = Opt[Hash32].err()
+  block body:
+    if code.len == 0:
+      adb.delFlatCode(accPath, info).isOkOr:
+        break body                                  # err()
+      bodyRc = typeof(bodyRc).ok(EMPTY_CODE_HASH)
+      break body
+
+    let newCode = code[^1].newCode
+    adb.putFlatCode(accPath, newCode, info).isOkOr:
+      break body
+
+    bodyRc = typeof(bodyRc).ok(newCode.keccak256)
+    # End `block body`
+  bodyRc
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+template applyAccountChanges(
+    ctx: SnapCtxRef;
+    chng: AccountChanges;
+    timer: TimerDataRef;
+    info: static[string];
+      ): auto =
+  ## Async template
+  ##
+  ## Apply BAL to account.
+  ##
+  var bodyRc = Opt[void].err()
+  block body:
+    if chng.storageChanges.len == 0 and
+       chng.balanceChanges.len == 0 and
+       chng.nonceChanges.len == 0 and
+       chng.codeChanges.len == 0:
+      bodyRc = typeof(bodyRc).ok()
+      break body                                    # nothing to do
+
+    # Check for accounts in the downloaded range, i.e. they are not registered
+    # for downloading. If an account is in the downloaded range, it is a new
+    # account and must be added. Otherwise, there is no knowledge whether this
+    # is a new account, or a partial update.
+    let
+      adb = ctx.pool.cacheDB
+      accPath = chng.address.computeAccPath
+      accState = adb.getAccMissingIntv(info).valueOr:
+        break body                                  # failed
+    if accState.ranges.covered(accPath.to(ItemKey)):
+      bodyRc = typeof(bodyRc).ok()
+      break body                                    # ignore for now
+
+    var acc = adb.getFlatAcc(accPath, info).valueOr:
+      emptyFlatAccData                              # new account
+
+    timer.yieldThread()
+
+    # Apply change list to account and cache DB
+    if 0 < chng.storageChanges.len:
+      acc.account.storageRoot = zeroHash32          # no sto. root known anymore
+      adb.applySlotChanges(accPath, chng.storageChanges, timer, info).isOkOr:
+        break body                                  # failed
+
+    if 0 < chng.codeChanges.len:
+      acc.account.codeHash =
+        adb.applyCodeChange(accPath, chng.codeChanges, info).valueOr:
+          break body                                # failed
+
+    if 0 < chng.nonceChanges.len:
+      acc.account.nonce = chng.nonceChanges[^1].newNonce
+
+    if 0 < chng.balanceChanges.len:
+      acc.account.balance = chng.balanceChanges[^1].postBalance
+
+    adb.putFlatAcc(accPath, acc, info).isOkOr:      # update account
+      break body                                    # failed
+
+    bodyRc = typeof(bodyRc).ok()
+    # End `block body`
+
+  bodyRc
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc stateForward*(
+template stateForward*(
     ctx: SnapCtxRef;
     info: static[string];
     nBalsMax = high(uint);
-      ): Opt[void] =
+      ): auto =
+  ## Async template
+  ##
   ## Apply stored BALs to the downloaded flat account and storage tables.
-  ## If successful, the block number of the last state is returned.
   ##
   ## The maximal number of BAs to apply can be passed as argument `nBalsMax`.
   ## In that case, the function can be called repeatedly until the BALs
   ## are exhausted. The latter can be detected if the return value stays
   ## the same.
   ##
-  let
-    db = ctx.pool.cacheDB
-    pivotNum = (?db.getAccMissingIntv(info)).number
+  var bodyRc = Opt[void].err()
+  block body:
+    let
+      adb = ctx.pool.cacheDB
+      accState = adb.getAccMissingIntv(info).valueOr:
+        break body                                  # failed
+      pivotNum = accState.number
 
-  var number = pivotNum
-  template dist: untyped = (number-pivotNum)
+    var
+      number = pivotNum
+      timer = TimerDataRef(time: Moment.now())
+    template dist: untyped = (number-pivotNum)
 
-  while true:
-    if nBalsMax <= dist:
-      chronicles.info info & ": some BALs applied", pivotNum, number, dist
-      break
-    number.inc
-    let bal = db.getBal(number, info).valueOr:
-      number.dec
-      chronicles.info info & ": all BALs applied", pivotNum, number, dist
-      break
+    while true:
+      if nBalsMax <= dist:
+        chronicles.info info & ": some BALs applied", pivotNum, number, dist
+        break
+      number.inc
+      let bal = adb.getBal(number, info).valueOr:
+        number.dec
+        chronicles.info info & ": all BALs applied", pivotNum, number, dist
+        break
 
-    for w in bal[]:
-      ctx.applyAccountChanges(w, info).isOkOr:
-        error info & ": Error applying BAL account changes", pivotNum, number,
-          dist, accAddr=($w.address), accPath=w.address.computeAccPath.toStr
-        return err()
+      for w in bal[]:
+        ctx.applyAccountChanges(w, timer, info).isOkOr:
+          error info & ": Error applying BAL account changes", pivotNum, number,
+            dist, accAddr=($w.address), accPath=w.address.computeAccPath.toStr
+          break body                                # failed
 
-  # Update pivot and forward block numbers if there was some progress
-  if pivotNum < number:
-    ?db.updAccMissingIntv(number, info)
-    ctx.pool.pivotNum = number
-    ctx.pool.forwardNum = number
+    # Update pivot and forward block numbers if there was some progress
+    if pivotNum < number:
+      adb.updAccMissingIntv(number, info).isOkOr:
+        break body                                  # failed
+      ctx.pool.pivotNum = number
+      ctx.pool.forwardNum = number
 
-  ok()
+    bodyRc = typeof(bodyRc).ok()
+    # End `block body`
+
+  bodyRc
 
 # ------------------------------------------------------------------------------
 # End

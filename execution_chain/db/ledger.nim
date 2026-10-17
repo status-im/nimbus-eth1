@@ -66,7 +66,7 @@ type
     storage:   Table[UInt256, UInt256]
     code: CodeBytesRef
 
-  AccountRef = ref object
+  AccountRef* = ref object
     statement: CoreDbAccount
     accPath: Hash32
     flags: AccountFlags
@@ -377,11 +377,10 @@ proc persistCode(acc: AccountRef, ledger: LedgerRef) =
     if ledger.holdCode:
       ledger.heldCode[acc.statement.codeHash] = acc.code
       return
-    let rc = ledger.txFrame.put(
-      contractHashKey(acc.statement.codeHash).toOpenArray, acc.code.bytes())
+    let rc = ledger.txFrame.persistCodeByHash(acc.statement.codeHash, acc.code.bytes())
     if rc.isErr:
       warn logTxt "persistCode()",
-       codeHash=acc.statement.codeHash, error=($$rc.error)
+       codeHash=acc.statement.codeHash, error=rc.error
     else:
       # If the ledger changes rolled back entirely from the database, the ledger
       # code cache must also be cleared!
@@ -485,12 +484,12 @@ template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
       # cached and easily accessible in the database layer - this is to prevent
       # EXTCODESIZE calls from messing up the code cache and thus causing
       # recomputation of the jump destination table
-      var rc = ledger.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
+      var rc = ledger.txFrame.getCodeLenByHash(acc.statement.codeHash)
 
       return rc.valueOr:
         # A non-empty code hash whose length is missing from the database: record
         # a fatalError but still return 0 so the async EVM continues.
-        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
+        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=rc.error
         ledger.fatalError = Opt.some("getCodeSize(): failed to fetch code length from database")
         0
 
@@ -636,11 +635,11 @@ proc getCode*(ledger: LedgerRef,
     acc.code =
       if acc.statement.codeHash != EMPTY_CODE_HASH:
         ledger.cachedCode(acc.statement.codeHash).valueOr:
-          var rc = ledger.txFrame.get(contractHashKey(acc.statement.codeHash).toOpenArray)
+          var rc = ledger.txFrame.getCodeByHash(acc.statement.codeHash)
           if rc.isErr:
             # A non-empty code hash with no code in the database: record a fatalError
             # but still return empty code so the async EVM continues.
-            warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
+            warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=rc.error
             ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
             CodeBytesRef()
           else:
@@ -668,9 +667,9 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
     acc.original.code =
       if acc.original.statement.codeHash != EMPTY_CODE_HASH:
         ledger.cachedCode(acc.original.statement.codeHash).valueOr:
-          var rc = ledger.txFrame.get(contractHashKey(acc.original.statement.codeHash).toOpenArray)
+          var rc = ledger.txFrame.getCodeByHash(acc.original.statement.codeHash)
           if rc.isErr:
-            warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=($$rc.error)
+            warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=rc.error
             CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
@@ -1050,8 +1049,8 @@ proc storeHeldCode*(ledger: LedgerRef): Result[void, string] =
   ## Write the code `holdCode` kept back, once its block is accepted.
   for codeHash, code in ledger.heldCode:
     if not code.persisted:
-      ledger.txFrame.put(contractHashKey(codeHash).toOpenArray, code.bytes()).isOkOr:
-        return err("storeHeldCode(): " & $$error)
+      ledger.txFrame.persistCodeByHash(codeHash, code.bytes()).isOkOr:
+        return err("storeHeldCode(): " & error)
       code.persisted = true
   ledger.heldCode.clear()
   ok()
@@ -1119,6 +1118,69 @@ func getAccessList*(ledger: LedgerRef): transactions.AccessList =
   doAssert(ledger.savePoint.parentSavePoint.isNil)
   ledger.savePoint.accessList.getAccessList()
 
+func copyAccessList*(ledger: LedgerRef): ac_access_list.AccessList =
+  ledger.savePoint.accessList
+
+func restoreAccessList*(ledger: LedgerRef, accessList: sink ac_access_list.AccessList) =
+  ledger.savePoint.accessList = move(accessList)
+
+func copySelfDestruct*(ledger: LedgerRef): HashSet[Address] =
+  ledger.savePoint.selfDestruct
+
+func restoreSelfDestruct*(ledger: LedgerRef, selfDestruct: sink HashSet[Address]) =
+  ledger.savePoint.selfDestruct = move(selfDestruct)
+
+proc getLiveAccount*(ledger: LedgerRef, address: Address): AccountRef =
+  ledger.getAccount(address, shouldCreate = false)
+
+proc getDirtyAccount*(ledger: LedgerRef, address: Address): AccountRef =
+  result = ledger.getAccount(address, shouldCreate = false)
+  if result.isNil.not and Dirty notin result.flags:
+    return nil
+
+iterator dirtyAccounts*(ledger: LedgerRef): (Address, AccountRef) =
+  var sp = ledger.savePoint
+  while sp != nil:
+    for address, acc in sp.dirty:
+      yield (address, acc)
+    sp = sp.parentSavePoint
+
+# ------------------------------------------------------------------------------
+# Public AccountRef read-only methods
+# ------------------------------------------------------------------------------
+
+func originalStatement*(acc: AccountRef): lent CoreDbAccount =
+  acc.original.statement
+
+func statement*(acc: AccountRef): lent CoreDbAccount =
+  acc.statement
+
+func balanceChanged*(acc: AccountRef): bool =
+  acc.statement.balance != acc.original.statement.balance
+
+func nonceChanged*(acc: AccountRef): bool =
+  acc.statement.nonce != acc.original.statement.nonce
+
+func codeChanged*(acc: AccountRef): bool =
+  CodeChanged in acc.flags
+
+func storageChanged*(acc: AccountRef): bool =
+  StorageChanged in acc.flags
+
+func codeChangedToSomething*(acc: AccountRef): bool =
+  acc.original.statement.codeHash == EMPTY_CODE_HASH and
+    acc.statement.codeHash != EMPTY_CODE_HASH
+
+func slots*(acc: AccountRef): seq[UInt256] =
+  for key in acc.overlayStorage.keys:
+    result.add key
+
+func storage*(acc: AccountRef, slot: UInt256): UInt256 =
+  acc.overlayStorage.getOrDefault(slot)
+
+func originalStorage*(acc: AccountRef, slot: UInt256): UInt256 =
+  acc.original.storage.getOrDefault(slot)
+
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
 # ------------------------------------------------------------------------------
@@ -1138,6 +1200,8 @@ proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAc
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase ledger, address)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase ledger, address)
+proc getLiveAccount*(ledger: ReadOnlyLedger, address: Address): AccountRef = getLiveAccount(distinctBase ledger, address)
+proc getDirtyAccount*(ledger: ReadOnlyLedger, address: Address): AccountRef = getDirtyAccount(distinctBase ledger, address)
 
 # ------------------------------------------------------------------------------
 # End

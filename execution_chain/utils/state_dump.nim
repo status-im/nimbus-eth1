@@ -53,28 +53,35 @@ proc `%`*(x: AccountNonce): JsonNode =
 proc `%`*(x: Table[UInt256, UInt256]): JsonNode =
   result = newJObject()
   for k, v in x:
-    result["0x" & k.toHex] = %(v)
+    if v.isZero:
+      continue
+    let
+      hex = k.toHex
+      key = if hex.len mod 2 != 0: "0x0" & hex
+            else: "0x" & hex
+    result[key] = %(v)
 
-proc `%`*(x: DumpAccount): JsonNode =
+proc `%`*(x: DumpAccount, extra: bool = false): JsonNode =
   result = %{
     "nonce"   : %(x.nonce),
     "balance" : %(x.balance),
     "code"    : %(x.code),
-    "storage" : %(x.storage),
-    "root"    : %(x.root),
-    "codeHash": %(x.codeHash),
-    "key"     : %(x.key)
+    "storage" : %(x.storage),    
   }
+  if extra:
+    result["root"]    = %(x.root)
+    result["codeHash"]= %(x.codeHash)
+    result["key"]     = %(x.key)
 
-proc `%`*(x: Table[Address, DumpAccount]): JsonNode =
+proc `%`*(x: Table[Address, DumpAccount], extra: bool = false): JsonNode =
   result = newJObject()
   for k, v in x:
-    result["0x" & k.toHex] = %(v)
+    result["0x" & k.toHex] = `%`(v, extra)
 
-proc `%`*(x: StateDump): JsonNode =
+proc `%`*(x: StateDump, extra: bool = false): JsonNode =
   result = %{
     "root": %(x.root),
-    "accounts": %(x.accounts)
+    "accounts": `%`(x.accounts, extra)
   }
 
 proc dumpAccount(ledger: LedgerRef, acc: Address): DumpAccount =
