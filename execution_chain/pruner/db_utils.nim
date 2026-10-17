@@ -63,9 +63,9 @@ proc deleteBlockBodyAndReceiptsBe*(kvt: KvtDbRef, header: Header) =
 proc deleteBlockAccessListsBe*(
     kvt: KvtDbRef, blockHashes: openArray[Hash32], tail: BlockNumber
 ) =
-  var keys = newSeqOfCap[DbKey](blockHashes.len)
+  var keys = newSeqOfCap[seq[byte]](blockHashes.len)
   for blockHash in blockHashes:
-    keys.add blockHashToBlockAccessListKey(blockHash)
+    keys.add @(blockHashToBlockAccessListKey(blockHash).toOpenArray)
   kvt.del(keys).expect("delete block access lists")
   # After the deletes: a crash in between only repeats them on the next run
   kvt.put(balTailKey().toOpenArray, tail.toBytesLE()).expect("no error")

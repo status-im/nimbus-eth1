@@ -66,18 +66,18 @@ suite "Kvt":
     db.close()
 
   test "Batch delete - del":
-    let keys = [
-      genericHashKey(keccak256([byte 1])),
-      genericHashKey(keccak256([byte 2])),
-      genericHashKey(keccak256([byte 3]))]
-    for key in keys:
-      check db.put(key.toOpenArray, [byte 0, 1]).isOk()
+    check:
+      db.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
+      db.put([byte 0, 1, 2], [byte 0, 1, 5]).isOk()
+      db.put([byte 0, 1, 3], [byte 0, 1, 6]).isOk()
 
     check:
-      db.del([keys[0], keys[1]]).isOk()
-      not db.hasKey(keys[0].toOpenArray)
-      not db.hasKey(keys[1].toOpenArray)
-      db.hasKey(keys[2].toOpenArray)
+      db.del([@[byte 0, 1, 1], @[byte 0, 1, 2]]).isOk()
+      not db.hasKey([byte 0, 1, 1])
+      not db.hasKey([byte 0, 1, 2])
+      db.get([byte 0, 1, 3]).expect("entry") == @[byte 0, 1, 6]
+      db.del([@[byte 0, 1, 3], @[]]) == Result[void, KvtError].err(KeyInvalid)
+      db.hasKey([byte 0, 1, 3])
 
     db.close()
 
@@ -263,7 +263,7 @@ suite "Kvt block hash cache":
     check db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
 
     check:
-      db.kvt.del([blockNumberToHashKey(BlockNumber(1))]).isOk()
+      db.kvt.del([@(blockNumberToHashKey(BlockNumber(1)).toOpenArray)]).isOk()
       db.baseTxFrame().getBlockHash(BlockNumber(1)).isErr()
 
     db.close()
@@ -279,15 +279,14 @@ suite "Kvt on RocksDB":
     removeDir(path)
 
   test "Batch delete - del":
-    let keys = [
-      genericHashKey(keccak256([byte 1])),
-      genericHashKey(keccak256([byte 2])),
-      genericHashKey(keccak256([byte 3]))]
-    for key in keys:
-      check db.kvt.put(key.toOpenArray, [byte 0, 1]).isOk()
+    let kvt = db.kvt
+    check:
+      kvt.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
+      kvt.put([byte 0, 1, 2], [byte 0, 1, 5]).isOk()
+      kvt.put([byte 0, 1, 3], [byte 0, 1, 6]).isOk()
 
     check:
-      db.kvt.del([keys[0], keys[1]]).isOk()
-      not db.kvt.hasKey(keys[0].toOpenArray)
-      not db.kvt.hasKey(keys[1].toOpenArray)
-      db.kvt.hasKey(keys[2].toOpenArray)
+      kvt.del([@[byte 0, 1, 1], @[byte 0, 1, 2]]).isOk()
+      not kvt.hasKey([byte 0, 1, 1])
+      not kvt.hasKey([byte 0, 1, 2])
+      kvt.get([byte 0, 1, 3]).expect("entry") == @[byte 0, 1, 6]

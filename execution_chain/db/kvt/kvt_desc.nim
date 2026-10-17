@@ -17,7 +17,6 @@ import
   std/[hashes, tables],
   eth/common/[base, hashes],
   results,
-  ../storage_types,
   ./kvt_init/init_common,
   ./kvt_constants,
   ./kvt_desc/desc_error
@@ -54,7 +53,7 @@ type
     ## Generic backend database bulk delete function.
 
   DelBatchKvpFn* =
-    proc(keys: openArray[DbKey]): Result[void, KvtError] {.gcsafe, raises: [].}
+    proc(keys: openArray[seq[byte]]): Result[void, KvtError] {.gcsafe, raises: [].}
     ## Generic backend database atomic bulk delete function.
 
   # -------------

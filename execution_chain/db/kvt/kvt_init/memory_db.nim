@@ -29,7 +29,6 @@ import
   std/[tables, sets],
   results,
   stew/byteutils,
-  ../../storage_types,
   ./init_common,
   ../kvt_desc
 
@@ -129,9 +128,9 @@ proc delRangeKvpFn(db: MemBackendRef): DelRangeKvpFn =
 
 proc delBatchKvpFn(db: MemBackendRef): DelBatchKvpFn =
   result =
-    proc(keys: openArray[DbKey]): Result[void, KvtError] =
+    proc(keys: openArray[seq[byte]]): Result[void, KvtError] =
       for key in keys:
-        db.tab.del(@(key.toOpenArray))
+        db.tab.del(key)
 
       ok()
 

@@ -20,7 +20,6 @@ import
   chronicles,
   rocksdb,
   results,
-  ../../storage_types,
   ../kvt_desc,
   ./init_common,
   ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put]
@@ -140,7 +139,7 @@ proc delRangeKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelRangeKvpFn =
 
 proc delBatchKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelBatchKvpFn =
   result =
-    proc(keys: openArray[DbKey]): Result[void, KvtError] =
+    proc(keys: openArray[seq[byte]]): Result[void, KvtError] =
       db.rdb.del(keys, cf).isOkOr:
         when extraTraceMessages:
           debug "delBatchKvpFn() failed", error=($error)
