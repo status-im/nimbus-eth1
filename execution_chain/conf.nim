@@ -76,6 +76,7 @@ type
     Eth                           ## enable eth_ set of RPC API
     Debug                         ## enable debug_ set of RPC API
     Admin                         ## enable admin_ set of RPC API
+    Trace                         ## enable trace_ set of RPC API
 
   ExecutionClientConf* = object
     ## Main configuration for the execution client - when updating, coordinate
@@ -777,6 +778,7 @@ proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
     of "eth": result.incl RpcFlag.Eth
     of "debug": result.incl RpcFlag.Debug
     of "admin": result.incl RpcFlag.Admin
+    of "trace": result.incl RpcFlag.Trace
     else:
       error "Unknown RPC API: ", name=item
       quit QuitFailure
