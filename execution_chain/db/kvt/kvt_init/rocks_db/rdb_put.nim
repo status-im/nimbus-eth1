@@ -53,6 +53,19 @@ proc put*(
     return err((errSym,error))
   ok()
 
+proc del*(
+    rdb: RdbInst;
+    keys: openArray[seq[byte]];
+    cf: static[KvtCFs]): Result[void,(KvtError,string)] =
+  let wb = rdb.baseDb.db.openWriteBatch(rdb.store[cf].handle())
+  defer: wb.close()
+  for key in keys:
+    wb.delete(key).isOkOr:
+      return err((RdbBeDriverDelError, error))
+  rdb.baseDb.db.write(wb).isOkOr:
+    return err((RdbBeDriverWriteError, error))
+  ok()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
