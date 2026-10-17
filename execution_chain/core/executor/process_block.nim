@@ -81,7 +81,9 @@ proc processTransactions*(
 
   let depositContractAddress = vmState.com.depositContractAddress
   vmState.withSender(transactions, blockAccessList):
-    if sender == default(Address):
+    # Accept a frame transaction sent from the zero address,
+    # whose code approves execution and payment.
+    if tx.txType != TxEip8141 and sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
 
     if vmState.balTrackerEnabled:
@@ -97,7 +99,7 @@ proc processTransactions*(
     if not skipReceipts:
       # calc logs bloom first, because makeReceipt will swallow vmState.txLogs
       vmState.receiptBlooms[txIndex] = calcLogsBloom(vmState.txLogs)
-      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)      
+      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
 
   ok()
 
