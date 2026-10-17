@@ -241,11 +241,19 @@ proc sstore8038Impl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasI
 
   # https://github.com/ethereum/execution-specs/pull/2733/changes
   if res.creditStateGas > 0:
-    c.gasMeter.creditStateGasRefund(res.creditStateGas)
+    c.creditStateGasRefund(res.creditStateGas, Opt.some(slot))
   if res.stateGas > 0:
-    ? c.gasMeter.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
+    ? c.chargeStateGas(res.stateGas, reason = "SSTORE state gas")
 
   c.gasMeter.refundGas(res.gasRefund)
+
+  # Record the executing frame as the outstanding charge's owner: a
+  # later refill of this slot is attributed back to it.
+  if c.vmState.frameEnabled and res.stateGas != 0:
+    let
+      snapshot = c.vmState.frameCtx.snapshot
+      key = AccountSlot(address: c.msg.currentTarget, slot: slot)
+    snapshot.ocOwners[key] = snapshot.currentFrameIndex
 
   if c.balTrackerEnabled:
     c.vmState.balTracker.trackStorageWrite(c.msg.currentTarget, slot, newValue)
@@ -254,7 +262,7 @@ proc sstore8038Impl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasI
   ok()
 
 proc sstoreEIP8038Op(cpt: VmCpt): EvmResultVoid =
-  ## 0x55, EIP2929: sstore for Berlin and later
+  ## 0x55, EIP8038: sstore for Amsterdam and later
   ? cpt.stack.lsCheck(2)
   let
     slot = cpt.stack.lsPeekInt(^1)

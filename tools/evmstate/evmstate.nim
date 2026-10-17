@@ -291,7 +291,7 @@ proc toTracerFlags(conf: StateConf): set[TracerFlags] =
 
 proc parseTx(ctx: var StateContext, txo: Txo, subTest: SubTest): Result[void, string] =
   try:
-    if txo.secretKey.isSome:
+    if txo.secretKey.isSome or txo.signatures.isSome:
       ctx.tx = ? parseTx(txo, subTest.indexes)
       return ok()
 
