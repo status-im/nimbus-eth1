@@ -12,6 +12,7 @@ import
   unittest2,
   chronos,
   web3/[eth_api_types, eth_api],
+  eth/common/eth_types_rlp,
   ../engine/header_store,
   ../engine/blocks,
   ../engine/types,
@@ -46,6 +47,16 @@ suite "test verified blocks":
 
       ts.clear()
       engine.headerStore.clear()
+
+  test "convHeader hashes a header with Amsterdam fields":
+    # sepolia block 0xb505b0, carrying blockAccessListHash and slotNumber
+    let blk =
+      getBlockFromJson("nimbus_verified_proxy/tests/data/sepolia_amsterdam.json")
+
+    check:
+      blk.blockAccessListHash.isSome()
+      blk.slotNumber.isSome()
+      convHeader(blk).computeBlockHash() == blk.hash
 
   test "check fetching blocks by number and tags":
     let
