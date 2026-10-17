@@ -58,9 +58,10 @@
     "payload": "01c0",
     "description": "The reason is optional, so an empty list is a valid disconnect"
   },
-  "DisconnectReason: no payload means no reason was given": {
+  "DisconnectReason: no payload at all": {
     "payload": "01",
-    "description": "The reason is optional, so no payload at all is a valid disconnect"
+    "error": "PeerDisconnected",
+    "description": "The spec spells the payload as a list, so an absent payload is a breach"
   },
   "DisconnectReason: single element list with entry out off enum range": {
     "payload": "01c111",
