@@ -1,3 +1,73 @@
+2026-10-17 v0.4.3
+=================
+
+The Nimbus Ethereum client `v0.4.3` beta and verified proxy are `high-urgency` for Hoodi, due to its 26th October Glamsterdam fork activation, and `low-urgency` for other networks.
+
+### Improvements
+
+- Schedule Hoodi Glamsterdam activation:
+  https://github.com/status-im/nimbus-eth1/pull/4938
+  https://github.com/status-im/nimbus-eth1/pull/5001
+
+- Implement asynchronous block building:
+  https://github.com/status-im/nimbus-eth1/pull/4512
+
+- Avoid spinning on packing transactions into already-nearly-full payloads:
+  https://github.com/status-im/nimbus-eth1/pull/4885
+
+- Optimize log-heavy block processing by 10%:
+  https://github.com/status-im/nimbus-eth1/pull/4924
+
+- Optimize building block access lists:
+  https://github.com/status-im/nimbus-eth1/pull/4931
+
+- Optimize block access list tracking:
+  https://github.com/status-im/nimbus-eth1/pull/4940
+
+- Optimize logs bloom computation:
+  https://github.com/status-im/nimbus-eth1/pull/4906
+
+- Ensure `finalized` tag enforced throughout verified proxy:
+  https://github.com/status-im/nimbus-eth1/issues/4751
+
+- Implement `eth_baseFee`:
+  https://github.com/status-im/nimbus-eth1/pull/4913
+
+### Fixes
+
+- Fix `eth_getPayloadBodiesByHashV2` returning empty block access list for blocks without withdrawals:
+  https://github.com/status-im/nimbus-eth1/pull/4890
+
+- Default omitted block parameter to `latest` in state queries:
+  https://github.com/status-im/nimbus-eth1/pull/4907
+
+- Default omitted block parameter to `latest` in `eth_call`, `eth_estimateGas`, and `eth_createAccessList`:
+  https://github.com/status-im/nimbus-eth1/pull/4922
+
+- Reject `eth_getLogs` ranges beyond head as invalid params:
+  https://github.com/status-im/nimbus-eth1/pull/4910
+
+- Report `eth_call` execution failures as errors:
+  https://github.com/status-im/nimbus-eth1/pull/4911
+
+- Execute `eth_call` and `eth_executeGas` in the requested block context:
+  https://github.com/status-im/nimbus-eth1/pull/4912
+
+- Reject an empty `eth_getStorageValues` request:
+  https://github.com/status-im/nimbus-eth1/pull/4917
+
+- Skip empty log packing in parallel transaction execution:
+  https://github.com/status-im/nimbus-eth1/pull/4905
+
+- Fix `gasPrice` and `yParity` in RPC transaction objects:
+  https://github.com/status-im/nimbus-eth1/pull/4908
+
+- Report RLP-encoded length as block size in RPC:
+  https://github.com/status-im/nimbus-eth1/pull/4909
+
+- Fix shutdown crash:
+  https://github.com/status-im/nimbus-eth1/pull/4948
+
 2026-09-29 v0.4.2
 =================
 
