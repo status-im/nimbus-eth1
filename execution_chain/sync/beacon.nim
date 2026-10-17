@@ -174,12 +174,9 @@ proc singleRun*(
   ##
   doAssert not desc.ctx.isNil
   if desc.startSync(standBy = false):               # run state was changed
-    desc.ctx.singleRunStart().isOkOr:
+    desc.ctx.singleRunStart(baseHeader, notify).isOkOr:
       discard desc.startSync(standBy = true)
       return err(NotInIdleMode)                     # oops, something went wrong
-    desc.ctx.pool.standByMode = false               # leave stand-by mode
-    desc.ctx.pool.stopBase = Opt.some(baseHeader)   # set stop header
-    desc.ctx.pool.stopNotifier = notify             # register notifier
     return ok()
   err(NotInStandByMode)
 
