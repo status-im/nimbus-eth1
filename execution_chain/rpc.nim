@@ -51,7 +51,7 @@ func installRPC(server: RpcServer,
     setupAdminRpc(nimbus, config, server)
 
   if RpcFlag.Debug in flags:
-    setupDebugRpc(com, nimbus.txPool, server)
+    setupDebugRpc(com, nimbus.txPool, server, config.rpcTotalDifficulty)
 
 
 proc newRpcWebsocketHandler(): RpcWebSocketHandler =
@@ -219,7 +219,7 @@ proc setupRpc*(nimbus: NimbusNode, config: ExecutionClientConf,
     allowedOrigins = config.getAllowedOrigins()
     jwtAuthHook = httpJwtAuth(jwtKey)
     corsHook = httpCors(allowedOrigins)
-    serverApi = newServerAPI(nimbus.txPool)
+    serverApi = newServerAPI(nimbus.txPool, config.rpcTotalDifficulty)
 
   if config.combinedServer:
     let hooks: seq[RpcAuthHook] = @[jwtAuthHook, corsHook]
