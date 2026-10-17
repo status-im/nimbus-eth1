@@ -118,6 +118,8 @@ func frameTransactionIntrinsicCost(tx: Transaction): IntrinsicGas =
     tokens = countTokensInData(nonceData)
     dataLength = nonceData.len
     valueTransferGas = 0.GasInt
+    keyedNonceAccessGas = 0.GasInt
+    signatureGas = 0.GasInt
 
   for frame in tx.frames:
     tokens += countTokensInData(frame.data)
@@ -126,9 +128,6 @@ func frameTransactionIntrinsicCost(tx: Transaction): IntrinsicGas =
        frame.target.isSome and
        frame.target.value != tx.sender:
       valueTransferGas += TX_VALUE_COST
-
-  var
-    signatureGas = 0.GasInt
 
   for sig in tx.signatures:
     signatureGas += signatureVerificationGas(sig)
@@ -139,12 +138,16 @@ func frameTransactionIntrinsicCost(tx: Transaction): IntrinsicGas =
     dataLength += sig.msg.len
     dataLength += sig.signature.len
 
+  if tx.nonceKeys != LEGACY_NONCE_KEYS:
+    keyedNonceAccessGas = GasInt(tx.nonceKeys.len * KEYED_NONCE_ACCESS)
+
   # EIP-7976 floor tokens: all charged bytes count uniformly.
   let
     floorTokens = dataLength * TX_DATA_TOKEN_STANDARD
     baseExecutionGas = TX_FRAME_INTRINSIC +
       tx.frames.len.GasInt * TX_PER_FRAME +
-      signatureGas + valueTransferGas
+      signatureGas + valueTransferGas +
+      keyedNonceAccessGas
 
   IntrinsicGas(
     execution: baseExecutionGas + tokens.GasInt * TX_DATA_TOKEN_STANDARD,

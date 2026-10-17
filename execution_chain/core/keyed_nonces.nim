@@ -17,7 +17,13 @@ import
   results,
   ../evm/[state, types]
 
-from ./eip8037 import STATE_BYTES_PER_STORAGE_SET, COST_PER_STATE_BYTE
+from ./eip8037 import
+  STATE_BYTES_PER_STORAGE_SET,
+  COST_PER_STATE_BYTE
+
+from ../evm/interpreter/gas_costs import
+  COLD_STORAGE_ACCESS_8038,
+  STORAGE_WRITE_8038
 
 const
   MAX_NONCE_KEYS* = 16
@@ -25,6 +31,7 @@ const
   KEYED_NONCE_FIRST_USE* = STATE_BYTES_PER_STORAGE_SET * COST_PER_STATE_BYTE
   LEGACY_NONCE_KEYS* = @[0.u256]
   NONCE_MANAGER = address"8250968c12e01a19d6f667b9b2f3b3a4d0e51cb7"
+  KEYED_NONCE_ACCESS* = COLD_STORAGE_ACCESS_8038 + STORAGE_WRITE_8038
 
 template nonceSeq*(tx: ptr Transaction): uint64 =
   tx.nonce
