@@ -75,6 +75,7 @@ suite "test receipts verification":
 
     # update block tags because getLogs (uses)-> getReceipts (uses)-> getHeader
     ts.loadBlockReceipts(blk, rxs)
+    ts.loadLogs(logs)
     engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
     engine.setAnchor(convHeader(blk), blk.hash, Finalized)
 
@@ -93,7 +94,6 @@ suite "test receipts verification":
         blockHash: Opt.none(Hash32),
       )
 
-      ts.loadLogs(filterOptions, logs)
       let verifiedLogs = waitFor frontend.eth_getLogs(filterOptions)
       check:
         verifiedLogs.isOk()
@@ -157,7 +157,7 @@ suite "test receipts verification":
       blockHash: Opt.none(Hash32),
     )
 
-    ts.loadLogs(filterOptions, logs)
+    ts.loadLogs(logs)
 
     let newFilter = waitFor frontend.eth_newFilter(filterOptions)
 
