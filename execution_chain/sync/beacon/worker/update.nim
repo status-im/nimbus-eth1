@@ -43,6 +43,7 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
   ## Clean up sync target buckets, stop syncer activity, and and get ready
   ## for awaiting a new request from the `CL`.
   ##
+  let lastHeadHash = ctx.hdrCache.headHash
   ctx.hdrCache.clear()
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false
@@ -57,6 +58,19 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
 
   info "Suspending syncer", base=ctx.chain.baseNumber,
     head=ctx.chain.latestNumber, nSyncPeers=ctx.nSyncPeers()
+
+  # A `CL` head update that arrived while the session was still open was
+  # ignored by the header chain cache. Replay the latest one if it still
+  # needs a sync, i.e. neither the head nor its parent is known to the `FC`
+  # module (as on the forkchoice path), and it is not the head of the session
+  # just ended (e.g. cancelled after an invalid block.)
+  let consHead = ctx.hdrCache.latestConsHead()
+  if 0 < consHead.number:
+    let consHash = consHead.computeBlockHash()
+    if consHash != lastHeadHash and
+       ctx.chain.headerByHash(consHash).isErr and
+       ctx.chain.headerByHash(consHead.parentHash).isErr:
+      ctx.hdrCache.headTargetUpdate(consHead, ctx.hdrCache.latestFinHash())
 
 proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Link header chain into `FC` module. Gets ready for block import.
