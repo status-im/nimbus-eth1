@@ -117,7 +117,7 @@ suite "test receipts verification":
       address = logs[0].address
 
     ts.loadBlockReceipts(blk, rxs)
-    ts.loadLogs(rxs.mapIt(it.logs).concat())  # also load non-Transfer logs
+    ts.loadLogs(rxs.mapIt(it.logs).concat()) # also load non-Transfer logs
     engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
     engine.setAnchor(convHeader(blk), blk.hash, Finalized)
 
