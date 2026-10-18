@@ -16,6 +16,7 @@ import
   pkg/stew/interval_set,
   ../../../../networking/p2p,
   ../../../../block_access_list/bal_utils,
+  ../../../../utils/utils,
   ../../../wire_protocol/types,
   ../[helpers, update, worker_desc],
   ./[blocks_fetch_bal, blocks_fetch_body, blocks_helpers, blocks_unproc]
@@ -27,6 +28,22 @@ import
 proc getNthHash(ctx: BeaconCtxRef; blocks: seq[EthBlock]; n: int): Hash32 =
   ctx.hdrCache.getHash(blocks[n].header.number).valueOr:
     return zeroHash32
+
+proc bodyMatchesHeader(blk: EthBlock): bool =
+  ## Check that the body is the one the header commits to (transactions,
+  ## uncles and withdrawals.) The block access list is already checked
+  ## against the header hash when it is decoded.
+  if blk.transactions.calcTxRoot != blk.header.txRoot:
+    return false
+  if blk.uncles.computeRlpHash != blk.header.ommersHash:
+    return false
+  if blk.header.withdrawalsRoot.isSome:
+    if blk.withdrawals.isNone or
+       blk.withdrawals.get.calcWithdrawalsRoot != blk.header.withdrawalsRoot.get:
+      return false
+  elif blk.withdrawals.isSome:
+    return false
+  true
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -308,6 +325,17 @@ template blocksImport*(
         of Invalid:
           # Genuine validation failure: the peer served an unusable block.
           isError = true
+
+          # Tell the engine API about the bad block, so that `newPayload` and
+          # `forkchoiceUpdated` for a child of the bad block or for the sync
+          # target answer INVALID rather than SYNCING. Only do so when the body
+          # matches the header: the header is linked by hash to the `CL`
+          # target, but the body is not verified before import, so a peer can
+          # make a canonical block fail by serving a different body.
+          if blocks[n].bodyMatchesHeader():
+            let badHeader = blocks[n].header
+            ctx.chain.com.notifyBadBlock(badHeader, badHeader)
+            ctx.chain.com.notifyBadBlock(badHeader, ctx.hdrCache.head)
 
           # Mark peer that produced that unusable block as a zombie
           let srcPeer = buddy.getSyncPeer peerID
