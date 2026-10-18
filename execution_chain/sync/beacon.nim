@@ -148,6 +148,12 @@ proc configTicker*(desc: BeaconSyncRef, enable: bool) =
   doAssert not desc.ctx.isNil
   desc.ctx.pool.syncTickerOk = enable
 
+proc configLoopInterval*(desc: BeaconSyncRef, interval: Duration) =
+  ## Replace the daemon and worker idle waits by the argument `interval`
+  ## (mainly for testing.)
+  doAssert not desc.ctx.isNil
+  desc.ctx.pool.loopInterval = Opt.some(interval)
+
 # -----------------
 
 proc start*(desc: BeaconSyncRef; standBy = false): bool =

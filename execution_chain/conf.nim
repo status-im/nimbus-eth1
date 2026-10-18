@@ -581,6 +581,12 @@ type
         defaultValue: false
         name: "debug-beacon-sync-ticker" .}: bool
 
+      beaconSyncLoopInterval* {.
+        hidden
+        desc: "Replace the beacon sync daemon wait and the worker idle waits" &
+              " by this interval in milliseconds (for testing)"
+        name: "debug-beacon-sync-loop-interval" .}: Option[uint32]
+
       beaconSyncTarget* {.
         hidden
         desc: "Manually set the initial sync target specified by its 32 byte" &
