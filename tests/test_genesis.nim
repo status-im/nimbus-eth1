@@ -10,6 +10,7 @@
 
 import
   std/[os],
+  stew/endians2,
   unittest2,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/utils/utils,
@@ -236,6 +237,12 @@ proc customGenesisTest() =
       com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
       com.checkForkAt(0, Amsterdam, bpo2[0], bpo2[1], bpo2[2])
       com.checkForkAt(15000, Amsterdam, bpo3[0], bpo3[1], bpo3[2])
+      # bpo3 is the only fork after genesis, so the only fork ID transition
+      let genesisCRC = crc32(0, com.genesisHash.data)
+      check com.forkId(EthTime(0)) ==
+        ForkId(hash: genesisCRC.to(Bytes4), next: 15000)
+      check com.forkId(EthTime(15000)) == ForkId(
+        hash: crc32(genesisCRC, 15000'u64.toBytesBE).to(Bytes4), next: 0)
 
       # bpo4 after Amsterdam
       check hiveParams(osakaToBpo2 &
