@@ -279,9 +279,9 @@ proc initTestExecutionBackend*(t: TestApiState): ExecutionApiBackend =
             lg.blockHash == filterOptions.blockHash
           else:
             # we directly use number here because the verified proxy should never use aliases
-            lg.blockNumber.isSome() and lg.blockNumber.get() in
-              filterOptions.fromBlock.get().number ..
-              filterOptions.toBlock.get().number
+            lg.blockNumber.isSome() and
+              lg.blockNumber.get() in
+              filterOptions.fromBlock.get().number .. filterOptions.toBlock.get().number
         if inRange:
           res.add(lg)
       ok(res)
