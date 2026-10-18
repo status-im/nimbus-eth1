@@ -10,7 +10,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, macros],
+  std/[tables, macros, sequtils, strutils],
   eth/rlp, eth/common/eth_types_json_serialization,
   eth/common/eth_types_rlp,
   stint, stew/byteutils,
@@ -200,22 +200,32 @@ proc validateChainConfig*(conf: ChainConfig): bool =
   # TODO: check to make sure the timestamps are all past the
   # block numbers?
 
-  var lastTimeBasedFork = timeBasedForkOptionals[0]
-  for i in 1..<timeBasedForkOptionals.len:
-    let cur = timeBasedForkOptionals[i]
+  # BPO forks only change the blob schedule. They are ordered after the forks
+  # before them and among themselves, but not against the named forks that
+  # follow them (e.g. a BPO may activate before or after Amsterdam).
+  const lastBpoTimeField = forkTimeField.find("bpo5Time")
+  let
+    namedTimeForks = timeBasedForkOptionals.filterIt(
+      not it.name.startsWith("bpo"))
+    bpoTimeForks = timeBasedForkOptionals[0 .. lastBpoTimeField]
 
-    if lastTimeBasedFork.time.isSome and cur.time.isSome:
-      if lastTimeBasedFork.time.get > cur.time.get:
-        error "Unsupported fork ordering",
-          lastFork=lastTimeBasedFork.name,
-          lastTime=lastTimeBasedFork.time,
-          curFork=cur.name,
-          curTime=cur.time
-        return false
+  for timeForks in [namedTimeForks, bpoTimeForks]:
+    var lastTimeBasedFork = timeForks[0]
+    for i in 1..<timeForks.len:
+      let cur = timeForks[i]
 
-    # If it was optional and not set, then ignore it
-    if cur.time.isSome:
-      lastTimeBasedFork = cur
+      if lastTimeBasedFork.time.isSome and cur.time.isSome:
+        if lastTimeBasedFork.time.get > cur.time.get:
+          error "Unsupported fork ordering",
+            lastFork=lastTimeBasedFork.name,
+            lastTime=lastTimeBasedFork.time,
+            curFork=cur.name,
+            curTime=cur.time
+          return false
+
+      # If it was optional and not set, then ignore it
+      if cur.time.isSome:
+        lastTimeBasedFork = cur
 
 func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
   [

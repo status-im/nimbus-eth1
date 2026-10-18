@@ -394,6 +394,23 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
 func toEVMFork*(com: CommonRef, header: Header): EVMFork =
   com.toEVMFork(forkDeterminationInfo(header))
 
+func toBlobFork*(com: CommonRef, timestamp: EthTime): HardFork =
+  ## Return the fork whose blob schedule applies at `timestamp`.
+  ## BPO forks may activate after a later named fork (e.g. Amsterdam), so
+  ## this is the most recently activated fork, with ties going to the later
+  ## fork. Execution rules still follow `toHardFork`.
+  result = com.toHardFork(timestamp)
+  var latest = Opt.none(EthTime)
+  for fork in Cancun..HardFork.high:
+    let time = com.forkTransitionTable.timeThresholds[fork]
+    if time.isSome and time.get <= timestamp and
+        (latest.isNone or time.get >= latest.get):
+      latest = time
+      result = fork
+
+func toBlobFork*(com: CommonRef, header: Header): HardFork =
+  com.toBlobFork(header.timestamp)
+
 func nextFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
   ## Returns the next hard fork after the given one
   ## The next fork can also be the last fork

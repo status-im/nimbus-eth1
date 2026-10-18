@@ -110,7 +110,7 @@ template checkBlockGasCapacity*(
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
     blobGasUsed = tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.hardFork)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.blobFork)
   if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     fail("blobGasUsed " & $blobGasUsed &
       " exceeds maximum allowance " & $maxBlobGasPerBlock)

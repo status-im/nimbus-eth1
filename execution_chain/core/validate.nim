@@ -414,7 +414,8 @@ proc validateTransaction*(
     # ensure that the user was willing to at least pay the current data gasprice
     let
       excessBlobGas = vmState.blockCtx.excessBlobGas
-      blobGasPrice = getBlobBaseFee(excessBlobGas, vmState.com, vmState.hardFork)
+      blobGasPrice = getBlobBaseFee(
+        excessBlobGas, vmState.com, vmState.com.toBlobFork(vmState.blockCtx.timestamp))
     if tx.maxFeePerBlobGas < blobGasPrice:
       return err("invalid tx: maxFeePerBlobGas smaller than blobGasPrice. " &
         &"maxFeePerBlobGas={tx.maxFeePerBlobGas}, blobGasPrice={blobGasPrice}")

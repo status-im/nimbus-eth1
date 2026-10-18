@@ -177,6 +177,81 @@ proc customGenesisTest() =
       validateBlobSchedule(cg, Bpo1, 9, 12, 5008888)
       validateBlobSchedule(cg, Amsterdam, 9, 12, 5008888) # fallback to bpo1, not Bpo2
 
+    test "BPO forks may activate after Amsterdam":
+      # Shaped like the hive genesis: everything up to bpo2 at genesis and a
+      # blob schedule per BPO, but none for Amsterdam.
+      proc hiveParams(forkTimes: string, params: var NetworkParams): bool =
+        decodeNetworkParams("""{"config": {
+          "chainId": 1, "homesteadBlock": 0, "eip150Block": 0, "eip155Block": 0,
+          "eip158Block": 0, "byzantiumBlock": 0, "constantinopleBlock": 0,
+          "petersburgBlock": 0, "istanbulBlock": 0, "berlinBlock": 0,
+          "londonBlock": 0, "mergeNetsplitBlock": 0, "terminalTotalDifficulty": 0,
+          "shanghaiTime": 0, "cancunTime": 0, "pragueTime": 0, """ & forkTimes & """,
+          "blobSchedule": {
+            "cancun": {"target": 3, "max": 6, "baseFeeUpdateFraction": 3338477},
+            "prague": {"target": 6, "max": 9, "baseFeeUpdateFraction": 5007716},
+            "osaka": {"target": 6, "max": 9, "baseFeeUpdateFraction": 5007716},
+            "bpo1": {"target": 10, "max": 15, "baseFeeUpdateFraction": 8346193},
+            "bpo2": {"target": 14, "max": 21, "baseFeeUpdateFraction": 11684671},
+            "bpo3": {"target": 21, "max": 32, "baseFeeUpdateFraction": 20609697},
+            "bpo4": {"target": 28, "max": 42, "baseFeeUpdateFraction": 27479596}
+          }}}""", params)
+
+      template checkForkAt(com: CommonRef, time: uint64, hardFork: HardFork,
+                           tgt, mx, fraction: uint64) =
+        let
+          t = EthTime(time)
+          blobFork = com.toBlobFork(t)
+        check com.toHardFork(t) == hardFork
+        check com.toEVMFork(t) == ToEVMFork[hardFork]
+        check com.isAmsterdamOrLater(t) == (hardFork >= Amsterdam)
+        check com.targetBlobsPerBlock(blobFork) == tgt
+        check com.maxBlobsPerBlock(blobFork) == mx
+        check com.baseFeeUpdateFraction(blobFork) == fraction
+
+      const
+        osakaToBpo2 = """"osakaTime": 0, "bpo1Time": 0, "bpo2Time": 0"""
+        bpo2 = (14'u64, 21'u64, 11684671'u64)
+        bpo3 = (21'u64, 32'u64, 20609697'u64)
+        bpo4 = (28'u64, 42'u64, 27479596'u64)
+
+      var cg: NetworkParams
+
+      # bpo3 after Osaka, no Amsterdam
+      check hiveParams(osakaToBpo2 & """, "bpo3Time": 15000""", cg)
+      var com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+      com.checkForkAt(0, Bpo2, bpo2[0], bpo2[1], bpo2[2])
+      com.checkForkAt(15000, Bpo3, bpo3[0], bpo3[1], bpo3[2])
+
+      # Amsterdam and bpo3 at genesis
+      check hiveParams(osakaToBpo2 &
+        """, "amsterdamTime": 0, "bpo3Time": 0""", cg)
+      com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+      com.checkForkAt(0, Amsterdam, bpo3[0], bpo3[1], bpo3[2])
+      com.checkForkAt(15000, Amsterdam, bpo3[0], bpo3[1], bpo3[2])
+
+      # bpo3 after Amsterdam
+      check hiveParams(osakaToBpo2 &
+        """, "amsterdamTime": 0, "bpo3Time": 15000""", cg)
+      com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+      com.checkForkAt(0, Amsterdam, bpo2[0], bpo2[1], bpo2[2])
+      com.checkForkAt(15000, Amsterdam, bpo3[0], bpo3[1], bpo3[2])
+
+      # bpo4 after Amsterdam
+      check hiveParams(osakaToBpo2 &
+        """, "amsterdamTime": 0, "bpo3Time": 0, "bpo4Time": 15000""", cg)
+      com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+      com.checkForkAt(0, Amsterdam, bpo3[0], bpo3[1], bpo3[2])
+      com.checkForkAt(15000, Amsterdam, bpo4[0], bpo4[1], bpo4[2])
+
+      # BPO forks are still ordered after Osaka and among themselves, and
+      # named forks among themselves
+      check not hiveParams(""""osakaTime": 100, "bpo1Time": 50""", cg)
+      check not hiveParams(osakaToBpo2 &
+        """, "amsterdamTime": 0, "bpo3Time": 200, "bpo4Time": 100""", cg)
+      check not hiveParams(osakaToBpo2 &
+        """, "amsterdamTime": 200, "bogotaTime": 100""", cg)
+
   test "Amsterdam-slotnumber":
     var cg: NetworkParams
     check loadNetworkParams("amsterdam_slotnumber.json".findFilePath, cg)
