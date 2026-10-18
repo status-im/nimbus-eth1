@@ -63,6 +63,7 @@ proc recoverSenderCached*(tx: Transaction): Opt[Address] =
 proc signTransaction*(
     tx: Transaction, privateKey: PrivateKey, eip155 = true
 ): Transaction =
+  doAssert(tx.txType != TxEip8141, "Frame transactions are not allowed to sign using this function")
   result = tx
   result.signature = result.sign(privateKey, eip155)
 
