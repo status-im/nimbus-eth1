@@ -17,6 +17,8 @@ import
   json_rpc/[rpcserver, rpcclient],
   ../engine/types
 
+from ../../execution_chain/rpc/filters import match
+
 type
   ProofQuery = (Address, seq[Bytes32], Hash32)
   AccessListQuery = (TransactionArgs, Hash32)
@@ -105,8 +107,8 @@ template loadBlockReceipts*(
   t.blockReceipts[blkHash] = receipts
   t.nums[blkNum] = blkHash
 
-template loadLogs*(t: TestApiState, logs: seq[LogObject]) =
-  t.logs.add(logs)
+template loadLogs*(t: TestApiState, newLogs: seq[LogObject]) =
+  t.logs.add(newLogs)
 
 template loadFeeHistory*(
     t: TestApiState,
@@ -282,7 +284,7 @@ proc initTestExecutionBackend*(t: TestApiState): ExecutionApiBackend =
             lg.blockNumber.isSome() and
               lg.blockNumber.get() in
               filterOptions.fromBlock.get().number .. filterOptions.toBlock.get().number
-        if inRange:
+        if inRange and lg.match(filterOptions.address, filterOptions.topics):
           res.add(lg)
       ok(res)
 
