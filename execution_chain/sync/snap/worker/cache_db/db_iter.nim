@@ -22,7 +22,11 @@ when extraTraceMessages:
     topics = "snap sync"
 
 type
-  KkvTriple* = tuple
+  KvPair = tuple
+    key: seq[byte]
+    value: seq[byte]
+
+  KkvTriple = tuple
     ## Internal helper structure
     key1: seq[byte]
     key2: seq[byte]

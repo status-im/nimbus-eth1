@@ -154,6 +154,10 @@ proc stateForwardNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   #
   let finHeadNum = ctx.finHeadNum info
   if ctx.pool.pivotNum + nFinHeadSupportWindowTopMargin < finHeadNum:
+    trace info & ": Continue fetching BALs", pivot=ctx.pool.pivotNum,
+      finHead=finHeadNum,
+      margin=(ctx.pool.pivotNum + nFinHeadSupportWindowTopMargin),
+      consHeadNum=ctx.consHeadNum()
     return SnapBalsFetch
   if ctx.pool.pivotNum < ctx.pool.forwardNum:       # state brought forward?
     return SnapStateForward
