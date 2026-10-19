@@ -28,10 +28,6 @@ const
     ## Bounds the maximum gas limit an EIP-1559 block may have.
     2
 
-  INITIAL_BASE_FEE = ##\
-    ## Initial base fee for Eip1559 blocks.
-    1000000000.u256
-
 proc calcEip8198BaseFee*(parentGasLimit, parentGasUsed: GasInt;
                          parentBaseFee: UInt256): UInt256 =
   ## calculates the basefee of the header.
