@@ -18,8 +18,12 @@ import
   ../evm/[evm_errors, state],
   ../constants,
   ../transaction/call_types,
-  ../evm/secp256r1verify,
   ./keyed_nonces
+
+when enable_zkvm_accelerators:
+  from ../stateless/zkvm/zkvm_accelerators import verifyRaw
+else:
+  from ../evm/secp256r1verify import verifyRaw
 
 from ./eip8037 import CREATE_ACCOUNT_STATE_GAS
 
