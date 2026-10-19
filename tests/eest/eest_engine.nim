@@ -118,9 +118,9 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
       if enp.validationError.isSome:
         return err("Expect validation error: " & enp.validationError.value & ", but got none")
 
-    #if enp.inclusionListSatisfied != status.inclusionListSatisfied:
-    #  return err("Expect inclusionListSatisfied: " & $enp.inclusionListSatisfied &
-    #    ", but got: " & $status.inclusionListSatisfied)
+    if enp.inclusionListSatisfied != status.inclusionListSatisfied:
+      return err("Expect inclusionListSatisfied: " & $enp.inclusionListSatisfied &
+        ", but got: " & $status.inclusionListSatisfied)
 
     let y = env.sendFCU(enp.forkchoiceUpdatedVersion.uint64, enp.params).valueOr:
       return err(error)

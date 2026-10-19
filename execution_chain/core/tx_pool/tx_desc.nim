@@ -14,7 +14,6 @@ import
   chronicles,
   metrics,
   std/[times, tables, typetraits],
-  eth/eip1559,
   eth/common/transaction_utils,
   stew/[sorted_set, bitseqs],
   web3/engine_api_types,
@@ -30,6 +29,7 @@ import
   ../focil,
   ../eip4844,
   ../eip7594,
+  ../gaslimit,
   ../validate,
   ../pooled_txs,
   ./tx_tabs,
@@ -95,10 +95,7 @@ func getBaseFee(com: CommonRef; parent: Header): GasInt =
   ## Calculates the `baseFee` of the head assuming this is the parent of a
   ## new block header to generate.
   ## Post Merge rule
-  calcEip1599BaseFee(
-    parent.gasLimit,
-    parent.gasUsed,
-    parent.baseFeePerGas.get(0.u256)).truncate(GasInt)
+  com.calcBaseFee(parent).truncate(GasInt)
 
 func getGasLimit(com: CommonRef; parent: Header, targetGasLimit: Opt[uint64]): GasInt =
   ## Post Merge rule

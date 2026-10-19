@@ -14,7 +14,8 @@ import
   ../common/common,
   std/strformat,
   results,
-  eth/[eip1559]
+  eth/eip1559,
+  ./eip8198
 
 export
   eip1559
@@ -42,12 +43,14 @@ proc validateGasLimit(header: Header; limit: GasInt): Result[void,string] =
 # ------------------------------------------------------------------------------
 
 # consensus/misc/eip1559.go(55): func CalcBaseFee(config [..]
-proc calcEip1599BaseFee*(com: CommonRef; parent: Header): UInt256 =
+proc calcBaseFee*(com: CommonRef; parent: Header): UInt256 =
   ## calculates the basefee of the header.
 
   # If the current block is the first EIP-1559 block, return the
   # initial base fee.
-  if com.isLondonOrLater(parent.number, parent.timestamp):
+  if com.isBogotaOrLater(parent.timestamp):
+    eip8198.calcEip8198BaseFee(parent.gasLimit, parent.gasUsed, parent.baseFeePerGas.get(0.u256))
+  elif com.isLondonOrLater(parent.number, parent.timestamp):
     eip1559.calcEip1599BaseFee(parent.gasLimit, parent.gasUsed, parent.baseFeePerGas.get(0.u256))
   else:
     EIP1559_INITIAL_BASE_FEE
@@ -70,7 +73,7 @@ proc verifyEip1559Header(com: CommonRef;
     return err("Post EIP-1559 header expected to have base fee")
 
   # Verify the baseFee is correct based on the parent header.
-  var expectedBaseFee = com.calcEip1599BaseFee(parent)
+  var expectedBaseFee = com.calcBaseFee(parent)
   if headerBaseFee != expectedBaseFee:
     return err(&"invalid baseFee: have {expectedBaseFee}, "&
                 &"want {header.baseFeePerGas}, " &
