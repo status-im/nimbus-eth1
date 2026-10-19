@@ -20,8 +20,7 @@ import
   ../../evm/state,
   ../../evm/types,
   ../../block_access_list/[bal_tracker, bal_validation],
-  ../dao,
-  ../eip6110,
+  ../[dao, focil, eip6110],
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
@@ -104,6 +103,7 @@ proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
+    inclusionList: Opt[DecodedILRef],
     skipValidation, skipReceipts, skipUncles: bool
 ): Result[void, string] =
   template header(): Header =
@@ -171,6 +171,9 @@ proc procBlkPreamble(
     )
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
+
+  if inclusionList.isSome:
+    vmState.inclusionListSatisfied = vmState.validateInclusionList(inclusionList.value, blk)
 
   # Setup block access list tracker for post‑execution system calls
   if vmState.balTrackerEnabled:
@@ -373,6 +376,7 @@ proc processBlock*(
     vmState: BaseVMState, ## Parent environment of header/body block
     blk: Block, ## Header/body block to add to the blockchain
     blockAccessList = Opt.none(BlockAccessListRef),
+    inclusionList = Opt.none(DecodedILRef),
     skipValidation = false,
     skipReceipts = false,
     skipUncles = false,
@@ -385,7 +389,7 @@ proc processBlock*(
 
   vmState.withBalPrefetch(blockAccessList):
     ?vmState.procBlkPreamble(
-      blk, blockAccessList, skipValidation, skipReceipts, skipUncles
+      blk, blockAccessList, inclusionList, skipValidation, skipReceipts, skipUncles
     )
 
     # EIP-3675: no reward for miner in POA/POS

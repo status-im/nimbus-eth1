@@ -489,8 +489,9 @@ proc rpcMain*() =
 
     test "eth_baseFee":
       let res = await client.call("eth_baseFee", %[], EthJson)
+      let header = env.chain.latestHeader
       check EthJson.decode(res.string, UInt256) ==
-        com.calcEip1599BaseFee(env.chain.latestHeader)
+        com.calcBaseFee(header, header.timestamp)
 
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()

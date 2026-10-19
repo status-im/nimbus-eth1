@@ -81,6 +81,7 @@ type
     indexes*: Index
     state*  : JsonNode
     receipt*: Opt[TxoReceipt]
+    expectException*: string
 
   SubTests* = ref object
     subs*: seq[SubTest]

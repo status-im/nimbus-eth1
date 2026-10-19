@@ -339,12 +339,28 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
   ## Execute as much transactions as possible.
   var pst = xp.vmExecInit.valueOr:
     return err(error)
+  let focil = xp.focil
 
   if xp.isOrdered:
     for item in xp.byOrder:
       let rc = pst.vmExecGrabItem(item)
       if rc == StopCollecting:
         break
+  elif focil.isNil.not:
+    block focilBlock:
+      for item in focil.list.values:
+        let rc = pst.vmExecGrabItem(item)
+        if rc == StopCollecting:
+          break focilBlock
+
+      for item in xp.byPriceAndNonce:
+        if item.id in focil.list:
+          continue
+        let rc = pst.vmExecGrabItem(item)
+        if rc == StopCollecting:
+          break
+    # reset focil to nil
+    xp.focil = nil
   else:
     for item in xp.byPriceAndNonce:
       let rc = pst.vmExecGrabItem(item)
