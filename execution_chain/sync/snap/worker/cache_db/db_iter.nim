@@ -70,7 +70,10 @@ proc splitKey97(key: openArray[byte]; key1, key2, key3: var Hash32): bool =
 # Public generic iterators
 # ------------------------------------------------------------------------------
 
-iterator colWalkAtLeast1*(adb: RocksDbRef, pfx: openArray[byte]): KvPair =
+iterator colWalkAtLeast1*(
+    adb: RocksDbRef;
+    pfx: openArray[byte];
+      ): tuple[key: Hash32, data: seq[byte]] =
   ## Walk over key-value pairs of the database for keys with the search
   ## head starting at postion `pfx[]`. The `pfx` argument must be length
   ## at least 1.
@@ -84,6 +87,7 @@ iterator colWalkAtLeast1*(adb: RocksDbRef, pfx: openArray[byte]): KvPair =
     defer: rit.close()
 
     let col = pfx[0]
+    var key1: Hash32
 
     rit.seekToKey(pfx)
     while rit.isValid():
@@ -92,8 +96,9 @@ iterator colWalkAtLeast1*(adb: RocksDbRef, pfx: openArray[byte]): KvPair =
         continue
       if col.ord.byte != key[0]:
         break
-      if 1 < key.len:
-        yield (key[1..^1], value)
+      if key.len == 33:
+        (addr (key1.distinctBase)[0]).copyMem(addr key[1], 32)
+        yield (key1, value)
 
 iterator colWalkAtLeast33*(adb: RocksDbRef, pfx: openArray[byte]): KkvTriple =
   ## Walk over key-value pairs of the database for keys with the search
