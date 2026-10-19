@@ -17,6 +17,7 @@ import
   eth/common/transactions_rlp,
   ../evm/[evm_errors, state],
   ../constants,
+  ../compile_info,
   ../transaction/call_types,
   ./keyed_nonces
 
