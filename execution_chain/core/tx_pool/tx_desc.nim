@@ -440,7 +440,7 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
         sender = sender
       return err(txErrorNonceTooSmall)
 
-  if ptx.tx.txType in {TxEip4844, TxEip8141} and XP_SKIP_BLOB_WRAPPER_VALIDATION notin xp.flags:
+  if ptx.tx.txType == TxEip4844 and XP_SKIP_BLOB_WRAPPER_VALIDATION notin xp.flags:
     ptx.validateBlobTransactionWrapper(xp.nextFork).isOkOr:
       debug "Invalid transaction: Blob transaction wrapper validation failed",
         tx = ptx.tx,
