@@ -280,15 +280,28 @@ proc processLoop(nserver: NimbusHttpServerRef, holder: HttpConnectionHolderRef) 
     discard
   server.connections.del(connectionId)
 
+const
+  acceptRetryMinDelay = 1.milliseconds
+  acceptRetryMaxDelay = 1.seconds
+
 proc acceptClientLoop(nserver: NimbusHttpServerRef) {.async: (raises: []).} =
   let server = nserver.server
+  var retryDelay = ZeroDuration
   while true:
     let transp =
       try:
+        if retryDelay > ZeroDuration:
+          await sleepAsync(retryDelay)
         await server.instance.accept()
       except TransportTooManyError as exc:
+        # Out of file descriptors or memory, back off instead of spinning.
+        retryDelay =
+          if retryDelay == ZeroDuration:
+            acceptRetryMinDelay
+          else:
+            min(retryDelay * 2, acceptRetryMaxDelay)
         debug "Unable to accept HTTP connection",
-          address = $server.address, reason = exc.msg
+          address = $server.address, reason = exc.msg, retryDelay
         continue
       except TransportAbortedError as exc:
         # Remote peer disconnected before accept
@@ -304,6 +317,8 @@ proc acceptClientLoop(nserver: NimbusHttpServerRef) {.async: (raises: []).} =
         error "HTTP server stopped accepting connections",
           address = $server.address, reason = exc.msg
         return
+
+    retryDelay = ZeroDuration
 
     let connectionId = transp.getId().valueOr:
       # The remote peer disconnected (e.g. reset) while queued for acceptance,
