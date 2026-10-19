@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/strutils,
+  stew/byteutils,
   eth/rlp,
   chronos,
   ./protocol_registry,
@@ -82,10 +82,7 @@ proc read*(
 ): T {.gcsafe, raises: [RlpError].} =
   ## Rlp mixin: `DisconnectionReasonList` parser
 
-  # The reason is optional, so a peer may hang up without giving one.
-  if not rlp.hasData():
-    return DisconnectionReasonList(value: DisconnectRequested)
-
+  # The specification states the payload as a list with the reason being optional.
   if rlp.isList:
     if rlp.listLen == 0:
       return DisconnectionReasonList(value: DisconnectRequested)
@@ -97,8 +94,8 @@ proc read*(
       # avoids looping through all items when parsing for an overlarge array
       return DisconnectionReasonList(value: rlp.read(array[1, DisconnectionReason])[0])
 
-  # Also accepted: a single byte reason code. Is is typically used
-  # by variants of the reference implementation `Geth`
+  # Also accepted: a single byte reason code. Is is used by
+  # Erigon. Remove this once Erigon is fixed.
   elif rlp.blobLen <= 1:
     return DisconnectionReasonList(value: rlp.read(DisconnectionReason))
 
@@ -171,13 +168,12 @@ proc sendDisconnectMsgThunk(peer: Peer; data: Rlp) {.
     ## reason
     if packet.reason.value == BreachOfProtocol:
       # TODO This is a temporary log message at warning level to aid in
-      #      debugging in pre-release versions - it should be removed before
-      #      release
-      # TODO Nethermind sends BreachOfProtocol on network id mismatch:
-      #      https://github.com/NethermindEth/nethermind/issues/7727
-      if not peer.clientId.startsWith("Nethermind"):
-        warn "TODO Peer sent BreachOfProtocol error!",
-          remote = peer.remote, clientId = peer.clientId
+      #      debugging in pre-release versions - it should be altered to
+      #      debug level before release
+      # It is currently known that reth still send `BreachOfProtocol` for
+      # reasons where `UselessPeer` is the more appropriate code.
+      warn "TODO Peer sent BreachOfProtocol error!",
+        remote = peer.remote, clientId = peer.clientId
     else:
       trace "disconnect message received", reason = packet.reason.value, peer = peer.remote
     await peer.disconnectPeer(peer, packet.reason.value, false)

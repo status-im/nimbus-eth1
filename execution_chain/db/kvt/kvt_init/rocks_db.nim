@@ -137,6 +137,18 @@ proc delRangeKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelRangeKvpFn =
 
 # -------------
 
+proc delBatchKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): DelBatchKvpFn =
+  result =
+    proc(keys: openArray[seq[byte]]): Result[void, KvtError] =
+      db.rdb.del(keys, cf).isOkOr:
+        when extraTraceMessages:
+          debug "delBatchKvpFn() failed", error=($error)
+        return err(error[0])
+
+      ok()
+
+# -------------
+
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
     proc(wipe: bool) =
@@ -169,6 +181,7 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
 
   db.delKvpFn = delKvpFn(be, cf)
   db.delRangeKvpFn = delRangeKvpFn(be, cf)
+  db.delBatchKvpFn = delBatchKvpFn(be, cf)
 
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be

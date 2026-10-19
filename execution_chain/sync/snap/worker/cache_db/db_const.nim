@@ -28,6 +28,7 @@ type
     cLastHeader                                     # last header reference
     cBal                                            # block access lists
     cLastBal                                        # last bal reference
+    cBlockHash                                      # block hashes by number
 
     gMissingTables = 20                             # group, not used as column
     cMissingIntv                                    # missing accounts/slots

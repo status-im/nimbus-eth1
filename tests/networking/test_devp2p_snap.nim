@@ -116,8 +116,8 @@ procSuite "devp2p snap Tests":
     await env2.close()
     await env1.close()
 
-suite "snap GetStorageRanges bounds":
-  test "empty bounds cover the whole range, 32 byte bounds are kept":
+suite "snap wire encoding":
+  test "GetStorageRanges: empty bounds cover the whole range, 32 byte bounds are kept":
     var w = initRlpWriter()
     w.startList(5)
     w.append(testHash(1))
@@ -137,3 +137,17 @@ suite "snap GetStorageRanges bounds":
       unbounded.limitHash.to(Hash32) == Hash32.fromHex("0x" & "ff".repeat(32))
       bounded.startingHash.to(Hash32) == testHash(2)
       bounded.limitHash.to(Hash32) == testHash(3)
+
+  test "AccBody: slim account body with empty storage root and code hash":
+    let body = rlp.decode(
+      rlp.encode((1'u64, 2'u64, newSeq[byte](), newSeq[byte]())), AccBody)
+    check:
+      body.nonce == 1
+      body.balance == 2.u256
+      body.storageRoot.to(Hash32) == EMPTY_ROOT_HASH
+      body.codeHash.to(Hash32) == EMPTY_CODE_HASH
+
+  test "AccBody: additional list elements are rejected":
+    expect RlpError:
+      discard rlp.decode(
+        rlp.encode((1'u64, 2'u64, newSeq[byte](), newSeq[byte](), 3'u64)), AccBody)

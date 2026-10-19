@@ -76,10 +76,9 @@ proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Proto
         raise newException(ValueError, "Record not in local routing table.")
 
     proc discv5_deleteEnr(nodeId: NodeId): bool {.raises: [ValueError].} =
-      # TODO: Adjust `removeNode` to accept NodeId as param and to return bool.
       let node = d.getNode(nodeId)
       if node.isSome():
-        d.routingTable.removeNode(node.get())
+        d.routingTable.replaceNode(node.get())
         return true
       else:
         raise newException(ValueError, "Record not in local routing table.")

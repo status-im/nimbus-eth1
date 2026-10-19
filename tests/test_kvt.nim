@@ -11,12 +11,14 @@
 {.used.}
 
 import
+  std/[os, tempfiles],
   unittest2,
   results,
   eth/common,
   eth/rlp,
   ../execution_chain/db/core_db,
-  ../execution_chain/db/core_db/memory_only,
+  ../execution_chain/db/core_db/[memory_only, persistent],
+  ../execution_chain/db/opts,
   ../execution_chain/db/storage_types,
   ../execution_chain/db/kvt,
   ../execution_chain/db/kvt/[kvt_init/memory_only, kvt_utils]
@@ -60,6 +62,22 @@ suite "Kvt":
       not db.hasKey([byte 0, 1, 1])
       not db.hasKey([byte 0, 1, 2])
       db.get([byte 0, 1, 3]).expect("entry") == @[byte 0, 1, 6]
+
+    db.close()
+
+  test "Batch delete - del":
+    check:
+      db.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
+      db.put([byte 0, 1, 2], [byte 0, 1, 5]).isOk()
+      db.put([byte 0, 1, 3], [byte 0, 1, 6]).isOk()
+
+    check:
+      db.del([@[byte 0, 1, 1], @[byte 0, 1, 2]]).isOk()
+      not db.hasKey([byte 0, 1, 1])
+      not db.hasKey([byte 0, 1, 2])
+      db.get([byte 0, 1, 3]).expect("entry") == @[byte 0, 1, 6]
+      db.del([@[byte 0, 1, 3], @[]]) == Result[void, KvtError].err(KeyInvalid)
+      db.hasKey([byte 0, 1, 3])
 
     db.close()
 
@@ -236,3 +254,39 @@ suite "Kvt block hash cache":
     check db.baseTxFrame().getBlockHash(BlockNumber(1)).isErr()
 
     db.close()
+
+  test "A block hash deleted in a batch is not served from the cache":
+    let base = db.baseTxFrame()
+    base.addBlockNumberToHashLookup(BlockNumber(1), hashA)
+    db.persist(base)
+
+    check db.baseTxFrame().getBlockHash(BlockNumber(1)).expect("hash") == hashA
+
+    check:
+      db.kvt.del([@(blockNumberToHashKey(BlockNumber(1)).toOpenArray)]).isOk()
+      db.baseTxFrame().getBlockHash(BlockNumber(1)).isErr()
+
+    db.close()
+
+suite "Kvt on RocksDB":
+  setup:
+    let
+      path = createTempDir("nimbus-kvt-", "")
+      db = AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+
+  teardown:
+    db.close()
+    removeDir(path)
+
+  test "Batch delete - del":
+    let kvt = db.kvt
+    check:
+      kvt.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
+      kvt.put([byte 0, 1, 2], [byte 0, 1, 5]).isOk()
+      kvt.put([byte 0, 1, 3], [byte 0, 1, 6]).isOk()
+
+    check:
+      kvt.del([@[byte 0, 1, 1], @[byte 0, 1, 2]]).isOk()
+      not kvt.hasKey([byte 0, 1, 1])
+      not kvt.hasKey([byte 0, 1, 2])
+      kvt.get([byte 0, 1, 3]).expect("entry") == @[byte 0, 1, 6]

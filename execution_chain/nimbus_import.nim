@@ -18,6 +18,7 @@ import
   beacon_chain/[era_db, process_state],
   beacon_chain/networking/network_metadata,
   ./conf,
+  ./db/aristo/aristo_compute,
   ./common/common,
   ./core/chain,
   ./history/db/era1_db,
@@ -409,3 +410,8 @@ proc importBlocks*(config: ExecutionClientConf, com: CommonRef, params: NetworkP
     blocks = persister.stats.blocks,
     txs = persister.stats.txs,
     mgas = f(persister.stats.gas.float / 1000000)
+
+  if config.withStateRoot:
+    discard com.db.mpt.txRef.computeStateRoot(skipLayers = true).valueOr:
+      fatal "Cannot compute root keys", msg = error
+      quit(QuitFailure)

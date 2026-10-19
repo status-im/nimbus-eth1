@@ -127,6 +127,7 @@ type
     chain: ForkedChainRef       # descriptor will resolve into that in future
     session: HccSession         # additional session variables
     consHead: Header            # for logging, metrics etc.
+    finHash: Hash32             # for logging, metrics etc.
     notify: HeaderChainNotifyCB # client app notification
     kvt: KvtDbRef               # metadata and temporary headers storage with
                                 # it's own column family
@@ -336,6 +337,7 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
     # So, the `nec_sync_consensus_head` will just stay with its latest
     # value unless updated by `updateMetrics()`.
     hc.consHead = h
+    hc.finHash = f
     metrics.set(nec_sync_consensus_head, h.number.int64)
     if hc.chain.latestNumber <= h.number:
       metrics.set(nec_sync_distance_to_sync,
@@ -719,6 +721,10 @@ func latestConsHead*(hc: HeaderChainRef): Header =
 func latestConsHeadNumber*(hc: HeaderChainRef): BlockNumber =
   ## Getter: block number of last `CL` head update (aka forkchoice update).
   hc.consHead.number
+
+func latestFinHash*(hc: HeaderChainRef): Hash32 =
+  ## Getter: hash of last `CL` head update (aka forkchoice update).
+  hc.finHash
 
 proc updateMetrics*(hc: HeaderChainRef) =
   ## Update/adjust some metrics, i.p. `nec_sync_distance_to_sync`. If there
