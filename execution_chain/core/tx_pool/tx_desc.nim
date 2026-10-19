@@ -91,11 +91,11 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-func getBaseFee(com: CommonRef; parent: Header): GasInt =
+func getBaseFee(com: CommonRef; parent: Header, timestamp: EthTime): GasInt =
   ## Calculates the `baseFee` of the head assuming this is the parent of a
   ## new block header to generate.
   ## Post Merge rule
-  com.calcBaseFee(parent).truncate(GasInt)
+  com.calcBaseFee(parent, timestamp).truncate(GasInt)
 
 func getGasLimit(com: CommonRef; parent: Header, targetGasLimit: Opt[uint64]): GasInt =
   ## Post Merge rule
@@ -117,7 +117,7 @@ proc setupVMState(com: CommonRef;
     blockCtx = BlockContext(
       timestamp    : pos.timestamp,
       gasLimit     : gasLimit,
-      baseFeePerGas: getBaseFee(com, parent),
+      baseFeePerGas: getBaseFee(com, parent, pos.timestamp),
       prevRandao   : pos.prevRandao,
       difficulty   : UInt256.zero(),
       coinbase     : pos.feeRecipient,

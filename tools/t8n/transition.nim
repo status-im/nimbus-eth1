@@ -482,7 +482,7 @@ proc calcBaseFee(com: CommonRef, env: EnvStruct): Result[UInt256, T8NErr] =
         env.parentGasLimit.get,
         env.parentGasUsed.get,
         env.parentBaseFee.get)
-    elif com.isLondonOrLater(env.currentNumber, env.currentTimestamp):
+    elif com.isLondonOrLater(env.currentNumber - 1, env.parentTimestamp):
       eip1559.calcEip1599BaseFee(
         env.parentGasLimit.get,
         env.parentGasUsed.get,

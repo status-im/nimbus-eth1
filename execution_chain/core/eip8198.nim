@@ -39,15 +39,13 @@ proc calcEip8198BaseFee*(parentGasLimit, parentGasUsed: GasInt;
   if parentGasUsed == parentGasTarget:
     return parentBaseFee
 
-  let parentGasDenom = parentGasTarget.u256 *
-                         BASE_FEE_CHANGE_DENOMINATOR.u256
-
   if parentGasTarget < parentGasUsed:
     # If the parent block used more gas than its target, the baseFee should
     # increase.
     let
       gasUsedDelta = (parentGasUsed - parentGasTarget).u256
-      baseFeeDelta = (parentBaseFee * gasUsedDelta * BASE_FEE_MAX_CHANGE_NUMERATOR) div parentGasDenom
+      targetFeeDelta = (parentBaseFee * gasUsedDelta) div parentGasTarget.u256
+      baseFeeDelta = targetFeeDelta * BASE_FEE_MAX_CHANGE_NUMERATOR div BASE_FEE_CHANGE_DENOMINATOR.u256
 
     return parentBaseFee + max(baseFeeDelta, 1.u256)
 
@@ -56,6 +54,7 @@ proc calcEip8198BaseFee*(parentGasLimit, parentGasUsed: GasInt;
     # baseFee should decrease.
     let
       gasUsedDelta = (parentGasTarget - parentGasUsed).u256
-      baseFeeDelta = (parentBaseFee * gasUsedDelta * BASE_FEE_MAX_CHANGE_NUMERATOR) div parentGasDenom
-
+      targetFeeDelta = (parentBaseFee * gasUsedDelta) div parentGasTarget.u256
+      baseFeeDelta = targetFeeDelta * BASE_FEE_MAX_CHANGE_NUMERATOR div BASE_FEE_CHANGE_DENOMINATOR.u256
+      
     return max(parentBaseFee - baseFeeDelta, 0.u256)

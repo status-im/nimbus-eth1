@@ -12,11 +12,5 @@
 const
   eestReleases* = [
     #"eest_mainnet",
-
-    # Per mainnet@v21.0.0 release, it already contains
-    # glamsterdam latest changes + additional changes not
-    # included in glamsterdam-tests@v8.1.4.
-    # Disable eest_devnet test until we have new release of
-    # next devnet.
     "eest_devnet",
   ]
