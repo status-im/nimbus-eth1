@@ -16,6 +16,7 @@
 #   ZKVM_CPU      Nim --cpu, since not every zkVM is 64-bit
 #   ZKVM_LIB      the vendor's static library
 #   ZKVM_LD       linker script
+#   ZKVM_LD_FLAGS extra linker flags the vendor's loader requires, optional
 #   ZKVM_GLUE     C sources for the platform layer
 #   ZKVM_CHECKS   targets that must pass before building, optional
 #   ZKVM_POST_CHECK  shell command run on the linked ELF, optional
@@ -60,7 +61,7 @@ ZKVM_NIM_CC := --cc:gcc --gcc.exe:"$(ZKVM_GCC)" --gcc.linkerexe:"$(ZKVM_GCC)"
 #                     what is not used, so the ELF is unchanged in size and
 #                     step count.
 ZKVM_PASSC := -D_POSIX_THREADS=1 $(ZKVM_ARCH) -ffunction-sections -fdata-sections -g0
-ZKVM_PASSL = $(ZKVM_ARCH) -nostdlib -nostartfiles -Wl,--build-id=none -Wl,--gc-sections -T $(ZKVM_LD) -L$(ZKVM_SYSROOT_LIBDIR) -L$(ZKVM_LIBGCC_DIR) -Wl,--whole-archive $(ZKVM_LIB) -Wl,--no-whole-archive -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group
+ZKVM_PASSL = $(ZKVM_ARCH) -nostdlib -nostartfiles -Wl,--build-id=none -Wl,--gc-sections $(ZKVM_LD_FLAGS) -T $(ZKVM_LD) -L$(ZKVM_SYSROOT_LIBDIR) -L$(ZKVM_LIBGCC_DIR) -Wl,--whole-archive $(ZKVM_LIB) -Wl,--no-whole-archive -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group
 
 check_zkvm_gcc:
 	@printf 'int main(void){return 0;}' | $(ZKVM_GCC) $(ZKVM_ARCH) -c -x c - -o /dev/null 2>/dev/null || { \
@@ -92,8 +93,12 @@ ZKVM_POST_CHECK ?= for s in memcpy memmove memset memcmp; do \
 # nim-eth and nim-ssz-serialization take their hash implementation from a
 # backend module on the search path: `keccak_external` and `sha256_external`,
 # both in $(ZKVM_DIR), hence the additional `--path`.
+#
+# A cache per zkVM: object files are named after the source basename, so two
+# vendors sharing one would link whichever built last.
 stateless_guest_zkvm: | build deps check_zkvm_gcc $(ZKVM_CHECKS)
 	$(ENV_SCRIPT) $(NIMC) c $(STATELESS_GUEST_FLAGS) $(ZKVM_EXTRA_NIM) -d:release -d:zkvmTarget --debugger:off \
+		--nimcache:nimcache/release/stateless_guest_$(ZKVM) \
 		--cpu:$(ZKVM_CPU) --os:any -d:enable_zkvm_accelerators \
 		--path:"$(ZKVM_DIR)" -d:keccakExternalBackend -d:PREFER_EXTERNAL_SHA256 \
 		$(ZKVM_NIM_CC) \
