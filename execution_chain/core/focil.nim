@@ -19,8 +19,11 @@ import
 
 from ../transaction import recoverSenderCached
 from ../utils/utils import short
-from ./validate import gasCost
+from ../evm/types import BaseVMState
+from ../transaction/call_types import intrinsicGas
+from ./validate import gasCost, validateTransaction, validateTxBasic
 from ./pooled_txs import PooledTransaction
+from ./executor/process_transaction import checkBlockGasCapacity
 from web3/engine_api_types import TypedTransaction
 
 type
@@ -29,11 +32,11 @@ type
     ok*: bool
     hash*: Hash32
 
-  DecodedIL* = ref object
+  DecodedILRef* = ref object
     list*: seq[DecodedILItem]
 
-proc decodeIL*(list: openArray[TypedTransaction]): DecodedIL =
-  let res = DecodedIL()
+proc decodeIL*(list: openArray[TypedTransaction]): DecodedILRef =
+  let res = DecodedILRef()
   for x in list:
     try:
       res.list.add DecodedILItem(
@@ -57,16 +60,23 @@ func missingHashes(list: HashSet[Hash32]): string =
       break
   $log
 
+const debugMode = false
+
 # ValidateInclusionListTransactions verifies that all transactions in the inclusion list
 # are either included in the block or cannot be appended at the end of the block.
 # Returns true if the block satisfies the inclusion list constraints.
-proc validateInclusionList*(ledger: LedgerRef, decodedIL: DecodedIL, blk: Block): bool =
+proc validateInclusionList*(vmState: BaseVMState, decodedIL: DecodedILRef, blk: Block): bool =
   # Build a set of transaction hashes that are included in the block
   var includedTxs: HashSet[Hash32]
   for tx in blk.transactions:
     includedTxs.incl tx.computeRlpHash
 
   template header: auto = blk.header
+
+  template fail(msg: untyped): untyped =
+    when debugMode:
+      debugEcho "check tx inclusion: ", msg
+    continue
 
   let
     gasLeft = header.gasLimit - header.gasUsed
@@ -86,39 +96,41 @@ proc validateInclusionList*(ledger: LedgerRef, decodedIL: DecodedIL, blk: Block)
     # Transaction is included - constraint satisfied
     if item.hash in includedTxs:
       inc alreadyIncluded
+      when debugMode:
+        debugEcho "included in tx_hashes: ", 1
       continue
 
     if not item.ok:
+      when debugMode:
+        debugEcho "decode error 2: ", 3
       continue
 
     # Blob transactions are not subject to inclusion list constraints
     if item.tx.txType == TxEip4844:
       inc blobTxs
-      continue
-
-    # Check if transaction cannot be included due to gas limit
-    if item.tx.gasLimit > gasLeft:
-      inc insufficientGas
+      when debugMode:
+        debugEcho "reject blob tx: ", 4
       continue
 
     # Check sender validity
     let sender = item.tx.recoverSenderCached().valueOr:
       inc invalidSender
+      when debugMode:
+        debugEcho "check tx exception: sender"
       continue
 
-    # Check if transaction cannot be included due to insufficient balance
-    let
-      balance = ledger.getBalance(sender)
-      cost = item.tx.gasCost()
+    let intrinsic = intrinsicGas(item.tx, vmState.hardFork, sender)
 
-    if balance - cost < item.tx.value:
-      inc insufficientFunds
+    vmState.checkBlockGasCapacity(item.tx, intrinsic, fail)
+
+    vmState.com.validateTxBasic(item.tx, intrinsic, vmState.hardFork).isOkOr:
+      when debugMode:
+        debugEcho "check tx exception: ", error
       continue
 
-    # Check if transaction cannot be included due to incorrect nonce
-    let nonce = ledger.getNonce(sender)
-    if nonce != item.tx.nonce:
-      inc invalidNonce
+    vmState.validateTransaction(item.tx, sender).isOkOr:
+      when debugMode:
+        debugEcho "check tx exception: ", error
       continue
 
     # Transaction could have been included but wasn't - validation fails
@@ -139,6 +151,8 @@ proc validateInclusionList*(ledger: LedgerRef, decodedIL: DecodedIL, blk: Block)
       gasLeft,
       totalInclusionList=decodedIL.list.len,
       blockTxs=blk.transactions.len
+    when debugMode:
+      debugEcho "return FALSE"
     return false
 
   # All transactions are either included or cannot be included
@@ -153,6 +167,8 @@ proc validateInclusionList*(ledger: LedgerRef, decodedIL: DecodedIL, blk: Block)
       insufficientFunds,
       invalidNonce,
       totalInclusionList=decodedIL.list.len
+  when debugMode:
+    debugEcho "return TRUE"
   true
 
 type

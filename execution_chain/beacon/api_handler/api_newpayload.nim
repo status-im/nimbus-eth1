@@ -19,6 +19,7 @@ import
   ../../core/tx_pool,
   ../../core/focil,
   ../../db/ledger,
+  ../../evm/[types, state],
   ../web3_eth_conv,
   ../beacon_engine,
   ../payload_conv,
@@ -200,15 +201,11 @@ func validateExecutionRequest(
     previousRequestType = requestType.int
   Opt.none(PayloadStatus)
 
-proc getValidIL(inclusionList: Opt[InclusionList],
-                txFrame: CoreDbTxRef, blk: Block): Opt[bool] =
+proc decodeIL(inclusionList: Opt[InclusionList]): Opt[DecodedILRef] =
   if inclusionList.isNone:
-    return Opt.none(bool)
+    return Opt.none(DecodedILRef)
 
-  let
-    decodedIL = decodeIL(inclusionList.value)
-    ledger = LedgerRef.init(txFrame)
-  Opt.some(validateInclusionList(ledger, decodedIL, blk))
+  Opt.some(decodeIL(inclusionList.value))
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
@@ -352,7 +349,9 @@ proc newPayload*(ben: BeaconEngineRef,
     hash = blockHash, number = header.number
 
   block:
-    let res = await chain.queueImportBlock(blk, blockAccessList)
+    let
+      decodedIL = decodeIL(inclusionList)
+      res = await chain.queueImportBlock(blk, blockAccessList, decodedIL)
     if res.isErr:
       warn "Error importing block",
         number = header.number,
@@ -376,7 +375,7 @@ proc newPayload*(ben: BeaconEngineRef,
     blobGas = header.blobGasUsed.get(0'u64)
 
   let
-    validIL = getValidIL(inclusionList, chain.latestTxFrame(), blk)
+    validIL = chain.lastInclusionListSatisfied
 
   return
     if withWitness:

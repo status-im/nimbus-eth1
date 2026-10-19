@@ -11,6 +11,7 @@
 
 import
   ./chain_desc,
+  ../../focil,
   ../../validate,
   ../../executor/process_block,
   ../../../common,
@@ -104,6 +105,7 @@ proc processBlock*(
     txFrame: CoreDbTxRef,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
+    inclusionList: Opt[DecodedILRef],
     blkHash: Hash32,
     finalized: bool,
 ): Result[seq[Hash32], string] =
@@ -136,6 +138,7 @@ proc processBlock*(
     vmState.processBlock(
       blk,
       blockAccessList = blockAccessList,
+      inclusionList = inclusionList,
       skipValidation = false,
       skipReceipts = false,
       skipUncles = true,
@@ -191,6 +194,11 @@ proc processBlock*(
   var txHashes = c.writeBaggage(
     blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
 
+  if inclusionList.isSome:
+    c.lastInclusionListSatisfied = Opt.some(vmState.inclusionListSatisfied)
+  else:
+    c.lastInclusionListSatisfied = Opt.none(bool)
+  
   vmState.receipts.setLen(0)
   vmState.receiptBlooms.setLen(0)
   vmState.blockLogs.setLen(0)
