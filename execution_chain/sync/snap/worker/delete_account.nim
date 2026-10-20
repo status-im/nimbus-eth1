@@ -10,7 +10,7 @@
 
 import
   pkg/stew/interval_set,
-  ../[cache_db, worker_desc]
+  ./[cache_db, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -22,6 +22,10 @@ template deleteAccount*(
     timer: TimerDataRef;
     info: static[string];
       ): auto =
+  ## Async template
+  ##
+  ## Delete account including sub-entries.
+  ##
   var bodyRc = Opt[void].err()
   block body:
     let
@@ -37,7 +41,8 @@ template deleteAccount*(
     elif ctx.accUnproc.borrowed.chunks == 0:        # clean accounts registry?
       discard ctx.accUnproc.unprocessed.merge(accPt, accPt)
     else:
-      error info & ": Cannot update dirty unprocessed ranges"
+      error info & ": Cannot update dirty unprocessed ranges",
+        nBorrowedChunks=ctx.accUnproc.borrowed.chunks
       break body                                    # failed
 
     adb.delFlatAcc(accPath, info).isOkOr:           # remove account record
@@ -62,13 +67,6 @@ template deleteAccount*(
     # End `block body`
 
   bodyRc
-
-func isFullRange*(itrs: ItemKeyRangeSet): bool =
-  # Defensive encoding of a full range check. Solely testing `total; == 0`
-  # leaves room for the case that the range is empty which is an illegal
-  # situation but it can handled with savely.
-  itrs.total == 0 and                               # => 0 or 2^256
-  itrs.chunks == 1                                  # => one intv => full MPT
 
 # ------------------------------------------------------------------------------
 # End

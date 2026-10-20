@@ -13,8 +13,7 @@
 import
   std/[sequtils, typetraits],
   pkg/[chronicles, chronos],
-  ../../[helpers, cache_db, worker_desc],
-  ../download_helpers,
+  ../../[helpers, cache_db, delete_account, worker_desc],
   ./code_fetch
 
 logScope:
