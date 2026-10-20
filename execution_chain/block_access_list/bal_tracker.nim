@@ -56,17 +56,22 @@ type
     balanceWritten: bool
     nonceWritten: bool
     codeWritten: bool
+    codeHashWritten: bool
     preBalanceKnown: bool
     preNonceKnown: bool
+    preCodeHashKnown: bool
     preBalance: UInt256 ## balance before the transaction, see `preBalanceKnown`
     postBalance: UInt256 ## latest balance written
     preNonce: AccountNonce
     postNonce: AccountNonce
+    preCodeHash: Hash32
+    postCodeHash: Hash32
     preCode: int32 ## position of the code hash before the transaction, -1 while unknown
     selfDestructed: bool ## created and self-destructed in this transaction
     lastBalanceJournal: int32 ## journal position of the latest balance record
     lastNonceJournal: int32 ## journal position of the latest nonce record
     lastCodeJournal: int32 ## journal position of the latest code record
+    lastCodeHashJournal: int32
 
   StorageEntry = object
     key: SlotKey
@@ -85,6 +90,7 @@ type
     jNonce
     jCode
     jSelfDestruct ## the account's self-destructed flag was set
+    jCodeHash
 
   JournalEntry = object
     idx: int32 ## entry position in the account or storage list
@@ -93,6 +99,7 @@ type
     prevWritten: bool
     prev: UInt256 ## previous post value for storage and balance changes
     prevNonce: AccountNonce
+    prevCodeHash: Hash32
 
   # Entries in insertion order with an open addressing index over them, so
   # that an entry can be referred to by its position. Keys live in the entries;
@@ -147,6 +154,7 @@ func init(T: type AccountEntry, address: Address, bucket: int32): T =
     lastBalanceJournal: -1,
     lastNonceJournal: -1,
     lastCodeJournal: -1,
+    lastCodeHashJournal: -1,
   )
 
 func init(T: type StorageEntry, key: SlotKey, bucket: int32): T =
@@ -463,6 +471,37 @@ proc trackCodeChange*(
   )
   e.codeWritten = true
 
+proc trackAdoptCode(
+    tracker: BlockAccessListTrackerRef,
+    address: Address,
+    newCodeHash: Hash32,
+    current: Opt[Hash32],
+) =
+  assert tracker.hasPendingCallFrame()
+  let idx = tracker.accountEntry(address)
+  template e(): untyped =
+    tracker.accounts[idx]
+
+  if e.codeHashWritten and e.postCodeHash == newCodeHash:
+    return
+
+  if not e.preCodeHashKnown:
+    e.preCodeHash = current.valueOr(tracker.ledger.getCodeHash(address))
+    e.preCodeHashKnown = true
+  tracker.recordOnce(
+    e.lastCodeHashJournal,
+    JournalEntry(
+      kind: jCodeHash, idx: idx, prevWritten: e.codeHashWritten, prevCodeHash: e.postCodeHash
+    ),
+  )
+  e.postCodeHash = newCodeHash
+  e.codeHashWritten = true
+
+proc trackAdoptCode*(
+    tracker: BlockAccessListTrackerRef, address: Address, newCodeHash: Hash32
+) =
+  tracker.trackAdoptCode(address, newCodeHash, Opt.none(Hash32))
+
 proc trackInTransactionSelfDestruct*(
     tracker: BlockAccessListTrackerRef, address: Address
 ) =
@@ -491,11 +530,14 @@ proc normalizeChanges(tracker: BlockAccessListTrackerRef) =
     if e.selfDestructed:
       e.nonceWritten = false
       e.codeWritten = false
+      e.codeHashWritten = false
 
     if e.balanceWritten and e.preBalance == e.postBalance:
       e.balanceWritten = false
     if e.nonceWritten and e.preNonce == e.postNonce:
       e.nonceWritten = false
+    if e.codeHashWritten and e.preCodeHash == e.postCodeHash:
+      e.codeHashWritten = false
     if e.codeWritten and
         tracker.codeHashes[e.preCode] == tracker.ledger.getCodeHash(e.address):
       e.codeWritten = false
@@ -522,6 +564,8 @@ proc recordTransaction(tracker: BlockAccessListTrackerRef) =
       builder[].addBalanceChange(index, id, e.postBalance)
     if e.nonceWritten:
       builder[].addNonceChange(index, id, e.postNonce)
+    if e.codeHashWritten:
+      builder[].addAdoptCode(index, id, e.postCodeHash)
     if e.codeWritten:
       builder[].addCodeChange(index, id, tracker.ledger.getCode(e.address).bytes)
 
@@ -570,6 +614,10 @@ proc undoJournal(tracker: BlockAccessListTrackerRef, journalLen: int32) =
       tracker.accounts[entry.idx].lastCodeJournal = entry.prevLast
     of jSelfDestruct:
       tracker.accounts[entry.idx].selfDestructed = false
+    of jCodeHash:
+      tracker.accounts[entry.idx].postCodeHash = entry.prevCodeHash
+      tracker.accounts[entry.idx].codeHashWritten = entry.prevWritten
+      tracker.accounts[entry.idx].lastCodeHashJournal = entry.prevLast
   tracker.journal.setLen(int(journalLen))
 
 proc rollbackCallFrame*(tracker: BlockAccessListTrackerRef) =

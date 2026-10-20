@@ -20,11 +20,20 @@ export
 template required(T: type, nField: string): auto =
   fromJson(T, n[nField])
 
+template optional(T: type, nField: string): auto =
+  if n.hasKey(nField):
+    Opt.none(T)
+  else:
+    Opt.some(fromJson(T, n[nField]))
+
 template fromJson(T: type Address, n: JsonNode): Address =
   Address.fromHex(n.getStr)
 
 template fromJson(T: type UInt256, n: JsonNode): UInt256 =
   UInt256.fromHex(n.getStr)
+
+template fromJson(T: type Hash32, n: JsonNode): Hash32 =
+  Hash32.fromHex(n.getStr)
 
 proc fromJson(T: type Bytes, n: JsonNode): T =
   let hex = n.getStr
@@ -54,7 +63,8 @@ proc fromJson(T: type BalanceChange, n: JsonNode): BalanceChange =
 proc fromJson(T: type CodeChange, n: JsonNode): CodeChange =
   (
     required(BlockAccessIndex, "blockAccessIndex"),
-    required(Bytes, "newCode")
+    required(Bytes, "newCode"),
+    optional(Hash32, "newCodeHash")
   )
 
 proc fromJson(T: type StorageChange, n: JsonNode): StorageChange =
@@ -67,7 +77,7 @@ proc fromJson[T](LT: type seq[T], list: JsonNode): LT =
   mixin fromJson
   for x in list:
     result.add T.fromJson(x)
-    
+
 proc fromJson(T: type SlotChanges, n: JsonNode): SlotChanges =
   (
     required(UInt256, "slot"),

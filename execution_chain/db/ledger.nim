@@ -190,6 +190,8 @@ proc applyOverlay(ledger: LedgerRef, address: Address, acc: AccountRef) =
     acc.statement.codeHash = keccak256(overlayAcc.code[])
     acc.code = CodeBytesRef.init(overlayAcc.code[])
     acc.flags.incl CodeChanged
+  if overlayAcc.codeHash.isSome():
+    acc.statement.codeHash = overlayAcc.codeHash[]
 
 proc isEmpty(acc: AccountRef): bool =
   acc.statement.nonce == 0 and
@@ -617,20 +619,7 @@ proc recordCodeRead(ledger: LedgerRef, address: Address, acc: AccountRef) =
       not ledger.isDeployedCode(acc.statement.codeHash):
     ledger.witnessKeys[(address, Opt.none(UInt256))] = true
 
-proc getCode*(ledger: LedgerRef,
-              address: Address,
-              returnHash: static[bool] = false): auto =
-  let acc = ledger.getAccount(address, false)
-
-  if ledger.collectWitness:
-    ledger.recordCodeRead(address, acc)
-
-  if acc.isNil:
-    when returnHash:
-      return (EMPTY_CODE_HASH, CodeBytesRef())
-    else:
-      return CodeBytesRef()
-
+proc ensureCodeLoaded(ledger: LedgerRef, acc: AccountRef) =
   if acc.code.isNil:
     acc.code =
       if acc.statement.codeHash != EMPTY_CODE_HASH:
@@ -648,6 +637,22 @@ proc getCode*(ledger: LedgerRef,
             newCode
       else:
         CodeBytesRef()
+
+proc getCode*(ledger: LedgerRef,
+              address: Address,
+              returnHash: static[bool] = false): auto =
+  let acc = ledger.getAccount(address, false)
+
+  if ledger.collectWitness:
+    ledger.recordCodeRead(address, acc)
+
+  if acc.isNil:
+    when returnHash:
+      return (EMPTY_CODE_HASH, CodeBytesRef())
+    else:
+      return CodeBytesRef()
+
+  ledger.ensureCodeLoaded(acc)
 
   when returnHash:
     (acc.statement.codeHash, acc.code)
@@ -748,6 +753,23 @@ proc originalAccountEmpty*(ledger: LedgerRef, address: Address): bool =
     return true
   acc.original.statement == EMPTY_STATEMENT
 
+proc canAdoptCode*(ledger: LedgerRef, address: Address): Opt[Hash32] =
+  let acc = ledger.getAccount(address, false)
+
+  if ledger.collectWitness:
+    ledger.recordCodeRead(address, acc)
+
+  if acc.isNil:
+    return Opt.none(Hash32)
+  if NewlyCreated in acc.flags:
+    return Opt.none(Hash32)
+  if acc.statement.codeHash == EMPTY_CODE_HASH:
+    return Opt.none(Hash32)
+  ledger.ensureCodeLoaded(acc)
+  if acc.code.bytes[0] == 0xEF:
+    return Opt.none(Hash32)
+  ok(acc.statement.codeHash)
+
 proc setBalance*(ledger: LedgerRef, address: Address, balance: UInt256) =
   let acc = ledger.getAccount(address)
   acc.flags.incl {LeafExists}
@@ -817,6 +839,17 @@ proc setCode*(ledger: LedgerRef, address: Address, code: seq[byte]) =
     acc.code = ledger.code.get(codeHash).valueOr(CodeBytesRef.init(code))
     acc.flags.incl CodeChanged
     if ledger.collectWitness and code.len > 0:
+      ledger.savePoint.deployedCodeHashes.incl(codeHash)
+
+proc adoptCode*(ledger: LedgerRef, address: Address, codeHash: Hash32) =
+  let acc = ledger.getAccount(address)
+  acc.flags.incl {LeafExists}
+  if acc.statement.codeHash != codeHash:
+    var acc = ledger.makeDirty(address)
+    acc.statement.codeHash = codeHash
+    acc.code = nil
+    # bytecode already stored, so only the code hash is written
+    if ledger.collectWitness and codeHash != EMPTY_CODE_HASH:
       ledger.savePoint.deployedCodeHashes.incl(codeHash)
 
 proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =

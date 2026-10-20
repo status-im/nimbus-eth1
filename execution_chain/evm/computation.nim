@@ -265,10 +265,18 @@ proc writeContract*(c: Computation) =
       blockNumber=c.vmState.blockNumber,
       parentHash=($c.vmState.parent.computeBlockHash)
 
+  let fork = c.fork
+  if fork >= FkBogota:
+    let codeHash = c.vmState.readOnlyLedger.getCodeHash(c.msg.currentTarget)
+    if codeHash != EMPTY_CODE_HASH:
+      # Code adopted through `SETCODEFROM` stays; the returned bytes
+      # are neither validated nor deposited, and cost nothing.
+      return
+
   # In each check below, they are guarded by `len > 0`.  This includes writing
   # out the code, because the account already has zero-length code to handle
   # nested calls (this is specified).  May as well simplify other branches.
-  let (len, fork) = (c.output.len, c.fork)
+  let len = c.output.len
   if len == 0:
     return
 

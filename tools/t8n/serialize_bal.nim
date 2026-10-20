@@ -32,6 +32,9 @@ func `@@`[T](list: openArray[T]): JsonNode
 func `@@`(x: Address): JsonNode =
   %(x.to0xHex)
 
+func `@@`(x: Hash32): JsonNode =
+  %(x.to0xHex)
+
 func `@@`(x: Bytes): JsonNode =
   %("0x" & x.toHex)
 
@@ -60,6 +63,8 @@ func `@@`(x: CodeChange): JsonNode =
     "blockAccessIndex": @@(x.blockAccessIndex),
     "newCode": @@(x.newCode),
   }
+  if x.newCodeHash.isSome:
+    result["newCodeHash"] = @@(x.newCodeHash.value)
 
 func `@@`(x: StorageChange): JsonNode =
   result = %{
