@@ -107,21 +107,20 @@ func decodeU256(input: openArray[byte]): Opt[UInt256] =
   Opt.some(UInt256.fromBytesBE(input.toOpenArray(0, 31)))
 
 func decodeString(input: openArray[byte]): Opt[string] =
-  let
-    offset256 = ?decodeU256(input)
-    offset = offset256.truncate(int)
-
-  if offset >= input.len:
+  let offset256 = ?decodeU256(input)
+  if offset256 >= input.len.u256:
     return Opt.none(string)
 
   let
+    offset = offset256.truncate(int)
     len256 = ?decodeU256(input.toOpenArray(offset, input.len-1))
-    len = len256.truncate(int)
     dataOffset = offset + 32
 
-  if dataOffset + len >= input.len:
+  # decodeU256 guarantees dataOffset <= input.len
+  if len256 > (input.len - dataOffset).u256:
     return Opt.none(string)
 
+  let len = len256.truncate(int)
   ok(string.fromBytes(input.toOpenArray(dataOffset, dataOffset + len - 1)))
 
 # UnpackRevert resolves the abi-encoded revert reason. According to the solidity
