@@ -101,7 +101,10 @@ runs:
       uses: actions/cache@v5
       with:
         path: external/mingw-${{ matrix.cpu }}
-        key: 'mingw-llvm-21-${{ matrix.cpu }}'
+        key: 'mingw-llvm-21-${{ matrix.cpu }}-${{ matrix.os }}-${{ github.ref_name }}'
+        restore-keys: |
+          'mingw-llvm-21-${{ matrix.cpu }}-${{ matrix.os }}-master'
+          'mingw-llvm-21-${{ matrix.cpu }}-${{ matrix.os }}-'
 
     - name: Install llvm-mingw dependency (Windows)
       if: >
@@ -178,7 +181,11 @@ runs:
           tests/fixtures/eest_zkevm
         # EEST release version contained in eest_ci_cache.sh.
         # Each time we bump EEST version, it should invalidate the cache too.
-        key: eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}
+        key: eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}-${{ github.ref_name }}
+        enableCrossOsArchive: true
+        restore-keys: |
+          eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}-master
+          eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}-
 
     - name: Download EEST fixtures if not exists
       if: inputs.eest-cache == 'true'
