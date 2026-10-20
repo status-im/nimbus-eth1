@@ -57,6 +57,11 @@ type
       # Queue of blocks that will become base.
       # This queue will be filled by `importBlock` or `forkChoice`.
       # Then consumed by the `processQueue` async worker.
+    baseEvent*   : AsyncEvent
+      # Event that is fired when a new base block is added to the queue.
+      # This is used to wake up the `processQueue` async worker.
+    baseLoop*: Future[void].Raising([])
+      # Async worker that consumes the `baseQueue` and updates the base block.
 
     lastBaseLogTime*: EthTime
 
@@ -113,10 +118,9 @@ type
     fcuSafe*: FcuHashAndNumber
       # Tracking current head and safe block of FC serialization.
 
-    queue*: AsyncQueue[QueueItem]
-    processingQueueLoop*: Future[void].Raising([CancelledError])
-      # Prevent async re-entrancy messing up FC state
-      # on both `importBlock` and `forkChoice`.
+    importLock*: AsyncLock
+      # Block import lock used to queue block import requests and prevent
+      # concurrent imports from messing up the FC state.
 
     badBlocks*: LruCache[Hash32, (Block, Opt[BlockAccessListRef])]
       # Recent blocks that failed validation for any reason,

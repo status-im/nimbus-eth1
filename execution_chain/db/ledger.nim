@@ -975,7 +975,7 @@ proc clearBlockHashesCache*(ledger: LedgerRef) =
 proc persist*(ledger: LedgerRef,
               clearEmptyAccount: bool = false,
               clearCache = false,
-              clearWitness = false) =
+              clearWitness = false) {.deprecated.} =
   const info = "persist(): "
 
   # make sure all savePoint already committed

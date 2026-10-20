@@ -50,19 +50,6 @@ const
   PersistBatchSize = 4'u64
   MaxQueueSize = 128
 
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-func toQueueResult(r: Result[void, string]): Result[ImportOutcome, ImportError] =
-  ## Adapt the `Result[void, string]` of the non-import queue handlers
-  ## (`forkChoice`, `setHead`, `processUpdateBase`, `processOrphan`) to the shared
-  ## `QueueItem` result type. The error `kind` is irrelevant on these paths:
-  ## their consumers only inspect ok/err and `msg` (the base/orphan results are
-  ## not even read back), so a plain `Valid`/`Invalid` mapping suffices.
-  if r.isOk: ok(Valid)
-  else: err(ImportError(kind: Invalid, msg: r.error))
-
 func appendBlock(c: ForkedChainRef,
          parent: BlockRef,
          blk: Block,
@@ -355,7 +342,6 @@ with --debug-eager-state-root."""
     base.txFrame.deleteTxFrame(it.hash).expect("delete persisted frame")
     c.removeBlockFromCache(it)
     inc count
-
   # Update base branch
   c.base = base
   c.base.parent = nil
@@ -363,6 +349,8 @@ with --debug-eager-state-root."""
 
   # Base block always have finalized marker
   c.base.finalize()
+
+  debug "Updated base", base = base.number, count = count, time = (Moment.now() - startTime).milliseconds
 
   if c.dynamicBatchSize:
     # Dynamicly adjust the persistBatchSize based on the recorded run time.
@@ -393,58 +381,60 @@ with --debug-eager-state-root."""
 
   count
 
-proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-  if c.baseQueue.len > 0:
-    let base = c.baseQueue.popFirst()
-    c.persistedCount += c.updateBase(base)
-
-  const
-    minLogInterval = 5
-
+proc processUpdateBase(c: ForkedChainRef) =
   if c.baseQueue.len == 0:
-    let time = EthTime.now()
-    if time - c.lastBaseLogTime > minLogInterval:
-      # Log only if more than one block persisted
-      # This is to avoid log spamming, during normal operation
-      # of the client following the chain
-      # When multiple blocks are persisted together, it's mainly
-      # during `beacon sync` or `nrpc sync`
-      if c.persistedCount > 1:
-        notice "Finalized blocks persisted",
-          nBlocks = c.persistedCount,
-          head = c.latest.number,
-          base = c.base.number,
-          baseHash = c.base.hash.short,
-          pendingFCU = c.pendingFCU.short,
-          resolvedFinNum = c.latestFinalized.number,
-          resolvedFinHash = c.latestFinalized.hash.short,
-          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
-      else:
-        debug "Finalized blocks persisted",
-          nBlocks = c.persistedCount,
-          target = c.base.hash.short,
-          base = c.base.number,
-          baseHash = c.base.hash.short,
-          pendingFCU = c.pendingFCU.short,
-          resolvedFinNum = c.latestFinalized.number,
-          resolvedFinHash = c.latestFinalized.hash.short,
-          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
-      c.lastBaseLogTime = time
-      c.persistedCount = 0
-    return ok()
+    return
 
-  if c.queue.isNil:
-    # This recursive mode only used in test env with small set of blocks
-    discard await c.processUpdateBase()
-  else:
-    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
-      toQueueResult(await c.processUpdateBase())
-    await c.queue.addLast(QueueItem(handler: asyncHandler))
+  let base = c.baseQueue.popFirst()
 
-  ok()
+  c.persistedCount += c.updateBase(base)
 
-proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
-     {.async: (raises: [CancelledError]).} =
+  const minLogInterval = 12
+
+  let time = EthTime.now()
+  if c.persistedCount > 0 and ((time - c.lastBaseLogTime > minLogInterval) or (c.baseQueue.len == 0)):
+    # Log only if more than one block persisted
+    # This is to avoid log spamming, during normal operation
+    # of the client following the chain
+    # When multiple blocks are persisted together, it's mainly
+    # during `beacon sync` or `nrpc sync`
+    info "Finalized blocks persisted",
+      nBlocks = c.persistedCount,
+      head = c.latest.number,
+      base = c.base.number,
+      baseHash = c.base.hash.short,
+      pendingFCU = c.pendingFCU.short,
+      resolvedFinNum = c.latestFinalized.number,
+      resolvedFinHash = c.latestFinalized.hash.short,
+      dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
+    c.lastBaseLogTime = time
+    c.persistedCount = 0
+
+proc processBaseLoop(fc: ForkedChainRef) {.async: (raises: []).} =
+  ## Base updates are done in the background to not block the action that led to
+  ## them. Each base update moves the base by some amount and then gives the
+  ## event loop a chance to run other tasks.
+  ##
+  ## Typically there will be only a single item in the base queue but if we
+  ## didn't know the finalized block number for a while, as happens when using
+  ## light clients, the queue can grow significantly. Once the finalized block
+  ## number becomes known, we also need to ensure that we base updates proceed
+  ## more quickly than blocks are added to the queue on average, otherwise the
+  ## queue can grow indefinitely and cause memory issues.
+  try:
+    # Share the thread with networking and other async tasks, but don't wait
+    # too long for an idle slot - we need to update the base faster than we
+    # add blocks to the queue on average.
+    while fc.baseQueue.len > 0:
+      discard await idleAsync().withTimeout(100.milliseconds)
+      fc.processUpdateBase()
+  except CancelledError:
+    # The loop is cancelled when the forked chain is being disposed.
+    # We don't want to propagate the exception, just exit the loop.
+    debug "processBaseLoop cancelled"
+  fc.baseLoop = nil
+
+proc queueUpdateBase(c: ForkedChainRef, base: BlockRef) =
   let
     prevQueuedBase = if c.baseQueue.len > 0:
                        c.baseQueue.peekLast()
@@ -468,24 +458,19 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
     it = it.parent
 
   for i in countdown(steps.len-1, 0):
+    debug "Queueing base update", bb = c.base.number, prev = prevQueuedBase.number, base = steps[i].number, hash = steps[i].hash.short
     c.baseQueue.addLast(steps[i])
 
-  if c.queue.isNil:
-    # This recursive mode only used in test env with small set of blocks
-    discard await c.processUpdateBase()
-  else:
-    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
-      toQueueResult(await c.processUpdateBase())
-    await c.queue.addLast(QueueItem(handler: asyncHandler))
+  if c.baseLoop.isNil or c.baseLoop.finished():
+    c.baseLoop = c.processBaseLoop()
 
 proc validateBlock(
     c: ForkedChainRef,
     parent: BlockRef,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    finalized: bool
-  ): Future[Result[BlockRef, string]] {.async: (raises: [CancelledError]).} =
-
+    finalized: bool,
+): Result[BlockRef, string] =
   let
     blkHash = blk.header.computeBlockHash
     existingBlock = c.hashToBlock.getOrDefault(blkHash)
@@ -578,78 +563,13 @@ proc validateBlock(
         break
 
     c.updateFinalized(finalizedFrontier, c.latest)
-    await c.queueUpdateBase(base)
-
+    c.queueUpdateBase(base)
     # If the head is behind base, move it to base too.
     if c.base.number > prevBase:
       if c.fcuHead.number < c.base.number:
         c.updateHead(c.base)
 
   ok(newBlock)
-
-template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): auto =
-  if c.queue.isNil:
-    # This recursive mode only used in test env with small set of blocks
-    discard await c.processOrphan(parent, finalized)
-  else:
-    proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
-      toQueueResult(await c.processOrphan(parent, finalized))
-    await c.queue.addLast(QueueItem(handler: asyncHandler))
-
-proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Future[Result[void, string]]
-  {.async: (raises: [CancelledError]).} =
-  if parent.txFrame.isNil:
-    # This can happen if `processUpdateBase` put `updateBase`
-    # before `processOrphan` and the `updateBase` remove orphan's parent.txFrame
-    # But because of async nature, very hard to replicate or to make a test case.
-    # https://github.com/status-im/nimbus-eth1/issues/3526
-    return ok()
-
-  let
-    orphan = c.quarantine.popOrphan(parent.hash).valueOr:
-      # No more orphaned block
-      return ok()
-    parent = (await c.validateBlock(parent, orphan[0], orphan[1], finalized)).valueOr:
-      # Silent?
-      # We don't return error here because the import is still ok()
-      # but the quarantined blocks may not linked
-      return ok()
-  c.queueOrphan(parent, finalized)
-
-proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
-  # Networking and block processing share this thread, so we have to hand the
-  # thread back regularly or network reads stall and peers time us out.
-  #
-  # We yield per batch, not per item:
-  #   - per item  -> costs up to `idleTimeout` for every single block
-  #   - per batch -> pay that once per `processingBudget` of work
-  const
-    # Cap on how long we wait for an idle slot. Under heavy network load the
-    # loop may never go idle, and we don't want to stop processing entirely.
-    # Waiting also lets reads batch up into fewer, larger ones.
-    idleTimeout = 10.milliseconds
-
-    # Max CPU time to spend before yielding. Keep well under the peer response
-    # timeouts, otherwise the syncer starts banning honest peers as slow.
-    processingBudget = 50.milliseconds
-
-  var lastYield = Moment.now()
-  while true:
-    if processingBudget <= Moment.now() - lastYield:
-      discard await idleAsync().withTimeout(idleTimeout)
-      lastYield = Moment.now()
-
-    let
-      # Yields on its own when the queue is empty, so an idle node stays
-      # cooperative even though the budget check above rarely fires.
-      item = await c.queue.popFirst()
-      res = await item.handler()
-
-    if item.responseFut.isNil:
-      continue
-
-    if not item.responseFut.finished:
-      item.responseFut.complete res
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -662,7 +582,6 @@ proc init*(
     persistBatchSize = PersistBatchSize;
     dynamicBatchSize = false;
     eagerStateRoot = false;
-    enableQueue = false;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
   ## This state coincides with the canonical head that would be used for
@@ -703,6 +622,7 @@ proc init*(
       fcuHead:          fcuHead,
       fcuSafe:          fcuSafe,
       baseQueue:        initDeque[BlockRef](),
+      importLock:       newAsyncLock(),
       lastBaseLogTime:  EthTime.now(),
       badBlocks:        LruCache[Hash32, (Block, Opt[BlockAccessListRef])].init(100),
     )
@@ -711,14 +631,12 @@ proc init*(
   # traversal if parent have finalized marker.
   baseBlock.finalize()
 
-  if enableQueue:
-    fc.queue = newAsyncQueue[QueueItem](maxsize = MaxQueueSize)
-    fc.processingQueueLoop = fc.processQueue()
-
   fc
 
 proc refresh*(fc: ForkedChainRef, eagerStateRoot = false) =
   ## Flush internal caches and reassign database.
+  # TODO rewrite this function - it should not need to reset everything since
+  #      the FC necessarily must be empty as long as there's no base
   let newFc = ForkedChainRef.init(
     com = fc.com,
     baseDistance = fc.baseDistance,
@@ -726,8 +644,6 @@ proc refresh*(fc: ForkedChainRef, eagerStateRoot = false) =
     dynamicBatchSize = fc.dynamicBatchSize,
     eagerStateRoot)                                 # seems to be unused, though
 
-  newFc.queue = fc.queue                            # save temporarily
-  newFc.processingQueueLoop = fc.processingQueueLoop
   fc[].reset                                        # clear desctiptor
 
   # Copy base settings
@@ -747,9 +663,6 @@ proc refresh*(fc: ForkedChainRef, eagerStateRoot = false) =
   fc.lastBaseLogTime = newFc.lastBaseLogTime
   fc.badBlocks = newFc.badBlocks
 
-  # Enable queue (if any)
-  fc.queue = newFc.queue
-  fc.processingQueueLoop = newFc.processingQueueLoop
 
   # Force GC to clean up
   newFc[].reset
@@ -786,60 +699,89 @@ proc importBlock*(
   if c.hashToBlock.hasKey(blkHash):
     return ok(AlreadyObserved)
 
+  # Validating the block is expensive, so give priority to networking and other async tasks
+  discard await idleAsync().withTimeout(10.milliseconds)
+
+  # This lock ensures that quarantine blocks are imported after their parent but
+  # but before other calls to importBlock - we take the lock before running the
+  # base update which might invalidate BlockRef instances such as the parent.
+  await c.importLock.acquire()
+  defer: c.importLock.release2()
+
+  # Check if there's a long queue of base updates and if so, run one base update
+  # before validating the block. This ensures that base updates have some priority
+  # over blocks and thus avoids a situation where the base update queue grows too
+  # long and causes memory issues.
+  # A large base queue occurs when finality makes a big jump, such as when the
+  # CL itself is syncing - in other words, this base update should typically
+  # not happen in a healthy and synced client.
+  if c.baseQueue.len > 5:
+    c.processUpdateBase()
+
   let parent = c.hashToBlock.getOrDefault(header.parentHash)
-  if parent.isOk:
-    # TODO: If engine API keep importing blocks
-    # but not finalized it, e.g. current chain length > StagedBlocksThreshold
-    # We need to persist some of the in-memory stuff
-    # to a "staging area" or disk-backed memory but it must not afect `base`.
-    # `base` is the point of no return, we only update it on finality.
+  if not parent.isOk:
+    # Parent is not in the in-memory `(base, latest]` window. Classify by the
+    # block's height relative to `base`/`latest` (the error channel is preserved -
+    # same `msg` as the previous `err("Block is not part of valid chain")`).
+    debug "Parent block not found",
+      blockHash = blkHash.short,
+      parentHash = header.parentHash.short,
+      a = header.number,
+      b = c.base.number,
+      c = c.latest.number,
+      d = c.baseTxFrame.getBlockHash(header.number)
 
-    # Setting the finalized flag to true here has the effect of skipping the
-    # stateroot check for performance reasons.
-    let
-      isFinalized = finalized or blk.header.number <= c.latestFinalized.number
-      newParent = (await c.validateBlock(parent, blk, blockAccessList, isFinalized)).valueOr:
-        return err(ImportError(kind: Invalid, msg: error))
-    if c.quarantine.hasOrphans():
-      c.queueOrphan(newParent, isFinalized)
-    return ok(Valid)
+    if header.number <= c.latest.number:
+      # The parent is gone, but this block may itself be the canonical block at
+      # this height that was already imported and then pruned from memory once it
+      # fell at/below `base` (finality cut off its parent). This happens when a
+      # concurrent importer such as `el_sync` advances and finalizes the chain past
+      # a stale sync target. Tell that apart from a genuine dead fork via the
+      # persisted canonical marker (reorg-safe: matched by hash, not by number).
+      if header.number <= c.base.number and
+        c.baseTxFrame.getBlockHash(header.number).valueOr(default(Hash32)) == blkHash:
+        return ok(AlreadyObserved)
 
-  # Parent is not in the in-memory `(base, latest]` window. Classify by the
-  # block's height relative to `base`/`latest` (the error channel is preserved -
-  # same `msg` as the previous `err("Block is not part of valid chain")`).
-  debug "Parent block not found",
-    blockHash = blkHash.short,
-    parentHash = header.parentHash.short
+      # The in-memory chain already spans this height yet the parent is gone: the
+      # parent's branch was pruned (finality cut it off), so this block is on a
+      # dead fork. `c.latest` is the reliable frontier here - `c.latestFinalized`
+      # can lag until a matching fork-choice block is imported.
+      return err(ImportError(kind: Orphaned, msg: "Block is not part of valid chain"))
 
-  if header.number <= c.latest.number:
-    # The parent is gone, but this block may itself be the canonical block at
-    # this height that was already imported and then pruned from memory once it
-    # fell at/below `base` (finality cut off its parent). This happens when a
-    # concurrent importer such as `el_sync` advances and finalizes the chain past
-    # a stale sync target. Tell that apart from a genuine dead fork via the
-    # persisted canonical marker (reorg-safe: matched by hash, not by number).
-    if header.number <= c.base.number and
-       c.baseTxFrame.getBlockHash(header.number).valueOr(default(Hash32)) == blkHash:
-      return ok(AlreadyObserved)
+    # The chain has not reached this height yet: the parent may still arrive.
+    # Quarantine and wait.
+    c.quarantine.addOrphan(blkHash, blk, blockAccessList)
+    return err(ImportError(kind: MissingParent, msg: "Block is not part of valid chain"))
 
-    # The in-memory chain already spans this height yet the parent is gone: the
-    # parent's branch was pruned (finality cut it off), so this block is on a
-    # dead fork. `c.latest` is the reliable frontier here - `c.latestFinalized`
-    # can lag until a matching fork-choice block is imported.
-    return err(ImportError(kind: Orphaned, msg: "Block is not part of valid chain"))
+  # TODO: If engine API keep importing blocks
+  # but not finalized it, e.g. current chain length > StagedBlocksThreshold
+  # We need to persist some of the in-memory stuff
+  # to a "staging area" or disk-backed memory but it must not afect `base`.
+  # `base` is the point of no return, we only update it on finality.
 
-  # The chain has not reached this height yet: the parent may still arrive.
-  # Quarantine and wait.
-  c.quarantine.addOrphan(blkHash, blk, blockAccessList)
-  return err(ImportError(kind: MissingParent, msg: "Block is not part of valid chain"))
+  # Setting the finalized flag to true here has the effect of skipping the
+  # stateroot check for performance reasons.
+  let
+    isFinalized = finalized or blk.header.number <= c.latestFinalized.number
+    newParent = c.validateBlock(parent, blk, blockAccessList, isFinalized).valueOr:
+      return err(ImportError(kind: Invalid, msg: error))
 
-proc forkChoice*(c: ForkedChainRef,
-                 headHash: Hash32,
-                 finalizedHash: Hash32,
-                 safeHash: Hash32 = zeroHash32):
-                    Future[Result[void, string]]
-                      {.async: (raises: [CancelledError]).} =
+    orphan = c.quarantine.popOrphan(newParent.hash)
 
+  if orphan.isSome():
+    # Enqueue the orphan for import after its parent, but before any other blocks. We're
+    # still holding the lock at this point.
+    discard c.importBlock(orphan.get()[0], orphan.get()[1])
+
+  return ok(Valid)
+
+proc forkChoice*(
+    c: ForkedChainRef,
+    headHash: Hash32,
+    finalizedHash: Hash32,
+    safeHash: Hash32 = zeroHash32,
+    eagerBase: bool = false,
+): Result[void, string] =
   if finalizedHash != zeroHash32:
     c.pendingFCU = finalizedHash
 
@@ -882,7 +824,13 @@ proc forkChoice*(c: ForkedChainRef,
   # and possibly switched to other chain beside the one with head.
   doAssert(finalized.number <= head.number)
   doAssert(base.number <= finalized.number)
-  await c.queueUpdateBase(base)
+  c.queueUpdateBase(base)
+
+  while eagerBase and c.baseQueue.len > 0:
+    # If the caller requested an eager base update, process one base update
+    # immediately. This is useful for testing and debugging, but not needed
+    # in normal operation since the base update loop will eventually catch up.
+    c.processUpdateBase()
 
   ok()
 
@@ -936,58 +884,13 @@ proc setHead*(c: ForkedChainRef, headHash: Hash32): Result[void, string] =
   ok()
 
 proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: []).} =
-  doAssert(c.processingQueueLoop.isNil.not, "Please set enableQueue=true when constructing FC")
-  # noCancel operation prevents race condition between processingQueue
-  # and FC.serialize, e.g. the queue is not empty and processingQueue loop still running, and
-  # at the same time FC.serialize modify the state, crash can happen.
-  await noCancel c.processingQueueLoop.cancelAndWait()
+  if c.baseLoop.isNil.not and c.baseLoop.finished().not:
+    await c.baseLoop.cancelAndWait()
 
   if not c.vmState.isNil():
     c.vmState.dispose()
     c.vmState = nil
     c.vmStateBlockHash.reset()
-
-template queueImportBlock*(
-    c: ForkedChainRef,
-    blk: Block,
-    blockAccessList = Opt.none(BlockAccessListRef),
-    finalized = false): auto =
-
-  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]]
-      {.async: (raises: [CancelledError], raw: true).} =
-    c.importBlock(blk, blockAccessList, finalized)
-
-  let item = QueueItem(
-    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
-    handler: asyncHandler
-  )
-  await c.queue.addLast(item)
-  item.responseFut
-
-template queueForkChoice*(c: ForkedChainRef,
-                 headHash: Hash32,
-                 finalizedHash: Hash32,
-                 safeHash: Hash32 = zeroHash32): auto =
-  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
-    toQueueResult(await c.forkChoice(headHash, finalizedHash, safeHash))
-
-  let item = QueueItem(
-    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
-    handler: asyncHandler
-  )
-  await c.queue.addLast(item)
-  item.responseFut
-
-template queueSetHead*(c: ForkedChainRef, headHash: Hash32): auto =
-  proc asyncHandler(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
-    toQueueResult(c.setHead(headHash))
-
-  let item = QueueItem(
-    responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
-    handler: asyncHandler
-  )
-  await c.queue.addLast(item)
-  item.responseFut
 
 func resolvedFinHash*(c: ForkedChainRef): Hash32 =
   c.latestFinalized.hash
