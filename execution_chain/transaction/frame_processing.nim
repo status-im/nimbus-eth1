@@ -28,9 +28,6 @@ from ../core/eip7702 import parseDelegationAddress
 from ../core/eip8037 import CREATE_ACCOUNT_STATE_GAS
 from ../core/keyed_nonces import checkNonceSet
 
-const
-  enableDebug = false
-
 proc executeDefaultVerifyCode(vmState: BaseVMState,
                               frame: TransactionFrame,
                               resolvedTarget: Address): EvmResult[bool] =
@@ -302,6 +299,7 @@ proc rollbackOnError(vmState: BaseVMState, batch: var AtomicBatch) =
     vmState.balTracker.rollbackCallFrame()
   vmState.ledger.rollback(batch.stateSnapshot)
   batch.stateSnapshot = nil
+  batch.frameSnapshot = nil
 
 proc processFrames(vmState: BaseVMState): Result[TransactionOutput, string] =
   let
@@ -487,19 +485,6 @@ func settleFrameTransactionGas(
       calldataFloor
     )
 
-  when enableDebug:
-    debugEcho "standard_gas_limit: ", standardGasLimit
-    debugEcho "calldata_floor: ", calldataFloor
-    debugEcho "tx_unused_gas: ", txUnusedGas
-    debugEcho "refund_counter: ", refundCounter
-    debugEcho "tx_state_gas: ", txStateGas
-
-    debugEcho "gas_used_before_refund: ", gasUsedBeforeRefund
-    debugEcho "applied_refund: ", appliedRefund
-    debugEcho "gas_used_after_refund: ", gasUsedAfterRefund
-    debugEcho "payer_execution_gas_used: ", payerExecutionGasUsed
-    debugEcho "block_execution_gas_used: ", blockExecutionGasUsed
-
   GasSettlement(
     gasUsed         : payerExecutionGasUsed + txStateGas,
     executionGasUsed: blockExecutionGasUsed,
@@ -559,11 +544,6 @@ proc prepareFrameProcessing(params: CallParams): Result[void, string] =
 
   vmState.frameCtx.standardGasLimit = params.intrinsic.execution + totalFrameGas
 
-  when enableDebug:
-    debugEcho "standard_gas_limit: ", vmState.frameCtx.standardGasLimit
-    debugEcho "intrinsic.execution: ", params.intrinsic.execution
-    debugEcho "total_frame_gas: ", totalFrameGas
-
   let
     maxGas = max(
       vmState.frameCtx.standardGasLimit,
@@ -598,13 +578,6 @@ proc processFrameTransaction*(params: CallParams): Result[GasSettlement, string]
 
   let
     txUnusedGas = txOutput.gasLeft + txOutput.stateGasLeft
-
-  when enableDebug:
-    debugEcho "tx_unused_gas: ", txUnusedGas
-    debugEcho "tx_output.gas_left: ", txOutput.gasLeft
-    debugEcho "tx_output.state_gas_left: ", txOutput.stateGasLeft
-
-  let
     settlement = settleFrameTransactionGas(
       vmState.frameCtx.standardGasLimit,
       params.intrinsic.floorDataGas,
