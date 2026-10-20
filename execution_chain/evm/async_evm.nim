@@ -324,6 +324,7 @@ proc setupVmState(evm: AsyncEvm, txFrame: CoreDbTxRef, header: Header): BaseVMSt
     coinbase: header.coinbase,
     excessBlobGas: header.excessBlobGas.get(0'u64),
     parentHash: header.computeRlpHash(),
+    slotNumber: header.slotNumber.get(0'u64),
   )
   BaseVMState.new(header, blockContext, evm.com, txFrame)
 
