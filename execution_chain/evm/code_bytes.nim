@@ -128,7 +128,7 @@ func markPushFreeWords(
 func jumpdestBitmap*(bytes: openArray[byte]): seq[byte] =
   ## Bit seq of the valid jump destinations in `bytes`: the JUMPDEST opcodes
   ## that are not PUSH data
-  var bitmap = newSeq[byte]((bytes.len + 7) div 8)
+  result = newSeq[byte]((bytes.len + 7) div 8)
   var i = 0
   while i < bytes.len:
     var
@@ -140,16 +140,15 @@ func jumpdestBitmap*(bytes: openArray[byte]): seq[byte] =
     while not isPushOpcode(op):
       if op == byte(JumpDest):
         let (bpos, bbit) = bitpos(i)
-        bitmap[bpos] = bitmap[bpos] or bbit
+        result[bpos] = result[bpos] or bbit
       i += 1
       if i >= stop:
-        i = markPushFreeWords(bytes, bitmap, i)
+        i = markPushFreeWords(bytes, result, i)
         if i >= bytes.len:
-          return bitmap
+          return
         stop = bytes.len
       op = bytes[i]
     i += op.int - 94
-  bitmap
 
 func isValidJumpdest*(c: CodeBytesRef, position: int): bool =
   if uint(position) >= uint(len(c)):
