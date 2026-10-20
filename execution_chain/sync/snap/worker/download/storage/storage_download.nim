@@ -18,8 +18,7 @@
 
 import
   pkg/[chronicles, chronos, stew/interval_set],
-  ../../[helpers, cache_db, mpt_build, worker_desc],
-  ../download_helpers,
+  ../../[helpers, cache_db, delete_account, mpt_build, worker_desc],
   ./storage_fetch
 
 const
@@ -28,6 +27,13 @@ const
 # ------------------------------------------------------------------------------
 # Private helpers for `downloadImpl()`
 # ------------------------------------------------------------------------------
+
+func isFullRange(itrs: ItemKeyRangeSet): bool =
+  # Defensive encoding of a full range check. Solely testing `total; == 0`
+  # leaves room for the case that the range is empty which is an illegal
+  # situation but it can handled with savely.
+  itrs.total == 0 and                               # => 0 or 2^256
+  itrs.chunks == 1                                  # => one intv => full MPT
 
 proc getQueryList(
     buddy: SnapPeerRef;

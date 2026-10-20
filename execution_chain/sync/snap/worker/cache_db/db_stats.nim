@@ -80,20 +80,62 @@ proc nMissPartStoRanges(
 
     timer.yieldThread()
 
-proc nFlatBlobs(db: CacheDbRef, info: static[string]): int =
-  let n = db.nFlatCode(info).valueOr:
-    return -1
-  n.int
+proc nFlatBlobs(db: CacheDbRef, info: static[string]; check = false): int =
+  var nCodes = 0u
+  for (accPath,value) in db.walkFlatCode():
+    nCodes.inc
+    if not check:
+      continue
+    if value.len == 0:
+      error info & ": Error empty contract code",
+        accPath=accPath.toStr
+      continue
+    let data = db.getFlatAcc(accPath, info).valueOr:
+      error info & ": Error contract code without account",
+        accPath=accPath.toStr
+      continue
+    if data.dirtyCode:
+      error info & ": Error contract code has dirtyCode flag set",
+        accPath=accPath.toStr
+      continue
+    if data.account.codeHash == EMPTY_CODE_HASH:
+      error info & ": Error contract code has empty code hash set",
+        accPath=accPath.toStr
+      continue
+    if data.account.codeHash == zeroHash32:
+      error info & ": Error contract code has zero hash set",
+        accPath=accPath.toStr
+      continue
+  nCodes.int
 
 proc nFlatMissBlobs(db: CacheDbRef, info: static[string]): int =
   let n = db.nMissingBlob(info).valueOr:
     return -1
   n.int
 
-proc nFlatSlots(db: CacheDbRef, info: static[string]): int =
-  let n = db.nFlatSlot(info).valueOr:
-    return -1
-  n.int
+proc nFlatSlots(db: CacheDbRef, info: static[string]; check = false): int =
+  var nSlots = 0u
+  for w in db.walkFlatSlot():
+    if 0 < w.error.len:
+      error info & ": Error walking flat slots on cache DB",
+        accPath=w.accPath.toStr, slotKey=w.slotKey.toStr, error=w.error
+      return -1
+    nSlots.inc
+    if not check:
+      continue
+    if w.data == 0:
+      error info & ": Error zero slot value",
+        accPath=w.accPath.toStr, slotKey=w.slotKey.toStr
+      continue
+    let data = db.getFlatAcc(w.accPath, info).valueOr:
+      error info & ": Error storage slot without account",
+        accPath=w.accPath.toStr, slotKey=w.slotKey.toStr
+      continue
+    if data.account.codeHash == EMPTY_ROOT_HASH:
+      error info & ": Error storage slot empty root hash set",
+        accPath=w.accPath.toStr, slotKey=w.slotKey.toStr
+      continue
+  nSlots.int
 
 proc statsWalk(
     db: CacheDbRef;
@@ -290,7 +332,7 @@ proc statsStateImpl(
       ela=(Moment.now() - start).toStr
 
   of minimal:
-    let stats = (await db.statsWalk(peer, timer, info, shallowCheck=true)).valueOr:
+    let stats = (await db.statsWalk(peer,timer,info,shallowCheck=true)).valueOr:
       chronicles.info info & ": Error collecting stats", peer
       return
 
@@ -313,7 +355,7 @@ proc statsStateImpl(
 
   of check, full:
     let
-      stats = (await db.statsWalk(peer, timer, info, shallowCheck=false)).valueOr:
+      stats = (await db.statsWalk(peer,timer,info,shallowCheck=false)).valueOr:
         chronicles.info info & ": Error collecting stats", peer
         return
 
@@ -357,12 +399,14 @@ proc statsStateImpl(
           number, nFullStoRange, nEmptyStoMpt
 
       if nFlatSlots != nStoSlot:
+        discard db.nFlatSlots(info, check=true)
         error info & ": Storage slot counts do not match", peer,
           number, nFlatSlots, nStoSlot
 
       # --------------
 
       if nCodeBlob != nFlatBlob:
+        discard db.nFlatBlobs(info, check=true)
         error info & ": Contract code counts do not match", peer,
           number, nCodeBlob, nFlatBlob
 
