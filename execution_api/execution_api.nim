@@ -31,6 +31,11 @@ createRpcSigsFromNim(RpcClient, EthJson):
     expectedBlobVersionedHashes: Opt[seq[VersionedHash]],
     parentBeaconBlockRoot: Opt[Hash32],
     executionRequests: Opt[seq[seq[byte]]]): PayloadStatus
+  proc engine_newPayloadV6(payload: ExecutionPayload,
+    expectedBlobVersionedHashes: Opt[seq[VersionedHash]],
+    parentBeaconBlockRoot: Opt[Hash32],
+    executionRequests: Opt[seq[seq[byte]]],
+    inclusionList: Opt[InclusionList]): PayloadStatus
 
   proc engine_newPayloadWithWitnessV4(payload: ExecutionPayload,
     expectedBlobVersionedHashes: Opt[seq[VersionedHash]],
@@ -45,3 +50,4 @@ createRpcSigsFromNim(RpcClient, EthJson):
   proc engine_forkchoiceUpdatedV2(forkchoiceState: ForkchoiceState, attributes: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse
   proc engine_forkchoiceUpdatedV3(forkchoiceState: ForkchoiceState, attributes: Opt[PayloadAttributes]): ForkchoiceUpdatedResponse
   proc engine_forkchoiceUpdatedV4(forkchoiceState: ForkchoiceState, attributes: Opt[PayloadAttributes], custodyColumns: Opt[FixedBytes[16]]): ForkchoiceUpdatedResponse
+  proc engine_forkchoiceUpdatedV5(forkchoiceState: ForkchoiceState, attributes: Opt[PayloadAttributes], custodyColumns: Opt[FixedBytes[16]]): ForkchoiceUpdatedResponse

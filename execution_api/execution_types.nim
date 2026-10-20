@@ -47,6 +47,7 @@ type
     parentBeaconBlockRoot*: Opt[Hash32]
     slotNumber*: Opt[Quantity]
     targetGasLimit*: Opt[Quantity]
+    inclusionListTransactions*: Opt[seq[TypedTransaction]]
 
   PayloadStatus* = object
     status*: PayloadExecutionStatus

@@ -730,7 +730,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, "Block not found")
       if not api.com.isLondonOrLater(header.number + 1, header.timestamp):
         raise newException(ValueError, "base fee not available before London")
-      api.com.calcEip1599BaseFee(header)
+      api.com.calcBaseFee(header, header.timestamp)
 
     proc eth_blobBaseFee(): Quantity {.raises: [ValueError].} =
       ## Returns the base fee per blob gas in wei.

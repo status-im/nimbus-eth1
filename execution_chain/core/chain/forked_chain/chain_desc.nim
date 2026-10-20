@@ -131,6 +131,8 @@ type
     vmStateBlockHash*: Hash32
       # Hash of the last block executed by cached vmState.
 
+    lastInclusionListSatisfied*: Opt[bool]
+    
 # ------------------------------------------------------------------------------
 # These functions are private to ForkedChainRef
 # ------------------------------------------------------------------------------
