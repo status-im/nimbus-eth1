@@ -259,6 +259,3 @@
 	url = https://github.com/eth-act/zkevm-standards.git
 	ignore = untracked
 	branch = main
-[submodule "vendor/nim-libplum"]
-	path = vendor/nim-libplum
-	url = https://github.com/logos-storage/nim-libplum.git

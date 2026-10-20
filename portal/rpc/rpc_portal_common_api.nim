@@ -65,10 +65,9 @@ proc installPortalCommonApiHandlers*(
       raise newException(ValueError, "Record not in local routing table.")
 
   rpc("portal_" & networkStr & "DeleteEnr") do(nodeId: NodeId) -> bool:
-    # TODO: Adjust `removeNode` to accept NodeId as param and to return bool.
     let node = p.getNode(nodeId)
     if node.isSome():
-      p.routingTable.removeNode(node.get())
+      p.routingTable.replaceNode(node.get())
       return true
     else:
       return false

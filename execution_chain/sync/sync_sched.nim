@@ -23,11 +23,14 @@
 ## *runRelease(ctx: CtxRef[S,W])*
 ##   Global clean up, done with all the worker peers.
 ##
-## *runDaemon(ctx: CtxRef[S,W]) {.async: (raises: []).}*
+## *runDaemon(ctx: CtxRef[S,W]): Duration*
 ##   Global background job that will be re-started as long as the variable
 ##   `ctx.daemon` is set `true`.
 ##
-##   The function returns a suggested idle time to wait for the next invocation.
+##   The function returns a suggested idle time to wait for the next
+##   invocation. This directive must be a template or a non`async` function.
+##   If needed, the template can be a simple wrapper around something like
+##   `await daemonFn()`.
 ##
 ## *runTicker(ctx: CtxRef[S,W])*
 ##   Global background job that is started every few seconds. It is to be
@@ -68,8 +71,10 @@
 ##   the `buddy.ctrl.poolMode` flag is set `false`. All workers run
 ##   concurrently in `async` mode.
 ##
-##   The function returns a suggested idle time to wait for the next invocation.
-##
+##   The function returns a suggested idle time to wait for the next
+##   invocation. This directive must be a template which can be a simple
+##   wrapper around something like `await peerFn()`.
+
 ##
 ## These are the control variables that can be set from within the above
 ## listed method/interface functions.
@@ -313,7 +318,7 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
       # Enforce minimum time spend on this loop
       let
         startMoment = Moment.now()
-        idleTime = await dsc.ctx.runDaemon()
+        idleTime = dsc.ctx.runDaemon()         # potentially an `async` template
 
       if not dsc.ctx.daemon:
         break
@@ -440,7 +445,7 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
         # Peer worker in async mode
         dsc.activeMulti.inc
         # Continue doing something, work a bit
-        idleTime = await worker.runPeer()
+        idleTime = worker.runPeer()                 # `async` template
         dsc.activeMulti.dec
 
       # Check for shutdown

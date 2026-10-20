@@ -130,6 +130,15 @@ func decodeFlatSlotData*(data: openArray[byte]): Result[UInt256,string] =
     return err(info & ": " & $e.name & "(" & e.msg & ")")
   ok(move res)
 
+func decodeHash32*(data: openArray[byte]): Result[Hash32,string] =
+  const info = "decodeHash32"
+  var res: Hash32
+  try:
+    res = rlp.decode(data, Hash32)
+  except RlpError as e:
+    return err(info & ": " & $e.name & "(" & e.msg & ")")
+  ok(move res)
+
 # ------------------------------------------------------------------------------
 # Public RLP encoders
 # ------------------------------------------------------------------------------
@@ -170,6 +179,11 @@ template encodeFlatSlotData*(
     slot: UInt256;
       ): untyped =
   rlp.encode(slot)
+
+template encodeHash32*(
+    hash: Hash32;
+      ): untyped =
+  rlp.encode hash
 
 # ------------------------------------------------------------------------------
 # End

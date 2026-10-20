@@ -56,8 +56,8 @@ proc runSetup(ctx: SnapCtxRef): bool =
 proc runRelease(ctx: SnapCtxRef) =
   worker.release(ctx, "Release")
 
-proc runDaemon(ctx: SnapCtxRef): Future[Duration] {.async: (raises: []).} =
-  return worker.runDaemon(ctx, "Daemon")
+template runDaemon(ctx: SnapCtxRef): Duration =
+  worker.runDaemon(ctx, "Daemon")
 
 proc runTicker(ctx: SnapCtxRef) =
   worker.runTicker(ctx, "Ticker")
@@ -71,8 +71,8 @@ proc runStop(buddy: SnapPeerRef) =
 proc runPool(buddy: SnapPeerRef; last: bool; laps: int): bool =
   worker.runPool(buddy, last, laps, "SyncMode")
 
-proc runPeer(buddy: SnapPeerRef): Future[Duration] {.async: (raises: []).} =
-  return worker.runPeer(buddy, "Peer")
+template runPeer(buddy: SnapPeerRef): Duration =
+  worker.runPeer(buddy, "Peer")
 
 # ------------------------------------------------------------------------------
 # Public functions

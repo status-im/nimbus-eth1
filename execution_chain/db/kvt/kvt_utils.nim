@@ -114,6 +114,25 @@ proc del*(
 
 # ------------
 
+proc del*(
+    db: KvtDbRef;                     # Database
+    keys: openArray[seq[byte]];       # Keys of database records to delete
+      ): Result[void,KvtError] =
+  ## Delete the values in one atomic step and invalidate any cached block
+  ## hash among them.
+  for key in keys:
+    if key.len == 0:
+      return err(KeyInvalid)
+
+  ?db.delBatchKvpFn(keys)
+  when compileOption("threads"):
+    for key in keys:
+      if key.isBlockNumberToHashKey:
+        db.blockHashes.del(key.blockNumberFromHashKey)
+  ok()
+
+# ------------
+
 proc get*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record

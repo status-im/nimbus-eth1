@@ -148,7 +148,8 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       discard
 
     of SnapDownloadCommit:
-      # FIXME: The directive `downloadCommit()` needs to be async-ified.
+      discard ctx.headerDownloadTrigger(info)       # see `SnapDownload`
+
       ctx.downloadCommit(info).isOkOr:              # write back ranges to DB
         # FIXME: any useful error handling here?
         error info & ": Error storing progress", `error`=error
