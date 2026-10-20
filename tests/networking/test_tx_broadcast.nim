@@ -102,7 +102,7 @@ proc newBroadcastTestEnv(genesisPath = ""): BroadcastTestEnv =
   com.taskpool = Taskpool.new()
   let
     node = setupTestNode()
-    chain = ForkedChainRef.init(com, enableQueue = true)
+    chain = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(chain)
     wire = node.addEthHandlerCapability(txPool)
 

@@ -123,7 +123,7 @@ proc setupEnv(envFork: HardFork = MergeFork,
 
   let
     com   = setupCom(config, params)
-    chain = ForkedChainRef.init(com, enableQueue = true)
+    chain = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(chain)
 
   let

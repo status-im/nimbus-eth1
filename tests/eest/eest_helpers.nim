@@ -99,7 +99,7 @@ proc prepareEnv*(
       com.db.mpt.taskpool = taskpool
       testEnv.taskpool = taskpool
 
-    let chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, persistBatchSize = 1)
 
     testEnv.chain = chain
     testEnv.client = Opt.none(RpcHttpClient)

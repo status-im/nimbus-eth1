@@ -75,7 +75,7 @@ proc newTestEnv*(maxPeers = 25): TestEnv =
     config = envConfig()
     params = config.computeNetworkParams()
     com    = makeCom(params)
-    chain  = ForkedChainRef.init(com, enableQueue = true)
+    chain  = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(chain)
     wire   = node.addEthHandlerCapability(txPool)
 

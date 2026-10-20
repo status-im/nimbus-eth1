@@ -334,19 +334,17 @@ proc newPayload*(ben: BeaconEngineRef,
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
 
-  block:
-    let res = await chain.queueImportBlock(blk, blockAccessList)
-    if res.isErr:
-      warn "Error importing block",
-        number = header.number,
-        hash = blockHash.short,
-        parent = header.parentHash.short,
-        error = res.error.msg
-      ben.setInvalidAncestor(header, blockHash)
-      let
-        txFrame = chain.latestTxFrame()
-        blockHash = latestValidHash(txFrame, parent, ttd)
-      return invalidStatus(blockHash, res.error.msg)
+  (await chain.importBlock(blk, blockAccessList)).isOkOr:
+    warn "Error importing block",
+      number = header.number,
+      hash = blockHash.short,
+      parent = header.parentHash.short,
+      error = error.msg
+    ben.setInvalidAncestor(header, blockHash)
+    let
+      txFrame = chain.latestTxFrame()
+      blockHash = latestValidHash(txFrame, parent, ttd)
+    return invalidStatus(blockHash, error.msg)
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 
@@ -358,8 +356,7 @@ proc newPayload*(ben: BeaconEngineRef,
     gasUsed = header.gasUsed,
     blobGas = header.blobGasUsed.get(0'u64)
 
-  return
-    if withWitness:
-      validStatus(blockHash, ben.collectWitness(blk))
-    else:
-      validStatus(blockHash)
+  if withWitness:
+    validStatus(blockHash, ben.collectWitness(blk))
+  else:
+    validStatus(blockHash)

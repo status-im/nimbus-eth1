@@ -61,18 +61,17 @@ proc importRlpBlocks*(
         hash = blk.header.computeBlockHash.short, number = blk.header.number
       printBanner = true
 
-    let res = await chain.importBlock(blk, finalized = true)
-    if res.isErr:
+    (await chain.importBlock(blk, finalized = true)).isOkOr:
       error "Error occurred when importing block",
         hash = blk.header.computeBlockHash.short,
         number = blk.header.number,
-        msg = res.error.msg
+        msg = error.msg
       if finalize:
-        ?(await chain.forkChoice(chain.latestHash, chain.latestHash))
-      return err(res.error.msg)
+        ?chain.forkChoice(chain.latestHash, chain.latestHash)
+      return err(error.msg)
 
   if finalize:
-    ?(await chain.forkChoice(chain.latestHash, chain.latestHash))
+    ?chain.forkChoice(chain.latestHash, chain.latestHash)
 
   ok()
 
@@ -94,5 +93,5 @@ proc importRlpBlocks*(
     (await importRlpBlocks(filePath, chain, config.bootstrapBlocksFinalized)).isOkOr:
       warn "Error when importing blocks", msg = error
       if config.bootstrapBlocksFinalized:
-        (await chain.forkChoice(chain.latestHash, chain.latestHash)).isOkOr:
+        chain.forkChoice(chain.latestHash, chain.latestHash).isOkOr:
           error "Error when finalizing chain", msg = error

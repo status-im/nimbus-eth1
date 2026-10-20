@@ -205,7 +205,7 @@ suite "Pruner integration tests":
     check (waitFor chain.importBlock(blk7)).isOk
 
     # Persist via fork choice (finalize blk6, head blk7)
-    check (waitFor chain.forkChoice(blk7.blockHash, blk6.blockHash)).isOk
+    check (chain.forkChoice(blk7.blockHash, blk6.blockHash, eagerBase = true)).isOk
 
     # Verify withdrawal data exists in backend for persisted blocks
     let kvt = com.db.kvt
@@ -259,11 +259,11 @@ suite "Pruner integration tests":
 
     # Import and persist all blocks
     check (waitFor chain.importBlock(blk1)).isOk
-    check (waitFor chain.forkChoice(blk1.blockHash, blk1.blockHash)).isOk
+    check (chain.forkChoice(blk1.blockHash, blk1.blockHash)).isOk
     check (waitFor chain.importBlock(blk2)).isOk
-    check (waitFor chain.forkChoice(blk2.blockHash, blk2.blockHash)).isOk
+    check (chain.forkChoice(blk2.blockHash, blk2.blockHash)).isOk
     check (waitFor chain.importBlock(blk3)).isOk
-    check (waitFor chain.forkChoice(blk3.blockHash, blk3.blockHash)).isOk
+    check (chain.forkChoice(blk3.blockHash, blk3.blockHash, eagerBase = true)).isOk
 
     let kvt = com.db.kvt
 
