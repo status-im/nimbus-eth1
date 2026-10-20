@@ -11,7 +11,7 @@
 
 import
   ./chain_desc,
-  ../../focil,
+  ../../inclusion_list,
   ../../validate,
   ../../executor/process_block,
   ../../../common,
@@ -198,7 +198,7 @@ proc processBlock*(
     c.lastInclusionListSatisfied = Opt.some(vmState.inclusionListSatisfied)
   else:
     c.lastInclusionListSatisfied = Opt.none(bool)
-  
+
   vmState.receipts.setLen(0)
   vmState.receiptBlooms.setLen(0)
   vmState.blockLogs.setLen(0)

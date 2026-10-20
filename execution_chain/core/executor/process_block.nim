@@ -20,7 +20,7 @@ import
   ../../evm/state,
   ../../evm/types,
   ../../block_access_list/[bal_tracker, bal_validation],
-  ../[dao, focil, eip6110],
+  ../[dao, inclusion_list, eip6110],
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,

@@ -17,7 +17,7 @@ import
   web3/primitives,
   json_rpc/errors,
   ../../core/tx_pool,
-  ../../core/focil,
+  ../../core/inclusion_list,
   ../../db/ledger,
   ../../evm/[types, state],
   ../web3_eth_conv,
