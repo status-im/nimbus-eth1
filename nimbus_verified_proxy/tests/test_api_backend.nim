@@ -221,6 +221,8 @@ func convToPartialBlock(blk: BlockObject): BlockObject =
     excessBlobGas: blk.excessBlobGas,
     parentBeaconBlockRoot: blk.parentBeaconBlockRoot,
     requestsHash: blk.requestsHash,
+    blockAccessListHash: blk.blockAccessListHash,
+    slotNumber: blk.slotNumber,
   )
 
 proc initTestExecutionBackend*(t: TestApiState): ExecutionApiBackend =
