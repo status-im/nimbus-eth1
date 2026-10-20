@@ -28,7 +28,8 @@ import
   ./oph_defs,
   ./oph_helpers,
   ../../state,
-  ../../../db/ledger
+  ../../../db/ledger,
+  ../../../constants
 
 # ------------------------------------------------------------------------------
 # Private
@@ -196,6 +197,68 @@ proc selfDestructEIP8037Op(cpt: VmCpt): EvmResultVoid =
   cpt.selfDestruct(beneficiary)
   ok()
 
+proc setCodeFromOp(cpt: VmCpt): EvmResultVoid =
+  ## 0xA7, EIP8298: Code Reuse Instruction
+  ? cpt.checkInStaticContext()
+
+  if cpt.msg.currentTarget in SYSTEM_CONTRACTS:
+    return err(opErr(CodeChangeInSystemContract))
+
+  ? cpt.stack.lsCheck(1)
+
+  let
+    source = cpt.stack.lsPeekAddress(^1)
+    ledger = cpt.vmState.ledger
+    isColdAccess = not ledger.inAccessList(source)
+
+  var
+    accessGasCost = WARM_ACCESS.GasInt
+
+  if isColdAccess:
+    accessGasCost += COLD_ACCOUNT_ACCESS_8038
+  else:
+    accessGasCost += WARM_ACCESS
+
+  ? cpt.gasMeter.checkGas(accessGasCost)
+
+  if isColdAccess:
+    ledger.accessList(source)
+
+  var
+    newCodeHash = Opt.none(Hash32)
+
+  if cpt.balTrackerEnabled:
+    cpt.vmState.balTracker.trackAddressAccess(source)
+
+  let
+    sourceCodeHash = ledger.canAdoptCode(source).valueOr:
+      ? cpt.opcodeGasCost(SetCodeFrom,
+          accessGasCost, reason = "SetCodeFrom EIP-8298")
+      cpt.stack.lsTop 0.u256
+      return ok()
+
+  accessGasCost += WARM_ACCESS
+  ? cpt.gasMeter.checkGas(accessGasCost)
+
+  let
+    currentCodeHash = ledger.getCodeHash(cpt.msg.currentTarget)
+
+  if currentCodeHash != sourceCodeHash:
+    accessGasCost += ACCOUNT_WRITE_8038
+    ? cpt.gasMeter.checkGas(accessGasCost)
+    newCodeHash = Opt.some(sourceCodeHash)
+
+  ? cpt.opcodeGasCost(SetCodeFrom,
+    accessGasCost, reason = "SetCodeFrom EIP-8298")
+
+  if newCodeHash.isSome:
+    if cpt.balTrackerEnabled:
+      cpt.vmState.balTracker.trackAdoptCode(cpt.msg.currentTarget, newCodeHash.value)
+    ledger.adoptCode(cpt.msg.currentTarget, newCodeHash.value)
+
+  cpt.stack.lsTop 1.u256
+  ok()
+
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
@@ -252,11 +315,19 @@ const
      info: "EIP2929: Halt execution and register account for later deletion",
      exec: selfDestructEIP2929Op),
 
+
     (opCode: SelfDestruct, ## 0xff, EIP2929: self destruct, Berlin and later
      forks: VmOpAmsterdamAndLater,
      name: "selfDestructEIP8037",
      info: "EIP8037: Halt execution and register account for later deletion",
-     exec: selfDestructEIP8037Op)]
+     exec: selfDestructEIP8037Op),
+
+
+    (opCode: SetCodeFrom,  ## 0xA7, EIP8298: Code Reuse Instruction
+     forks: VmOpBogotaAndLater,
+     name: "setCodeFrom",
+     info: "EIP8298: Code Reuse Instruction",
+     exec: setCodeFromOp)]
 
 # ------------------------------------------------------------------------------
 # End
