@@ -129,3 +129,15 @@ suite "ForkedChain BLOCKHASH across branches":
     checkHead(chain, A3)
     checkImport(chain, B4)
     checkBlockHashes(chain, B4, [C1, B2, B3])
+
+  test "parent frame keeps resolving the branch block hashes":
+    let chain = newChain(params)
+    checkImport(chain, C1)
+    checkImport(chain, A2)
+    checkImport(chain, A3)
+    checkImport(chain, B2)
+    checkImport(chain, B3)
+    checkHead(chain, A3)
+    let frame = chain.txFrame(B3.blockHash).parent()
+    for anc in [C1, B2, B3]:
+      check frame.getBlockHash(anc.header.number).get(zeroHash32) == anc.blockHash
