@@ -22,13 +22,10 @@ const
   ]
 
 const skipFiles = [
-  # The guest rejects a valid block
-  "witness_codes_create_same_hash_then_read_same_tx.json",
-  "witness_codes_delegation_same_marker_cleared_then_read.json",
-  "witness_codes_delegation_same_marker_then_read_same_tx.json",
   # The generated witness differs from the expected one: a code read that an
   # earlier write in the block serves still adds the pre-state code.
   "witness_codes_delegation_same_marker_then_read.json",
+  "witness_codes_delegation_same_marker_then_read_same_tx.json",
   # The generated witness differs from the expected one: the proof for a branch
   # collapse onto an extension sibling includes unneeded nodes.
   "witness_state_sstore_delete_branch_collapse_adds_auxiliary_node.json",
