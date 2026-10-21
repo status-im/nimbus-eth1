@@ -198,58 +198,96 @@ proc runCodeStreamTests() =
       check(codeStream[1] == Op.MUL)
       check(codeStream[2] == Op.ADDRESS)
 
-    test "isValidOpcode invalidates after PUSHXX":
-      var codeStream = CodeStream.init("\x02\x60\x02\x04")
-      check(codeStream.isValidOpcode(0))
-      check(codeStream.isValidOpcode(1))
-      check(not codeStream.isValidOpcode(2))
-      check(codeStream.isValidOpcode(3))
-      check(not codeStream.isValidOpcode(4))
+    test "isValidJumpdest invalidates after PUSHXX":
+      var codeStream = CodeStream.init("\x5b\x60\x5b\x5b")
+      check(codeStream.isValidJumpdest(0))
+      check(not codeStream.isValidJumpdest(1))
+      check(not codeStream.isValidJumpdest(2))
+      check(codeStream.isValidJumpdest(3))
+      check(not codeStream.isValidJumpdest(4))
 
-    test "isValidOpcode 0":
-      var codeStream = CodeStream.init(@[2.byte, 3.byte, 0x72.byte].concat(repeat(4.byte, 32)).concat(@[5.byte]))
-      # valid: 0 - 2 :: 22 - 35
-      # invalid: 3-21 (PUSH19) :: 36+ (too long)
-      check(codeStream.isValidOpcode(0))
-      check(codeStream.isValidOpcode(1))
-      check(codeStream.isValidOpcode(2))
-      check(not codeStream.isValidOpcode(3))
-      check(not codeStream.isValidOpcode(21))
-      check(codeStream.isValidOpcode(22))
-      check(codeStream.isValidOpcode(35))
-      check(not codeStream.isValidOpcode(36))
+    test "isValidJumpdest 0":
+      var codeStream = CodeStream.init(@[0x5b.byte, 0x5b.byte, 0x72.byte].concat(repeat(0x5b.byte, 32)).concat(@[0x5b.byte]))
+      # valid: 0, 1 :: 22 - 35
+      # invalid: 2 (PUSH19) :: 3-21 (PUSH19 data) :: 36+ (too long)
+      check(codeStream.isValidJumpdest(0))
+      check(codeStream.isValidJumpdest(1))
+      check(not codeStream.isValidJumpdest(2))
+      check(not codeStream.isValidJumpdest(3))
+      check(not codeStream.isValidJumpdest(21))
+      check(codeStream.isValidJumpdest(22))
+      check(codeStream.isValidJumpdest(35))
+      check(not codeStream.isValidJumpdest(36))
 
-    test "isValidOpcode 1":
-      let test = @[2.byte, 3.byte, 0x7d.byte].concat(repeat(4.byte, 32)).concat(@[5.byte, 0x7e.byte]).concat(repeat(4.byte, 35)).concat(@[1.byte, 0x61.byte, 1.byte, 1.byte, 1.byte])
+    test "isValidJumpdest 1":
+      let test = @[0x5b.byte, 0x5b.byte, 0x7d.byte].concat(repeat(0x5b.byte, 32)).concat(@[0x5b.byte, 0x7e.byte]).concat(repeat(0x5b.byte, 35)).concat(@[0x5b.byte, 0x61.byte, 0x5b.byte, 0x5b.byte, 0x5b.byte])
       var codeStream = CodeStream.init(test)
-      # valid: 0 - 2 :: 33 - 36 :: 68 - 73 :: 76
-      # invalid: 3 - 32 (PUSH30) :: 37 - 67 (PUSH31) :: 74, 75 (PUSH2) :: 77+ (too long)
-      check(codeStream.isValidOpcode(0))
-      check(codeStream.isValidOpcode(1))
-      check(codeStream.isValidOpcode(2))
-      check(not codeStream.isValidOpcode(3))
-      check(not codeStream.isValidOpcode(32))
-      check(codeStream.isValidOpcode(33))
-      check(codeStream.isValidOpcode(36))
-      check(not codeStream.isValidOpcode(37))
-      check(not codeStream.isValidOpcode(67))
-      check(codeStream.isValidOpcode(68))
-      check(codeStream.isValidOpcode(71))
-      check(codeStream.isValidOpcode(72))
-      check(codeStream.isValidOpcode(73))
-      check(not codeStream.isValidOpcode(74))
-      check(not codeStream.isValidOpcode(75))
-      check(codeStream.isValidOpcode(76))
-      check(not codeStream.isValidOpcode(77))
+      # valid: 0, 1 :: 33 - 35 :: 68 - 72 :: 76
+      # invalid: 2 (PUSH30) :: 3 - 32 (data) :: 36 (PUSH31) :: 37 - 67 (data) :: 73 (PUSH2) :: 74, 75 (data) :: 77+ (too long)
+      check(codeStream.isValidJumpdest(0))
+      check(codeStream.isValidJumpdest(1))
+      check(not codeStream.isValidJumpdest(2))
+      check(not codeStream.isValidJumpdest(3))
+      check(not codeStream.isValidJumpdest(32))
+      check(codeStream.isValidJumpdest(33))
+      check(codeStream.isValidJumpdest(35))
+      check(not codeStream.isValidJumpdest(36))
+      check(not codeStream.isValidJumpdest(37))
+      check(not codeStream.isValidJumpdest(67))
+      check(codeStream.isValidJumpdest(68))
+      check(codeStream.isValidJumpdest(71))
+      check(codeStream.isValidJumpdest(72))
+      check(not codeStream.isValidJumpdest(73))
+      check(not codeStream.isValidJumpdest(74))
+      check(not codeStream.isValidJumpdest(75))
+      check(codeStream.isValidJumpdest(76))
+      check(not codeStream.isValidJumpdest(77))
 
     test "right number of bytes invalidates":
-      var codeStream = CodeStream.init("\x02\x03\x60\x02\x02")
-      check(codeStream.isValidOpcode(0))
-      check(codeStream.isValidOpcode(1))
-      check(codeStream.isValidOpcode(2))
-      check(not codeStream.isValidOpcode(3))
-      check(codeStream.isValidOpcode(4))
-      check(not codeStream.isValidOpcode(5))
+      var codeStream = CodeStream.init("\x5b\x5b\x60\x5b\x5b")
+      check(codeStream.isValidJumpdest(0))
+      check(codeStream.isValidJumpdest(1))
+      check(not codeStream.isValidJumpdest(2))
+      check(not codeStream.isValidJumpdest(3))
+      check(codeStream.isValidJumpdest(4))
+      check(not codeStream.isValidJumpdest(5))
+
+    test "isValidJumpdest rejects non-JUMPDEST opcodes":
+      var codeStream = CodeStream.init("\x00\x56\x5b\x57")
+      check(not codeStream.isValidJumpdest(0))
+      check(not codeStream.isValidJumpdest(1))
+      check(codeStream.isValidJumpdest(2))
+      check(not codeStream.isValidJumpdest(3))
+      check(not codeStream.isValidJumpdest(-1))
+      check(not codeStream.isValidJumpdest(int.high))
+
+    test "isValidJumpdest does not depend on query order":
+      var codeStream = CodeStream.init("\x61\x5b\x60\x5b")
+      check(not codeStream.isValidJumpdest(1))
+      check(codeStream.isValidJumpdest(3))
+      codeStream = CodeStream.init("\x61\x5b\x60\x61\x5b\x5b\x5b")
+      check(not codeStream.isValidJumpdest(1))
+      check(not codeStream.isValidJumpdest(4))
+      check(not codeStream.isValidJumpdest(5))
+      check(codeStream.isValidJumpdest(6))
+
+    test "precomputed jumpdest bitmap is used as is":
+      let
+        bytes = @[0x00'u8, 0x5b, 0x60, 0x5b]
+        code = CodeBytesRef.init(bytes, jumpdestBitmap(bytes))
+        forged = CodeBytesRef.init(bytes, @[0b0101'u8])
+      check(not code.isValidJumpdest(0))
+      check(code.isValidJumpdest(1))
+      check(not code.isValidJumpdest(3))
+      check(forged.isValidJumpdest(0))
+      check(not forged.isValidJumpdest(1))
+      check(forged.isValidJumpdest(2))
+      check(not forged.isValidJumpdest(4))
+
+    test "empty code has no jump destinations":
+      let code = CodeBytesRef.init(newSeq[byte](), newSeq[byte]())
+      check(jumpdestBitmap([]).len == 0)
+      check(not code.isValidJumpdest(0))
 
     test "code bytes accessors":
       let code = CodeBytesRef.init(@[0x60'u8, 0x01, 0x5b, 0x00])
@@ -455,8 +493,8 @@ proc runCreateCacheTests() =
         require outer.pendingCode.hasKey(codeHash)
         let executed = outer.pendingCode[codeHash]
         check:
-          executed.processed >= 6
-          not executed.isValidOpcode(4) # PUSH data, despite being 0x5b
+          executed.jumpdests.len > 0
+          not executed.isValidJumpdest(4) # PUSH data, despite being 0x5b
           not executed.persisted
 
         let expectedAddress =
@@ -549,7 +587,7 @@ proc runCreateCacheTests() =
         let order = toSeq(ledger.code.keys)
         let warm = vm.runFactory(factoryCode(op, revertAfter = true), initcode)
         check warm.isError
-        check cached.processed >= 6 # the cached instance was executed
+        check cached.jumpdests.len > 0 # the cached instance was executed
         check toSeq(ledger.code.keys) == order
 
       test "reverted enclosing CALL excludes creation from a successful transaction":

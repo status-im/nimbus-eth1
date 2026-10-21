@@ -518,7 +518,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       ## Signs a transaction that can be submitted to the network at a later time using with
       ## eth_sendRawTransaction
       let
-        address = data.`from`.get()
+        address = data.`from`.valueOr:
+          raise newException(ValueError, "Missing from address")
         acc = am[].getAccount(address).tryGet()
 
       if not acc.unlocked:
@@ -541,7 +542,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       ## Returns the transaction hash, or the zero hash if the transaction is not yet available.
       ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
       let
-        address = data.`from`.get()
+        address = data.`from`.valueOr:
+          raise newException(ValueError, "Missing from address")
         acc = am[].getAccount(address).tryGet()
 
       if not acc.unlocked:

@@ -97,10 +97,6 @@ type
     data: UInt256
     error: string
 
-  KvPair* = tuple
-    key: seq[byte]
-    value: seq[byte]
-
   # ---------
 
   TimerDataRef* = ref object

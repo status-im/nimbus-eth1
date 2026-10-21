@@ -269,9 +269,6 @@ proc updateBeaconState*(ctx: BeaconCtxRef; info: static[string]) =
   #        |    |                 |            |
   #        `----|-----------------'            |
   #             v                              |
-  #            linger -----------------------> +
-  #             |                              |
-  #             v                              |
   #            blocks -> blocksCancel -------> +
   #             |                              |
   #             v                              |

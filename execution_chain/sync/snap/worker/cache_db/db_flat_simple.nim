@@ -172,19 +172,6 @@ proc delFlatAcc*(
     return err()
   ok()
 
-proc nFlatAcc*(
-    db: CacheDbRef;
-    info: static[string];
-      ): Opt[uint] =
-  var nAccounts = 0u
-  for w in db.walkFlatAcc():
-    if 0 < w.error.len:
-      error info & ": Error walking " & AccountInfo & " on cache DB",
-        accPath=w.accPath.toStr, error=w.error
-      return err()
-    nAccounts.inc
-  ok(move nAccounts)
-
 # -------------
 
 const StoMissingIntvInfo = "missing storage slots ranges"
@@ -378,19 +365,6 @@ proc delFlatSlot*(
     return err()
   ok()
 
-proc nFlatSlot*(
-    db: CacheDbRef;
-    info: static[string];
-      ): Opt[uint] =
-  var nSlots = 0u
-  for w in db.walkFlatSlot():
-    if 0 < w.error.len:
-      error info & ": Error walking " & FlatSlotInfo & "on cache DB",
-        accPath=w.accPath.toStr, slotKey=w.slotKey.toStr, error=w.error
-      return err()
-    nSlots.inc
-  ok(move nSlots)
-
 # -------------
 
 const CodeMissingInfo = "missing contract code"
@@ -549,15 +523,6 @@ proc delFlatCode*(
       `error`=error
     return err()
   ok()
-
-proc nFlatCode*(
-    db: CacheDbRef;
-    info: static[string];
-      ): Opt[uint] =
-  var nCodes = 0u
-  for _ in db.walkFlatCode():
-    nCodes.inc
-  ok(move nCodes)
 
 # ------------------------------------------------------------------------------
 # End
