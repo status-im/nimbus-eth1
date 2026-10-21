@@ -282,6 +282,8 @@ proc getBlockAccessLists*(
       ): BlockAccessListsPacket =
   ## Shared by `eth/71` and `snap/2`, which specify the same response
   let nHashes = min(blockHashes.len, MAX_BALS_SERVE)
+  if nHashes == 0:
+    return BlockAccessListsPacket()
 
   var balValues = newSeq[Opt[seq[byte]]](nHashes)
   chain.latestTxFrame.getBlockAccessLists(
