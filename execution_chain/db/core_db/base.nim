@@ -505,7 +505,7 @@ proc txFrameBegin*(
 proc parent*(tx: CoreDbTxRef): CoreDbTxRef =
   assert not tx.kvt.isNil()
   assert not tx.aTx.parent.isNil()
-  CoreDbTxRef(kvt: tx.kvt, aTx: tx.aTx.parent)
+  CoreDbTxRef(kvt: tx.kvt, aTx: tx.aTx.parent, blockHashFn: tx.blockHashFn)
 
 proc checkpoint*(tx: CoreDbTxRef, blockNumber: BlockNumber, skipSnapshot = false) =
   tx.aTx.checkpoint(blockNumber, skipSnapshot)
