@@ -13,12 +13,15 @@ import
   ./eest_runner,
   ./eest_blockchain
 
+const eestBenchmarkParallel {.booldefine.} = false
+
 const
   baseFolder = "tests/fixtures"
   suiteName = "Benchmark Test"
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_benchmark",
+    "eest_zkevm_benchmark",
   ]
 
 const skipFiles = [
@@ -31,6 +34,6 @@ runEESTSuite(
   baseFolder,
   suiteName,
   eestType,
-  testFilter = "*ecrecover*",
-  parallelEnabled = false
+  # testFilter = "*ecrecover*",
+  parallelEnabled = eestBenchmarkParallel
 )
