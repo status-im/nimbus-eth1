@@ -19,7 +19,7 @@ import
   eth/common/hashes,
   results,
   ./aristo_delete/delete_subtree,
-  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers, aristo_serialise]
+  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private heplers
@@ -100,10 +100,9 @@ proc deleteImpl(
           NibblesBuf.nibble(nbl.byte)
         else:
           ExtBranchRef(brVtx).pfx & NibblesBuf.nibble(nbl.byte)
-      let newExt = BoundaryNodeRef.init(pfx, childKey)
-      db.layersPutKey(
-        (hike.root, br.vid), newExt,
-        rlpEncodeExt(pfx, childKey).digestTo(HashKey))
+      let newExt = BoundaryNodeRef.init(pfx, childKey, unprovenCollapsep = true)
+      db.layersPutVtx((hike.root, br.vid), newExt)
+      db.unprovenCollapses.add((hike.root, br.vid))
       db.layersResVtx((hike.root, vid))
       return ok(VertexRef(newExt))
 
@@ -130,7 +129,9 @@ proc deleteImpl(
           ExtBranchRef.init(pfx & nxt.pfx, nxt.startVid, nxt.used)
         of BoundaryNode:
           let nxt = BoundaryNodeRef(nxt)
-          BoundaryNodeRef.init(pfx & nxt.pfx, nxt.childKey)
+          if nxt.unprovenCollapse:
+            db.unprovenCollapses.add((hike.root, br.vid))
+          BoundaryNodeRef.init(pfx & nxt.pfx, nxt.childKey, nxt.unprovenCollapse)
 
     # Put the new vertex at the id of the obsolete branch
     db.layersPutVtx((hike.root, br.vid), vtx)

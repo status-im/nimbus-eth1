@@ -943,6 +943,17 @@ proc getCollapsedSiblings*(
       res.add((accPath, sibStoPath))
   res
 
+proc hasUnprovenCollapse*(ledger: LedgerRef): bool =
+  ## Stateless only: true if a branch that collapsed onto a child absent from
+  ## the witness is still collapsed. The witness then lacks that child.
+  let db = ledger.txFrame.aTx
+  for rvid in db.unprovenCollapses:
+    let vtx = db.getVtx(rvid)
+    if vtx.isValid and vtx.vType == BoundaryNode and
+        BoundaryNodeRef(vtx).unprovenCollapse:
+      return true
+  false
+
 template clearWitnessKeys*(ledger: LedgerRef) =
   ledger.witnessKeys.clear()
 
