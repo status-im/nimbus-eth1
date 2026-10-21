@@ -162,7 +162,7 @@ proc multiGet*(
     sortedInput = false,
       ): Result[void, KvtError] =
 
-  db.multiGetBe(keys, values)
+  db.multiGetBe(keys, values, sortedInput)
 
 proc hasKeyRc*(
     db: KvtDbRef;                     # Database
@@ -175,7 +175,7 @@ proc hasKeyRc*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  let rc = db.getBe key
+  let rc = db.getBeLen key
   if rc.isOk:
     return ok(true)
   if rc.error == GetNotFound:
