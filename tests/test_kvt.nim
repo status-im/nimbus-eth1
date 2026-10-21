@@ -162,6 +162,13 @@ suite "Kvt":
 
     db.close()
 
+  test "MultiGet - empty keys":
+    let keys: seq[seq[byte]] = @[]
+    var values: seq[Opt[seq[byte]]] = @[]
+    check db.multiGet(keys, values).isOk()
+
+    db.close()
+
 suite "Kvt block hash cache":
   const
     hashA = hash32"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -306,3 +313,8 @@ suite "Kvt on RocksDB":
         sortedInput = true).isOk()
       values == @[
         Opt.some(@[byte 0, 1, 4]), Opt.none(seq[byte]), Opt.some(@[byte 0, 1, 6])]
+
+  test "MultiGet - empty keys":
+    let keys: seq[seq[byte]] = @[]
+    var values: seq[Opt[seq[byte]]] = @[]
+    check db.kvt.multiGet(keys, values).isOk()

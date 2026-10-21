@@ -98,14 +98,16 @@ runs:
     - name: Restore llvm-mingw (Windows) from cache
       if: runner.os == 'Windows' && inputs.llvm-mingw == 'true'
       id: windows-mingw-cache
-      uses: actions/cache@v5
+      uses: actions/cache/restore@v6
       with:
         path: external/mingw-${{ matrix.cpu }}
-        key: 'mingw-llvm-21-${{ matrix.cpu }}'
+        key: mingw-llvm-21-${{ matrix.cpu }}-${{ matrix.os }}-${{ github.ref_name }}
+        restore-keys: |
+          mingw-llvm-21-${{ matrix.cpu }}-${{ matrix.os }}-master
 
     - name: Install llvm-mingw dependency (Windows)
-      if: >
-        steps.windows-mingw-cache.outputs.cache-hit != 'true' &&
+      if: |
+        steps.windows-mingw-cache.outputs.cache-matched-key == '' &&
         runner.os == 'Windows' && inputs.llvm-mingw == 'true'
       shell: bash
       run: |
@@ -122,6 +124,15 @@ runs:
         curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.cpu }}.zip"
         7z x -y "external/mingw-${{ matrix.cpu }}.zip" -oexternal/mingw-${{ matrix.cpu }}/
         mv external/mingw-${{ matrix.cpu }}/**/* ./external/mingw-${{ matrix.cpu }}
+
+    - name: Save llvm-mingw (Windows) to cache
+      if: |
+        steps.windows-mingw-cache.outputs.cache-matched-key == '' &&
+        runner.os == 'Windows' && inputs.llvm-mingw == 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: external/mingw-${{ matrix.cpu }}
+        key: ${{ steps.windows-mingw-cache.outputs.cache-primary-key }}
 
     - name: Path to cached dependencies (Windows)
       if: >
@@ -170,18 +181,37 @@ runs:
 
     - name: Restore EEST test vectors from cache
       if: inputs.eest-cache == 'true'
-      uses: actions/cache@v5
+      id: eest-cache
+      uses: actions/cache/restore@v6
       with:
         path: |
           tests/fixtures/eest_mainnet
           tests/fixtures/eest_devnet
           tests/fixtures/eest_zkevm
+        enableCrossOsArchive: true
         # EEST release version contained in eest_ci_cache.sh.
         # Each time we bump EEST version, it should invalidate the cache too.
-        key: eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}
+        key: eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}-${{ github.ref_name }}
+        restore-keys: |
+          eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}-master
 
     - name: Download EEST fixtures if not exists
-      if: inputs.eest-cache == 'true'
+      if: |
+        steps.eest-cache.outputs.cache-matched-key == '' &&
+        inputs.eest-cache == 'true'
       shell: bash
       run: |
         scripts/eest_ci_cache.sh
+
+    - name: Save EEST test vectors to cache
+      if: |
+        steps.eest-cache.outputs.cache-matched-key == '' &&
+        inputs.eest-cache == 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: |
+          tests/fixtures/eest_mainnet
+          tests/fixtures/eest_devnet
+          tests/fixtures/eest_zkevm
+        enableCrossOsArchive: true
+        key: ${{ steps.eest-cache.outputs.cache-primary-key }}

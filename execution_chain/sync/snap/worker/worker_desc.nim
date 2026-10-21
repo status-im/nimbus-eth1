@@ -86,7 +86,7 @@ type
     ## Derived from `StorageRangesPacket`
     slots: seq[seq[StorageItem]]                    # Slots without proof
     partial: seq[StorageItem]                       # Incomplete slot with proof
-    proof: seq[ProofNode]                           # Prof for `slot`
+    proof: seq[ProofNode]                           # Prof for `partial`
 
   # -------------------
 

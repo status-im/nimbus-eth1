@@ -408,12 +408,11 @@ proc convertSubtrie(
         ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
 
         if dst.contains(k):
+          # The child stays in `dst`: the same branch may also hang directly
+          # under another branch elsewhere in the witness.
           let
             childNode = dst.getOrDefault(k)
             childBranch = BranchRef(childNode.vtx)
-
-          # Remove the childNode because it's branch was copied into this node
-          dst.del(k)
 
           NodeRef(
             key: childNode.key,

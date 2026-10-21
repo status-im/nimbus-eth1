@@ -71,8 +71,8 @@ proc multiGetKvpFn(db: MemBackendRef): MultiGetKvpFn =
   result =
     proc(keys: openArray[seq[byte]], values: var openArray[Opt[seq[byte]]],
          sortedInput: bool): Result[void, KvtError] =
-      assert keys.len() > 0
-      assert keys.len() == values.len()
+      doAssert keys.len() > 0
+      doAssert keys.len() == values.len()
 
       for i, k in keys:
         if k.len() == 0:

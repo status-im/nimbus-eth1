@@ -48,6 +48,9 @@ proc multiGetBe*(
     values: var openArray[Opt[seq[byte]]],
     sortedInput = false,
       ): Result[void, KvtError] =
+  if keys.len == 0:
+    # The backends require a non-empty batch
+    return ok()
   db.multiGetKvpFn(keys, values, sortedInput)
 
 # ------------
