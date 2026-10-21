@@ -74,14 +74,13 @@ proc putBe*(
 
 # ------------
 
-proc putMove*(
+proc put*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record to store
-    data: var seq[byte];              # Value of database record to store
+    data: openArray[byte];            # Value of database record to store
       ): Result[void,KvtError] =
-  ## For the argument `key` associated the argument `data` as value (which
-  ## will be marked in the top layer cache.) The contents of `data` are taken
-  ## over, leaving it empty.
+  ## For the argument `key` store the argument `data` as value in the
+  ## backend database.
   if key.len == 0:
     return err(KeyInvalid)
   if data.len == 0:
@@ -89,14 +88,13 @@ proc putMove*(
 
   db.putKvpFn(key, data)
 
-proc put*(
+proc putMove*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record to store
-    data: openArray[byte];            # Value of database record to store
+    data: var seq[byte];              # Value of database record to store
       ): Result[void,KvtError] =
-  ## Variant of `putMove()` copying `data` into the top layer cache.
-  var data = @data
-  db.putMove(key, data)
+  ## Same as `put()`. The backend copies `data`, which is left unchanged.
+  db.put(key, data)
 
 proc del*(
     db: KvtDbRef;                     # Database

@@ -228,8 +228,7 @@ proc putMove*(
     key: openArray[byte];
     val: var seq[byte];
       ): CoreDbRc[void] =
-  ## Variant of `put()` that takes over ownership of `val` instead of
-  ## copying it - the caller must not use `val` after this call
+  ## Same as `put()`. The backend copies `val`, which is left unchanged.
   kvt.kvt.putMove(key, val).isOkOr:
     return err(error.toError(""))
 
