@@ -769,10 +769,11 @@ proc addBalance*(
       let acc = ledger.getAccount(address)
       if acc.isEmpty:
         ledger.makeDirty(address).flags.incl Touched
-    elif ledger.collectWitness:
+    elif ledger.collectWitness or ledger.stateless:
       # The reference implementation reads the account even for a zero-value
       # credit (e.g. zero-amount withdrawals, zero-fee coinbase payments), so
-      # the address must be part of the execution witness.
+      # the address must be part of the execution witness, and stateless
+      # execution must be able to fail when the witness lacks its proof.
       discard ledger.getAccount(address, shouldCreate = false)
     return
   ledger.setBalance(address, ledger.getBalance(address) + delta)
