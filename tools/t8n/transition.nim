@@ -25,7 +25,7 @@ import
   ../../execution_chain/core/pow/difficulty,
   ../../execution_chain/core/dao,
   ../../execution_chain/core/executor/[process_transaction, executor_helpers],
-  ../../execution_chain/core/[eip4844, eip6110, eip8198],
+  ../../execution_chain/core/[eip4844, eip6110], #, eip8198],
   ../../execution_chain/evm/tracer/json_tracer
 
 const
@@ -476,13 +476,14 @@ proc calcBaseFee(com: CommonRef, env: EnvStruct): Result[UInt256, T8NErr] =
     return err(t8nerr(ErrorConfig,
       "'parentBaseFee' exists but missing 'parentGasLimit' in env section"))
 
+  {.warning: "heze-devnet-3: restore bogota calcEip8198BaseFee".}
   let baseFee =
-    if com.isBogotaOrLater(env.currentTimestamp):
-      eip8198.calcEip8198BaseFee(
-        env.parentGasLimit.get,
-        env.parentGasUsed.get,
-        env.parentBaseFee.get)
-    elif com.isLondonOrLater(env.currentNumber - 1, env.parentTimestamp):
+    #if com.isBogotaOrLater(env.currentTimestamp):
+    #  eip8198.calcEip8198BaseFee(
+    #    env.parentGasLimit.get,
+    #    env.parentGasUsed.get,
+    #    env.parentBaseFee.get)
+    if com.isLondonOrLater(env.currentNumber - 1, env.parentTimestamp):
       eip1559.calcEip1599BaseFee(
         env.parentGasLimit.get,
         env.parentGasUsed.get,

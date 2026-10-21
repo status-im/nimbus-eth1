@@ -14,8 +14,8 @@ import
   ../common/common,
   std/strformat,
   results,
-  eth/eip1559,
-  ./eip8198
+  eth/eip1559 #,
+  #./eip8198
 
 export
   eip1559
@@ -48,9 +48,10 @@ proc calcBaseFee*(com: CommonRef; parent: Header, timestamp: EthTime): UInt256 =
 
   # If the current block is the first EIP-1559 block, return the
   # initial base fee.
-  if com.isBogotaOrLater(timestamp):
-    eip8198.calcEip8198BaseFee(parent.gasLimit, parent.gasUsed, parent.baseFeePerGas.get(0.u256))
-  elif com.isLondonOrLater(parent.number, parent.timestamp):
+  {.warning: "heze-devnet-3: restore bogota calcEip8198BaseFee".}
+  #if com.isBogotaOrLater(timestamp):
+  #  eip8198.calcEip8198BaseFee(parent.gasLimit, parent.gasUsed, parent.baseFeePerGas.get(0.u256))  
+  if com.isLondonOrLater(parent.number, parent.timestamp):
     eip1559.calcEip1599BaseFee(parent.gasLimit, parent.gasUsed, parent.baseFeePerGas.get(0.u256))
   else:
     EIP1559_INITIAL_BASE_FEE

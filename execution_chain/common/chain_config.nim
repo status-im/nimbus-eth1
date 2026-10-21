@@ -218,6 +218,7 @@ proc validateChainConfig*(conf: ChainConfig): bool =
       lastTimeBasedFork = cur
 
 func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
+  {.warning: "heze-devnet-3: restore bogota blob schedule".}
   [
     Cancun: Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64)),
     Prague: Opt.some(BlobSchedule(target: 6'u64, max: 9'u64, baseFeeUpdateFraction: 5_007_716'u64)),
@@ -228,7 +229,8 @@ func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
     Bpo4  : Opt.none(BlobSchedule),
     Bpo5  : Opt.none(BlobSchedule),
     Amsterdam: Opt.some(BlobSchedule(target: 14'u64, max: 21'u64, baseFeeUpdateFraction: 11_684_671'u64)),
-    Bogota: Opt.some(BlobSchedule(target: 12'u64, max: 18'u64, baseFeeUpdateFraction: 12_018_519'u64)),
+    Bogota: Opt.some(BlobSchedule(target: 14'u64, max: 21'u64, baseFeeUpdateFraction: 11_684_671'u64)),
+    #Bogota: Opt.some(BlobSchedule(target: 12'u64, max: 18'u64, baseFeeUpdateFraction: 12_018_519'u64)),
   ]
 
 func chainConfigForNetwork*(id: NetworkId): ChainConfig =
