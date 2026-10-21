@@ -205,6 +205,9 @@ func validateLegacySignatureForm(tx: Transaction, fork: HardFork): bool =
     vMax = 28'u64
 
   if tx.V >= EIP155_CHAIN_ID_OFFSET:
+    # EIP-155 signatures are valid from Spurious Dragon on
+    if fork < Spurious:
+      return false
     let chainId = (tx.V - EIP155_CHAIN_ID_OFFSET) div 2
     vMin = 35 + (2 * chainId)
     vMax = vMin + 1
@@ -216,8 +219,9 @@ func validateLegacySignatureForm(tx: Transaction, fork: HardFork): bool =
   isValid = isValid and tx.S < SECPK1_N
   isValid = isValid and tx.R < SECPK1_N
 
+  # EIP-2: s <= secp256k1n/2
   if fork >= Homestead:
-    isValid = isValid and tx.S < SECPK1_N div 2
+    isValid = isValid and tx.S <= SECPK1_N div 2
 
   isValid
 
@@ -225,7 +229,7 @@ func validateEip2930SignatureForm(tx: Transaction): bool =
   var isValid = tx.V == 0'u64 or tx.V == 1'u64
   isValid = isValid and tx.S >= UInt256.one
   # https://eips.ethereum.org/EIPS/eip-2#specification
-  isValid = isValid and tx.S < SECPK1_N div 2
+  isValid = isValid and tx.S <= SECPK1_N div 2
   isValid = isValid and tx.R < SECPK1_N
   isValid
 

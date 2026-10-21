@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -34,3 +34,28 @@ suite "EVM errors tests":
 
     var revertReason = unpackRevertReason(data.hexToSeqByte())
     check revertReason == Opt.none(string)
+
+  test "unpack revert reason with oversized string length":
+    let data = "0x08c379a0" &
+      "0000000000000000000000000000000000000000000000000000000000000020" &
+      "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" &
+      "0000000000000000000000000000000000000000000000000000000000000000"
+
+    check unpackRevertReason(data.hexToSeqByte()) == Opt.none(string)
+
+  test "unpack revert reason with oversized string offset":
+    let data = "0x08c379a0" &
+      "0000000000000000000000000000000000000000000000010000000000000020" &
+      "0000000000000000000000000000000000000000000000000000000000000004" &
+      "6f6f707300000000000000000000000000000000000000000000000000000000"
+
+    check unpackRevertReason(data.hexToSeqByte()) == Opt.none(string)
+
+  test "unpack revert reason data with a 32 byte string":
+    let data = "0x08c379a0" &
+      "0000000000000000000000000000000000000000000000000000000000000020" &
+      "0000000000000000000000000000000000000000000000000000000000000020" &
+      "3031323334353637383961626364656630313233343536373839616263646566"
+
+    let revertReason = unpackRevertReason(data.hexToSeqByte()).expect("something")
+    check revertReason == "0123456789abcdef0123456789abcdef"

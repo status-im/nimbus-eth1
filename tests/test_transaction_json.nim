@@ -24,7 +24,19 @@ import
   ../execution_chain/utils/utils
 
 const
-  FIXTURE_FORK_SKIPS = ["_info", "rlp", "Constantinople"]
+  # Fixture fork names that differ from the `getChainConfig` names
+  FIXTURE_CONFIG_NAMES = {
+    "EIP150": "TangerineWhistle",
+    "EIP158": "SpuriousDragon",
+  }.toTable
+
+  # Valid per the fixtures, but their gas price does not fit the 64-bit
+  # `Transaction.gasPrice`, so decoding rejects them
+  KNOWN_UNDECODABLE = [
+    "GasLimitPriceProductOverflowtMinusOne",
+    "TransactionWithHighGasPrice",
+    "V_equals38",
+  ]
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
@@ -34,69 +46,43 @@ proc transactionJsonMain*() =
 
 transactionJsonMain()
 
-proc txHash(tx: Transaction): string =
-  computeRlpHash(tx).toHex()
-
-proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testStatusIMPL: var TestStatus) =
+proc testTxByFork(
+    tx: Transaction, forkData: JsonNode, forkName: string,
+    testStatusIMPL: var TestStatus) =
   let
-    config = getChainConfig(forkName).expect("ok")
+    config = getChainConfig(FIXTURE_CONFIG_NAMES.getOrDefault(forkName, forkName)).expect("ok")
     memDB  = newCoreDbRef DefaultDbMemory
     com    = CommonRef.new(memDB, config)
-    fork   = nameToFork[forkName]
-    sender = tx.recoverSender().expect("valid signature")
-    intrinsic = tx.intrinsicGas(fork, sender)
+    fork   = if forkName == "Paris": MergeFork else: nameToFork[forkName]
+    sender = tx.recoverSender()
+    res    =
+      if sender.isNone: Result[void, string].err("cannot recover sender")
+      else: validateTxBasic(com, tx, tx.intrinsicGas(fork, sender.get), fork)
 
-  validateTxBasic(com, tx, intrinsic, fork).isOkOr:
-    return
-
-  if forkData.len > 0 and "sender" in forkData:
-    let txSender = Address.fromHex(forkData["sender"].getStr)
-    check "hash" in forkData
-    check tx.txHash == forkData["hash"].getStr
-    check txSender == sender
-
-func noHash(fixture: JsonNode): bool =
-  result = true
-  for forkName, forkData in fixture:
-    if forkName notin FIXTURE_FORK_SKIPS:
-      if forkData.len == 0: return
-      if "hash" in forkData: return false
-
-# nimbus rlp cannot allow type mismatch
-# e.g. uint256 value put into int64
-# so we skip noHash check. this behavior
-# is different compared to py-evm
-const SKIP_TITLES = [
-  "TransactionWithGasLimitxPriceOverflow",
-  "TransactionWithHighNonce256",
-  "TransactionWithHighGasPrice",
-  "V_equals38"
-  ]
+  if "hash" in forkData:
+    # Valid for this fork
+    check res == Result[void, string].ok()
+    if res.isOk:
+      check:
+        tx.computeRlpHash == Hash32.fromHex(forkData["hash"].getStr)
+        sender.get == Address.fromHex(forkData["sender"].getStr)
+  else:
+    # Invalid for this fork
+    check res.isErr
 
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
-  var
-    title: string
-    rlpData: seq[byte]
-    tx: Transaction
-
-  for key, fixture in node:
-    title = key
-
+  for title, fixture in node:
+    let results = fixture["result"]
+    var tx: Transaction
     try:
-      rlpData = safeHexToSeqByte(fixture["rlp"].getStr)
-    except ValueError:
-      # bad rlp bytes
-      check noHash(fixture)
-      return
+      tx = rlp.decode(safeHexToSeqByte(fixture["txbytes"].getStr), Transaction)
+    except RlpError, ValueError:
+      if title notin KNOWN_UNDECODABLE:
+        # Only transactions that are invalid for every fork may fail to decode
+        for forkName, forkData in results:
+          check "exception" in forkData
+      continue
 
-    try:
-      tx = rlp.decode(rlpData, Transaction)
-    except RlpTypeMismatch, MalformedRlpError, UnsupportedRlpError:
-      if title in SKIP_TITLES:
-        return
-      check noHash(fixture)
-      return
-
-    for forkName, fork in fixture:
-      if forkName notin FIXTURE_FORK_SKIPS:
-        testTxByFork(tx, fork, forkName, testStatusIMPL)
+    for forkName, forkData in results:
+      if forkName in nameToFork or forkName == "Paris":
+        testTxByFork(tx, forkData, forkName, testStatusIMPL)

@@ -9,7 +9,8 @@ import
   std/os,
   unittest2,
   stint,
-  eth/common/[hashes, addresses, accounts],
+  eth/common/[hashes, addresses, accounts, accounts_rlp],
+  eth/rlp,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/[ledger, core_db],
   ../execution_chain/common/[chain_config_loader, genesis]
@@ -26,6 +27,41 @@ func toNodesTable(proofNodes: openArray[seq[byte]]): Table[Hash32, seq[byte]] =
   for n in proofNodes:
     nodes[keccak256(n)] = n
   nodes
+
+func hexPrefix(nibbles: openArray[int], isLeaf: bool): seq[byte] =
+  let odd = nibbles.len mod 2
+  var res: seq[byte]
+  res.add byte((if isLeaf: 0x20 else: 0x00) or (odd shl 4) or
+    (if odd == 1: nibbles[0] else: 0))
+  for i in countup(odd, nibbles.high, 2):
+    res.add byte(nibbles[i] shl 4 or nibbles[i + 1])
+  res
+
+func shortNode(nibbles: openArray[int], isLeaf: bool, payload: seq[byte]): seq[byte] =
+  var w = initRlpList(2)
+  w.append(hexPrefix(nibbles, isLeaf))
+  w.append(payload)
+  w.finish()
+
+func branchNode(children: openArray[(int, Hash32)]): seq[byte] =
+  var slots: array[16, seq[byte]]
+  for (i, h) in children:
+    slots[i] = @(h.data)
+  var w = initRlpList(17)
+  for s in slots:
+    w.append(s)
+  w.append(newSeq[byte]())
+  w.finish()
+
+func pathOf(nibbles: openArray[int]): Hash32 =
+  ## Pads `nibbles` with zeros to a 64-nibble path.
+  var data: array[32, byte]
+  for i, n in nibbles:
+    data[i div 2] = data[i div 2] or byte(if i mod 2 == 0: n shl 4 else: n)
+  Hash32(data)
+
+func zeros(n: int): seq[int] =
+  newSeq[int](n)
 
 suite "Aristo subtries json tests":
 
@@ -264,3 +300,47 @@ suite "Aristo subtries json tests":
     check:
       fullTrieLedger.getStateRoot() != stateRoot
       subtrieLedger.getStateRoot() == fullTrieLedger.getStateRoot()
+
+  test "Branch shared by a branch parent and an extension parent":
+    let
+      one = rlp.encode(1.u256)
+      two = rlp.encode(2.u256)
+      leaf0 = shortNode(zeros(58), true, one)
+      leaf1 = shortNode(zeros(58), true, two)
+      shared = branchNode([(0, keccak256(leaf0)), (1, keccak256(leaf1))])
+
+      # Storage trie 1: ext 0000 -> branch {6: shared, 7: leaf}
+      leaf7 = shortNode(zeros(59), true, one)
+      branch1 = branchNode([(6, keccak256(shared)), (7, keccak256(leaf7))])
+      root1 = shortNode([0, 0, 0, 0], false, @(keccak256(branch1).data))
+
+      # Storage trie 2: branch {0: ext 0006 -> shared, 1: leaf}
+      ext2 = shortNode([0, 0, 0, 6], false, @(keccak256(shared).data))
+      leaf2 = shortNode(zeros(63), true, one)
+      root2 = branchNode([(0, keccak256(ext2)), (1, keccak256(leaf2))])
+
+      # Account 1 sorts first, so its storage trie is converted first.
+      acc1 = shortNode(zeros(63), true, rlp.encode(Account(
+        balance: 1.u256, storageRoot: keccak256(root1), codeHash: EMPTY_CODE_HASH)))
+      acc2 = shortNode(zeros(63), true, rlp.encode(Account(
+        balance: 2.u256, storageRoot: keccak256(root2), codeHash: EMPTY_CODE_HASH)))
+      stateRoot = branchNode([(1, keccak256(acc1)), (2, keccak256(acc2))])
+
+      nodes = toNodesTable([
+        leaf0, leaf1, shared, leaf7, branch1, root1, ext2, leaf2, root2,
+        acc1, acc2, stateRoot])
+      accPath1 = pathOf([1])
+      accPath2 = pathOf([2])
+      sharedPath0 = pathOf([0, 0, 0, 0, 6, 0])
+      sharedPath1 = pathOf([0, 0, 0, 0, 6, 1])
+
+      db = newCoreDbRef(DefaultDbMemory)
+      txFrame = db.baseTxFrame().txFrameBegin()
+
+    check:
+      txFrame.putSubtrie(keccak256(stateRoot), nodes).isOk()
+      txFrame.getStateRoot().get() == keccak256(stateRoot)
+      txFrame.fetchSlot(accPath1, sharedPath0).get(0.u256) == 1.u256
+      txFrame.fetchSlot(accPath1, sharedPath1).get(0.u256) == 2.u256
+      txFrame.fetchSlot(accPath2, sharedPath0).get(0.u256) == 1.u256
+      txFrame.fetchSlot(accPath2, sharedPath1).get(0.u256) == 2.u256

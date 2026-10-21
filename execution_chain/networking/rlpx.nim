@@ -249,13 +249,21 @@ proc recvMsg(
         snappy.decode(msgBody.toOpenArray(tmp.position, msgBody.high), maxMsgSize)
       if decoded.len == 0:
         if msgId == 0x01 and msgBody.len > 1 and msgBody.len < 16 and msgBody[1] == 0xc1:
-          # Nethermind sends its TooManyPeers uncompressed but we want to be nice!
-          # https://github.com/NethermindEth/nethermind/issues/7726
-          debug "Trying to decode disconnect uncompressed",
+          # WORKAROUND Nethermind still sends the disconnect uncompressed sometimes.
+          # Issue https://github.com/NethermindEth/nethermind/issues/7726 was closed
+          # but only partially fixed.
+          debug "TODO Disconnect sent uncompressed after the hello",
             remote = peer.remote, clientId = peer.clientId, data = toHex(msgBody)
         else:
+          # This might mean: corrupt stream, mistmatching length header, payload
+          # over the limit, or a message that was never compressed.
+          # Currently known issue is Nethermind sometimes still sending the ping
+          # uncompressed, which arrives as msgId 2 holding c0.
           await peer.disconnectAndRaise(
-            BreachOfProtocol, "Could not decompress snappy data"
+            BreachOfProtocol,
+            "Could not decompress snappy data, msgId " & $msgId &
+              ", compressed size " & $(msgBody.len - tmp.position) & ", starting with " &
+              toHex(msgBody.toOpenArray(tmp.position, min(tmp.position + 7, msgBody.high))),
           )
       else:
         trace "Decoded message",
@@ -275,7 +283,7 @@ proc recvMsg(
       remote = peer.remote,
       clientId = peer.clientId,
       err = exc.msg,
-      rawData = toHex(msgBody)
+      rawData = toHex(msgBody.toOpenArray(0, min(255, msgBody.high)))
 
     await peer.disconnectAndRaise(BreachOfProtocol, "Could not decode msgId")
 
@@ -310,10 +318,8 @@ proc disconnect*(
 ) {.async: (raises: []).} =
   if reason == BreachOfProtocol:
     # TODO remove warning after all protocol breaches have been investigated
-    # TODO https://github.com/NethermindEth/nethermind/issues/7727
-    if not peer.clientId.startsWith("Nethermind"):
-      warn "TODO disconnecting peer because of protocol breach",
-        remote = peer.remote, clientId = peer.clientId
+    warn "TODO disconnecting peer because of protocol breach",
+      remote = peer.remote, clientId = peer.clientId
   if peer.connectionState notin {Disconnecting, Disconnected}:
     if peer.connectionState == Connected:
       # Only log peers that successfully completed the full connection setup -
@@ -531,9 +537,13 @@ proc helloHandshake(
       return response
     of msgIdDisconnect: # Disconnection requested by peer
       # TODO distinguish their reason from ours
+      # There is no hello yet, so no client id to identify the peer by. Report
+      # the node id instead.
       let reason = msgData.read(DisconnectionReasonList).value
       await peer.disconnectAndRaise(
-        reason, "Peer disconnecting during hello: " & $reason
+        reason,
+        "Peer disconnecting during hello: " & $reason & ", nodeId " &
+          toHex(peer.transport.pubkey.toRaw()),
       )
     else:
       # No other messages may be sent until a Hello is received.
