@@ -47,6 +47,29 @@ suite "test verified blocks":
       ts.clear()
       engine.headerStore.clear()
 
+  test "check fetching a block with Amsterdam header fields":
+    # sepolia block 0xb505b0, carrying blockAccessListHash and slotNumber
+    let blk =
+      getBlockFromJson("nimbus_verified_proxy/tests/data/sepolia_amsterdam.json")
+
+    ts.loadBlock(blk)
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+
+    let
+      fullBlk = waitFor frontend.eth_getBlockByHash(blk.hash, true)
+      hashesBlk = waitFor frontend.eth_getBlockByHash(blk.hash, false)
+
+    check:
+      fullBlk.isOk()
+      blk == fullBlk.get()
+      hashesBlk.isOk()
+      hashesBlk.get().hash == blk.hash
+      hashesBlk.get().blockAccessListHash == blk.blockAccessListHash
+      hashesBlk.get().slotNumber == blk.slotNumber
+
+    ts.clear()
+    engine.headerStore.clear()
+
   test "check fetching blocks by number and tags":
     let
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
