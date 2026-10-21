@@ -210,6 +210,13 @@ template fetchHeadersReversed*(
       bodyRc = typeof(bodyRc).err(EValidationError)
       break body
 
+    if req.startBlock.isHash and h[0].computeBlockHash() != topHash:
+      buddy.hdrFetchRegisterError(forceZombie=true)
+      trace recvInfo & " error, hash mismatch", peer, nReq=req.maxResults,
+        hash, nResp=h.len, ela, state, nErrors=buddy.nErrors.fetch.hdr
+      bodyRc = typeof(bodyRc).err(EValidationError)
+      break body
+
     # Update download statistics
     let bps = buddy.hdrSampleSize(elapsed, h.getEncodedLength)
 
