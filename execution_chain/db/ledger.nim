@@ -15,11 +15,11 @@ import
   chronicles,
   results,
   minilru,
-  eth/common/[addresses, hashes],
+  eth/common/[addresses, hashes, block_access_lists],
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
   ../constants,
-  ../block_access_list/bal_overlay,
+  ../block_access_list/[bal_overlay, bal_utils],
   ./[access_list as ac_access_list, core_db, storage_types],
   ./aristo/[aristo_blobify, aristo_desc, aristo_get]
 
@@ -1044,6 +1044,81 @@ proc persist*(ledger: LedgerRef,
     ledger.clearCollapsedSiblings()
     ledger.clearDeployedCodeHashes()
     ledger.clearBlockHashesCache()
+
+proc applyBlockAccessList*(ledger: LedgerRef, bal: BlockAccessList, txCount: int) =
+  ## Write the block access list's final state for indices up to `txCount`
+  ## straight into the frame, after persisting what the ledger holds and
+  ## dropping each written address from the caches.
+  const info = "applyBlockAccessList(): "
+
+  ledger.persist(clearEmptyAccount = true)
+
+  let boundary = txCount + 1
+  for accChanges in bal:
+    let
+      address = accChanges.address
+      balancePos = accChanges.balanceChanges.findLastWriteBefore(boundary)
+      noncePos = accChanges.nonceChanges.findLastWriteBefore(boundary)
+      codePos = accChanges.codeChanges.findLastWriteBefore(boundary)
+    var
+      accPath: Hash32
+      written = false
+
+    if balancePos >= 0 or noncePos >= 0 or codePos >= 0:
+      accPath = address.computeAccPath
+      written = true
+      var rec = ledger.txFrame.fetchAccount(accPath).valueOr(EMPTY_STATEMENT)
+      if balancePos >= 0:
+        rec.balance = accChanges.balanceChanges[balancePos].postBalance
+      if noncePos >= 0:
+        rec.nonce = accChanges.nonceChanges[noncePos].newNonce
+      if codePos >= 0:
+        template newCode(): untyped =
+          accChanges.codeChanges[codePos].newCode
+        rec.codeHash = keccak256(newCode)
+        if newCode.len > 0:
+          if ledger.holdCode:
+            ledger.heldCode[rec.codeHash] = CodeBytesRef.init(newCode)
+          else:
+            ledger.txFrame.persistCodeByHash(rec.codeHash, newCode).isOkOr:
+              warn logTxt "applyBlockAccessList()", codeHash = rec.codeHash, error
+      if rec == EMPTY_STATEMENT:
+        ledger.txFrame.deleteAccount(accPath).isOkOr:
+          if error.error != AccNotFound:
+            ledger.setFatalErrorOrAssert(info & $$error)
+      else:
+        ledger.txFrame.mergeAccount(accPath, rec).isOkOr:
+          ledger.setFatalErrorOrAssert(info & $$error)
+
+    for slotChanges in accChanges.storageChanges:
+      let changePos = slotChanges.changes.findLastWriteBefore(boundary)
+      if changePos < 0:
+        continue
+      if not written:
+        accPath = address.computeAccPath
+        written = true
+      let slot = slotChanges.slot
+      var cached = true
+      let slotKey = ledger.slots.get(slot).valueOr:
+        cached = false
+        let slotKey = computeSlotKey(slot)
+        ledger.slots.put(slot, slotKey)
+        slotKey
+      let value = slotChanges.changes[changePos].newValue
+      if value > 0:
+        ledger.txFrame.mergeSlot(accPath, slotKey, value).isOkOr:
+          ledger.setFatalErrorOrAssert(info & $$error)
+      else:
+        ledger.txFrame.deleteSlot(accPath, slotKey).isOkOr:
+          ledger.setFatalErrorOrAssert(info & $$error)
+      if ledger.storeSlotHash and not cached:
+        let rc = ledger.txFrame.put(slotKey.slotHashToSlotKey.toOpenArray, blobify(slot).data)
+        if rc.isErr:
+          warn logTxt "applyBlockAccessList()", slot, error = ($$rc.error)
+
+    if written:
+      ledger.savePoint.cache.del address
+      ledger.cache.del address
 
 proc storeHeldCode*(ledger: LedgerRef): Result[void, string] =
   ## Write the code `holdCode` kept back, once its block is accepted.
