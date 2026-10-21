@@ -270,6 +270,26 @@ proc setupPruning(
     nimbus.balPruner = BalPrunerRef.init(com)
     nimbus.balPruner.start()
 
+proc verifyEmptyStateDb(db: CoreDbRef, complain: static[string]) =
+    # Note that Genesis might have been stored on the kvt, already. This
+    # happens if snap sync was interrupted and restarted.
+    let
+      txFrame = db.baseTxFrame()
+      baseNum = txFrame.getSavedStateBlockNumber()
+    # A zero state block number is a necessary condition for an empty
+    # state DB. Checking this number before the state root avoids
+    # potentially costly calculation of the state root hash if the state
+    # DB has also other than Genesis accounts.
+    if baseNum != 0:
+      fatal complain, baseNum
+      quit(QuitFailure)
+    let stateRoot = txFrame.getStateRoot().valueOr:
+      fatal "Cannot retrieve state root", error=($$error)
+      quit(QuitFailure)
+    if stateRoot != EMPTY_ROOT_HASH:
+      fatal complain, baseNum, stateRoot
+      quit(QuitFailure)
+
 proc internalRestart(
     config: ExecutionClientConf;
     com: CommonRef;
@@ -277,6 +297,11 @@ proc internalRestart(
     nimbus: NimbusNode;
       ) =
   ## Update database and restart some services after snap sync.
+
+  # Verify that the state DB is still empty
+  com.db.verifyEmptyStateDb(
+    "State DB has changed to non-empty. Cannot proceed. STOP")
+
   let newDbPath = nimbus.snapSyncRef.sharedState().newDbPath
 
   # Shut down currently unwanted modules. No async poller must be running.
@@ -399,7 +424,10 @@ proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef, para
   nimbus
 
 proc setupCommonRef*(
-    config: ExecutionClientConf, params: NetworkParams, numThreads: int): (CommonRef, bool) =
+    config: ExecutionClientConf;
+    params: NetworkParams;
+    numThreads: int;
+      ): tuple[com: CommonRef, keyCacheEnabled, emptyStateDb: bool] =
 
   if config.statelessProvider and config.balParallelExecution:
     warn "Stateless provider enabled. Running without BAL parallel execution"
@@ -415,10 +443,12 @@ proc setupCommonRef*(
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config, params)
 
-  # FIXME.
-  # When running snap sync, the ledger (aka Aristo) database needs to be kept
-  # empty while Genesis (with the proper state root) will be stored in kvt.
-  # To set that up is a task for the common module.
+  # Must not snap sync on a non-empty state DB.
+  var emptyStateDb = false
+  if config.snapSyncEnabled:
+    coreDB.verifyEmptyStateDb "Cannot snap sync on a pre-initialised state DB"
+    emptyStateDb = true
+
   let com = CommonRef.new(
     db = coreDB,
     params = params,
@@ -430,7 +460,8 @@ proc setupCommonRef*(
     balStatePrefetchWorkers = config.balStatePrefetchWorkers,
     balParallelExecution = config.balParallelExecution and
         not config.statelessProvider and not disableParallelFeatures,
-    parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures)
+    parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures,
+    emptyStateDb = emptyStateDb)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
@@ -453,7 +484,7 @@ proc setupCommonRef*(
   com.extraData = config.extraData
   com.maxBlobs = config.maxBlobs
 
-  (com, dbOpts.rdbKeyCacheSize > 0)
+  (com, dbOpts.rdbKeyCacheSize > 0, emptyStateDb)
 
 # ------------------------------------------------------------------------------
 # Public functions, `main()` API
@@ -584,11 +615,15 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   when compileOption("threads"):
     let
       taskpool = setupTaskpool(config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config, params, taskpool.numThreads)
+      setupData = setupCommonRef(config, params, taskpool.numThreads)
+      com = setupData.com
+
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config, params, 0)
+    let
+      setupData = setupCommonRef(config, params, 0)
+      com = setupData.com
 
   block checkKeyCache:
     let
@@ -599,12 +634,13 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
           baseNum, err = error
         quit(QuitFailure)
 
-    if base.stateRoot == EMPTY_ROOT_HASH:
+    if base.stateRoot == EMPTY_ROOT_HASH or
+       setupData.emptyStateDb:
       # Prevent calling computeStateRoot if base have no accounts
       # Usually a genesis block
       break checkKeyCache
 
-    if keyCacheEnabled:
+    if setupData.keyCacheEnabled:
       # Make sure key cache isn't empty
       discard com.db.mpt.txRef.computeStateRoot(skipLayers = true).valueOr:
         fatal "Cannot compute root keys", msg = error
