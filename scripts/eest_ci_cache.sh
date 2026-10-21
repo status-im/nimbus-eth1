@@ -22,7 +22,7 @@ EEST_MAINNET_URL="https://github.com/ethereum/execution-specs/releases/download/
 
 # --- Devnet Release ---
 EEST_DEVNET_NAME="tests-heze-devnet"
-EEST_DEVNET_VERSION="v2.0.0"
+EEST_DEVNET_VERSION="v2.0.1"
 EEST_DEVNET_DIR="${FIXTURES_DIR}/eest_devnet"
 EEST_DEVNET_ARCHIVE="fixtures_heze-devnet.tar.gz"
 EEST_DEVNET_URL="https://github.com/ethereum/execution-specs/releases/download/${EEST_DEVNET_NAME}%40${EEST_DEVNET_VERSION}/${EEST_DEVNET_ARCHIVE}"
