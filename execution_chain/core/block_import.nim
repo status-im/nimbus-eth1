@@ -61,7 +61,7 @@ proc importRlpBlocks*(
         hash = blk.header.computeBlockHash.short, number = blk.header.number
       printBanner = true
 
-    (await chain.importBlock(blk, finalized = true)).isOkOr:
+    (await chain.importBlock(blk, finalized = true, immediate = true)).isOkOr:
       error "Error occurred when importing block",
         hash = blk.header.computeBlockHash.short,
         number = blk.header.number,

@@ -51,6 +51,15 @@ const
   EagerBaseQueueSize = 8
     ## How large the base queue can become before we eagerly process base
     ## updates during `importBlock`.
+  ImportYieldInterval = 50.milliseconds
+    ## Max CPU time to spend on block imports before yielding to the event
+    ## loop. Keep well under the peer response timeouts, otherwise the syncer
+    ## starts banning honest peers as slow. Yields per batch of work, not per
+    ## block, so bulk imports stay fast.
+  ImportYieldTimeout = 10.milliseconds
+    ## Cap on how long we wait for an idle slot when yielding. Under heavy
+    ## network load the loop may never go idle, and we don't want to stop
+    ## processing entirely.
 
 func appendBlock(c: ForkedChainRef,
          parent: BlockRef,
@@ -668,6 +677,7 @@ proc refresh*(fc: ForkedChainRef, eagerStateRoot = false) =
   fc.fcuSafe = newFc.fcuSafe
   fc.baseQueue = newFc.baseQueue
   fc.lastBaseLogTime = newFc.lastBaseLogTime
+  fc.lastImportYield = newFc.lastImportYield
   fc.badBlocks = newFc.badBlocks
   fc.importLock = newFc.importLock
 
@@ -679,7 +689,8 @@ proc importBlock*(
     c: ForkedChainRef,
     blk: Block,
     blockAccessList = Opt.none(BlockAccessListRef),
-    finalized = false
+    finalized = false,
+    immediate = false,
   ): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
   ## Try to import block to canonical or side chain.
   ##
@@ -707,8 +718,15 @@ proc importBlock*(
   if c.hashToBlock.hasKey(blkHash):
     return ok(AlreadyObserved)
 
-  # Make sure the event loop has a chance to run between block validations
-  discard await idleAsync().withTimeout(10.milliseconds)
+  # Make sure the event loop has a chance to run between block validations.
+  # Networking and block processing share this thread, so we hand it back
+  # regularly or network reads stall and peers time us out. We yield per
+  # batch of work (not per block): yielding for every single block costs up to
+  # the timeout for each one and makes bulk imports (e.g. bootstrap) much
+  # slower than they need to be.
+  if ImportYieldInterval <= Moment.now() - c.lastImportYield and not immediate:
+    discard await idleAsync().withTimeout(ImportYieldTimeout)
+    c.lastImportYield = Moment.now()
 
   # This lock ensures that quarantine blocks are imported after their parent but
   # but before other calls to importBlock.

@@ -59,6 +59,11 @@ type
     lastBaseLogTime*: Moment
     lastBaseDur*: Duration
 
+    lastImportYield*: Moment
+      # Time of the last event-loop yield during block import. Used to yield
+      # per batch of work (not per block) so that import stays fast while still
+      # giving the network a chance to run.
+
     lastFcuTime*: EthTime
       # Time of the latest forkchoice update request from the `CL`, zero if
       # none was received yet. Only used for status logging.
