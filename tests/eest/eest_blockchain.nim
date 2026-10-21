@@ -300,7 +300,7 @@ proc runTest(
         # statelessProcessBlock directly.
         ?generatedWitness.statelessProcessBlock(env.chain.com, blk.blk)
 
-  (await env.chain.forkChoice(unit.lastblockhash, unit.lastblockhash)).isOkOr:
+  (env.chain.forkChoice(unit.lastblockhash, unit.lastblockhash)).isOkOr:
     return err("Fork choice failed")
 
   let headHash = env.chain.latestHash
