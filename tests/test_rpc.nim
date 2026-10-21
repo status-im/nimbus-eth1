@@ -660,6 +660,13 @@ proc rpcMain*() =
         expected = computeRlpHash(blobTx.tx) # use inner tx hash
       check expected == blobTxHash # should return inner tx hash
 
+    test "eth_signTransaction, eth_sendTransaction without from":
+      let args = TransactionArgs(to: Opt.some(contractAddress))
+      expect RpcResponseError:
+        discard await client.eth_signTransaction(args)
+      expect RpcResponseError:
+        discard await client.eth_sendTransaction(args)
+
     test "eth_call":
       let ec = TransactionArgs(
         `from`: Opt.some(signer),
