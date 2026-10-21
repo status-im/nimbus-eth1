@@ -88,14 +88,6 @@ proc put*(
 
   db.putKvpFn(key, data)
 
-proc putMove*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record to store
-    data: var seq[byte];              # Value of database record to store
-      ): Result[void,KvtError] =
-  ## Same as `put()`. The backend copies `data`, which is left unchanged.
-  db.put(key, data)
-
 proc del*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record to delete

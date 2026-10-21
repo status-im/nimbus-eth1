@@ -223,17 +223,6 @@ proc put*(
 
   ok()
 
-proc putMove*(
-    kvt: CoreDbTxRef;
-    key: openArray[byte];
-    val: var seq[byte];
-      ): CoreDbRc[void] =
-  ## Same as `put()`. The backend copies `val`, which is left unchanged.
-  kvt.kvt.putMove(key, val).isOkOr:
-    return err(error.toError(""))
-
-  ok()
-
 proc hasKeyRc*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[bool] =
   ## For the argument `key` return `true` if `get()` returned a value on
   ## that argument, `false` if it returned `GetNotFound`, and an error
