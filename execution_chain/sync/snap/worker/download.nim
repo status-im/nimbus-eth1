@@ -234,34 +234,40 @@ template downloadState*(
     while buddy.ctrl.running and doEntity != 0:
 
       if doEntity.testBit(0):
-        buddy.accountDownload(stateRoot, number, info).isOkOr:
-          if error != ECompleted:
-            bodyRc = typeof(bodyRc).err(error)
-            break
+        let rc = buddy.accountDownload(stateRoot, number, info)
+        if rc.isOk:
           didSomething = true                       # logging only
+          doEntity.setBit(1)                        # re-activate storage & code
+          doEntity.setBit(2)
+        elif rc.error == ECompleted:
           doEntity.clearBit(0)                      # done with accounts
-        doEntity.setBit(1)                          # re-activate storage & code
-        doEntity.setBit(2)
+        else:
+          bodyRc = typeof(bodyRc).err(rc.error)
+          break
 
       if doEntity.testBit(1):
         if buddy.ctrl.stopped:
           break
-        buddy.storageDownload(stateRoot, number, info).isOkOr:
-          if error != ECompleted:
-            bodyRc = typeof(bodyRc).err(error)
-            break
+        let rc = buddy.storageDownload(stateRoot, number, info)
+        if rc.isOk:
           didSomething = true                       # logging only
+        elif rc.error == ECompleted:
           doEntity.clearBit(1)                      # done with storage so far
+        else:
+          bodyRc = typeof(bodyRc).err(rc.error)
+          break
 
       if doEntity.testBit(2):
         if buddy.ctrl.stopped:
           break
-        buddy.codeDownload(stateRoot, number, info).isOkOr:
-          if error != ECompleted:
-            bodyRc = typeof(bodyRc).err(error)
-            break
+        let rc = buddy.codeDownload(stateRoot, number, info)
+        if rc.isOk:
           didSomething = true                       # logging only
+        elif rc.error == ECompleted:
           doEntity.clearBit(2)                      # done with code so far
+        else:
+          bodyRc = typeof(bodyRc).err(rc.error)
+          break
       # End `while ..`
 
     let data {.used.} = ctx.downloadReady(info).valueOr:
