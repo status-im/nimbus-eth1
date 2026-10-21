@@ -222,6 +222,28 @@ procSuite "devp2p eth/71 Tests":
     await env2.close()
     await env1.close()
 
+  asyncTest "getBlockAccessLists - empty request":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    let
+      req = BlockAccessListsRequest(blockHashes: @[])
+      respOpt = await eth.getBlockAccessLists(peer, req, timeout = chronos.seconds(3))
+    check respOpt.isSome()
+    check respOpt.get().accessLists.len() == 0
+
+    await env2.close()
+    await env1.close()
+
   asyncTest "getBlockAccessLists - SOFT_RESPONSE_LIMIT respected":
     var
       env1 = newTestEnv()
