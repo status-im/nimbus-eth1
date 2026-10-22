@@ -79,7 +79,7 @@ template checkImport(chain, blk) =
 
 template checkHead(chain, blk) =
   # Forkchoice without finality, so both branches stay alive
-  check (waitFor chain.forkChoice(blk.blockHash, zeroHash32)).isOk
+  check (chain.forkChoice(blk.blockHash, zeroHash32)).isOk
 
 template checkBlockHashes(chain, blk, ancestors) =
   let ledger = LedgerRef.init(chain.txFrame(blk.blockHash))
