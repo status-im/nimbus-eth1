@@ -138,7 +138,7 @@ proc close*(env: TestEnv) =
       waitFor env.server.get().closeWait()
     if env.beaconEngine.isNil.not:
       waitFor env.beaconEngine.stop()
-    waitFor env.chain.stopProcessingQueue()
+    waitFor env.chain.flushBaseLoop()
     env.chain.com.db.close()
     if env.taskpool != nil:
       env.taskpool.shutdown()

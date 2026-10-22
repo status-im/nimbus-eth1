@@ -489,16 +489,9 @@ proc validateBlock(
     parent: BlockRef,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
+    blkHash: Hash32,
     finalized: bool,
 ): Result[BlockRef, string] =
-  let
-    blkHash = blk.header.computeBlockHash
-    existingBlock = c.hashToBlock.getOrDefault(blkHash)
-
-  # Block exists, just return
-  if existingBlock.isOk:
-    return ok(existingBlock)
-
   if blkHash == c.pendingFCU:
     # Resolve the hash into latestFinalizedBlockNumber
     discard c.tryUpdatePendingFCU(blkHash, blk.header.number)
@@ -562,9 +555,7 @@ proc validateBlock(
         c.latestFinalized.number - offset
   if c.base.number < number:
     # 0 < number => latestFinalized.hash != zero
-    let
-      base = c.calculateNewBase(c.latestFinalized.number, c.latest)
-      prevBase = c.base.number
+    let base = c.calculateNewBase(c.latestFinalized.number, c.latest)
 
     # `base` is the persistence point; the finalization reference passed to
     # `updateFinalized` must never sit *below* the existing finalized markers.
@@ -712,11 +703,10 @@ proc importBlock*(
     blk.header
 
   let blkHash = header.computeBlockHash
-
-  # Already observed: the block content arrived earlier (from us or a concurrent
-  # importer such as `el_sync`). Nothing to do.
-  if c.hashToBlock.hasKey(blkHash):
-    return ok(AlreadyObserved)
+  logScope:
+    blockHash = blkHash.short
+    parentHash = header.parentHash.short
+    number = header.number
 
   # Make sure the event loop has a chance to run between block validations.
   # Networking and block processing share this thread, so we hand it back
@@ -729,9 +719,17 @@ proc importBlock*(
     c.lastImportYield = Moment.now()
 
   # This lock ensures that quarantine blocks are imported after their parent but
-  # but before other calls to importBlock.
+  # but before other calls to importBlock - it also ensures that if two calls to
+  # `importBlock` are racing to import the same block, only one of them will
+  # process the block.
   await c.importLock.acquire()
   defer: c.importLock.release2()
+
+  # Already observed: the block content arrived earlier (from us or a concurrent
+  # importer such as `el_sync`). Nothing to do.
+  if c.hashToBlock.hasKey(blkHash):
+    debug "Block already observed"
+    return ok(AlreadyObserved)
 
   # Check if there's a long queue of base updates and if so, run one base update
   # before validating the block - this ensures that at least some blocks are
@@ -747,9 +745,6 @@ proc importBlock*(
     # Parent is not in the in-memory `(base, latest]` window. Classify by the
     # block's height relative to `base`/`latest` (the error channel is preserved -
     # same `msg` as the previous `err("Block is not part of valid chain")`).
-    debug "Parent block not found",
-      blockHash = blkHash.short,
-      parentHash = header.parentHash.short
     return
       if header.number <= c.latest.number:
         # The parent is gone, but this block may itself be the canonical block at
@@ -760,18 +755,21 @@ proc importBlock*(
         # persisted canonical marker (reorg-safe: matched by hash, not by number).
         if header.number <= c.base.number and
             c.baseTxFrame.getBlockHash(header.number).valueOr(default(Hash32)) == blkHash:
+          debug "Block already observed"
           ok(AlreadyObserved)
         else:
           # The in-memory chain already spans this height yet the parent is gone: the
           # parent's branch was pruned (finality cut it off), so this block is on a
           # dead fork. `c.latest` is the reliable frontier here - `c.latestFinalized`
           # can lag until a matching fork-choice block is imported.
+          debug "Block orphaned"
           err(ImportError(kind: Orphaned, msg: "Block is not part of valid chain"))
       else:
         # The chain has not reached this height yet: the parent may still arrive.
         # Quarantine and wait.
         c.quarantine.addOrphan(blkHash, blk, blockAccessList)
-        err(ImportError(kind: MissingParent, msg: "Block is not part of valid chain"))
+        debug "Parent not found"
+        err(ImportError(kind: MissingParent, msg: "Block parent not found"))
 
   # TODO: If engine API keep importing blocks
   # but not finalized it, e.g. current chain length > StagedBlocksThreshold
@@ -783,10 +781,14 @@ proc importBlock*(
   # stateroot check for performance reasons.
   let
     isFinalized = finalized or blk.header.number <= c.latestFinalized.number
-    newParent = c.validateBlock(parent, blk, blockAccessList, isFinalized).valueOr:
+    startTime = Moment.now()
+    newParent = c.validateBlock(parent, blk, blockAccessList, blkHash, isFinalized).valueOr:
+      debug "Block invalid", validationDur = Moment.now() - startTime, error
       return err(ImportError(kind: Invalid, msg: error))
 
     orphan = c.quarantine.popOrphan(newParent.hash)
+
+  debug "Block validated", validationDur = Moment.now() - startTime
 
   if orphan.isSome():
     # Enqueue the orphan for import after its parent, but before any other blocks. We're
@@ -803,7 +805,6 @@ proc forkChoice*(
     headHash: Hash32,
     finalizedHash: Hash32,
     safeHash: Hash32 = zeroHash32,
-    eagerBase: bool = false,
 ): Result[void, string] =
   if finalizedHash != zeroHash32:
     c.pendingFCU = finalizedHash
@@ -848,12 +849,6 @@ proc forkChoice*(
   doAssert(finalized.number <= head.number)
   doAssert(base.number <= finalized.number)
   c.queueUpdateBase(base)
-
-  while eagerBase and c.baseQueue.len > 0:
-    # If the caller requested an eager base update, process one base update
-    # immediately. This is useful for testing and debugging, but not needed
-    # in normal operation since the base update loop will eventually catch up.
-    c.processUpdateBase()
 
   ok()
 
@@ -906,9 +901,16 @@ proc setHead*(c: ForkedChainRef, headHash: Hash32): Result[void, string] =
 
   ok()
 
-proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: []).} =
+proc flushBaseLoop*(c: ForkedChainRef, dropQueue = false) {.async: (raises: []).} =
   if c.baseLoop.isNil.not and c.baseLoop.finished().not:
-    await c.baseLoop.cancelAndWait()
+    if dropQueue:
+      c.baseQueue.clear()
+
+    debug "Waiting for base loop to finish",
+      baseQueueLen = c.baseQueue.len,
+      baseNumber = c.base.number,
+      latestNumber = c.latest.number
+    await c.baseLoop
 
   if not c.vmState.isNil():
     c.vmState.dispose()

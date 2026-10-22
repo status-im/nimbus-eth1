@@ -154,7 +154,7 @@ proc close(env: TestEnv) =
   waitFor env.client.close()
   waitFor env.server.closeWait()
   waitFor env.beaconEngine.stop()
-  waitFor env.chain.stopProcessingQueue()
+  waitFor env.chain.flushBaseLoop()
 
 proc runBasicCycleTest(env: TestEnv): Result[void, string] =
   let

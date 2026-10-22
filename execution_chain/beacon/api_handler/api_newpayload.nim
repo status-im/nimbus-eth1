@@ -272,7 +272,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.
   if chain.haveBlockAndState(blockHash):
-    debug "Ignoring already known beacon payload",
+    debug "Ignoring already known payload",
       number = header.number, hash = blockHash.short
     return
       if withWitness:
@@ -348,7 +348,7 @@ proc newPayload*(ben: BeaconEngineRef,
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 
-  info "New payload received and validated",
+  info "New payload validated",
     number = header.number,
     hash = blockHash.short,
     parent = header.parentHash.short,
