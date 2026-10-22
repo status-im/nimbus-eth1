@@ -78,10 +78,14 @@ template applyCodeChange(
     if newCode.len == 0:
       adb.delFlatCode(accPath, info).isOkOr:
         break body                                  # err()
+      adb.delMissingBlob(accPath, info).isOkOr:     # no more missing (if any)
+        break body
       bodyRc = typeof(bodyRc).ok(EMPTY_CODE_HASH)
       break body
 
     adb.putFlatCode(accPath, newCode, info).isOkOr:
+      break body
+    adb.delMissingBlob(accPath, info).isOkOr:       # no more missing (if any)
       break body
 
     bodyRc = typeof(bodyRc).ok(newCode.keccak256)
