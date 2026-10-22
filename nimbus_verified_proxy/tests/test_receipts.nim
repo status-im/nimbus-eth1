@@ -9,6 +9,7 @@
 {.push raises: [].}
 
 import
+  std/sequtils,
   unittest2,
   chronos,
   web3/[eth_api, eth_api_types],
@@ -75,6 +76,7 @@ suite "test receipts verification":
 
     # update block tags because getLogs (uses)-> getReceipts (uses)-> getHeader
     ts.loadBlockReceipts(blk, rxs)
+    ts.loadLogs(logs)
     engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
     engine.setAnchor(convHeader(blk), blk.hash, Finalized)
 
@@ -93,11 +95,57 @@ suite "test receipts verification":
         blockHash: Opt.none(Hash32),
       )
 
-      ts.loadLogs(filterOptions, logs)
       let verifiedLogs = waitFor frontend.eth_getLogs(filterOptions)
       check:
         verifiedLogs.isOk()
         verifiedLogs.get().len == logs.len
+
+    ts.clear()
+    engine.headerStore.clear()
+
+  test "get logs using address and topic filters":
+    let
+      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      rxs = getReceiptsFromJson("nimbus_verified_proxy/tests/data/receipts.json")
+      logs = getLogsFromJson("nimbus_verified_proxy/tests/data/logs.json")
+      numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: blk.number)
+      transferTopic = TopicOrList(
+        kind: SingleOrListKind.slkSingle,
+        single:
+          bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+      )
+      address = logs[0].address
+
+    ts.loadBlockReceipts(blk, rxs)
+    ts.loadLogs(rxs.mapIt(it.logs).concat()) # also load non-Transfer logs
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+    engine.setAnchor(convHeader(blk), blk.hash, Finalized)
+
+    block:
+      let filterOptions = FilterOptions(
+        fromBlock: Opt.some(numberTag),
+        toBlock: Opt.some(numberTag),
+        topics: @[transferTopic],
+      )
+
+      let verifiedLogs = waitFor frontend.eth_getLogs(filterOptions)
+      check:
+        verifiedLogs.isOk()
+        verifiedLogs.get().len == logs.len
+
+    block:
+      let filterOptions = FilterOptions(
+        fromBlock: Opt.some(numberTag),
+        toBlock: Opt.some(numberTag),
+        address: AddressOrList(kind: SingleOrListKind.slkSingle, single: address),
+        topics: @[transferTopic],
+      )
+
+      let verifiedLogs = waitFor frontend.eth_getLogs(filterOptions)
+      check:
+        verifiedLogs.isOk()
+        verifiedLogs.get().len == logs.countIt(it.address == address)
+        verifiedLogs.get().allIt(it.address == address)
 
     ts.clear()
     engine.headerStore.clear()
@@ -157,7 +205,7 @@ suite "test receipts verification":
       blockHash: Opt.none(Hash32),
     )
 
-    ts.loadLogs(filterOptions, logs)
+    ts.loadLogs(logs)
 
     let newFilter = waitFor frontend.eth_newFilter(filterOptions)
 
