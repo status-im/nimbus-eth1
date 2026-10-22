@@ -769,10 +769,11 @@ proc addBalance*(
       let acc = ledger.getAccount(address)
       if acc.isEmpty:
         ledger.makeDirty(address).flags.incl Touched
-    elif ledger.collectWitness:
+    elif ledger.collectWitness or ledger.stateless:
       # The reference implementation reads the account even for a zero-value
       # credit (e.g. zero-amount withdrawals, zero-fee coinbase payments), so
-      # the address must be part of the execution witness.
+      # the address must be part of the execution witness, and stateless
+      # execution must be able to fail when the witness lacks its proof.
       discard ledger.getAccount(address, shouldCreate = false)
     return
   ledger.setBalance(address, ledger.getBalance(address) + delta)
@@ -941,6 +942,17 @@ proc getCollapsedSiblings*(
     else:
       res.add((accPath, sibStoPath))
   res
+
+proc hasUnprovenCollapse*(ledger: LedgerRef): bool =
+  ## Stateless only: true if a branch that collapsed onto a child absent from
+  ## the witness is still collapsed. The witness then lacks that child.
+  let db = ledger.txFrame.aTx
+  for rvid in db.unprovenCollapses:
+    let vtx = db.getVtx(rvid)
+    if vtx.isValid and vtx.vType == BoundaryNode and
+        BoundaryNodeRef(vtx).unprovenCollapse:
+      return true
+  false
 
 template clearWitnessKeys*(ledger: LedgerRef) =
   ledger.witnessKeys.clear()

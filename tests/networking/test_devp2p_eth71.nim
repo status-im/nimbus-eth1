@@ -16,11 +16,12 @@ import
   chronos,
   eth/[common, rlp],
   eth/common/block_access_lists_rlp,
-  stew/endians2,
+  stew/[endians2, interval_set],
   ../../execution_chain/networking/p2p,
   ../../execution_chain/sync/wire_protocol,
   ../../execution_chain/sync/wire_protocol/eth/eth_handler {.all.},
   ../../execution_chain/sync/beacon/worker/blocks/blocks_fetch_bal,
+  ../../execution_chain/sync/beacon/worker/headers/headers_fetch,
   ../../execution_chain/sync/beacon/worker/worker_desc,
   ../../execution_chain/core/chain/header_chain_cache,
   ../../execution_chain/core/chain/forked_chain,
@@ -396,6 +397,39 @@ procSuite "devp2p eth/71 Tests":
     check:
       resp.headers.len() == 1
       resp.headers[0].number == 0
+
+    await env2.close()
+    await env1.close()
+
+  asyncTest "fetchHeadersReversed - header must match the requested hash":
+    var
+      env1 = newTestEnv()
+      env2 = newTestEnv()
+
+    env2.node.startListening()
+
+    let connRes = await env1.node.rlpxConnect(newNode(env2.node.toENode()))
+    check connRes.isOk()
+
+    let peer = connRes.get()
+    check peer.supports(eth71)
+
+    # `env2` answers a header request by `requested` with a header that has
+    # a different hash
+    let
+      requested = makeHash(7)
+      served = Header(number: 1000)
+    check served.computeBlockHash() != requested
+    env2.chain.hashToBlock[requested] = BlockRef(header: served, hash: requested)
+
+    let ctx = BeaconCtxRef()
+    ctx.pool.hdrCache = HeaderChainRef()
+    let
+      buddy = BeaconPeerRef(peer: peer, ctx: ctx)
+      rc = buddy.fetchHeadersReversed(BnRange.new(0u, 0u), requested)
+    check rc.isErr()
+    if rc.isErr():
+      check rc.error == EValidationError
 
     await env2.close()
     await env1.close()

@@ -215,8 +215,7 @@ func sanitizeHeader(com: CommonRef, h: Header): Header =
 proc runExecution(ctx: var StateContext,
                   conf: StateConf,
                   pre: GenesisAlloc,
-                  receipt: Opt[TxoReceipt],
-                  txBytes: openArray[byte]): Result[StateResult, string] =
+                  subTest: SubTest): Result[StateResult, string] =
   let
     com     = ctx.com
     stream  = newFileStream(stderr)
@@ -242,24 +241,31 @@ proc runExecution(ctx: var StateContext,
     setupLedger(pre, ledger)
     ledger.persist(clearEmptyAccount = false) # settle accounts storage
 
-  let sender = ctx.tx.recoverSender().valueOr:
-    # Invalid signature, early exit
-    let stateRoot = vmState.readOnlyLedger.getStateRoot()
-    return ok(StateResult(
-      name : ctx.name,
-      pass : true,
-      root : stateRoot,
-      fork : ctx.forkStr
-    ))
+  let (stateRoot, status) =
+    if subTest.expectException.len == 0:
+      let sender = ctx.tx.recoverSender().valueOr:
+        # Invalid signature, early exit
+        let stateRoot = vmState.readOnlyLedger.getStateRoot()
+        return ok(StateResult(
+          name : ctx.name,
+          pass : true,
+          root : stateRoot,
+          fork : ctx.forkStr
+        ))
 
-  let txRes = vmState.processTransaction(ctx.tx, sender)
-  coinbaseStateClearing(vmState, ctx.header.coinbase)
+      let txRes = vmState.processTransaction(ctx.tx, sender)
+      coinbaseStateClearing(vmState, ctx.header.coinbase)
 
-  let stateRoot = vmState.readOnlyLedger.getStateRoot()
-  ctx.verifyResult(vmState, stateRoot)
-  if receipt.isSome and ctx.error.len == 0:
-    let generatedReceipt = vmState.makeReceipt(ctx.tx.txType)
-    ctx.verifyReceipt(generatedReceipt, receipt.value, ctx.tx, txBytes)
+      let stateRoot = vmState.readOnlyLedger.getStateRoot()
+      ctx.verifyResult(vmState, stateRoot)
+      if subTest.receipt.isSome and ctx.error.len == 0:
+        let generatedReceipt = vmState.makeReceipt(ctx.tx.txType)
+        ctx.verifyReceipt(generatedReceipt, subTest.receipt.value, ctx.tx, subTest.txbytes)
+      (stateRoot, if txRes.isErr: txRes.error else: "ok")
+    else:
+      let stateRoot = vmState.readOnlyLedger.getStateRoot()
+      ctx.verifyResult(vmState, stateRoot)
+      (stateRoot, "tx exception")
 
   let res = StateResult(
     name  : ctx.name,
@@ -267,7 +273,7 @@ proc runExecution(ctx: var StateContext,
     root  : stateRoot,
     fork  : ctx.forkStr,
     error : ctx.error,
-    status: if txRes.isErr: txRes.error else: "ok",
+    status: status,
   )
 
   if conf.dumpEnabled:
@@ -299,8 +305,13 @@ proc parseTx(ctx: var StateContext, txo: Txo, subTest: SubTest): Result[void, st
       ctx.tx = rlp.decode(subTest.txbytes, Transaction)
       return ok()
 
+    if subTest.expectException.len > 0:
+      return err("Should error when decode transaction, but get none")
+
     return err("Unsupported fixture format")
   except RlpError as exc:
+    if subTest.expectException.len > 0:
+      return ok()
     return err(exc.msg)
 
 proc prepareFork(ctx: var StateContext, forkName: string): Result[void, string] =
@@ -319,7 +330,7 @@ proc runSubTest(ctx: var StateContext,
   if subTest.state.isNil.not:
     ctx.postState  = subTest.state
   ? ctx.parseTx(unit.txo, subTest)
-  ctx.runExecution(conf, unit.pre, subTest.receipt, subTest.txbytes)
+  ctx.runExecution(conf, unit.pre, subTest)
 
 proc executeTest(resList: var seq[StateResult], unit: StateUnit, conf: StateConf): Result[void, string] =
   var

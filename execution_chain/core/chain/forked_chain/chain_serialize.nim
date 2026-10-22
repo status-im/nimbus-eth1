@@ -182,12 +182,12 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
                       else: slots.getOrDefault(b.parent.hash) + 1'u
     var encodedBlock = rlp.encode(StoredBlock(
       header: b.header, hash: b.hash, parentIndex: parentIndex))
-    ?txFrame.putMove(blockIndexKey(i), encodedBlock)
+    ?txFrame.put(blockIndexKey(i), encodedBlock)
     if b != fc.base:
       ?txFrame.storeTxFrame(b.txFrame, b.hash)
 
   var encodedState = rlp.encode(state)
-  ?txFrame.putMove(FcStateKey.toOpenArray, encodedState)
+  ?txFrame.put(FcStateKey.toOpenArray, encodedState)
 
   # Block data is in the shared KVT already, the snapshot adds the DAG layout
   # and the in-memory state frames of the blocks above base

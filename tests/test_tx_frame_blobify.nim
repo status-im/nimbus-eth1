@@ -378,7 +378,7 @@ suite "TxFrame blobify round-trip":
     check (waitFor chain.importBlock(shared)).isOk
     check (waitFor chain.importBlock(exclusive)).isOk
     let hash = canonical.header.computeBlockHash
-    check (waitFor chain.forkChoice(hash, hash)).isOk
+    check (chain.forkChoice(hash, hash)).isOk
 
     let db = chain.baseTxFrame
     check db.getEthBlock(hash).get.transactions == canonical.transactions
@@ -413,7 +413,7 @@ suite "TxFrame blobify round-trip":
     check (waitFor chain.importBlock(survivor)).isOk
     # Import the dead fork last so both indexes initially point at it.
     check (waitFor chain.importBlock(dead)).isOk
-    check (waitFor chain.forkChoice(canonicalHash, canonicalHash)).isOk
+    check (chain.forkChoice(canonicalHash, canonicalHash)).isOk
 
     let hash = survivor.transactions[0].computeRlpHash
     # Above base, the tx lookup is in memory only

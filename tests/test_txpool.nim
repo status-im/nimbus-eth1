@@ -650,7 +650,7 @@ suite "TxPool test suite":
 
     xp.checkImportBlock(3, 0)
     let latestHash = chain.latestHash
-    check (waitFor env.chain.forkChoice(latestHash, latestHash)).isOk
+    check (env.chain.forkChoice(latestHash, latestHash)).isOk
 
     let hs = [
       computeRlpHash(tx1),

@@ -56,11 +56,12 @@ template onException(
 
 proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   # Setup the chain
-  let fc = ForkedChainRef.init(com,
+  let fc = ForkedChainRef.init(
+    com,
     eagerStateRoot = config.eagerStateRootCheck,
     persistBatchSize = config.persistBatchSize,
     dynamicBatchSize = config.dynamicBatchSize,
-    enableQueue = true)
+  )
   if config.deserializeFcState:
     fc.deserialize().isOkOr:
       warn "Loading block DAG from database", msg=error

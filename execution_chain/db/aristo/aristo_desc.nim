@@ -92,6 +92,10 @@ type
       ## in the final trie before including it.
       ## Only populated when collectWitness is true.
 
+    unprovenCollapses*: seq[RootedVertexID]
+      ## Stateless only. Where a `BoundaryNodeRef` with `unprovenCollapse` set
+      ## was put. Entries may be stale; `getVtx` tells if one is still there.
+
     snapshot*: Snapshot
       ## Optional snapshot containing the cumulative changes from ancestors and
       ## the current frame
