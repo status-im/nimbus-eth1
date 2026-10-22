@@ -117,25 +117,39 @@ template accountDownload*(
       if limit < w.accHash.to(ItemKey):             # ignore excess entries
         break                                       # exit `for()` loop
 
+      var
+        dirtyStorage {.inject.} = false
+        dirtyCode {.inject.} = false
       let
         acc = cast[Account](w.accBody)              # distinct field diffs only
-        dirtyStorage =
-          if acc.storageRoot == EMPTY_ROOT_HASH: false
-          else:
-            let ikrs = ItemKeyRangeSet.init ItemKeyRangeMax
-            adb.putStoMissingIntv(w.accHash, ikrs, info).isOkOr:
-              bodyRc = typeof(bodyRc).err(ECacheError)
-              ctx.accUnproc.commit(ivReq, ivReq)    # registry roll back
-              break body                            # return err()
-            true
-        dirtyCode =
-          if acc.codeHash == EMPTY_CODE_HASH: false
-          else:
-            adb.putMissingBlob(w.accHash, info).isOkOr:
-              bodyRc = typeof(bodyRc).err(ECacheError)
-              ctx.accUnproc.commit(ivReq, ivReq)    # registry roll back
-              break body                            # return err()
-            true
+
+      # Check whether this account was marked for re-fetch while storage
+      # data or contract code records already exist on the cache DB.
+      let maybe = adb.getFlatAcc(w.accHash, info)
+      if maybe.isSome():
+        let prvData = maybe.unsafeGet()
+        dirtyStorage = prvData.dirtyStorage
+        dirtyCode = prvData.dirtyCode
+        trace info & ": Updated accounts record", peer, root, number,
+          accPath=w.accHash.toStr, dirtyStorage, dirtyCode,
+          syncState=($buddy.syncState)
+
+      else:
+        # Set dirty flags according to `storageRoot` and `codeHash`
+        if acc.storageRoot != EMPTY_ROOT_HASH:
+          let ikrs = ItemKeyRangeSet.init ItemKeyRangeMax
+          adb.putStoMissingIntv(w.accHash, ikrs, info).isOkOr:
+            bodyRc = typeof(bodyRc).err(ECacheError)
+            ctx.accUnproc.commit(ivReq, ivReq)      # registry roll back
+            break body                              # return err()
+          dirtyStorage = true
+
+        if acc.codeHash != EMPTY_CODE_HASH:
+          adb.putMissingBlob(w.accHash, info).isOkOr:
+            bodyRc = typeof(bodyRc).err(ECacheError)
+            ctx.accUnproc.commit(ivReq, ivReq)      # registry roll back
+            break body                              # return err()
+          dirtyCode = true
 
       adb.putFlatAcc(w.accHash, dirtyStorage, dirtyCode, acc, info).isOkOr:
         bodyRc = typeof(bodyRc).err(ECacheError)
