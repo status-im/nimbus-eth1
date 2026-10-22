@@ -10,10 +10,10 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[tables, macros],
+  std/tables,
   eth/rlp, eth/common/eth_types_json_serialization,
   eth/common/eth_types_rlp,
-  stint, stew/byteutils,
+  stint, stew/[byteutils, staticfor], stew/shims/macros,
   json_serialization, chronicles,
   json_serialization/pkg/results,
   json_serialization/std/tables,
@@ -138,24 +138,6 @@ func decodePrealloc*(data: seq[byte]): GenesisAlloc
   for tup in rlp.decode(data, seq[AddressBalance]):
     result[tup.address] = tup.account
 
-macro fillArrayOfBlockNumberBasedForkOptionals(conf, tmp: typed): untyped =
-  result = newStmtList()
-  for i, x in forkBlockField:
-    let fieldIdent = newIdentNode(x)
-    result.add quote do:
-      `tmp`[`i`] = BlockNumberBasedForkOptional(
-        number  : `conf`.`fieldIdent`,
-        name    : `x`)
-
-macro fillArrayOfTimeBasedForkOptionals(conf, tmp: typed): untyped =
-  result = newStmtList()
-  for i, x in forkTimeField:
-    let fieldIdent = newIdentNode(x)
-    result.add quote do:
-      `tmp`[`i`] = TimeBasedForkOptional(
-        time    : `conf`.`fieldIdent`,
-        name    : `x`)
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -175,10 +157,14 @@ proc validateChainConfig*(conf: ChainConfig): bool =
   # block-based ones and the time-based ones.
 
   var blockNumberBasedForkOptionals: array[forkBlockField.len, BlockNumberBasedForkOptional]
-  fillArrayOfBlockNumberBasedForkOptionals(conf, blockNumberBasedForkOptionals)
+  staticFor i, 0 ..< forkBlockField.len:
+    blockNumberBasedForkOptionals[i] = BlockNumberBasedForkOptional(
+      number: conf.field(forkBlockField[i]), name: forkBlockField[i])
 
   var timeBasedForkOptionals: array[forkTimeField.len, TimeBasedForkOptional]
-  fillArrayOfTimeBasedForkOptionals(conf, timeBasedForkOptionals)
+  staticFor i, 0 ..< forkTimeField.len:
+    timeBasedForkOptionals[i] = TimeBasedForkOptional(
+      time: conf.field(forkTimeField[i]), name: forkTimeField[i])
 
   var lastBlockNumberBasedFork = blockNumberBasedForkOptionals[0]
   for i in 1..<blockNumberBasedForkOptionals.len:
