@@ -103,6 +103,7 @@ template accountDownload*(
         buddy.ctrl.zombie = true                    # peer not useful
         debug info & ": Accounts validation failed", peer, root,number,
           ivReq=ivReq.flStr, nAccounts, nProof, syncState=($buddy.syncState)
+        ctx.accUnproc.commit(ivReq, ivReq)          # registry roll back
         bodyRc = typeof(bodyRc).err(EValidationError)
         break body                                  # return err()
 
