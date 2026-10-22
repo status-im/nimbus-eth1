@@ -18,12 +18,17 @@
 
 import
   std/sequtils,
-  pkg/[chronicles, chronos, stew/interval_set],
+  pkg/[chronicles, chronos, metrics, stew/interval_set],
   ../../[helpers, cache_db, delete_account, mpt_build, worker_desc],
   ./storage_fetch
 
 const
   emptyProof = seq[ProofNode].default
+
+declareGauge nec_snap_storage_coverage, "" &
+  "Factor of accumulated storage slots ranges"
+
+proc storageDownloadMetricsUpdate*(ctx: SnapCtxRef, info: static[string])
 
 # ------------------------------------------------------------------------------
 # Private helpers for `downloadImpl()`
@@ -338,6 +343,8 @@ template queueAndDownload(
       number, nComplete=(stoQ.len - nPartial), nPartial,
       syncState=($buddy.syncState)
 
+    ctx.storageDownloadMetricsUpdate(info)          # update metrics
+
     bodyRc = typeof(bodyRc).ok()
     # End `block body`
 
@@ -346,6 +353,23 @@ template queueAndDownload(
 # ------------------------------------------------------------------------------
 # Public function
 # ------------------------------------------------------------------------------
+
+proc storageDownloadMetricsReset*(ctx: SnapCtxRef) =
+  metrics.set(nec_snap_storage_coverage, 0)
+
+proc storageDownloadMetricsUpdate*(ctx: SnapCtxRef, info: static[string]) =
+  var
+    q: seq[float]
+    n: int
+  for w in ctx.pool.cacheDB.walkStoMissingIntv():
+    if w.data.ranges.isFullRange:
+      n.inc
+    else:
+      q.add w.data.ranges.totalRatio
+  let
+    d = n + q.len
+    r = if 0 < d: (n.float + q.foldl(a+b, 0.0)) / d.float else: 0.0
+  metrics.set(nec_snap_storage_coverage, 1.0 - r)
 
 template storageDownloadCommit*(
     ctx: SnapCtxRef;

@@ -180,6 +180,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapStop:
       await ctx.statsStateLog info                  # FIXME, will go away
       ctx.accountDownloadMetricsReset()             # cosmetics
+      ctx.storageDownloadMetricsReset()
 
       # Done, terminate
       if 0 < ctx.pool.newCoreDb.newDbPath.len:

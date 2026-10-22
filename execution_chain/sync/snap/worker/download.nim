@@ -20,7 +20,7 @@ logScope:
   topics = "snap sync"
 
 export
-  account, header
+  account, header, storage
 
 type
   DownloadInfo = tuple
@@ -154,6 +154,7 @@ proc downloadInit*(
     ?ctx.startDownloading(firstPivot, info)
 
   ctx.accountDownloadMetricsUpdate()
+  ctx.storageDownloadMetricsUpdate(info)
   ok()
 
 template downloadCommit*(
