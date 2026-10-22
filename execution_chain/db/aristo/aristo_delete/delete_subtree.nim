@@ -28,6 +28,10 @@ proc delStoTreeNow(
 
   let (vtx, _) = db.getVtxRc(rvid).valueOr:
     if error == GetVtxNotFound:
+      if db.layersGetKeyOrVoid(rvid).isValid:
+        # Subtrie known only by its hash (e.g. a stateless witness without it).
+        # Drop the hash so that the vid can be reused for a fresh trie.
+        db.layersResVtx(rvid)
       return ok()
     return err(error)
 

@@ -62,6 +62,11 @@ proc mergePayloadImpl[LeafType, T](
       if error != GetVtxNotFound:
         return err(error)
 
+      # A root known only by its hash (e.g. a stateless witness without the
+      # root node) cannot be extended
+      if db.layersGetKeyOrVoid((root, cur)).isValid:
+        return err(MergeHikeFailed)
+
       # We're at the root vertex and there is no data - this must be a fresh
       # VertexID!
       return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil, 0)

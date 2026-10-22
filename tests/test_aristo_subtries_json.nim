@@ -344,3 +344,42 @@ suite "Aristo subtries json tests":
       txFrame.fetchSlot(accPath1, sharedPath1).get(0.u256) == 2.u256
       txFrame.fetchSlot(accPath2, sharedPath0).get(0.u256) == 1.u256
       txFrame.fetchSlot(accPath2, sharedPath1).get(0.u256) == 2.u256
+
+  test "Storage root missing from the witness is not read as empty storage":
+    let
+      address = address"0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b"
+      accPath = address.computeAccPath()
+      fullLedger = LedgerRef.init(newCoreDbRef(DefaultDbMemory).baseTxFrame().txFrameBegin())
+
+    # Full node: an account with one storage slot
+    fullLedger.setBalance(address, 10.u256)
+    fullLedger.setStorage(address, 1.u256, 7.u256)
+    fullLedger.persist()
+
+    # Witness with the account but without its storage trie
+    let
+      accountProof = fullLedger.txFrame.proof(accPath).expect("proof")[0]
+      witnessTxFrame = newCoreDbRef(DefaultDbMemory).baseTxFrame().txFrameBegin()
+    check witnessTxFrame.putSubtrie(fullLedger.getStateRoot(), toNodesTable(accountProof)).isOk()
+
+    # Writing a slot fails. The ledger always reads before it writes, so this
+    # can only be checked at this level.
+    check witnessTxFrame.mergeSlot(accPath, computeSlotKey(2.u256), 8.u256).isErr()
+
+    # Reading the slot fails, instead of returning 0
+    let readLedger =
+      LedgerRef.init(witnessTxFrame.txFrameBegin(), storeSlotHash = false, stateless = true)
+    discard readLedger.getStorage(address, 1.u256)
+    check readLedger.fatalError.isSome()
+
+    # Clearing the storage and then writing a slot needs no storage nodes, and
+    # gives the same state root as on the full node
+    let clearLedger =
+      LedgerRef.init(witnessTxFrame.txFrameBegin(), storeSlotHash = false, stateless = true)
+    for ledger in [fullLedger, clearLedger]:
+      ledger.clearStorage(address)
+      ledger.setStorage(address, 2.u256, 8.u256)
+      ledger.persist()
+    check:
+      clearLedger.fatalError.isNone()
+      clearLedger.getStateRoot() == fullLedger.getStateRoot()

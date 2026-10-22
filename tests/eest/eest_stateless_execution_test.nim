@@ -24,7 +24,6 @@ const
 const skipFiles = [
   # The guest accepts an invalid block
   "validation_state_missing_delete_auxiliary_node.json",
-  "validation_state_unchanged_request_queue_read.json",
   # The guest rejects a valid block
   "witness_codes_create_same_hash_then_read_same_tx.json",
   "witness_codes_delegation_same_marker_cleared_then_read.json",
