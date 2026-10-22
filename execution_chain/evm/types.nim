@@ -65,7 +65,8 @@ type
     blockLogs*        : seq[Log] # EIP-6110
     refundCounter*    : int64    # Global refundCounter counter
     balTracker*       : BlockAccessListTrackerRef
-
+    inclusionListSatisfied*: bool
+    
   Computation* = ref object
     # The execution computation
     vmState*:               BaseVMState

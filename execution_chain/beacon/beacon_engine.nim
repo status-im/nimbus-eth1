@@ -17,6 +17,7 @@ import
   ./web3_eth_conv,
   ./payload_conv,
   ./api_handler/api_utils,
+  ../core/focil,
   ../core/tx_pool,
   ../core/pooled_txs,
   ../core/chain/forked_chain,
@@ -161,6 +162,9 @@ proc generateExecutionBundle*(
 
     if attrs.slotNumber.isSome:
       xp.slotNumber = distinctBase attrs.slotNumber.get
+
+    if attrs.inclusionListTransactions.isSome:
+      xp.focil = ? toFocil(attrs.inclusionListTransactions.value)
 
     xp.setWithdrawals(attrs)
 

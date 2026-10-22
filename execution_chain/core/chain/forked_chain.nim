@@ -20,6 +20,7 @@ import
   ../../evm/types,
   ../../evm/state,
   ../validate,
+  ../inclusion_list,
   ../executor/process_block,
   ../../portal/portal,
   ../../stateless/witness_generation,
@@ -483,6 +484,7 @@ proc validateBlock(
     parent: BlockRef,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
+    inclusionList: Opt[DecodedILRef],
     finalized: bool
   ): Future[Result[BlockRef, string]] {.async: (raises: [CancelledError]).} =
 
@@ -534,7 +536,7 @@ proc validateBlock(
     txFrame=cast[uint](txFrame)
 
   let txHashes = c.processBlock(
-      parent, txFrame, blk, blockAccessList, blkHash, finalized).valueOr:
+      parent, txFrame, blk, blockAccessList, inclusionList, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -609,7 +611,7 @@ proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Futu
     orphan = c.quarantine.popOrphan(parent.hash).valueOr:
       # No more orphaned block
       return ok()
-    parent = (await c.validateBlock(parent, orphan[0], orphan[1], finalized)).valueOr:
+    parent = (await c.validateBlock(parent, orphan[0], orphan[1], Opt.none(DecodedILRef), finalized)).valueOr:
       # Silent?
       # We don't return error here because the import is still ok()
       # but the quarantined blocks may not linked
@@ -758,6 +760,7 @@ proc importBlock*(
     c: ForkedChainRef,
     blk: Block,
     blockAccessList = Opt.none(BlockAccessListRef),
+    inclusionList = Opt.none(DecodedILRef),
     finalized = false
   ): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
   ## Try to import block to canonical or side chain.
@@ -798,7 +801,7 @@ proc importBlock*(
     # stateroot check for performance reasons.
     let
       isFinalized = finalized or blk.header.number <= c.latestFinalized.number
-      newParent = (await c.validateBlock(parent, blk, blockAccessList, isFinalized)).valueOr:
+      newParent = (await c.validateBlock(parent, blk, blockAccessList, inclusionList, isFinalized)).valueOr:
         return err(ImportError(kind: Invalid, msg: error))
     if c.quarantine.hasOrphans():
       c.queueOrphan(newParent, isFinalized)
@@ -951,11 +954,12 @@ template queueImportBlock*(
     c: ForkedChainRef,
     blk: Block,
     blockAccessList = Opt.none(BlockAccessListRef),
+    inclusionList = Opt.none(DecodedILRef),
     finalized = false): auto =
 
   proc asyncHandler(): Future[Result[ImportOutcome, ImportError]]
       {.async: (raises: [CancelledError], raw: true).} =
-    c.importBlock(blk, blockAccessList, finalized)
+    c.importBlock(blk, blockAccessList, inclusionList, finalized)
 
   let item = QueueItem(
     responseFut: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError]).init(),
