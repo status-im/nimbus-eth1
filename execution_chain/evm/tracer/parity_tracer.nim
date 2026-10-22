@@ -7,6 +7,10 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+## Parity-style trace_* API tracer.
+## Tentative spec: https://github.com/ethereum/execution-apis/pull/895
+## Cross-client decisions and evidence: https://github.com/banteg/trace-interop
+
 {.push raises: [].}
 
 import
