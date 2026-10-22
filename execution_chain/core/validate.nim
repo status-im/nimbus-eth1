@@ -96,6 +96,13 @@ proc validateHeader*(
   if header.timestamp <= parentHeader.timestamp:
     return err("timestamp must be strictly later than parent")
 
+  if com.isBogotaOrLater(header.timestamp):
+    # Although slotNumber is introduced at Amsterdam,
+    # this rule is active at Bogota (EIP-8198)
+    if header.slotNumber.isSome:
+      if header.slotNumber.get <= parentHeader.slotNumber.get(0'u64):
+        return err("slotNumber must be strictly greater than parent")
+
   if header.gasLimit > GAS_LIMIT_MAXIMUM:
     return err("gasLimit exceeds GAS_LIMIT_MAXIMUM")
 

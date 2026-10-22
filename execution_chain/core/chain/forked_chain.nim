@@ -20,6 +20,7 @@ import
   ../../evm/types,
   ../../evm/state,
   ../validate,
+  ../inclusion_list,
   ../executor/process_block,
   ../../portal/portal,
   ../../stateless/witness_generation,
@@ -489,6 +490,7 @@ proc validateBlock(
     parent: BlockRef,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
+    inclusionList: Opt[DecodedILRef],
     blkHash: Hash32,
     finalized: bool,
 ): Result[BlockRef, string] =
@@ -532,7 +534,7 @@ proc validateBlock(
     txFrame=cast[uint](txFrame)
 
   let txHashes = c.processBlock(
-      parent, txFrame, blk, blockAccessList, blkHash, finalized).valueOr:
+      parent, txFrame, blk, blockAccessList, inclusionList, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -680,6 +682,7 @@ proc importBlock*(
     c: ForkedChainRef,
     blk: Block,
     blockAccessList = Opt.none(BlockAccessListRef),
+    inclusionList = Opt.none(DecodedILRef),
     finalized = false,
     immediate = false,
   ): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).} =
@@ -767,7 +770,7 @@ proc importBlock*(
       else:
         # The chain has not reached this height yet: the parent may still arrive.
         # Quarantine and wait.
-        c.quarantine.addOrphan(blkHash, blk, blockAccessList)
+        c.quarantine.addOrphan(blkHash, blk, blockAccessList, inclusionList)
         debug "Parent not found"
         err(ImportError(kind: MissingParent, msg: "Block parent not found"))
 
@@ -782,7 +785,7 @@ proc importBlock*(
   let
     isFinalized = finalized or blk.header.number <= c.latestFinalized.number
     startTime = Moment.now()
-    newParent = c.validateBlock(parent, blk, blockAccessList, blkHash, isFinalized).valueOr:
+    newParent = c.validateBlock(parent, blk, blockAccessList, inclusionList, blkHash, isFinalized).valueOr:
       debug "Block invalid", validationDur = Moment.now() - startTime, error
       return err(ImportError(kind: Invalid, msg: error))
 
@@ -796,7 +799,7 @@ proc importBlock*(
     # represents the orphan task - the return value is not used any more because
     # the caller that enqueued the orphan has already moved on with
     # `MissingParent`.
-    discard c.importBlock(orphan.get()[0], orphan.get()[1])
+    discard c.importBlock(orphan.get()[0], orphan.get()[1], orphan.get()[2])
 
   ok(Valid)
 

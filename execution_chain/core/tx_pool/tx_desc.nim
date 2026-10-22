@@ -14,7 +14,6 @@ import
   chronicles,
   metrics,
   std/[times, tables, typetraits],
-  eth/eip1559,
   eth/common/transaction_utils,
   stew/[sorted_set, bitseqs],
   web3/engine_api_types,
@@ -27,8 +26,10 @@ import
   ../../transaction/call_types,
   ../chain/forked_chain,
   ../pow/header,
+  ../focil,
   ../eip4844,
   ../eip7594,
+  ../gaslimit,
   ../validate,
   ../pooled_txs,
   ./tx_tabs,
@@ -55,6 +56,7 @@ type
     beaconRoot  : Hash32 ## EIP-4788
     slotNumber  : uint64 ## EIP-7843
     targetGasLimit: Opt[uint64]
+    focil       : Focil
 
   TxPoolFlags* = enum
     XP_ORDERED
@@ -89,14 +91,11 @@ const
 # Private functions
 # ------------------------------------------------------------------------------
 
-func getBaseFee(com: CommonRef; parent: Header): GasInt =
+func getBaseFee(com: CommonRef; parent: Header, header: Header): GasInt =
   ## Calculates the `baseFee` of the head assuming this is the parent of a
   ## new block header to generate.
   ## Post Merge rule
-  calcEip1599BaseFee(
-    parent.gasLimit,
-    parent.gasUsed,
-    parent.baseFeePerGas.get(0.u256)).truncate(GasInt)
+  com.calcBaseFee(parent, header).truncate(GasInt)
 
 func getGasLimit(com: CommonRef; parent: Header, targetGasLimit: Opt[uint64]): GasInt =
   ## Post Merge rule
@@ -112,13 +111,18 @@ proc setupVMState(com: CommonRef;
   let
     fork = com.toHardFork(pos.timestamp)
     gasLimit = getGasLimit(com, parent, pos.targetGasLimit)
+    header = Header(
+      number: parent.number + 1,
+      timestamp: pos.timestamp,
+      slotNumber: Opt.some(pos.slotNumber),
+    )
 
   result = BaseVMState.new(
     parent   = parent,
     blockCtx = BlockContext(
       timestamp    : pos.timestamp,
       gasLimit     : gasLimit,
-      baseFeePerGas: getBaseFee(com, parent),
+      baseFeePerGas: getBaseFee(com, parent, header),
       prevRandao   : pos.prevRandao,
       difficulty   : UInt256.zero(),
       coinbase     : pos.feeRecipient,
@@ -499,11 +503,11 @@ iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
     yield item
 
 iterator allItems*(xp: TxPoolRef): TxItemRef =
-  for _, item in xp.idTab:
+  for item in xp.idTab.values:
     yield item
 
 iterator byOrder*(xp: TxPoolRef): TxItemRef =
-  for _, item in xp.idTab:
+  for item in xp.idTab.values:
     yield item
 
 func isOrdered*(xp: TxPoolRef): bool =
@@ -588,6 +592,30 @@ proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: Bi
 
   Opt.none(BlobCellsAndProofsV1)
 
+func getInclusionListV1*(xp: TxPoolRef): InclusionList =
+  const MaxILSize = 1024 * 8
+  var
+    rlpSize = 0
+    list = newSeqOfCap[TxItemRef](xp.idTab.len)
+    res: seq[TypedTransaction]
+
+  for item in xp.idTab.values:
+    # Inclusion List must not contains blob tx
+    if item.tx.txType == TxEip4844:
+      continue
+    list.add item
+
+  for i in countdown(list.len-1, 0):
+    var
+      item = list[i]
+      rlpBytes = rlp.encode(item.tx)
+    if rlpSize + rlpBytes.len > MaxILSize:
+      return move(res)
+    rlpSize += rlpBytes.len
+    res.add TypedTransaction(move(rlpBytes))
+
+  move(res)
+
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters
 # ------------------------------------------------------------------------------
@@ -609,6 +637,9 @@ func parentBeaconBlockRoot*(xp: TxPoolRef): Hash32 =
 
 func slotNumber*(xp: TxPoolRef): uint64 =
   xp.pos.slotNumber
+
+func focil*(xp: TxPoolRef): Focil =
+  xp.pos.focil
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes setters
@@ -634,3 +665,6 @@ func `slotNumber=`*(xp: TxPoolRef, val: uint64) =
 
 func `targetGasLimit=`*(xp: TxPoolRef, val: Opt[uint64]) =
   xp.pos.targetGasLimit = val
+
+func `focil=`*(xp: TxPoolRef, val: Focil) =
+  xp.pos.focil = val

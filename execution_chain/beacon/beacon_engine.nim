@@ -17,8 +17,9 @@ import
   ./web3_eth_conv,
   ./payload_conv,
   ./api_handler/api_utils,
+  ../core/focil,
   ../core/tx_pool,
-  ../core/pooled_txs,
+  ../core/[pooled_txs, inclusion_list],
   ../core/chain/forked_chain,
   ../core/chain/forked_chain/block_quarantine,
   ../../execution_api/execution_types
@@ -161,6 +162,9 @@ proc generateExecutionBundle*(
 
     if attrs.slotNumber.isSome:
       xp.slotNumber = distinctBase attrs.slotNumber.get
+
+    if attrs.inclusionListTransactions.isSome:
+      xp.focil = ? toFocil(attrs.inclusionListTransactions.value)
 
     xp.setWithdrawals(attrs)
 
@@ -382,14 +386,15 @@ proc delayPayloadImport*(
   ben: BeaconEngineRef,
   blockHash: Hash32,
   blk: Block,
-  blockAccessList: Opt[BlockAccessListRef]
+  blockAccessList: Opt[BlockAccessListRef],
+  inclusionList: Opt[DecodedILRef],
 ): PayloadStatus =
   # Sanity check that this block's parent is not on a previously invalidated
   # chain. If it is, mark the block as invalid too.
   ben.checkInvalidAncestor(blk.header.parentHash, blockHash).valueOr:
     # Stash the block away for a potential forced forkchoice update to it
     # at a later time.
-    ben.chain.quarantine.addOrphan(blockHash, blk, blockAccessList)
+    ben.chain.quarantine.addOrphan(blockHash, blk, blockAccessList, inclusionList)
     info "New payload with unknown parent, syncing",
       number = blk.header.number,
       hash = blockHash.short,

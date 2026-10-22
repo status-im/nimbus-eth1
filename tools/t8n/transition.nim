@@ -12,7 +12,7 @@
 
 import
   std/[json, strutils, tables, os, streams],
-  eth/[rlp, trie, eip1559],
+  eth/[rlp, trie],
   eth/common/transaction_utils,
   stint, results,
   "."/[config, types, helpers],
@@ -23,10 +23,8 @@ import
   ../../execution_chain/db/ledger,
   ../../execution_chain/utils/utils,
   ../../execution_chain/core/pow/difficulty,
-  ../../execution_chain/core/dao,
   ../../execution_chain/core/executor/[process_transaction, executor_helpers],
-  ../../execution_chain/core/eip4844,
-  ../../execution_chain/core/eip6110,
+  ../../execution_chain/core/[eip4844, eip6110, dao, gaslimit],
   ../../execution_chain/evm/tracer/json_tracer
 
 const
@@ -468,7 +466,7 @@ proc parseChainConfig(network: string): Result[ChainConfig, T8NErr] =
     return err(t8nerr(ErrorConfig, error))
   ok(conf)
 
-proc calcBaseFee(env: EnvStruct): Result[UInt256, T8NErr] =
+proc calcBaseFee(com: CommonRef, env: EnvStruct): Result[UInt256, T8NErr] =
   if env.parentGasUsed.isNone:
     return err(t8nerr(ErrorConfig,
       "'parentBaseFee' exists but missing 'parentGasUsed' in env section"))
@@ -476,13 +474,25 @@ proc calcBaseFee(env: EnvStruct): Result[UInt256, T8NErr] =
   if env.parentGasLimit.isNone:
     return err(t8nerr(ErrorConfig,
       "'parentBaseFee' exists but missing 'parentGasLimit' in env section"))
+  let
+    parent = Header(
+      number: env.currentNumber - 1,
+      gasLimit: env.parentGasLimit.get,
+      gasUsed: env.parentGasUsed.get,
+      timestamp: env.parentTimestamp,
+      baseFeePerGas: env.parentBaseFee,
+      slotNumber: env.parentSlotNumber,
+    )
 
-  ok(
-    calcEip1599BaseFee(
-      env.parentGasLimit.get,
-      env.parentGasUsed.get,
-      env.parentBaseFee.get)
-  )
+    header = Header(
+      number: env.currentNumber,
+      timestamp: env.currentTimestamp,
+      slotNumber: env.slotNumber,
+    )
+
+    baseFee = com.calcBaseFee(parent, header)
+
+  ok(baseFee)
 
 proc processInputs*(ctx: var TransContext, conf: T8NConf): Result[void, T8NErr] =
   if conf.inputAlloc.len == 0 and conf.inputEnv.len == 0 and conf.inputTxs.len == 0:
@@ -573,7 +583,7 @@ proc transitionAction*(ctx: var TransContext,
       # Already set, currentBaseFee has precedent over parentBaseFee.
       discard
     elif ctx.env.parentBaseFee.isSome:
-      let baseFee = ? calcBaseFee(ctx.env)
+      let baseFee = ? com.calcBaseFee(ctx.env)
       ctx.env.currentBaseFee = Opt.some(baseFee)
     else:
       return err(t8nerr(ErrorConfig, "EIP-1559 config but missing 'currentBaseFee' in env section"))
