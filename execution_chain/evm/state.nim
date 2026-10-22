@@ -26,6 +26,10 @@ func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInf
 func determineFork*(vmState: BaseVMState): HardFork =
   vmState.com.toHardFork(vmState.forkDeterminationInfoForVMState)
 
+func blobFork*(vmState: BaseVMState): HardFork =
+  ## Return the fork whose blob schedule applies to this block.
+  vmState.com.toBlobFork(vmState.blockCtx.timestamp)
+
 proc init(
       self:         BaseVMState;
       ledger:       LedgerRef,

@@ -90,7 +90,8 @@ proc setupEVM(params: CallParams, keepStack: bool): Computation =
   vmState.txCtx = TxContext(
     origin           : params.sender,
     effectiveGasPrice: params.effectiveGasPrice,
-    blobBaseFee      : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, fork),
+    blobBaseFee      : getBlobBaseFee(
+      vmState.blockCtx.excessBlobGas, vmState.com, vmState.blobFork),
     tx               : params.tx,
   )
 
@@ -163,7 +164,7 @@ proc prepareToRunComputation(params: CallParams) =
     if fork >= Cancun:
       # EIP-4844
       gasFee += blobGasFee(tx.versionedHashes.len,
-        vmState.blockCtx.excessBlobGas, vmState.com, fork)
+        vmState.blockCtx.excessBlobGas, vmState.com, vmState.blobFork)
 
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackSubBalanceChange(params.sender, gasFee)

@@ -175,7 +175,7 @@ func validateEip4844Header*(
     return err("expect EIP-4844 excessBlobGas in block header")
 
   let
-    fork = com.toHardFork(header)
+    fork = com.toBlobFork(header)
     headerBlobGasUsed = header.blobGasUsed.get()
     blobGasUsed = blobGasUsed(txs)
     headerExcessBlobGas = header.excessBlobGas.get

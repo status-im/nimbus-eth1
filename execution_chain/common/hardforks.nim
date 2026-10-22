@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/strutils,
+  std/[algorithm, strutils],
   eth/common/[base, headers],
   stew/endians2,
   json_serialization,
@@ -470,12 +470,16 @@ func init*(
   if forksByBlock.len > 0 and forksByBlock[0] == 0:
     forksByBlock.delete(0)
 
-  # Extract the fork rule timestamp number aggregate it
-  var forksByTime: seq[uint64]
+  # Extract the fork rule timestamp number aggregate it. BPO forks may
+  # activate after a later named fork, so sort before deduplicating.
+  var times: seq[uint64]
   for fork, val in map.timeThresholds:
-    if val.isNone:
-      continue
-    let val64 = val.get.uint64
+    if val.isSome:
+      times.add val.get.uint64
+  times.sort()
+
+  var forksByTime: seq[uint64]
+  for val64 in times:
     if forksByTime.len == 0:
       forksByTime.add val64
     elif forksByTime[^1] != val64:

@@ -110,7 +110,7 @@ proc setupVMState(com: CommonRef;
                   parentFrame: CoreDbTxRef): BaseVMState =
 
   let
-    fork = com.toHardFork(pos.timestamp)
+    blobFork = com.toBlobFork(pos.timestamp)
     gasLimit = getGasLimit(com, parent, pos.targetGasLimit)
 
   result = BaseVMState.new(
@@ -122,7 +122,7 @@ proc setupVMState(com: CommonRef;
       prevRandao   : pos.prevRandao,
       difficulty   : UInt256.zero(),
       coinbase     : pos.feeRecipient,
-      excessBlobGas: com.calcExcessBlobGas(parent, fork),
+      excessBlobGas: com.calcExcessBlobGas(parent, blobFork),
       parentHash   : parentHash,
       slotNumber   : pos.slotNumber,
     ),
@@ -214,7 +214,7 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
-      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.hardFork)
+      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.blobFork)
     if tx.maxFeePerBlobGas < blobGasPrice:
       debug "Invalid transaction: maxFeePerBlobGas lower than blobGasPrice",
         maxFeePerBlobGas = tx.maxFeePerBlobGas,

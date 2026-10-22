@@ -10,7 +10,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strutils, macros],
+  std/[algorithm, macros, sequtils, strutils],
   std/os,
   stew/[byteutils, io2],
   stint,
@@ -234,16 +234,33 @@ proc configureBlobSchedule(conf: ChainConfig) =
 
   let blobScheduleTime: array[Cancun..HardFork.high, Opt[EthTime]] = blobScheduleActivation(conf)
 
-  var prevFork = Cancun
-  for fork in Prague..HardFork.high:
+  proc inherit(fork, prevFork: HardFork) =
     if conf.blobSchedule[fork].isNone:
       conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
     if conf.blobSchedule[fork].value.baseFeeUpdateFraction == 0:
       # Set fallback to Cancun's baseFeeUpdateFraction and prevent division by zero
       warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
       conf.blobSchedule[fork].value.baseFeeUpdateFraction = 3_338_477'u64
+
+  # A scheduled fork without its own blob schedule keeps the one active before
+  # it. BPO forks may activate after a later named fork (e.g. Amsterdam), so
+  # walk the scheduled forks in activation order. The sort is stable, so forks
+  # activating together keep their declaration order.
+  var scheduled = toSeq(Prague..HardFork.high).filterIt(blobScheduleTime[it].isSome)
+  scheduled.sort(proc(a, b: HardFork): int =
+    cmp(blobScheduleTime[a].get, blobScheduleTime[b].get))
+  var prevFork = Cancun
+  for fork in scheduled:
+    inherit(fork, prevFork)
+    prevFork = fork
+
+  # Unscheduled forks never activate, but still need a schedule.
+  prevFork = Cancun
+  for fork in Prague..HardFork.high:
     if blobScheduleTime[fork].isSome:
       prevFork = fork
+    else:
+      inherit(fork, prevFork)
 
 # Genesis / network-params file loading
 

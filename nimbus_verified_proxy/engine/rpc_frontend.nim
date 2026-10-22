@@ -564,7 +564,7 @@ proc getExecutionApiFrontend*(
         (UnavailableDataError, "excessBlobGas missing from latest header", UNTAGGED)
       )
     let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get, com, com.toHardFork(header))
+      getBlobBaseFee(header.excessBlobGas.get, com, com.toBlobFork(header))
 
     ok(blobBaseFee)
 
