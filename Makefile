@@ -237,7 +237,7 @@ eest:
 	scripts/eest_ci_cache.sh
 
 eest_benchmark:
-	scripts/eest_ci_cache.sh benchmark
+	scripts/eest_ci_cache.sh benchmark benchmark_amsterdam
 
 eest_zkevm_benchmark:
 	scripts/eest_ci_cache.sh zkevm_benchmark
@@ -485,7 +485,7 @@ eest_stateless_execution_test: | build deps eest
 		echo -e $(BUILD_END_MSG) "build/$@"
 	build/$@
 
-eest_benchmark_test: | build deps eest_benchmark eest_zkevm_benchmark
+eest_benchmark_test: | build deps eest_benchmark
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
 		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \

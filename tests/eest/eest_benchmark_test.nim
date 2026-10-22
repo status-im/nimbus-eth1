@@ -19,7 +19,7 @@ const
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_benchmark",
-    "eest_zkevm_benchmark",
+    "eest_benchmark_amsterdam",
   ]
 
 const skipFiles = [
