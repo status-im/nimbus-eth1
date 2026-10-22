@@ -237,7 +237,7 @@ eest:
 	scripts/eest_ci_cache.sh
 
 eest_benchmark:
-	scripts/eest_ci_cache.sh benchmark
+	scripts/eest_ci_cache.sh benchmark benchmark_amsterdam
 
 eest_zkevm_benchmark:
 	scripts/eest_ci_cache.sh zkevm_benchmark
