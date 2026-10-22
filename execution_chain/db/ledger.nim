@@ -149,10 +149,12 @@ type
     dirty: Table[Address, AccountRef]
     selfDestruct: HashSet[Address]
     accessList: ac_access_list.AccessList
-    deployedCodeHashes: HashSet[Hash32]
-      ## Caches codeHashes deployed via CREATE in this savepoint.
     pendingCode: Table[Hash32, CodeBytesRef]
       ## Executed initcode awaiting successful commit of all enclosing frames.
+    writtenCode: Table[Hash32, CodeBytesRef]
+      ## Code set in this savepoint, by code hash (stateless execution and
+      ## witness collection only). Reads of that hash later in the block are
+      ## served from it, so the witness omits that code.
 
 const
   resetFlags = {
@@ -372,6 +374,16 @@ proc cachedCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
     return Opt.some(held[])
   Opt.none(CodeBytesRef)
 
+func writtenCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
+  ## Code set earlier in the block in a save point that is still active. A
+  ## reverted write is dropped with its save point.
+  var sp = ledger.savePoint
+  while sp != nil:
+    sp.writtenCode.withValue(codeHash, code):
+      return Opt.some(code[])
+    sp = sp.parentSavePoint
+  Opt.none(CodeBytesRef)
+
 proc persistCode(acc: AccountRef, ledger: LedgerRef) =
   if acc.code.len != 0 and not acc.code.persisted:
     if ledger.holdCode:
@@ -485,13 +497,14 @@ template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
       # EXTCODESIZE calls from messing up the code cache and thus causing
       # recomputation of the jump destination table
       var rc = ledger.txFrame.getCodeLenByHash(acc.statement.codeHash)
-
-      return rc.valueOr:
+      if rc.isOk:
+        return rc.value
+      ledger.writtenCode(acc.statement.codeHash).valueOr:
         # A non-empty code hash whose length is missing from the database: record
         # a fatalError but still return 0 so the async EVM continues.
         warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=rc.error
         ledger.fatalError = Opt.some("getCodeSize(): failed to fetch code length from database")
-        0
+        return 0
 
   acc.code.len()
 
@@ -543,7 +556,7 @@ proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   ledger.savePoint.dirty.mergeAndReset(savePoint.dirty)
   ledger.savePoint.accessList.mergeAndReset(savePoint.accessList)
   ledger.savePoint.selfDestruct.mergeAndReset(savePoint.selfDestruct)
-  ledger.savePoint.deployedCodeHashes.mergeAndReset(savePoint.deployedCodeHashes)
+  ledger.savePoint.writtenCode.mergeAndReset(savePoint.writtenCode)
 
   if ledger.savePoint.parentSavePoint.isNil:
     for codeHash, code in savePoint.pendingCode:
@@ -580,6 +593,7 @@ proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   ledger.fatalError = Opt.none(string)
   ledger.balOverlay = Opt.none(BlockAccessListOverlay)
   ledger.witnessKeys.clear()
+  ledger.savePoint.writtenCode.clear()
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
   let acc = ledger.getAccount(address, false)
@@ -596,25 +610,13 @@ proc getNonce*(ledger: LedgerRef, address: Address): AccountNonce =
   if acc.isNil: EMPTY_ACCOUNT.nonce
   else: acc.statement.nonce
 
-func isDeployedCode(ledger: LedgerRef, codeHash: Hash32): bool =
-  ## Check if codeHash was deployed in any currently active save point.
-  ## A deployment only counts while every save point it lives in is still
-  ## active: reverted deployments are rolled back and must not suppress
-  ## witness entries.
-  var sp = ledger.savePoint
-  while sp != nil:
-    if codeHash in sp.deployedCodeHashes:
-      return true
-    sp = sp.parentSavePoint
-  false
-
 proc recordCodeRead(ledger: LedgerRef, address: Address, acc: AccountRef) =
   ## Mark the code as touched in the witness keys, unless the code was
-  ## deployed earlier in this block.
+  ## written earlier in this block.
   ## We overwrite any existing false entry so codeTouched is set to true
   ## even if the account was previously accessed without touching the code.
   if acc.isNil or acc.statement.codeHash == EMPTY_CODE_HASH or
-      not ledger.isDeployedCode(acc.statement.codeHash):
+      ledger.writtenCode(acc.statement.codeHash).isNone():
     ledger.witnessKeys[(address, Opt.none(UInt256))] = true
 
 proc getCode*(ledger: LedgerRef,
@@ -637,11 +639,12 @@ proc getCode*(ledger: LedgerRef,
         ledger.cachedCode(acc.statement.codeHash).valueOr:
           var rc = ledger.txFrame.getCodeByHash(acc.statement.codeHash)
           if rc.isErr:
-            # A non-empty code hash with no code in the database: record a fatalError
-            # but still return empty code so the async EVM continues.
-            warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=rc.error
-            ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
-            CodeBytesRef()
+            ledger.writtenCode(acc.statement.codeHash).valueOr:
+              # A non-empty code hash with no code in the database: record a fatalError
+              # but still return empty code so the async EVM continues.
+              warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=rc.error
+              ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
+              CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
             ledger.code.put(acc.statement.codeHash, newCode)
@@ -669,8 +672,9 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
         ledger.cachedCode(acc.original.statement.codeHash).valueOr:
           var rc = ledger.txFrame.getCodeByHash(acc.original.statement.codeHash)
           if rc.isErr:
-            warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=rc.error
-            CodeBytesRef()
+            ledger.writtenCode(acc.original.statement.codeHash).valueOr:
+              warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=rc.error
+              CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
             ledger.code.put(acc.original.statement.codeHash, newCode)
@@ -817,8 +821,8 @@ proc setCode*(ledger: LedgerRef, address: Address, code: seq[byte]) =
     # a given that it will be executed within LRU range
     acc.code = ledger.code.get(codeHash).valueOr(CodeBytesRef.init(code))
     acc.flags.incl CodeChanged
-    if ledger.collectWitness and code.len > 0:
-      ledger.savePoint.deployedCodeHashes.incl(codeHash)
+    if (ledger.collectWitness or ledger.stateless) and code.len > 0:
+      ledger.savePoint.writtenCode[codeHash] = acc.code
 
 proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
   let acc = ledger.getAccount(address)
@@ -960,8 +964,8 @@ template clearWitnessKeys*(ledger: LedgerRef) =
 template clearCollapsedSiblings*(ledger: LedgerRef) =
   ledger.txFrame.aTx.collapsedSiblings.setLen(0)
 
-template clearDeployedCodeHashes*(ledger: LedgerRef) =
-  ledger.savePoint.deployedCodeHashes.clear()
+template clearWrittenCode*(ledger: LedgerRef) =
+  ledger.savePoint.writtenCode.clear()
 
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
   # Range checks must be done earlier, any miss here treated as an error:
@@ -1054,7 +1058,7 @@ proc persist*(ledger: LedgerRef,
   if clearWitness:
     ledger.clearWitnessKeys()
     ledger.clearCollapsedSiblings()
-    ledger.clearDeployedCodeHashes()
+    ledger.clearWrittenCode()
     ledger.clearBlockHashesCache()
 
 proc storeHeldCode*(ledger: LedgerRef): Result[void, string] =
