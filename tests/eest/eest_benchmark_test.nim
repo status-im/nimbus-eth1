@@ -13,8 +13,6 @@ import
   ./eest_runner,
   ./eest_blockchain
 
-const eestBenchmarkParallel {.booldefine.} = false
-
 const
   baseFolder = "tests/fixtures"
   suiteName = "Benchmark Test"
@@ -34,6 +32,6 @@ runEESTSuite(
   baseFolder,
   suiteName,
   eestType,
-  # testFilter = "*ecrecover*",
-  parallelEnabled = eestBenchmarkParallel
+  testFilter = "*",
+  parallelEnabled = false
 )
