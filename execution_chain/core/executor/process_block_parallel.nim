@@ -458,6 +458,8 @@ proc processTransactionsParallel*(
       entries[i].logs.dispose()
       entries[i].error.dispose()
 
+  vmState.ledger.applyBlockAccessList(balRef[], n)
+
   let depositContractAddress = vmState.com.depositContractAddress
 
   # Process each result as soon as its task completes so the main thread makes
@@ -513,5 +515,4 @@ proc processTransactionsParallel*(
       vmState.receipts[i] =
         vmState.makeReceipt(transactions[i].txType)
 
-  vmState.ledger.applyBlockAccessList(balRef[], n)
   ok()
