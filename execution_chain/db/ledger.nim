@@ -1215,7 +1215,7 @@ proc isAccountAlive*(ledger: ReadOnlyLedger, address: Address): bool = isAccount
 proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAccount(distinctBase ledger, address)
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase ledger, address)
-proc inAccessList*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase ledger, address)
+proc inAccessList*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase ledger, address, slot)
 proc getLiveAccount*(ledger: ReadOnlyLedger, address: Address): AccountRef = getLiveAccount(distinctBase ledger, address)
 proc getDirtyAccount*(ledger: ReadOnlyLedger, address: Address): AccountRef = getDirtyAccount(distinctBase ledger, address)
 

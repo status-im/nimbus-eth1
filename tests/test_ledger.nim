@@ -661,6 +661,21 @@ proc runLedgerBasicOperationsTests() =
       check ledger.verifySlots(0xcc, 0x01)
       check ledger.verifySlots(0xdd, 0x04)
 
+    test "ReadOnlyLedger accessList slot check":
+      var ledger = LedgerRef.init(memDB.baseTxFrame())
+      let
+        a = initAddr(0xee)
+        b = initAddr(0xef)
+      ledger.accessList(a)
+      ledger.accessList(b, 1.u256)
+      let ro = ReadOnlyLedger(ledger)
+      # warm address, cold slot
+      check ro.inAccessList(a)
+      check ro.inAccessList(a, 1.u256) == false
+      # warm slot, address itself not in the address set
+      check ro.inAccessList(b) == false
+      check ro.inAccessList(b, 1.u256)
+
     test "ledger contractCollision":
       # use previous hash
       var ledger = LedgerRef.init(memDB.baseTxFrame())
