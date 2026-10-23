@@ -33,6 +33,7 @@ type
     balance*: Opt[UInt256]
     nonce*: Opt[AccountNonce]
     code*: Opt[Bytecode]
+    codeHash*: Opt[Hash32]
 
 const emptyOverlayAcc* = default(OverlayAccount)
 
@@ -92,7 +93,10 @@ proc getAccount*(
 
   let codePos = accChanges.codeChanges.findLastWriteBefore(overlay.balIndex)
   if codePos >= 0:
-    overlayAcc.code = Opt.some(accChanges.codeChanges[codePos].newCode)
+    if accChanges.codeChanges[codePos].newCodeHash.isNone:
+      overlayAcc.code = Opt.some(accChanges.codeChanges[codePos].newCode)
+    else:
+      overlayAcc.codeHash = accChanges.codeChanges[codePos].newCodeHash
 
   overlayAcc
 

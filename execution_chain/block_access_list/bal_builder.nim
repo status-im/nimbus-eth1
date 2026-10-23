@@ -38,7 +38,7 @@ type
   StorageReadEntry = tuple[account: LocalAccountId, slot: UInt256]
   BalanceWrite = tuple[account: LocalAccountId, balance: UInt256]
   NonceWrite = tuple[account: LocalAccountId, nonce: AccountNonce]
-  CodeWrite = tuple[account: LocalAccountId, code: SharedBytes]
+  CodeWrite = tuple[account: LocalAccountId, code: SharedBytes, codeHash: Opt[Hash32]]
 
   BalIndexData = object
     accounts: SharedSeq[Address]
@@ -58,7 +58,9 @@ proc dispose(indexData: var BalIndexData) =
   indexData.balanceChanges.dispose()
   indexData.nonceChanges.dispose()
   for code in indexData.codeChanges.mitems():
-    code.code.dispose()
+    if code.codeHash.isNone:
+      # Adopt code doesn't have code bytes
+      code.code.dispose()
   indexData.codeChanges.dispose()
 
 proc `=copy`(
@@ -158,7 +160,18 @@ proc addCodeChange*(
 ) =
   builder.checkAccount(blockAccessIndex, account)
   builder.perIndex[blockAccessIndex].codeChanges.add(
-    (account, SharedBytes.init(newCode))
+    (account, SharedBytes.init(newCode), Opt.none(Hash32))
+  )
+
+proc addAdoptCode*(
+    builder: var BlockAccessListBuilder,
+    blockAccessIndex: int,
+    account: LocalAccountId,
+    newCodeHash: Hash32,
+) =
+  builder.checkAccount(blockAccessIndex, account)
+  builder.perIndex[blockAccessIndex].codeChanges.add(
+    (account, default(SharedBytes), Opt.some(newCodeHash))
   )
 
 type
@@ -170,7 +183,7 @@ type
   FlatStorageRead = tuple[acct: int32, slot: UInt256]
   FlatBalanceChange = tuple[acct: int32, index: BlockAccessIndex, value: UInt256]
   FlatNonceChange = tuple[acct: int32, index: BlockAccessIndex, value: AccountNonce]
-  FlatCodeChange = tuple[acct: int32, index: BlockAccessIndex, value: ptr SharedBytes]
+  FlatCodeChange = tuple[acct: int32, index: BlockAccessIndex, value: ptr SharedBytes, codeHash: Opt[Hash32]]
 
   # Open addressing table from address to dense id, with the addresses kept in
   # id order.
@@ -324,9 +337,13 @@ template collapseByIndex[T](src: seq[T], lo, hi: int, emit: untyped) =
   while cursor < hi:
     let index {.inject.} = src[cursor].index
     var value {.inject.} = src[cursor].value
+    when T is FlatCodeChange:
+      var codeHash {.inject.} = src[cursor].codeHash
     inc cursor
     while cursor < hi and src[cursor].index == index:
       value = src[cursor].value
+      when T is FlatCodeChange:
+        codeHash = src[cursor].codeHash
       inc cursor
     emit
 
@@ -380,7 +397,10 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
       nFlat.add((ids[int(nc.account)], balIndex, nc.nonce))
     for j in 0 ..< d[].codeChanges.len:
       let cc = addr d[].codeChanges[j]
-      cFlat.add((ids[int(cc[].account)], balIndex, addr cc[].code))
+      if cc[].codeHash.isNone:
+        cFlat.add((ids[int(cc[].account)], balIndex, addr cc[].code, Opt.none(Hash32)))
+      else:
+        cFlat.add((ids[int(cc[].account)], balIndex, nil, cc[].codeHash))
 
   let numAccounts = accounts.addresses.len
 
@@ -509,7 +529,10 @@ func buildBlockAccessList*(builder: var BlockAccessListBuilder): BlockAccessList
       var ci = 0
       collapseByIndex(cChanges, cLo, cHi):
         acct.codeChanges[ci].blockAccessIndex = index
-        acct.codeChanges[ci].newCode = value[].data()
+        if codeHash.isNone:
+          acct.codeChanges[ci].newCode = value[].data()
+        else:
+          acct.codeChanges[ci].newCodeHash = codeHash        
         inc ci
 
   blockAccessList
