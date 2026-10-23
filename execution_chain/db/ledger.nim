@@ -770,6 +770,10 @@ proc canAdoptCode*(ledger: LedgerRef, address: Address): Opt[Hash32] =
   if acc.statement.codeHash == EMPTY_CODE_HASH:
     return Opt.none(Hash32)
   ledger.ensureCodeLoaded(acc)
+  if acc.code.len == 0:
+    # The check above for EMPTY_CODE_HASH should handle
+    # zero length. This is an extra check.
+    return Opt.none(Hash32)
   if acc.code.bytes[0] == 0xEF:
     return Opt.none(Hash32)
   ok(acc.statement.codeHash)
