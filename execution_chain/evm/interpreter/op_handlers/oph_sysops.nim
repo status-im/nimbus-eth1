@@ -232,6 +232,8 @@ proc setCodeFromOp(cpt: VmCpt): EvmResultVoid =
 
   let
     sourceCodeHash = ledger.canAdoptCode(source).valueOr:
+      ? cpt.opcodeGasCost(SetCodeFrom,
+          accessGasCost, reason = "SetCodeFrom EIP-8298")
       cpt.stack.lsTop 0.u256
       return ok()
 
