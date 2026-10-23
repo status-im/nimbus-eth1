@@ -781,19 +781,31 @@ proc runLedgerBasicOperationsTests() =
         witnessKeys.getOrDefault(key) == false
 
     test "Witness keys - Get code":
-      var
-        ledger = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
+      let
         addr1 = initAddr(1)
+        addr2 = initAddr(2)
+        addr3 = initAddr(3)
+      block: # Only a read of non-empty pre-state code marks the code touched
+        let pre = LedgerRef.init(memDB.baseTxFrame(), false)
+        pre.setCode(addr1, @[0x00'u8])
+        pre.setCode(addr3, @[0x01'u8])
+        pre.persist()
 
+      var ledger = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
+      ledger.setCode(addr3, @[]) # cleared before it is read
       discard ledger.getCode(addr1)
+      discard ledger.getCode(addr2)
+      discard ledger.getCode(addr3)
 
       let
         witnessKeys = ledger.getWitnessKeys()
         key = (addr1, Opt.none(UInt256))
       check:
-        witnessKeys.len() == 1
+        witnessKeys.len() == 3
         witnessKeys.contains(key)
         witnessKeys.getOrDefault(key) == true
+        witnessKeys.getOrDefault((addr2, Opt.none(UInt256))) == false
+        witnessKeys.getOrDefault((addr3, Opt.none(UInt256))) == false
 
     test "Witness keys - Get storage":
       var
@@ -829,12 +841,17 @@ proc runLedgerBasicOperationsTests() =
 
     test "Witness keys - Get account, code and storage":
       var
-        ledger = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
         addr1 = initAddr(1)
         addr2 = initAddr(2)
         addr3 = initAddr(3)
         slot1 = 1.u256
+      block:
+        let pre = LedgerRef.init(memDB.baseTxFrame(), false)
+        pre.setCode(addr1, @[0x00'u8])
+        pre.setCode(addr2, @[0x01'u8])
+        pre.persist()
 
+      var ledger = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
 
       discard ledger.getAccount(addr1)
       discard ledger.getCode(addr2)

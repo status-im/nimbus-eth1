@@ -610,13 +610,13 @@ proc getNonce*(ledger: LedgerRef, address: Address): AccountNonce =
   if acc.isNil: EMPTY_ACCOUNT.nonce
   else: acc.statement.nonce
 
-proc recordCodeRead(ledger: LedgerRef, address: Address, acc: AccountRef) =
-  ## Mark the code as touched in the witness keys, unless the code was
-  ## written earlier in this block.
+proc recordCodeRead(ledger: LedgerRef, address: Address, codeHash: Hash32) =
+  ## Mark the code as touched in the witness keys if the read is served from
+  ## the pre-state: the code is not empty and was not written earlier in this
+  ## block.
   ## We overwrite any existing false entry so codeTouched is set to true
   ## even if the account was previously accessed without touching the code.
-  if acc.isNil or acc.statement.codeHash == EMPTY_CODE_HASH or
-      ledger.writtenCode(acc.statement.codeHash).isNone():
+  if codeHash != EMPTY_CODE_HASH and ledger.writtenCode(codeHash).isNone():
     ledger.witnessKeys[(address, Opt.none(UInt256))] = true
 
 proc getCode*(ledger: LedgerRef,
@@ -624,8 +624,8 @@ proc getCode*(ledger: LedgerRef,
               returnHash: static[bool] = false): auto =
   let acc = ledger.getAccount(address, false)
 
-  if ledger.collectWitness:
-    ledger.recordCodeRead(address, acc)
+  if ledger.collectWitness and not acc.isNil:
+    ledger.recordCodeRead(address, acc.statement.codeHash)
 
   if acc.isNil:
     when returnHash:
@@ -658,13 +658,12 @@ proc getCode*(ledger: LedgerRef,
     acc.code
 
 proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
-  if ledger.collectWitness:
-    let lookupKey = (address, Opt.none(UInt256))
-    ledger.witnessKeys[lookupKey] = true
-
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
     return CodeBytesRef()
+
+  if ledger.collectWitness:
+    ledger.recordCodeRead(address, acc.original.statement.codeHash)
 
   if acc.original.code.isNil:
     acc.original.code =
@@ -687,8 +686,8 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
 proc getCodeSize*(ledger: LedgerRef, address: Address): int =
   let acc = ledger.getAccount(address, false)
 
-  if ledger.collectWitness:
-    ledger.recordCodeRead(address, acc)
+  if ledger.collectWitness and not acc.isNil:
+    ledger.recordCodeRead(address, acc.statement.codeHash)
 
   if acc.isNil:
     return 0
