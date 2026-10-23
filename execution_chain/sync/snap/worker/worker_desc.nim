@@ -46,7 +46,6 @@ type
     ## as the running/finished state of the snap sync process.
     waitSync*: bool                                 # Shutdown in progress
     snapSyncStop*: bool                             # Can be monitored
-    coreDbOk*: bool                                 # For debugging
 
   # -------------------
 
