@@ -22,9 +22,9 @@ template required(T: type, nField: string): auto =
 
 template optional(T: type, nField: string): auto =
   if n.hasKey(nField):
-    Opt.none(T)
-  else:
     Opt.some(fromJson(T, n[nField]))
+  else:
+    Opt.none(T)
 
 template fromJson(T: type Address, n: JsonNode): Address =
   Address.fromHex(n.getStr)
