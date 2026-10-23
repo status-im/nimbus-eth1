@@ -432,7 +432,9 @@ proc processTransactionsParallel*(
     futs = newSeq[Flowvar[bool]](n)
 
   ctx.com = vmState.com
-  ctx.txFrame = vmState.ledger.txFrame
+  # Read through the parent frame because the block access list state is
+  # applied to the current frame while the transactions execute.
+  ctx.txFrame = vmState.ledger.txFrame.parent()
   ctx.parent = vmState.parent
   ctx.blockCtx = vmState.blockCtx
   ctx.balPtr = balRef[].addr
@@ -457,6 +459,8 @@ proc processTransactionsParallel*(
     for i in 0 ..< n:
       entries[i].logs.dispose()
       entries[i].error.dispose()
+
+  vmState.ledger.applyBlockAccessList(balRef[], n)
 
   let depositContractAddress = vmState.com.depositContractAddress
 
@@ -513,5 +517,4 @@ proc processTransactionsParallel*(
       vmState.receipts[i] =
         vmState.makeReceipt(transactions[i].txType)
 
-  vmState.ledger.applyBlockAccessList(balRef[], n)
   ok()
