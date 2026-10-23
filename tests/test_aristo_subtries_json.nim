@@ -195,7 +195,7 @@ suite "Aristo subtries json tests":
         paths[keccak256(address.data())] = slots
 
         var proofNodes: seq[seq[byte]]
-        txFrame.multiProof(paths, proofNodes).expect("ok")
+        txFrame.multiProof(paths, [], proofNodes).expect("ok")
         let nodes = toNodesTable(proofNodes)
 
         check:
@@ -227,7 +227,7 @@ suite "Aristo subtries json tests":
         paths[keccak256(address.data())] = slots
 
       var proofNodes: seq[seq[byte]]
-      txFrame.multiProof(paths, proofNodes).expect("ok")
+      txFrame.multiProof(paths, [], proofNodes).expect("ok")
       let nodes = toNodesTable(proofNodes)
 
       check:
@@ -265,7 +265,7 @@ suite "Aristo subtries json tests":
     paths[keccak256(address.data())] = slotPaths
 
     var proofNodes: seq[seq[byte]]
-    ledger.txFrame.multiProof(paths, proofNodes).expect("ok")
+    ledger.txFrame.multiProof(paths, [], proofNodes).expect("ok")
     let nodes = toNodesTable(proofNodes)
 
     let
@@ -334,7 +334,7 @@ suite "Aristo subtries json tests":
       paths[a] = @[]
       paths[e] = @[]
       var proofNodes: seq[seq[byte]]
-      full.multiProof(paths, proofNodes).expect("ok")
+      full.multiProof(paths, [], proofNodes).expect("ok")
       let witness = newCoreDbRef(DefaultDbMemory).baseTxFrame().txFrameBegin()
       doAssert witness.putSubtrie(full.getStateRoot().get(), toNodesTable(proofNodes)).isOk()
       Dbs(full: full, witness: witness)

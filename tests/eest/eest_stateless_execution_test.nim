@@ -22,9 +22,7 @@ const
   ]
 
 const skipFiles = [
-  # The generated witness differs from the expected one: the proof for a branch
-  # collapse onto an extension sibling includes unneeded nodes.
-  "witness_state_sstore_delete_branch_collapse_adds_auxiliary_node.json",
+  "",
 ]
 
 runEESTSuite(

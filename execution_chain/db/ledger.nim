@@ -928,22 +928,20 @@ proc clearEmptyAccounts(ledger: LedgerRef) =
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
-proc getCollapsedSiblings*(
-    ledger: LedgerRef
-): seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]] =
+proc getCollapsedSiblings*(ledger: LedgerRef): seq[RootedVertexID] =
   ## Collapsed siblings for witness generation. StoLeaf collapses (brVid
   ## valid) are only included if brVid is still a StoLeaf in the final trie.
   ## A branch there means a later insertion expanded it again, no auxiliary
   ## needed.
   let db = ledger.txFrame.aTx
-  var res: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]]
-  for (accPath, sibStoPath, stoRoot, brVid) in db.collapsedSiblings:
+  var res: seq[RootedVertexID]
+  for (sibling, brVid) in db.collapsedSiblings:
     if brVid.isValid:
-      let vtx = db.getVtx((stoRoot, brVid))
+      let vtx = db.getVtx((sibling.root, brVid))
       if vtx.isValid and vtx.vType == StoLeaf:
-        res.add((accPath, sibStoPath))
+        res.add(sibling)
     else:
-      res.add((accPath, sibStoPath))
+      res.add(sibling)
   res
 
 proc hasUnprovenCollapse*(ledger: LedgerRef): bool =
