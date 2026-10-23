@@ -7,7 +7,7 @@
 cd "$(dirname "${BASH_SOURCE[0]}")"/..
 
 # exit codes
-readonly E_OK=0 E_OUTDATED=1 E_UNCHECKABLE=2
+readonly E_OK=0 E_UNCHECKABLE=2
 
 # Print the commit a submodule is pinned at in the given repo (committed pin,
 # not the working tree). Prints nothing if the path is not a submodule there.
@@ -51,7 +51,7 @@ if [[ "$1" == "--update" ]]; then
     fi
   done
 else
-  status=$E_OK
+  outdated=0
   for dep in $COMMON; do
     eth1_commit=$(pinned_commit . "$dep")
     eth2_commit=$(pinned_commit vendor/nimbus-eth2 "$dep")
@@ -67,12 +67,13 @@ else
     if git -C "$dep" merge-base --is-ancestor "$eth2_commit" "$eth1_commit"; then
       : # eth1 is equal or newer than eth2
     else
-      eth1_info=$(git -C "$dep" show -s --format="%h %ad %s" --date=short "$eth1_commit")
-      eth2_info=$(git -C vendor/nimbus-eth2/"$dep" show -s --format="%h %ad %s" --date=short "$eth2_commit")
-      echo "$dep:"
-      echo "  eth1: $eth1_info"
-      echo "  eth2: $eth2_info (newer)"
-      status=$E_OUTDATED
+      eth1_info=$(git -C "$dep" show -s --format="%h (%ad)" --date=short "$eth1_commit")
+      eth2_info=$(git -C vendor/nimbus-eth2/"$dep" show -s --format="%h (%ad)" --date=short "$eth2_commit")
+      # anchor the warning on the submodule's line in .gitmodules
+      line=$(grep -nF "[submodule \"$dep\"]" .gitmodules | head -n1 | cut -d: -f1)
+      [ -z "$line" ] && line=1
+      echo "::warning file=.gitmodules,line=${line}::${dep} is pinned older than nimbus-eth2: eth1 ${eth1_info} vs eth2 ${eth2_info}"
+      outdated=$((outdated+1))
     fi
   done
   for dep in $(ls vendor/nimbus-eth2/vendor/ -1); do
@@ -82,8 +83,9 @@ else
       echo "  git submodule add $url vendor/$dep"
     fi
   done
-  if [ "$status" -ne "$E_OK" ]; then
-    echo "error: some eth1 submodules are older than their nimbus-eth2 counterpart" >&2
-    exit "$status"
+  if [ "$outdated" -gt 0 ]; then
+    echo "warning: $outdated eth1 submodule(s) pinned older than their nimbus-eth2 counterpart (see annotations)"
   fi
+  # do not fail the job; outdated submodules are reported as warnings above
+  exit "$E_OK"
 fi

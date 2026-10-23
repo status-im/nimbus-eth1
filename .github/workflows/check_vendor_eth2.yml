@@ -28,4 +28,4 @@ jobs:
 
       - name: Check eth1 submodules are not older than nimbus-eth2
         run: |
-          bash scripts/check_vendor_eth2.sh || echo Run scripts/check_vendor_eth2.sh --update to update submodules
+          bash scripts/check_vendor_eth2.sh
