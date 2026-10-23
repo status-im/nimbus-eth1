@@ -430,15 +430,15 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
       error = error
     return err(txErrorBasicValidation)
 
-  let
-    nonce = xp.getNonce(sender)
-
-  if ptx.tx.nonce < nonce:
-    debug "Transaction rejected: Nonce too small",
-      txNonce = ptx.tx.nonce,
-      nonce = nonce,
-      sender = sender
-    return err(txErrorNonceTooSmall)
+  if ptx.tx.txType != TxEip8141:
+    let
+      nonce = xp.getNonce(sender)
+    if ptx.tx.nonce < nonce:
+      debug "Transaction rejected: Nonce too small",
+        txNonce = ptx.tx.nonce,
+        nonce = nonce,
+        sender = sender
+      return err(txErrorNonceTooSmall)
 
   if ptx.tx.txType == TxEip4844 and XP_SKIP_BLOB_WRAPPER_VALIDATION notin xp.flags:
     ptx.validateBlobTransactionWrapper(xp.nextFork).isOkOr:

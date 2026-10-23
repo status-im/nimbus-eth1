@@ -21,7 +21,9 @@ const
   eestType = "blockchain_tests"
 
 const skipFiles = [
-  "",
+  # requires both tx.maxPriorityFeePerGas and tx.maxFeePerGas
+  # of EIP-1559 as UInt256
+  "admission_constraints.json",
 ]
 
 runEESTSuite(

@@ -11,16 +11,19 @@
 {.push raises: [].}
 
 import
-  "."/[stack, memory, code_stream, evm_errors],
+  std/[hashes],
+  eth/common/addresses,
+  ./[stack, memory, code_stream, evm_errors],
   ./interpreter/[gas_costs, op_codes],
   ./transient_storage,
   ../db/ledger,
   ../common/[common, evmforks],
-  ../block_access_list/bal_tracker
+  ../block_access_list/bal_tracker,
+  ./frame_transaction
 
 from ../common/hardforks import HardFork
 
-export stack, memory, transient_storage, bal_tracker
+export stack, memory, transient_storage, bal_tracker, hashes, frame_transaction
 
 type
   VMFlag* = enum
@@ -49,6 +52,7 @@ type
     parent*           : Header
     blockCtx*         : BlockContext
     txCtx*            : TxContext
+    frameCtx*         : FrameContext
     flags*            : set[VMFlag]
     fork*             : EVMFork
     hardFork*         : HardFork
@@ -80,6 +84,7 @@ type
     transientStorage*:      TransientStorage
     error*:                 Error
     savePoint*:             LedgerSpRef
+    frameSnapshot*:         FrameSnapshotRef
     instr*:                 Op
     opIndex*:               int
     parent* {.cursor.}:     Computation  # non-owning back pointer

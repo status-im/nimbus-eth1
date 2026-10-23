@@ -27,6 +27,7 @@ import
   ./process_transaction,
   ./executor_helpers,
   eth/common/transaction_utils,
+  eth/common/receipts_rlp,
   taskpools,
   results,
   stew/assign2
@@ -76,6 +77,8 @@ type
     blockStateGasUsed: GasInt
     blobGasUsed: uint64
     status: bool
+    payer: Opt[Address]
+    frameReceipts: SharedBytes
     logs: SharedBytes
     error: SharedString
     preempted: bool
@@ -285,15 +288,47 @@ template withBalPrefetchParallel*(
     for f in futs.mitems():
       discard sync(f)
 
-proc packLogs(logs: openArray[Log]): SharedBytes =
+proc applyBlockAccessListState(ledger: LedgerRef, bal: BlockAccessList, txCount: int) =
+  let boundary = txCount + 1
+
+  for accChanges in bal:
+    let address = accChanges.address
+
+    var balanceZeroed = false
+    let balancePos = accChanges.balanceChanges.findLastWriteBefore(boundary)
+    if balancePos >= 0:
+      let postBalance = accChanges.balanceChanges[balancePos].postBalance
+      ledger.setBalance(address, postBalance)
+      balanceZeroed = postBalance.isZero
+
+    let noncePos = accChanges.nonceChanges.findLastWriteBefore(boundary)
+    if noncePos >= 0:
+      ledger.setNonce(address, accChanges.nonceChanges[noncePos].newNonce)
+
+    let codePos = accChanges.codeChanges.findLastWriteBefore(boundary)
+    if codePos >= 0:
+      ledger.setCode(address, accChanges.codeChanges[codePos].newCode)
+
+    for slotChanges in accChanges.storageChanges:
+      let changePos = slotChanges.changes.findLastWriteBefore(boundary)
+      if changePos >= 0:
+        ledger.setStorage(
+          address, slotChanges.slot, slotChanges.changes[changePos].newValue
+        )
+
+    if balanceZeroed:
+      ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
+
+func packedLogsSize(logs: openArray[Log]): int =
   var size = sizeof(uint32)
   for log in logs:
     size +=
       sizeof(Address) + sizeof(uint32) + log.topics.len * sizeof(Topic) + sizeof(uint32) +
       log.data.len
+  size
 
+proc packLogs(logs: openArray[Log], packed: var openArray[byte]): int =
   var
-    packed = SharedBytes.init(size, zeroed = false)
     pos = 0
 
   template put(src: pointer, n: int) =
@@ -313,10 +348,17 @@ proc packLogs(logs: openArray[Log]): SharedBytes =
     putLen(log.data.len)
     if log.data.len > 0:
       put(unsafeAddr log.data[0], log.data.len)
+  pos
 
+proc packLogs(logs: openArray[Log]): SharedBytes =
+  var
+    size = packedLogsSize(logs)
+    packed = SharedBytes.init(size, zeroed = false)
+
+  doAssert packLogs(logs, packed.data(asOpenArray = true)) == size
   packed
 
-proc unpackLogs(buf: openArray[byte]): seq[Log] =
+proc unpackLogs(buf: openArray[byte], output: var seq[Log]): int =
   var pos = 0
 
   template get(dst: pointer, n: int) =
@@ -340,7 +382,59 @@ proc unpackLogs(buf: openArray[byte]): seq[Log] =
       log.data = newSeqUninit[byte](dataLen)
       get(addr log.data[0], dataLen)
 
-  logs
+  output = move(logs)
+  pos
+
+proc packFrameReceipts(receipts: openArray[FrameReceipt]): SharedBytes =
+  var size = sizeof(uint32)
+  for rec in receipts:
+    size +=
+      sizeof(uint8) +
+      sizeof(GasInt) +
+      sizeof(GasInt) +
+      packedLogsSize(rec.logs)
+
+  var
+    packed = SharedBytes.init(size, zeroed = false)
+    pos = 0
+
+  template put(src: pointer, n: int) =
+    copyMem(addr packed[pos], src, n)
+    pos += n
+
+  template putLen(v: int) =
+    var x = uint32(v)
+    put(addr x, sizeof(uint32))
+
+  putLen(receipts.len)
+  for rec in receipts:
+    put(addr rec.status, sizeof(uint8))
+    put(addr rec.gasUsed, sizeof(GasInt))
+    put(addr rec.stateGasUsed, sizeof(GasInt))
+    pos += packLogs(rec.logs, packed.toOpenArray(pos))
+
+  packed
+
+proc unpackFrameReceipts(buf: openArray[byte]): seq[FrameReceipt] =
+  var pos = 0
+
+  template get(dst: pointer, n: int) =
+    copyMem(dst, unsafeAddr buf[pos], n)
+    pos += n
+
+  template getLen(): int =
+    var x: uint32
+    get(addr x, sizeof(uint32))
+    int(x)
+
+  var recs = newSeq[FrameReceipt](getLen())
+  for rec in recs.mitems:
+    get(addr rec.status, sizeof(uint8))
+    get(addr rec.gasUsed, sizeof(GasInt))
+    get(addr rec.stateGasUsed, sizeof(GasInt))
+    pos += unpackLogs(buf.toOpenArray(pos, buf.len-1), rec.logs)
+
+  move(recs)
 
 proc processTxTask(
     ctx: ptr BalParallelTxCtx, e: ptr BalParallelTxEntry
@@ -407,6 +501,9 @@ proc processTxTask(
   e[].blockStateGasUsed = vmState.blockStateGasUsed
   e[].blobGasUsed = vmState.blobGasUsed
   e[].status = vmState.status
+  if vmState.frameEnabled():
+    e[].payer = vmState.payer()
+    e[].frameReceipts = packFrameReceipts(vmState.frameReceipts)
   if not ctx[].blooms.isNil():
     calcLogsBloom(vmState.txLogs, ctx[].blooms[e[].txIndex])
   if vmState.txLogs.len > 0:
@@ -457,6 +554,7 @@ proc processTransactionsParallel*(
     for i in 0 ..< n:
       entries[i].logs.dispose()
       entries[i].error.dispose()
+      entries[i].frameReceipts.dispose()
 
   vmState.ledger.applyBlockAccessList(balRef[], n)
 
@@ -504,8 +602,17 @@ proc processTransactionsParallel*(
           $vmState.blockExecutionGasUsed & ", stateGas=" & $vmState.blockStateGasUsed
       )
 
+    if entries[i].frameReceipts.len > 0:
+      # only need payer and receipts to create EIP-8141 receipts
+      vmState.frameCtx.snapshot = FrameSnapshotRef(
+        payer: entries[i].payer,
+        receipts: unpackFrameReceipts(entries[i].frameReceipts.data(asOpenArray = true)),
+      )
+    else:
+      vmState.frameCtx.snapshot = nil
+
     if entries[i].logs.len > 0:
-      vmState.txLogs = unpackLogs(entries[i].logs.data(asOpenArray = true))
+      doAssert(unpackLogs(entries[i].logs.data(asOpenArray = true), vmState.txLogs) == entries[i].logs.len)
     else:
       vmState.txLogs.setLen(0)
     if collectLogs:

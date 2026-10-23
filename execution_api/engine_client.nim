@@ -360,6 +360,10 @@ proc toTransaction(tx: TransactionObject): Transaction =
     R               : tx.r,
     S               : tx.s,
     authorizationList: authList(tx.authorizationList),
+    sender          : tx.`from`,
+    frames          : tx.frames.get(@[]),
+    signatures      : tx.signatures.get(@[]),
+    nonceKeys       : tx.nonceKeys.get(@[]),
   )
 
 proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =
@@ -386,6 +390,8 @@ type
     effectiveGasPrice*: GasInt
     blobGasUsed*: Opt[uint64]
     blobGasPrice*: Opt[UInt256]
+    payer*: Opt[Address]
+    frameReceipts*: Opt[seq[FrameReceipt]]
 
   RPCTx* = object
     txType*: TxType
@@ -410,6 +416,9 @@ type
     maxFeePerBlobGas*: Opt[UInt256]
     versionedHashes*: Opt[seq[VersionedHash]]
     authorizationList*: Opt[seq[Authorization]]
+    frames*: seq[TransactionFrame]
+    signatures*: seq[FrameSignature]
+    nonceKeys*: seq[UInt256]
 
 proc toRPCReceipt(rec: ReceiptObject): RPCReceipt =
   RPCReceipt(
@@ -430,6 +439,8 @@ proc toRPCReceipt(rec: ReceiptObject): RPCReceipt =
     effectiveGasPrice: rec.effectiveGasPrice.GasInt,
     blobGasUsed: maybeU64(rec.blobGasUsed),
     blobGasPrice: rec.blobGasPrice,
+    payer: rec.payer,
+    frameReceipts: rec.frameReceipts,
   )
 
 proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
@@ -459,6 +470,9 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
     else:
       Opt.none(seq[VersionedHash]),
     authorizationList: tx.authorizationList,
+    frames: tx.frames.get(@[]),
+    signatures: tx.signatures.get(@[]),
+    nonceKeys: tx.nonceKeys.get(@[]),
   )
 
 proc blockNumber*(client: RpcClient): Result[uint64, string] =

@@ -19,7 +19,7 @@ import
   ../[transaction, constants],
   ../utils/utils,
   ../block_access_list/bal_validation,
-  ./[dao, eip4844, eip7702, eip7691, gaslimit, withdrawals],
+  ./[dao, eip4844, eip7702, eip7691, gaslimit, withdrawals, eip8141, keyed_nonces],
   ./pow/difficulty,
   stew/objects,
   results
@@ -253,11 +253,6 @@ func validateTxBasic*(
     return err("invalid tx: chain id mismatch, got: " &
       $derivedChainId & " expected: " & $com.chainId)
 
-  # EIP-2681: a nonce of 2^64-1 can never be included since executing the
-  # transaction would overflow the account nonce.
-  if tx.nonce >= high(uint64):
-    return err("invalid tx: nonce at maximum")
-
   if validateFork:
     if tx.txType == TxEip2930 and fork < Berlin:
       return err("invalid tx: EIP-2930 Tx type detected before Berlin")
@@ -271,6 +266,13 @@ func validateTxBasic*(
     if tx.txType == TxEip7702 and fork < Prague:
       return err("invalid tx: EIP-7702 Tx type detected before Prague")
 
+    if tx.txType == TxEip8141 and fork < Bogota:
+      return err("invalid tx: EIP-8141 Tx type detected before Bogota")
+
+  # The total must be the larger of the two
+  if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
+    return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
+
   if fork >= Shanghai and tx.contractCreation:
     if fork >= Amsterdam:
       if tx.payload.len > EIP7954_MAX_INITCODE_SIZE:
@@ -278,9 +280,18 @@ func validateTxBasic*(
     elif tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
       return err("invalid tx: initcode size exceeds EIP-3860 maximum")
 
-  # The total must be the larger of the two
-  if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
-    return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
+  if tx.txType == TxEip8141:
+    if tx.nonceSeq >= MAX_NONCE_SEQ:
+      return err("invalid tx: nonceSeq at maximum")
+
+    ? validateNonceKeys(tx)
+
+    return validateTxEip8141(tx, intrinsic)
+
+  # EIP-2681: a nonce of 2^64-1 can never be included since executing the
+  # transaction would overflow the account nonce.
+  if tx.nonce >= high(uint64):
+    return err("invalid tx: nonce at maximum")
 
   let
     minGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
@@ -363,58 +374,65 @@ proc validateTransaction*(
 
   let
     ledger  = vmState.ledger
-    baseFee = vmState.blockCtx.baseFeePerGas
-    balance = ledger.getBalance(sender)
-    nonce = ledger.getNonce(sender)
 
-  # Note that the following check bears some plausibility but is _not_
-  # covered by the EIP-1559 reference (sort of) pseudo code, for details
-  # see `https://eips.ethereum.org/EIPS/eip-1559#specification`_
-  #
-  # Rather this check is needed for surviving the post-London unit test
-  # eest/state_tests/stEIP1559/lowGasLimit.json
-  #
-  # Interestingly, the hive tests do not use this particular test but rather
-  # eest/blockchain_tests/stEIP1559/lowGasLimit.json
-  # from a parallel tests series which look like somehow expanded versions.
-  #
-  # The parallel lowGasLimit.json test never triggers the case checked below
-  # as the paricular transaction is omitted (the txs list is just set empty.)
-  if vmState.blockCtx.gasLimit < tx.gasLimit:
-    return err(&"invalid tx: block header gasLimit exceeded. maxLimit={vmState.blockCtx.gasLimit}, gasLimit={tx.gasLimit}")
+  if tx.txType == TxEip8141:
+    if tx.nonceSeq >= MAX_NONCE_SEQ:
+      return err(&"invalid tx: nonceSeq at maximum")
+  else:
+    let
+      baseFee = vmState.blockCtx.baseFeePerGas
+      balance = ledger.getBalance(sender)
 
-  # ensure that the user was willing to at least pay the base fee
-  if tx.maxFeePerGasNorm < baseFee:
-    return err(&"invalid tx: maxFee is smaller than baseFee. maxFee={tx.maxFeePerGas}, baseFee={baseFee}")
+    # Note that the following check bears some plausibility but is _not_
+    # covered by the EIP-1559 reference (sort of) pseudo code, for details
+    # see `https://eips.ethereum.org/EIPS/eip-1559#specification`_
+    #
+    # Rather this check is needed for surviving the post-London unit test
+    # eest/state_tests/stEIP1559/lowGasLimit.json
+    #
+    # Interestingly, the hive tests do not use this particular test but rather
+    # eest/blockchain_tests/stEIP1559/lowGasLimit.json
+    # from a parallel tests series which look like somehow expanded versions.
+    #
+    # The parallel lowGasLimit.json test never triggers the case checked below
+    # as the paricular transaction is omitted (the txs list is just set empty.)
+    if vmState.blockCtx.gasLimit < tx.gasLimit:
+      return err(&"invalid tx: block header gasLimit exceeded. maxLimit={vmState.blockCtx.gasLimit}, gasLimit={tx.gasLimit}")
 
-  # the signer must be able to fully afford the transaction
-  let gasCost = tx.gasCost()
+    # ensure that the user was willing to at least pay the base fee
+    if tx.maxFeePerGasNorm < baseFee:
+      return err(&"invalid tx: maxFee is smaller than baseFee. maxFee={tx.maxFeePerGas}, baseFee={baseFee}")
 
-  if balance < gasCost:
-    return err(&"invalid tx: not enough cash for gas. avail={balance}, require={gasCost}")
+    # the signer must be able to fully afford the transaction
+    let gasCost = tx.gasCost()
 
-  if balance - gasCost < tx.value:
-    return err(&"invalid tx: not enough cash to send. avail={balance}, availMinusGas={balance-gasCost}, require={tx.value}")
+    if balance < gasCost:
+      return err(&"invalid tx: not enough cash for gas. avail={balance}, require={gasCost}")
 
-  if not skipNonceCheck:
-    if tx.nonce != nonce:
-      return err(&"invalid tx: account nonce mismatch. txNonce={tx.nonce}, accNonce={nonce}")
+    if balance - gasCost < tx.value:
+      return err(&"invalid tx: not enough cash to send. avail={balance}, availMinusGas={balance-gasCost}, require={tx.value}")
 
-  if tx.nonce == high(uint64):
-    return err(&"invalid tx: nonce at maximum")
+    # EIP-3607 Reject transactions from senders with deployed code
+    # The EIP spec claims this attack never happened before
+    # Clients might choose to disable this rule for RPC calls like
+    # `eth_call` and `eth_estimateGas`
+    # EOA = Externally Owned Account
+    let
+      code = ledger.getCode(sender)
+      delegated = code.isDelegation()
+    if code.len > 0 and not delegated:
+      return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeLen={code.len}")
 
-  # EIP-3607 Reject transactions from senders with deployed code
-  # The EIP spec claims this attack never happened before
-  # Clients might choose to disable this rule for RPC calls like
-  # `eth_call` and `eth_estimateGas`
-  # EOA = Externally Owned Account
-  let
-    code = ledger.getCode(sender)
-    delegated = code.isDelegation()
-  if code.len > 0 and not delegated:
-    return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeLen={code.len}")
+    if not skipNonceCheck:
+      let
+        nonce = ledger.getNonce(sender)
+      if tx.nonce != nonce:
+        return err(&"invalid tx: account nonce mismatch. txNonce={tx.nonce}, accNonce={nonce}")
 
-  if tx.txType == TxEip4844:
+    if tx.nonce == high(uint64):
+      return err(&"invalid tx: nonce at maximum")
+
+  if tx.txType == TxEip4844 or (tx.txType == TxEip8141 and tx.versionedHashes.len  > 0):
     # ensure that the user was willing to at least pay the current data gasprice
     let
       excessBlobGas = vmState.blockCtx.excessBlobGas
