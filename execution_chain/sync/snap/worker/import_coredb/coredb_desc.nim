@@ -26,11 +26,6 @@ const
   coreDb2Folder = Path "coredb.new"
 
 type
-  AristoImportStats* = tuple
-    nAccounts: uint
-    nSlots: uint
-    nCodes: uint
-
   CoreDb2Ref* = ref object
     ## Secondary core DB
     dbDir*: Path
