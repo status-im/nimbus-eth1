@@ -857,9 +857,6 @@ proc adoptCode*(ledger: LedgerRef, address: Address, codeHash: Hash32) =
     var acc = ledger.makeDirty(address)
     acc.statement.codeHash = codeHash
     acc.code = nil
-    # bytecode already stored, so only the code hash is written
-    if ledger.collectWitness and codeHash != EMPTY_CODE_HASH:
-      ledger.savePoint.deployedCodeHashes.incl(codeHash)
 
 proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
   let acc = ledger.getAccount(address)
