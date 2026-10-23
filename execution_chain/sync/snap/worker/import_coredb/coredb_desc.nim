@@ -28,7 +28,7 @@ const
 type
   CoreDb2Ref* = ref object
     ## Secondary core DB
-    dbDir*: Path
+    dbDir: Path
     db2*: CoreDbRef
     tx2*: CoreDbTxRef
 
@@ -36,19 +36,16 @@ type
 # Public constuctor/destructor
 # ------------------------------------------------------------------------------
 
-proc init*(_: type CoreDb2Ref, ctx: SnapCtxRef, clean = false): CoreDb2Ref =
+proc init*(_: type CoreDb2Ref, ctx: SnapCtxRef): CoreDb2Ref =
   let
     dbOpts = DbOptions.init()
-    dataDir = string(ctx.pool.cacheDB.dir.parentDir / coreDb2Folder)
+    dataDir = string(ctx.pool.cacheDB.dir / coreDb2Folder)
   var
-    db2 = AristoDbRocks.newCoreDbRef(dataDir, dbOpts)
-  if clean:
-    db2.close(wipe=true)
     db2 = AristoDbRocks.newCoreDbRef(dataDir, dbOpts)
   CoreDb2Ref(db2: db2, tx2: db2.baseTxFrame, dbDir: Path dataDir)
 
 proc destroy*(db: CoreDb2Ref) =
-  db.db2.close()
+  db.db2.close(wipe=true)
   db[].reset
 
 # ------------------------------------------------------------------------------

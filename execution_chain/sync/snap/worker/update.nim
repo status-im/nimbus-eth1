@@ -229,7 +229,7 @@ proc assembleMptNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   ## State transition handler
   if ctx.pool.resetReq:                             # Oops, something failed
     return SnapClear
-  if 0 < ctx.pool.newCoreDb.newDbPath.len:
+  if ctx.pool.newCoreDb.coreDbOk:
     return SnapStop
   # Reaching here would be quite unusual as this state is handled
   # by the deamon in the foreground.
