@@ -48,6 +48,9 @@ proc multiGetBe*(
     values: var openArray[Opt[seq[byte]]],
     sortedInput = false,
       ): Result[void, KvtError] =
+  if keys.len == 0:
+    # The backends require a non-empty batch
+    return ok()
   db.multiGetKvpFn(keys, values, sortedInput)
 
 # ------------
@@ -74,29 +77,19 @@ proc putBe*(
 
 # ------------
 
-proc putMove*(
+proc put*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record to store
-    data: var seq[byte];              # Value of database record to store
+    data: openArray[byte];            # Value of database record to store
       ): Result[void,KvtError] =
-  ## For the argument `key` associated the argument `data` as value (which
-  ## will be marked in the top layer cache.) The contents of `data` are taken
-  ## over, leaving it empty.
+  ## For the argument `key` store the argument `data` as value in the
+  ## backend database.
   if key.len == 0:
     return err(KeyInvalid)
   if data.len == 0:
     return err(DataInvalid)
 
   db.putKvpFn(key, data)
-
-proc put*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record to store
-    data: openArray[byte];            # Value of database record to store
-      ): Result[void,KvtError] =
-  ## Variant of `putMove()` copying `data` into the top layer cache.
-  var data = @data
-  db.putMove(key, data)
 
 proc del*(
     db: KvtDbRef;                     # Database
@@ -164,7 +157,7 @@ proc multiGet*(
     sortedInput = false,
       ): Result[void, KvtError] =
 
-  db.multiGetBe(keys, values)
+  db.multiGetBe(keys, values, sortedInput)
 
 proc hasKeyRc*(
     db: KvtDbRef;                     # Database
@@ -177,7 +170,7 @@ proc hasKeyRc*(
   if key.len == 0:
     return err(KeyInvalid)
 
-  let rc = db.getBe key
+  let rc = db.getBeLen key
   if rc.isOk:
     return ok(true)
   if rc.error == GetNotFound:

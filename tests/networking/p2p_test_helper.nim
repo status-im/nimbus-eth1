@@ -75,7 +75,7 @@ proc newTestEnv*(maxPeers = 25): TestEnv =
     config = envConfig()
     params = config.computeNetworkParams()
     com    = makeCom(params)
-    chain  = ForkedChainRef.init(com, enableQueue = true)
+    chain  = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(chain)
     wire   = node.addEthHandlerCapability(txPool)
 
@@ -92,7 +92,7 @@ proc close*(env: TestEnv) {.async: (raises: [CancelledError]).} =
   if env.node.listeningServer.isNil.not:
     await env.node.closeWait()
   await env.wire.stop()
-  await env.chain.stopProcessingQueue()
+  await env.chain.flushBaseLoop()
 
 template sourceDir*: string = currentSourcePath.rsplit(DirSep, 1)[0]
 

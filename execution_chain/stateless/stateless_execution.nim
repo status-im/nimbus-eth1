@@ -116,6 +116,9 @@ proc statelessProcessBlock*(
   )
   doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
 
+  if memoryVmState.ledger.hasUnprovenCollapse():
+    return err("Witness lacks the sibling node of a collapsed branch")
+
   ok()
 
 proc statelessProcessBlock*(

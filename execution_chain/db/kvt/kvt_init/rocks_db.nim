@@ -78,8 +78,8 @@ proc multiGetKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): MultiGetKvpFn =
   result =
     proc(keys: openArray[seq[byte]], values: var openArray[Opt[seq[byte]]],
         sortedInput: bool): Result[void, KvtError] =
-      assert keys.len() > 0
-      assert keys.len() == values.len()
+      doAssert keys.len() > 0
+      doAssert keys.len() == values.len()
 
       let multiGetIter = db.rdb.store[cf].multiGetIter(keys, sortedInput).valueOr:
         when extraTraceMessages:

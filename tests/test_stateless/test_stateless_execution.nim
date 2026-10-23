@@ -37,7 +37,7 @@ procSuite "Stateless Execution Tests":
       # Stateless provider is enabled so that witnesses will be generated
       # and stored in the database
       com = CommonRef.new(db, statelessProvider = true)
-      fc = ForkedChainRef.init(com, enableQueue = false)
+      fc = ForkedChainRef.init(com)
 
   asyncTest "Stateless process block - replay mainnet ere":
     var blk: EthBlock
