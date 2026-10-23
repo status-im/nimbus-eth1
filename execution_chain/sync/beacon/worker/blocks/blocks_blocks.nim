@@ -262,7 +262,7 @@ template blocksImport*(
         # per-item, so no extra throttle is needed here.
         let verdict =
           try:
-            await ctx.chain.queueImportBlock(
+            await ctx.chain.importBlock(
               blocks[n],
               if n < bals.len: bals[n] else: Opt.none(BlockAccessListRef))
           except CancelledError:

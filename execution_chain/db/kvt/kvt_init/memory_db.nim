@@ -62,17 +62,17 @@ proc lenKvpFn(db: MemBackendRef): LenKvpFn =
     proc(key: openArray[byte]): Result[int,KvtError] =
       if key.len == 0:
         return err(KeyInvalid)
-      var data = db.tab.getOrVoid @key
-      if data.isValid:
-        return ok(data.len)
+      db.tab.withValue(@key, data):
+        if data[].len > 0:
+          return ok(data[].len)
       err(GetNotFound)
 
 proc multiGetKvpFn(db: MemBackendRef): MultiGetKvpFn =
   result =
     proc(keys: openArray[seq[byte]], values: var openArray[Opt[seq[byte]]],
          sortedInput: bool): Result[void, KvtError] =
-      assert keys.len() > 0
-      assert keys.len() == values.len()
+      doAssert keys.len() > 0
+      doAssert keys.len() == values.len()
 
       for i, k in keys:
         if k.len() == 0:

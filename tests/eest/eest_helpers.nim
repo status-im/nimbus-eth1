@@ -99,7 +99,7 @@ proc prepareEnv*(
       com.db.mpt.taskpool = taskpool
       testEnv.taskpool = taskpool
 
-    let chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
+    let chain = ForkedChainRef.init(com, persistBatchSize = 1)
 
     testEnv.chain = chain
     testEnv.client = Opt.none(RpcHttpClient)
@@ -138,7 +138,7 @@ proc close*(env: TestEnv) =
       waitFor env.server.get().closeWait()
     if env.beaconEngine.isNil.not:
       waitFor env.beaconEngine.stop()
-    waitFor env.chain.stopProcessingQueue()
+    waitFor env.chain.flushBaseLoop()
     env.chain.com.db.close()
     if env.taskpool != nil:
       env.taskpool.shutdown()

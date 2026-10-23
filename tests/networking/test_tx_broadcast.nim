@@ -102,7 +102,7 @@ proc newBroadcastTestEnv(genesisPath = ""): BroadcastTestEnv =
   com.taskpool = Taskpool.new()
   let
     node = setupTestNode()
-    chain = ForkedChainRef.init(com, enableQueue = true)
+    chain = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(chain)
     wire = node.addEthHandlerCapability(txPool)
 
@@ -118,7 +118,7 @@ proc close(env: BroadcastTestEnv) {.async: (raises: [CancelledError]).} =
   if env.node.listeningServer.isNil.not:
     await env.node.closeWait()
   await env.wire.stop()
-  await env.chain.stopProcessingQueue()
+  await env.chain.flushBaseLoop()
 
 template setupEnvPair(env1, env2: untyped) =
   ## Declare two envs sharing one genesis file. They must share it:

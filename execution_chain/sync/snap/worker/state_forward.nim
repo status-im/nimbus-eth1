@@ -64,13 +64,15 @@ template applyCodeChange(
   ##
   var bodyRc = Opt[Hash32].err()
   block body:
-    if code.len == 0:
+    doAssert 0 < code.len
+    let newCode = code[^1].newCode
+
+    if newCode.len == 0:
       adb.delFlatCode(accPath, info).isOkOr:
         break body                                  # err()
       bodyRc = typeof(bodyRc).ok(EMPTY_CODE_HASH)
       break body
 
-    let newCode = code[^1].newCode
     adb.putFlatCode(accPath, newCode, info).isOkOr:
       break body
 

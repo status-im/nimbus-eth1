@@ -451,7 +451,7 @@ proc delFlatCode*(db: CacheDbRef, accPath: Hash32): DelResult =
 proc clearFlatCode*(db: CacheDbRef): DelResult =
   db.clr1 cFlatCode
 
-iterator walkFlatCode*(db: CacheDbRef): KvPair =
+iterator walkFlatCode*(db: CacheDbRef): tuple[key: Hash32, data: seq[byte]] =
   for (key,value) in db.adb.colWalkAtLeast1 @[byte cFlatCode]:
     yield (key,value)
 

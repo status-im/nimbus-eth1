@@ -324,6 +324,28 @@ proc opMiscMain*() =
       stack:
         [0, 0, 1]
 
+    assembler:
+      title: "REVERT_ERROR_STRING_OVERSIZED_LENGTH"
+      code:
+        Push32 "0x08c379a000000000000000000000000000000000000000000000000000000000"
+        Push1 "0x00"
+        Mstore
+        Push1 "0x20"
+        Push1 "0x04"
+        Mstore
+        Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        Push1 "0x24"
+        Mstore
+        Push1 "0x44"
+        Push1 "0x00"
+        Revert
+      fork: Cancun
+      success: false
+      memory:
+        "0x08c379a000000000000000000000000000000000000000000000000000000000"
+        "0x00000020ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        "0xffffffff00000000000000000000000000000000000000000000000000000000"
+
 #[
   EIP-2315: Simple Subroutines for the EVM
   disabled reason: not included in Berlin hard fork
