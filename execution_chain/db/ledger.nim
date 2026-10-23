@@ -15,11 +15,11 @@ import
   chronicles,
   results,
   minilru,
-  eth/common/[addresses, hashes],
+  eth/common/[addresses, hashes, block_access_lists],
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
   ../constants,
-  ../block_access_list/bal_overlay,
+  ../block_access_list/[bal_overlay, bal_utils],
   ./[access_list as ac_access_list, core_db, storage_types],
   ./aristo/[aristo_blobify, aristo_desc, aristo_get]
 
@@ -850,6 +850,40 @@ proc clearStorage*(ledger: LedgerRef, address: Address) =
     # both getStorage and getCommittedStorage will
     # return wrong value
     acc.original.storage.clear()
+
+proc applyBlockAccessList*(ledger: LedgerRef, bal: BlockAccessList, txCount: int) =
+  ## Set the block access list's final state for indices up to `txCount` on
+  ## the ledger's accounts, for the next persist to write.
+  let boundary = txCount + 1
+  for accChanges in bal:
+    let
+      address = accChanges.address
+      balancePos = accChanges.balanceChanges.findLastWriteBefore(boundary)
+      noncePos = accChanges.nonceChanges.findLastWriteBefore(boundary)
+      codePos = accChanges.codeChanges.findLastWriteBefore(boundary)
+    var acc: AccountRef
+
+    if balancePos >= 0 or noncePos >= 0 or codePos >= 0:
+      acc = ledger.makeDirty(address)
+      acc.flags.incl LeafExists
+      if balancePos >= 0:
+        acc.statement.balance = accChanges.balanceChanges[balancePos].postBalance
+      if noncePos >= 0:
+        acc.statement.nonce = accChanges.nonceChanges[noncePos].newNonce
+      if codePos >= 0:
+        ledger.setCode(address, accChanges.codeChanges[codePos].newCode)
+      if acc.isEmpty:
+        acc.flags.incl Touched
+
+    for slotChanges in accChanges.storageChanges:
+      let changePos = slotChanges.changes.findLastWriteBefore(boundary)
+      if changePos < 0:
+        continue
+      if acc.isNil:
+        acc = ledger.makeDirty(address)
+        acc.flags.incl LeafExists
+      acc.overlayStorage[slotChanges.slot] = slotChanges.changes[changePos].newValue
+      acc.flags.incl StorageChanged
 
 proc deleteAccount(ledger: LedgerRef, address: Address) =
   # make sure all savePoints already committed
