@@ -13,7 +13,7 @@
 import
   eth/common/hashes,
   results,
-  "."/[aristo_desc, aristo_get]
+  "."/[aristo_desc, aristo_get, aristo_layers]
 
 const
   HikeAcceptableStopsNotFound* = {
@@ -68,6 +68,10 @@ proc step*(
       return err(error)
 
     if rvid.root == rvid.vid:
+      # A root known only by its hash (e.g. a stateless witness without the
+      # root node) is not an empty trie
+      if db.layersGetKeyOrVoid(rvid).isValid:
+        return err(HikeDanglingEdge)
       return err(HikeNoLegs)
     # The vertex ID `vid` was a follow up from a parent vertex, but there is
     # no child vertex on the database. So `vid` is a dangling link which is

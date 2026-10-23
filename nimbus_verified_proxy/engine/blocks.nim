@@ -55,6 +55,8 @@ func convHeader*(blk: eth_api_types.BlockObject): Header =
     excessBlobGas: blk.excessBlobGas.u64,
     parentBeaconBlockRoot: blk.parentBeaconBlockRoot,
     requestsHash: blk.requestsHash,
+    blockAccessListHash: blk.blockAccessListHash,
+    slotNumber: blk.slotNumber,
   )
 
 func isEIP2935Active(engine: RpcVerificationEngine, header: Header): bool =

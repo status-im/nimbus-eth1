@@ -99,7 +99,7 @@ proc closeWait*(nimbus: NimbusNode) {.async.} =
   if nimbus.beaconEngine.isNil.not:
     waitedFutures.add nimbus.beaconEngine.stop()
 
-  waitedFutures.add nimbus.fc.stopProcessingQueue()
+  waitedFutures.add nimbus.fc.flushBaseLoop(dropQueue = true)
 
   let
     # The 30s for shutdown is quite rich but would not do any harm. Previously,

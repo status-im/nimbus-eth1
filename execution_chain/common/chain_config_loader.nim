@@ -10,9 +10,10 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[strutils, macros],
+  std/strutils,
   std/os,
-  stew/[byteutils, io2],
+  stew/[byteutils, io2, staticfor],
+  stew/shims/macros,
   stint,
   eth/common,
   eth/common/eth_types_json_serialization,
@@ -214,17 +215,6 @@ proc readValue(reader: var JsonReader[JGenesis], value: var array[Cancun..HardFo
 
 # Blob-schedule post-processing
 
-macro blobScheduleActivation(conf: typed): untyped =
-  # Automated blob schedule parser generator
-  var res = nnkBracket.newTree
-  for fork in Cancun..HardFork.high:
-    let activationName = BlobScheduleTable[fork] & "Time"
-    let fieldIdent = newIdentNode(activationName)
-    res.add quote do:
-      `conf`.`fieldIdent`
-
-  res
-
 proc configureBlobSchedule(conf: ChainConfig) =
   if conf.blobSchedule[Cancun].isNone:
     conf.blobSchedule[Cancun] = Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64))
@@ -232,7 +222,10 @@ proc configureBlobSchedule(conf: ChainConfig) =
     if conf.blobSchedule[Cancun].value.baseFeeUpdateFraction == 0:
       conf.blobSchedule[Cancun].value.baseFeeUpdateFraction = 3_338_477'u64
 
-  let blobScheduleTime: array[Cancun..HardFork.high, Opt[EthTime]] = blobScheduleActivation(conf)
+  var blobScheduleTime: array[Cancun..HardFork.high, Opt[EthTime]]
+  staticFor i, Cancun.int .. HardFork.high.int:
+    blobScheduleTime[HardFork(i)] =
+      conf.field(BlobScheduleTable[HardFork(i)] & "Time")
 
   var prevFork = Cancun
   for fork in Prague..HardFork.high:

@@ -272,7 +272,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.
   if chain.haveBlockAndState(blockHash):
-    debug "Ignoring already known beacon payload",
+    debug "Ignoring already known payload",
       number = header.number, hash = blockHash.short
     return
       if withWitness:
@@ -334,23 +334,21 @@ proc newPayload*(ben: BeaconEngineRef,
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
 
-  block:
-    let res = await chain.queueImportBlock(blk, blockAccessList)
-    if res.isErr:
-      warn "Error importing block",
-        number = header.number,
-        hash = blockHash.short,
-        parent = header.parentHash.short,
-        error = res.error.msg
-      ben.setInvalidAncestor(header, blockHash)
-      let
-        txFrame = chain.latestTxFrame()
-        blockHash = latestValidHash(txFrame, parent, ttd)
-      return invalidStatus(blockHash, res.error.msg)
+  (await chain.importBlock(blk, blockAccessList)).isOkOr:
+    warn "Error importing block",
+      number = header.number,
+      hash = blockHash.short,
+      parent = header.parentHash.short,
+      error = error.msg
+    ben.setInvalidAncestor(header, blockHash)
+    let
+      txFrame = chain.latestTxFrame()
+      blockHash = latestValidHash(txFrame, parent, ttd)
+    return invalidStatus(blockHash, error.msg)
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 
-  info "New payload received and validated",
+  info "New payload validated",
     number = header.number,
     hash = blockHash.short,
     parent = header.parentHash.short,
@@ -358,8 +356,7 @@ proc newPayload*(ben: BeaconEngineRef,
     gasUsed = header.gasUsed,
     blobGas = header.blobGasUsed.get(0'u64)
 
-  return
-    if withWitness:
-      validStatus(blockHash, ben.collectWitness(blk))
-    else:
-      validStatus(blockHash)
+  if withWitness:
+    validStatus(blockHash, ben.collectWitness(blk))
+  else:
+    validStatus(blockHash)

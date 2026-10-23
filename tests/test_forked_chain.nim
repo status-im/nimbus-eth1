@@ -252,8 +252,9 @@ template checkVerdictErr(chain, blk, expected) =
 template checkForkChoice(chain, a, b) =
   let bHash = when typeof(b) is Hash32: b
               else: b.blockHash
-  let res = waitFor chain.forkChoice(a.blockHash, bHash)
+  let res = chain.forkChoice(a.blockHash, bHash)
   check res.isOk
+  waitFor chain.flushBaseLoop()
   if res.isErr:
     debugEcho "FORK CHOICE FAIL: ", res.error
     when typeof(b) is Hash32:
@@ -262,7 +263,8 @@ template checkForkChoice(chain, a, b) =
       debugEcho "Block Number: ", a.header.number, ", ", b.header.number
 
 template checkForkChoiceErr(chain, a, b) =
-  let res = waitFor chain.forkChoice(a.blockHash, b.blockHash)
+  let res = chain.forkChoice(a.blockHash, b.blockHash)
+  waitFor chain.flushBaseLoop()
   check res.isErr
   if res.isOk:
     debugEcho "FORK CHOICE SHOULD FAIL"
@@ -992,7 +994,7 @@ suite "ForkedChainRef tests":
     const info = "newBase move forward, auto mode"
     let com = env.newCom()
     let chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
-    check (waitFor chain.forkChoice(blk7.blockHash, blk6.blockHash)).isErr
+    check chain.forkChoice(blk7.blockHash, blk6.blockHash).isErr
     check chain.tryUpdatePendingFCU(blk6.blockHash, blk6.header.number)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
@@ -1001,13 +1003,14 @@ suite "ForkedChainRef tests":
     checkImportBlock(chain, blk5)
     checkImportBlock(chain, blk6)
     checkImportBlock(chain, blk7)
+    waitFor chain.flushBaseLoop()
 
     check chain.validate info & " (1)"
 
-    checkHeadHash chain, blk2.blockHash
+    checkHeadHash chain, blk4.blockHash
     check chain.latestHash == blk7.blockHash
 
-    check chain.baseNumber == 2'u64
+    check chain.baseNumber == 4'u64
     check chain.heads.len == 1
     check chain.validate info & " (2)"
 
@@ -1041,7 +1044,7 @@ suite "ForkedChainRef tests":
       baseDistance = 2,
       persistBatchSize = 1,
       dynamicBatchSize = false)
-    check (waitFor chain.forkChoice(blk8.blockHash, blk8.blockHash)).isErr
+    check chain.forkChoice(blk8.blockHash, blk8.blockHash).isErr
     check chain.tryUpdatePendingFCU(blk8.blockHash, blk8.header.number)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
@@ -1054,13 +1057,14 @@ suite "ForkedChainRef tests":
     checkImportBlock(chain, blk6)
     checkImportBlock(chain, blk7)
     checkImportBlock(chain, blk8)
+    waitFor chain.flushBaseLoop()
 
     check chain.validate info & " (1)"
 
-    checkHeadHash chain, blk5.blockHash
+    checkHeadHash chain, blk6.blockHash
     check chain.latestHash == blk8.blockHash
 
-    check chain.baseNumber == 5'u64
+    check chain.baseNumber == 6'u64
     check chain.heads.len == 1
     check chain.validate info & " (2)"
 
@@ -1652,8 +1656,9 @@ suite "ForkedChainRef tests":
       chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7]:
       checkImportBlock(chain, blk)
-    check (waitFor chain.forkChoice(
-      blk7.blockHash, blk5.blockHash, blk6.blockHash)).isOk
+    check chain.forkChoice(
+      blk7.blockHash, blk5.blockHash, blk6.blockHash).isOk
+    waitFor chain.flushBaseLoop()
     check chain.baseHash == blk4.blockHash
     check chain.fcuHead.hash == blk7.blockHash
     check chain.fcuSafe.hash == blk6.blockHash
@@ -1748,15 +1753,15 @@ procSuite "ForkedChain mainnet replay":
     let
       era0 = EreDB.new(sourcePath / "replay", "mainnet", 15537394'u64).expect("Ere files present")
       com = CommonRef.new(AristoDbMemory.newCoreDbRef())
-      fc {.used.}= ForkedChainRef.init(com, enableQueue = true)
+      fc {.used.}= ForkedChainRef.init(com)
 
   asyncTest "Replay mainnet era, single FCU":
     var blk: EthBlock
     for i in 1..<fc.baseDistance * 10:
       era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
-      check (await fc.queueImportBlock(blk)).isOk()
+      check (await fc.importBlock(blk)).isOk()
 
-    check (await fc.queueForkChoice(blk.blockHash, blk.blockHash)).isOk()
+    check fc.forkChoice(blk.blockHash, blk.blockHash).isOk()
 
   asyncTest "Replay mainnet era, multiple FCU":
     # Simulates the typical case where fcu comes after the block
@@ -1767,10 +1772,10 @@ procSuite "ForkedChain mainnet replay":
 
     for i in 1..<fc.baseDistance * 10:
       era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
-      check (await fc.queueImportBlock(blk)).isOk()
+      check (await fc.importBlock(blk)).isOk()
 
       let hash = blk.blockHash
-      check (await fc.queueForkChoice(hash, blocks[0])).isOk()
+      check fc.forkChoice(hash, blocks[0]).isOk()
       if i mod 32 == 0:
         # in reality, finalized typically lags a bit more than this, but
         # for the purpose of the test, this should be good enough
@@ -1778,7 +1783,7 @@ procSuite "ForkedChain mainnet replay":
         blocks[1] = hash
 
   asyncTest "Replay mainnet era, multiple FCU - stateroot check enabled & custom persist batch size":
-    let fc = ForkedChainRef.init(com, enableQueue = true, eagerStateRoot = true, persistBatchSize = 10)
+    let fc = ForkedChainRef.init(com, eagerStateRoot = true, persistBatchSize = 10)
 
     var blk: EthBlock
     era0.getEthBlock(0.BlockNumber, blk).expect("block in test database")
@@ -1787,10 +1792,10 @@ procSuite "ForkedChain mainnet replay":
 
     for i in 1..<fc.baseDistance * 2:
       era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
-      check (await fc.queueImportBlock(blk)).isOk()
+      check (await fc.importBlock(blk)).isOk()
 
       let hash = blk.blockHash
-      check (await fc.queueForkChoice(hash, blocks[0])).isOk()
+      check fc.forkChoice(hash, blocks[0]).isOk()
       if i mod 32 == 0:
         # in reality, finalized typically lags a bit more than this, but
         # for the purpose of the test, this should be good enough
@@ -1810,11 +1815,11 @@ procSuite "ForkedChain mainnet replay":
     era0.getEthBlock(2.BlockNumber, blk2).expect("block in test database")
     era0.getEthBlock(3.BlockNumber, blk3).expect("block in test database")
 
-    check (await fc.queueImportBlock(blk1)).isOk()
+    check (await fc.importBlock(blk1)).isOk()
     for i in 1..10:
-      check (await fc.queueImportBlock(invalidBlk)).isErr()
-    check (await fc.queueImportBlock(blk2)).isOk()
-    check (await fc.queueImportBlock(blk3)).isOk()
+      check (await fc.importBlock(invalidBlk)).isErr()
+    check (await fc.importBlock(blk2)).isOk()
+    check (await fc.importBlock(blk3)).isOk()
 
   asyncTest "Concurrent block imports - stateroot check enabled":
     let fc = ForkedChainRef.init(com, eagerStateRoot = true)

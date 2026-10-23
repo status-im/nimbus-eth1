@@ -11,10 +11,13 @@ import
   std/tables,
   chronos,
   stint,
+  stew/shims/macros,
   beacon_chain/spec/forks,
   web3/[eth_api, eth_api_types],
   json_rpc/[rpcserver, rpcclient],
   ../engine/types
+
+from ../../execution_chain/rpc/filters import match
 
 type
   ProofQuery = (Address, seq[Bytes32], Hash32)
@@ -35,7 +38,7 @@ type
     blockReceipts: Table[Hash32, seq[ReceiptObject]]
     receipts: Table[Hash32, ReceiptObject]
     transactions: Table[Hash32, TransactionObject]
-    logs: Table[FilterOptions, seq[LogObject]]
+    logs: seq[LogObject]
     feeHistories: Table[FeeHistoryQuery, FeeHistoryResult]
     bootstraps: Table[Eth2Digest, ForkedLightClientBootstrap]
     updates: Table[uint64, ForkedLightClientUpdate]
@@ -54,7 +57,7 @@ func clear*(t: TestApiState) =
   t.blockReceipts.clear()
   t.receipts.clear()
   t.transactions.clear()
-  t.logs.clear()
+  t.logs.setLen(0)
   t.feeHistories.clear()
 
 template loadBlock*(t: TestApiState, blk: BlockObject) =
@@ -104,10 +107,8 @@ template loadBlockReceipts*(
   t.blockReceipts[blkHash] = receipts
   t.nums[blkNum] = blkHash
 
-template loadLogs*(
-    t: TestApiState, filterOptions: FilterOptions, logs: seq[LogObject]
-) =
-  t.logs[filterOptions] = logs
+template loadLogs*(t: TestApiState, newLogs: seq[LogObject]) =
+  t.logs.add(newLogs)
 
 template loadFeeHistory*(
     t: TestApiState,
@@ -142,50 +143,11 @@ func hash*(x: BlockTag): Hash =
 func hash*(x: FeeHistoryQuery): Hash =
   hash(x[0].uint64) xor hash(x[1])
 
-# TODO: remove template below after this is resolved
-# https://github.com/nim-lang/Nim/issues/25087
-template `==`*(x: BlockTag, y: BlockTag): bool =
-  hash(x) == hash(y)
-
-func hash*[T](x: SingleOrList[T]): Hash =
-  if x.kind == SingleOrListKind.slkSingle:
-    return hash(x.single)
-  elif x.kind == SingleOrListKind.slkList:
-    return hash(x.list)
-  else:
-    return hash(0)
-
-# TODO: remove template below after this is resolved
-# https://github.com/nim-lang/Nim/issues/25087
-template `==`*[T](x: SingleOrList[T], y: SingleOrList[T]): bool =
-  hash(x) == hash(y)
-
-func hash*(x: FilterOptions): Hash =
-  let
-    fromHash =
-      if x.fromBlock.isSome():
-        hash(x.fromBlock.get)
-      else:
-        hash(0)
-    toHash =
-      if x.toBlock.isSome():
-        hash(x.toBlock.get)
-      else:
-        hash(0)
-    addrHash = hash(x.address)
-    topicsHash = hash(x.topics)
-    blockHashHash =
-      if x.blockHash.isSome():
-        hash(x.blockHash.get)
-      else:
-        hash(0)
-
-  (fromHash xor toHash xor addrHash xor topicsHash xor blockHashHash)
-
-# TODO: remove template below after this is resolved
-# https://github.com/nim-lang/Nim/issues/25087
-template `==`*(x: FilterOptions, y: FilterOptions): bool =
-  hash(x) == hash(y)
+func `==`*(x, y: BlockTag): bool =
+  for name, value in x.fieldPairs:
+    if value != y.field(name):
+      return false
+  true
 
 func convToPartialBlock(blk: BlockObject): BlockObject =
   var txHashes: seq[TxOrHash]
@@ -221,6 +183,8 @@ func convToPartialBlock(blk: BlockObject): BlockObject =
     excessBlobGas: blk.excessBlobGas,
     parentBeaconBlockRoot: blk.parentBeaconBlockRoot,
     requestsHash: blk.requestsHash,
+    blockAccessListHash: blk.blockAccessListHash,
+    slotNumber: blk.slotNumber,
   )
 
 proc initTestExecutionBackend*(t: TestApiState): ExecutionApiBackend =
@@ -312,10 +276,19 @@ proc initTestExecutionBackend*(t: TestApiState): ExecutionApiBackend =
     getLogsProc = proc(
         filterOptions: FilterOptions
     ): Future[EngineResult[seq[LogObject]]] {.async: (raises: [CancelledError]).} =
-      try:
-        ok(t.logs[filterOptions])
-      except KeyError as e:
-        err((BackendFetchError, e.msg, UNTAGGED))
+      var res: seq[LogObject]
+      for lg in t.logs:
+        let inRange =
+          if filterOptions.blockHash.isSome():
+            lg.blockHash == filterOptions.blockHash
+          else:
+            # we directly use number here because the verified proxy should never use aliases
+            lg.blockNumber.isSome() and
+              lg.blockNumber.get() in
+              filterOptions.fromBlock.get().number .. filterOptions.toBlock.get().number
+        if inRange and lg.match(filterOptions.address, filterOptions.topics):
+          res.add(lg)
+      ok(res)
 
     feeHistoryProc = proc(
         blockCount: Quantity, newestBlock: BlockTag, rewardPercentiles: seq[float64]

@@ -557,6 +557,40 @@ proc runLedgerBasicOperationsTests() =
         val = memDB.baseTxFrame().get(key.toOpenArray).valueOr: EmptyBlob
       check val == code
 
+    test "Stateless: code written earlier in the block serves reads by hash":
+      let
+        bob = initAddr(2)
+        alice = initAddr(3)
+      block:
+        # Pre-state: bob holds code that is not in the database, as when a
+        # witness omits it
+        let pre = LedgerRef.init(memDB.baseTxFrame())
+        pre.holdCode = true
+        pre.setCode(bob, code)
+        pre.persist()
+
+      # A rolled back write must not serve the code
+      let reverted = LedgerRef.init(memDB.baseTxFrame(), false, stateless = true)
+      let sp = reverted.beginSavePoint()
+      reverted.setCode(alice, code)
+      reverted.rollback(sp)
+      check:
+        reverted.getCodeSize(bob) == 0
+        reverted.fatalError.isSome
+
+      # A committed write serves it, even when cleared again (never persisted)
+      let ledger = LedgerRef.init(memDB.baseTxFrame(), false, stateless = true)
+      let sp2 = ledger.beginSavePoint()
+      ledger.setCode(alice, code)
+      ledger.setCode(alice, @[])
+      ledger.commit(sp2)
+      ledger.persist()
+      check:
+        ledger.getCodeSize(bob) == code.len
+        ledger.getCode(bob) == code
+        ledger.getOriginalCode(bob) == code
+        ledger.fatalError.isNone
+
     test "accessList operations":
       proc verifyAddrs(ledger: LedgerRef, addrs: varargs[int]): bool =
         for c in addrs:

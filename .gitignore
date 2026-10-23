@@ -28,7 +28,7 @@
 *.dll
 
 # Ignore generated C and doc files
-nimcache
+nimcache/
 /execution_chain/docs
 
 /debug*.json
