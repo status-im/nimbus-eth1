@@ -17,12 +17,18 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos, stew/interval_set],
+  std/sequtils,
+  pkg/[chronicles, chronos, metrics, stew/interval_set],
   ../../[helpers, cache_db, delete_account, mpt_build, worker_desc],
   ./storage_fetch
 
 const
   emptyProof = seq[ProofNode].default
+
+declareGauge nec_snap_storage_coverage, "" &
+  "Factor of accumulated storage slots ranges"
+
+proc storageDownloadMetricsUpdate*(ctx: SnapCtxRef, info: static[string])
 
 # ------------------------------------------------------------------------------
 # Private helpers for `downloadImpl()`
@@ -337,6 +343,8 @@ template queueAndDownload(
       number, nComplete=(stoQ.len - nPartial), nPartial,
       syncState=($buddy.syncState)
 
+    ctx.storageDownloadMetricsUpdate(info)          # update metrics
+
     bodyRc = typeof(bodyRc).ok()
     # End `block body`
 
@@ -345,6 +353,23 @@ template queueAndDownload(
 # ------------------------------------------------------------------------------
 # Public function
 # ------------------------------------------------------------------------------
+
+proc storageDownloadMetricsReset*(ctx: SnapCtxRef) =
+  metrics.set(nec_snap_storage_coverage, 0)
+
+proc storageDownloadMetricsUpdate*(ctx: SnapCtxRef, info: static[string]) =
+  var
+    q: seq[float]
+    n: int
+  for w in ctx.pool.cacheDB.walkStoMissingIntv():
+    if w.data.ranges.isFullRange:
+      n.inc
+    else:
+      q.add w.data.ranges.totalRatio
+  let
+    d = n + q.len
+    r = if 0 < d: (n.float + q.foldl(a+b, 0.0)) / d.float else: 0.0
+  metrics.set(nec_snap_storage_coverage, 1.0 - r)
 
 template storageDownloadCommit*(
     ctx: SnapCtxRef;
@@ -355,8 +380,9 @@ template storageDownloadCommit*(
   ##
   ## Get ready for state forward procedure using BAL.
   ##
-  ## In particular, for partial storage sub-MPTs and lock records, its
-  ## correspnding accounts and contract code are deleted.
+  ## In particular, for partial storage sub-MPTs the account must be re-fetched
+  ## so that the storage root can be updated. This is needed for completing the
+  ## storage tree from the updated state.
   ##
   var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
@@ -364,32 +390,37 @@ template storageDownloadCommit*(
       error info & ": Cannot commit unsynced accounts ranges"
       bodyRc = typeof(bodyRc).err(ENoDataAvailable)
       break body
+    if ctx.accUnproc.borrowed.chunks != 0:          # clean accounts registry?
+      error info & ": Cannot update dirty unprocessed ranges",
+        nBorrowedChunks=ctx.accUnproc.borrowed.chunks
+      bodyRc = typeof(bodyRc).err(ENoDataAvailable)
+      break body                                    # failed
 
     let adb = ctx.pool.cacheDB
 
-    # Collect paths for partial sub-MPTs.
-    var accPaths: seq[Hash32]
-    for w in adb.walkStoMissingIntv:
+    # Process paths for partial sub-MPTs.
+    var nPartMpt {.inject,used.} = 0
+    for w in adb.walkStoMissingIntv():
       if 0 < w.error.len:
         error info & ": Error walking missing storage list", `error`=w.error
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body
-      accPaths.add w.accPath
+      # Mark account deleted while leaving the record in the database.
+      discard ctx.accUnproc.unprocessed.merge(w.accPath.to(ItemKey))
+      nPartMpt.inc
       timer.yieldThread()
 
-    let nPartMpt {.inject.} = accPaths.len
-    for key in adb.walkStoLock:
-      accPaths.add key
-
-    # Delete all accounts for partial sub-MPTs and obsolete storage locks.
-    for accPath in accPaths:
+    # Delete all accounts for obsolete storage locks which should
+    # never happen in the first place.
+    let lckPaths = adb.walkStoLock.toSeq()
+    for accPath in lckPaths:
       ctx.deleteAccount(accPath, timer, info).isOkOr:
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body
 
-    if 0 < accPaths.len:
-      chronicles.info info & ": Cleared partial storage sub-MPTs",
-        nPartMpt, nStoLock=(accPaths.len-nPartMpt)
+    if 0 < lckPaths.len or 0 < nPartMpt:
+      warn info & ": Cleared locked storage sub-MPTs",
+        nPartMpt, nStoLock=lckPaths.len
 
     bodyRc = typeof(bodyRc).ok()
     # End `block body`

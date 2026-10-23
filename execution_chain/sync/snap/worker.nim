@@ -153,7 +153,6 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       ctx.downloadCommit(info).isOkOr:              # write back ranges to DB
         # FIXME: any useful error handling here?
         error info & ": Error storing progress", `error`=error
-      await ctx.statsStateLog info                  # FIXME, will go away
 
     of SnapBalsFetch:
       discard ctx.headerDownloadTrigger(info)       # see `SnapDownload`
@@ -174,12 +173,18 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         forwardNum=ctx.pool.forwardNum
 
     of SnapAssembleMpt:
-      ctx.importCoreDb(info).isOkOr:
-        ctx.pool.resetReq = true                    # not much else possible
+      let start = Moment.now()
+      ctx.importCoreDb(info).isErrOr:
+        debug info & ": coreDb import ok",
+          stats=value, ela=(Moment.now()-start).toStr
+        break body
+
+      ctx.pool.resetReq = true                      # not much else possible
+      debug info & ": coreDb import failed", ela=(Moment.now()-start).toStr
 
     of SnapStop:
-      await ctx.statsStateLog info                  # FIXME, will go away
       ctx.accountDownloadMetricsReset()             # cosmetics
+      ctx.storageDownloadMetricsReset()
 
       # Done, terminate
       if 0 < ctx.pool.newCoreDb.newDbPath.len:

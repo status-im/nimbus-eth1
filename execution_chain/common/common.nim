@@ -201,11 +201,12 @@ proc initializeDb(com: CommonRef) =
       FcuHashAndNumber(hash: baseHash, number: base.number)
 
   # Check for truncated history
-  var sohNum = BlockNumber(0)
+  var sohNum = "n/a"
   txFrame.getFirstBlockHeader().isErrOr:
     doAssert 0 < value.number
     com.startOfHistory = value.parentHash
-    sohNum = value.number - 1
+    if 0 < value.number:
+      sohNum = $(value.number - 1)
 
   info "Database initialized",
     base = (baseHash, base.number),

@@ -306,33 +306,45 @@ proc internalRestart(
       nimbus.balPruner = BalPrunerRef(nil)
 
   # Update database
-  com.db.close()
-  let
-    params = config.computeNetworkParams()
-    dataDir = config.dataDir(params)
-  dataDir.ecdbDirSwap(newDbPath).isOkOr:
-    fatal "Cannot update database", dataDir, newDbPath, error
-    QuitFailure.onException("Exception while shutting down"):
-      waitFor nimbus.closeWait()
-    quit(QuitFailure)
-
-  # Reassign updated DB. This is managed transparently by the `CoreDb`
-  # wrapper, the sole exception being an unmanaged KVT table for the
-  # header cache. This is handled below (see `beaconSyncRef.refresh()`.)
-  when compileOption("threads"):
+  block updateDb:
+    # FIXME.
+    # This section will be reworked. Rather than accepting a new initialised
+    # DB, the current one will be loaded by snap data assuming it is empty.
+    # There is no recourse if that fails (e.g. state root mismatch.)
+    com.db.close()
     let
-      taskpool = setupTaskpool(config.numThreads)
-      dbOpts = config.getCoreDbOpts(params, taskpool.numThreads)
-    AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
-    com.taskpool = taskpool
-    com.db.mpt.taskpool = taskpool
-  else:
-    dbOpts = config.getCoreDbOpts(params, 0)
-    AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
+      params = config.computeNetworkParams()
+      dataDir = config.dataDir(params)
+    dataDir.ecdbDirSwap(newDbPath).isOkOr:
+      fatal "Cannot update database", dataDir, newDbPath, error
+      QuitFailure.onException("Exception while shutting down"):
+        waitFor nimbus.closeWait()
+      quit(QuitFailure)
 
-  # Force `com` and other modules to ajustment. History and forks have leapt
-  # forward. So modules must adjust accordingly.
+    # Reassign updated DB. This is managed transparently by the `CoreDb`
+    # wrapper, the sole exception being an unmanaged KVT table for the
+    # header cache. This is handled below (see `beaconSyncRef.refresh()`.)
+    when compileOption("threads"):
+      let
+        taskpool = setupTaskpool(config.numThreads)
+        dbOpts = config.getCoreDbOpts(params, taskpool.numThreads)
+      AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
+      com.taskpool = taskpool
+      com.db.mpt.taskpool = taskpool
+    else:
+      dbOpts = config.getCoreDbOpts(params, 0)
+      AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
+
+  # Force `com` and other modules to ajust. History and forks have leapt
+  # forward. So modules must update accordingly.
   com.refresh()
+
+  if true:
+    warn "Snap sync was successful and a new DB is available." &
+      " The modules update code has to be re-worked. So the EL" &
+      " stops here and needs to be manually restarted."
+    quit(QuitSuccess)
+
   nimbus.fc.refresh()
   QuitFailure.onException("Cannot initialise RPC client history"):
     nimbus.fc.portal = HistoryExpiryRef.init(config, com)
@@ -403,6 +415,10 @@ proc setupCommonRef*(
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config, params)
 
+  # FIXME.
+  # When running snap sync, the ledger (aka Aristo) database needs to be kept
+  # empty while Genesis (with the proper state root) will be stored in kvt.
+  # To set that up is a task for the common module.
   let com = CommonRef.new(
     db = coreDB,
     params = params,
