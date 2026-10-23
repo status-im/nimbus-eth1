@@ -20,7 +20,7 @@ import
   ../../evm/types,
   ../../evm/precompiles,
   ../../evm/interpreter/gas_costs,
-  ../../block_access_list/[bal_builder, bal_overlay, bal_tracker, bal_utils],
+  ../../block_access_list/[bal_builder, bal_overlay, bal_tracker],
   ../../concurrency/[shared_types, utils],
   ../eip6110,
   ../eip7691,
@@ -285,37 +285,6 @@ template withBalPrefetchParallel*(
     for f in futs.mitems():
       discard sync(f)
 
-proc applyBlockAccessListState(ledger: LedgerRef, bal: BlockAccessList, txCount: int) =
-  let boundary = txCount + 1
-
-  for accChanges in bal:
-    let address = accChanges.address
-
-    var balanceZeroed = false
-    let balancePos = accChanges.balanceChanges.findLastWriteBefore(boundary)
-    if balancePos >= 0:
-      let postBalance = accChanges.balanceChanges[balancePos].postBalance
-      ledger.setBalance(address, postBalance)
-      balanceZeroed = postBalance.isZero
-
-    let noncePos = accChanges.nonceChanges.findLastWriteBefore(boundary)
-    if noncePos >= 0:
-      ledger.setNonce(address, accChanges.nonceChanges[noncePos].newNonce)
-
-    let codePos = accChanges.codeChanges.findLastWriteBefore(boundary)
-    if codePos >= 0:
-      ledger.setCode(address, accChanges.codeChanges[codePos].newCode)
-
-    for slotChanges in accChanges.storageChanges:
-      let changePos = slotChanges.changes.findLastWriteBefore(boundary)
-      if changePos >= 0:
-        ledger.setStorage(
-          address, slotChanges.slot, slotChanges.changes[changePos].newValue
-        )
-
-    if balanceZeroed:
-      ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
-
 proc packLogs(logs: openArray[Log]): SharedBytes =
   var size = sizeof(uint32)
   for log in logs:
@@ -544,5 +513,5 @@ proc processTransactionsParallel*(
       vmState.receipts[i] =
         vmState.makeReceipt(transactions[i].txType)
 
-  applyBlockAccessListState(vmState.ledger, balRef[], n)
+  vmState.ledger.applyBlockAccessList(balRef[], n)
   ok()
