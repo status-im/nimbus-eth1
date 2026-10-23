@@ -26,6 +26,26 @@ fail_uncheckable() {
   exit "$E_UNCHECKABLE"
 }
 
+# Ensure the given commit is available in a submodule so that an ancestry check
+# is possible. A shallow/depth-limited checkout may not contain it, so fetch the
+# full history: unshallow, then a plain fetch, then the specific commit from the
+# local nimbus-eth2 clone (which always has it checked out). Quiet on success;
+# returns non-zero (with a diagnostic) only if the commit still can't be resolved.
+ensure_commit() {
+  local dep="$1" commit="$2"
+  git -C "$dep" cat-file -e "$commit^{commit}" 2>/dev/null && return 0
+  local eth2clone
+  eth2clone="$(pwd)/vendor/nimbus-eth2/$dep"
+  git -C "$dep" fetch -q --unshallow origin 2>/dev/null \
+    || git -C "$dep" fetch -q origin 2>/dev/null \
+    || git -C "$dep" fetch -q "$eth2clone" "$commit" 2>/dev/null
+  if git -C "$dep" cat-file -e "$commit^{commit}" 2>/dev/null; then
+    return 0
+  fi
+  echo "  [debug] $dep: eth2 commit $commit still missing after fetch (is-shallow=$(git -C "$dep" rev-parse --is-shallow-repository 2>/dev/null))" >&2
+  return 1
+}
+
 COMMON=$(ls vendor/ vendor/nimbus-eth2/vendor/ -1 | sort | uniq -d | sed -e "sX^Xvendor/X")
 
 if [[ "$1" == "--update" ]]; then
@@ -37,8 +57,7 @@ if [[ "$1" == "--update" ]]; then
     [ -z "$eth2_commit" ] && continue
     [ "$eth1_commit" = "$eth2_commit" ] && continue
     # the eth2 commit must be present in the eth1 submodule to compare history
-    git -C "$dep" cat-file -e "$eth2_commit^{commit}" 2>/dev/null \
-      || fail_uncheckable "$dep" "$eth2_commit"
+    ensure_commit "$dep" "$eth2_commit" || fail_uncheckable "$dep" "$eth2_commit"
     # eth2 commit is an ancestor of the eth1 commit -> eth1 is newer
     if git -C "$dep" merge-base --is-ancestor "$eth2_commit" "$eth1_commit"; then
       if [[ "$2" == "--downgrade" ]]; then
@@ -60,8 +79,7 @@ else
     [ -z "$eth2_commit" ] && continue
     [ "$eth1_commit" = "$eth2_commit" ] && continue
     # the eth2 commit must be present in the eth1 submodule to compare history
-    git -C "$dep" cat-file -e "$eth2_commit^{commit}" 2>/dev/null \
-      || fail_uncheckable "$dep" "$eth2_commit"
+    ensure_commit "$dep" "$eth2_commit" || fail_uncheckable "$dep" "$eth2_commit"
     # eth1 is OK when the eth2 commit is an ancestor of the eth1 commit
     # (i.e. the eth2 commit appears in the history of the eth1 commit)
     if git -C "$dep" merge-base --is-ancestor "$eth2_commit" "$eth1_commit"; then
