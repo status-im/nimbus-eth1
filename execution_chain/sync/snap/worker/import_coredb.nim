@@ -63,19 +63,17 @@ proc importCoreDb*(
     info: static[string];
     stopOnError = true;
       ): Opt[CoredbImportStats] =
-  ## Import the flat tables into a version of CoreDb/Aristo, different from
-  ## the active one. If successful, the installation path is returned.
+  ## Import the flat tables into a temporary CoreDb version. After assembly,
+  ## the temporary database is closed and wiped.
   ##
   ## This function is for debugging, only.
   ##
   let
     adb = ctx.pool.cacheDB
-    db2 = CoreDb2Ref.init(ctx, clean=true)
-  defer: db2.destroy()                              # close and reset desctiptor
+    db2 = CoreDb2Ref.init(ctx)
+  defer: db2.destroy()
 
-  let txStats = ?db2.db2.importCoreDb(db2.tx2, adb, info, stopOnError)
-  ctx.pool.newCoreDb.newDbPath = string db2.dbDir
-  ok(txStats)
+  db2.db2.importCoreDb(db2.tx2, adb, info, stopOnError)
 
 # ------------------------------------------------------------------------------
 # End

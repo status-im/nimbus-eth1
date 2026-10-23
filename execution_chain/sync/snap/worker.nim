@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos, minilru, results],
   pkg/[beacon_chain/process_state, stew/byteutils],
-  ./worker/[download, helpers, cache_db, import_coredb,
+  ./worker/[download, helpers, cache_db,
             state_forward, start_stop, update, worker_desc]
 
 logScope:
@@ -173,24 +173,19 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         forwardNum=ctx.pool.forwardNum
 
     of SnapAssembleMpt:
-      let start = Moment.now()
-      ctx.importCoreDb(info).isErrOr:
-        debug info & ": coreDb import ok",
-          stats=value, ela=(Moment.now()-start).toStr
-        break body
-
-      ctx.pool.resetReq = true                      # not much else possible
-      debug info & ": coreDb import failed", ela=(Moment.now()-start).toStr
+      # This is a place holder state for DB test. In production mode,
+      # there will be nothing to do here. Eventally, this state will be
+      # will be removed or merged into `SnapStop`.
+      ctx.pool.newCoreDb.coreDbOk = true
 
     of SnapStop:
       ctx.accountDownloadMetricsReset()             # cosmetics
       ctx.storageDownloadMetricsReset()
 
       # Done, terminate
-      if 0 < ctx.pool.newCoreDb.newDbPath.len:
+      if ctx.pool.newCoreDb.coreDbOk:
         if not ctx.pool.newCoreDb.waitSync:
-          notice info & ": Snap sync successful, will terminate",
-            dbPath=ctx.pool.newCoreDb.newDbPath
+          notice info & ": Snap sync successful, will terminate"
           ctx.pool.newCoreDb.waitSync = true
           ctx.headerDownloadCancel()
         elif ctx.beaconState == BeaconState.idle:
