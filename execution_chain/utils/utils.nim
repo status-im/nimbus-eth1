@@ -56,22 +56,29 @@ func calcLogsBloom*(logs: openArray[Log], bloom: var Bloom) =
 template appendNetworkReceipt(w: var RlpWriter, r, bloomExpr: untyped) =
   ## Network `Receipt` wire format (bloom included) borrowing the stored
   ## receipt's logs instead of copying them
-  if r.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt}:
+  if r.receiptType in {Eip2930Receipt, Eip1559Receipt, Eip4844Receipt, Eip7702Receipt, Eip8141Receipt}:
     w.appendDetached(r.receiptType.uint8)
-  w.startList(4)
-  if r.isHash:
-    w.append(r.hash)
-  else:
-    w.append(r.status.uint8)
-  w.append(r.cumulativeGasUsed)
 
-  when w is RlpLengthTracker:
-    # The length pass only needs the encoded size, identical for any bloom
-    w.append(default(Bloom))
+  if r.receiptType == Eip8141Receipt:
+    w.startList(3)
+    w.append(r.cumulativeGasUsed)
+    w.append(r.payer)
+    w.append(r.frameReceipts)
   else:
-    w.append(bloomExpr)
+    w.startList(4)
+    if r.isHash:
+      w.append(r.hash)
+    else:
+      w.append(r.status.uint8)
+    w.append(r.cumulativeGasUsed)
 
-  w.append(r.logs)
+    when w is RlpLengthTracker:
+      # The length pass only needs the encoded size, identical for any bloom
+      w.append(default(Bloom))
+    else:
+      w.append(bloomExpr)
+
+    w.append(r.logs)
 
 type
   NetworkFormatReceipt = distinct StoredReceipt

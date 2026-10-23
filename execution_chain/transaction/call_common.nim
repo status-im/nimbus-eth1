@@ -16,14 +16,14 @@ import
   ../evm/[types, state],
   ../evm/[message, precompiles, internals, interpreter_dispatch, evm_errors],
   ../evm/interpreter/op_handlers/oph_helpers,
+  ../evm/computation,
   ../db/ledger,
   ../common/evmforks,
   ../core/eip4844,
   ../core/eip8037,
    ./eoa_delegation,
-   ./call_types
-
-import ../evm/computation
+   ./call_types,
+   ./frame_processing
 
 export
   call_types
@@ -93,6 +93,9 @@ proc setupEVM(params: CallParams, keepStack: bool): Computation =
     blobBaseFee      : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, fork),
     tx               : params.tx,
   )
+
+  # non Frame Transaction should not use frame related features
+  vmState.disableFrame()
 
   # reset global refundCounter counter each time
   # EVM called for a new transaction
@@ -232,10 +235,10 @@ proc finishRunningComputation(
     # Collecting the result can be unnecessarily expensive when (re)-processing
     # transactions
     if c.isError:
-      result.error = c.error.info
+      result.error = move(c.error.info)
       result.status = c.error.status
     result.gasUsed = gasUsed.txGasUsed
-    result.output = system.move(c.output)
+    result.output = move(c.output)
     result.contractAddress = if params.isCreate: c.msg.currentTarget
                              else: default(addresses.Address)
 
@@ -264,11 +267,11 @@ proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
     code =
       if params.isCreate:
         if ledger.originalAccountEmpty(c.msg.currentTarget):
-          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
+          ? c.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
         CodeBytesRef.initCopy(tx.payload)
       else:
         if tx.value.isZero.not and not ledger.isAccountAlive(c.msg.currentTarget):
-          ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
+          ? c.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
         assign(c.msg.data, tx.payload)
         getRecipientCode(vmState, c.msg)
 
@@ -327,7 +330,32 @@ proc preExecComputation(c: Computation, params: CallParams) =
     if not params.topFrameAuthAndDelegation(c):
       return
 
+proc handleFrameTransaction(params: CallParams, T: type): T =
+  let
+    res = processFrameTransaction(params)
+
+  when T is CallResult|DebugCallResult:
+    if res.isErr:
+      result.error  = res.error
+      result.status = StatusCode.Failure
+    else:
+      result.gasUsed = res.value.gasUsed
+  elif T is TxResult:
+    if res.isOk:
+      result.gasUsed = res.value.gasUsed
+      result.blockExecutionGasUsed = res.value.executionGasUsed
+      result.blockStateGasUsed = res.value.stateGasUsed
+    else:
+      params.vmState.frameCtx.error = res.error
+  elif T is VoidResult:
+    discard res
+  else:
+    {.error: "Unknown computation output".}
+
 proc runComputation*(params: CallParams, T: type): T =
+  if params.tx.txType == TxEip8141:
+    return handleFrameTransaction(params, T)
+
   prepareToRunComputation(params)
   initialAccessListEIP2929(params)
 

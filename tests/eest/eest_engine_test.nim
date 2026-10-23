@@ -24,6 +24,10 @@ const
 
 const skipFiles = [
   "CALLBlake2f_MaxRounds.json", # Doesn't work in github CI
+  
+  # requires both tx.maxPriorityFeePerGas and tx.maxFeePerGas
+  # of EIP-1559 as UInt256
+  "admission_constraints.json",
 ]
 
 runEESTSuite(
