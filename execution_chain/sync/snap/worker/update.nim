@@ -80,7 +80,7 @@ proc resumeNext(ctx: SnapCtxRef; info: static[string]): SnapState =
   if ctx.accUnproc.synced() and 0 < ctx.pool.pivotNum:
     info info & ": Resuming previous session"
     ctx.allDownloaded(info).isErrOr:
-      return SnapAssembleMpt
+      return SnapStop
     return SnapBalsFetch
   info info & ": No previous session available"
   SnapIdle
@@ -219,21 +219,11 @@ proc downloadCommitNext(ctx: SnapCtxRef, info: static[string]): SnapState =
 
   # Check whether the download is complete
   ctx.allDownloaded(info).isErrOr:
-    return SnapAssembleMpt
+    return SnapStop
 
   SnapBalsFetch
 
 # -------------------------
-
-proc assembleMptNext(ctx: SnapCtxRef, info: static[string]): SnapState =
-  ## State transition handler
-  if ctx.pool.resetReq:                             # Oops, something failed
-    return SnapClear
-  if ctx.pool.newCoreDb.coreDbOk:
-    return SnapStop
-  # Reaching here would be quite unusual as this state is handled
-  # by the deamon in the foreground.
-  SnapAssembleMpt
 
 func stopNext(ctx: SnapCtxRef, info: static[string]): SnapState =
   SnapStop
@@ -254,28 +244,25 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   #                 +---------- resume            |
   #                /               |              |
   #               |                v              v
-  #               |    .--+--> balsFetch -----> clear <---.
-  #               |    |  |        |              |       |
-  #               |    |  |        v              V       |
-  #               |    |  |  balsFetchFinish    ready     |
-  #               |    |  |        |              |       |
-  #               |    |  |        v              |       |
-  #               |    |  `-- stateForward        |       |
-  #               |    |           |              |       |
-  #               |    |           v              |       |
-  #               |    |        download <--------'       |
-  #               |    |           |                      |
-  #               |    |           v                      |
-  #               |    |     downloadFinish               |
-  #               |    |           |                      |
-  #               |    |           v                      |
-  #               |    `---- downloadCommit               |
-  #               |                |                      |
-  #               |                v                      |
-  #               `----------> assembleMpt ---------------'
-  #                                |
-  #                                v
-  #                              stop
+  #               |    .--+--> balsFetch -----> clear
+  #               |    |  |        |              |
+  #               |    |  |        v              v
+  #               |    |  |  balsFetchFinish    ready
+  #               |    |  |        |              |
+  #               |    |  |        v              |
+  #               |    |  `-- stateForward        |
+  #               |    |           |              |
+  #               |    |           v              |
+  #               |    |        download <--------'
+  #               |    |           |
+  #               |    |           v
+  #               |    |     downloadFinish
+  #               |    |           |
+  #               |    |           v
+  #               |    `---- downloadCommit
+  #               |                |
+  #               |                v
+  #               `------------> stop
   #
   let newState =
     case ctx.pool.syncState:
@@ -299,8 +286,6 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
       ctx.balsFetchFinishNext info
     of SnapStateForward:
       ctx.stateForwardNext info
-    of SnapAssembleMpt:
-      ctx.assembleMptNext info
     of SnapStop:
       ctx.stopNext info
 
@@ -311,8 +296,7 @@ proc updateSnapState*(ctx: SnapCtxRef; info: static[string]): SnapState =
   ctx.pool.syncState = newState
 
   case newState:
-  of SnapReady, SnapDownload, SnapDownloadFinish, SnapDownloadCommit,
-     SnapAssembleMpt:
+  of SnapReady, SnapDownload, SnapDownloadFinish, SnapDownloadCommit:
     chronicles.info info & ": State changed", prevState, newState,
       pivot=ctx.pool.pivotNum, finHead=ctx.finHeadNum(info),
       consHead=ctx.consHeadNum(), nSyncPeers=ctx.nSyncPeers()
