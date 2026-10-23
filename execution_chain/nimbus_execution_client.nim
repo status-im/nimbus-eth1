@@ -302,7 +302,14 @@ proc internalRestart(
   com.db.verifyEmptyStateDb(
     "State DB has changed to non-empty. Cannot proceed. STOP")
 
-  let newDbPath = nimbus.snapSyncRef.sharedState().newDbPath
+  # Import snap data.
+  let
+    txFrame = com.db.baseTxFrame()
+    cacheDb = nimbus.snapSyncRef.ctx.pool.cacheDB
+    stats = com.db.importCoreDb(txFrame, cacheDb, "Snap Sync Import").valueOr:
+      fatal "CoreDb import failed. STOP"
+      quit(QuitFailure)
+  info "CoreDb import OK", stats
 
   # Shut down currently unwanted modules. No async poller must be running.
   QuitFailure.onException("Exception while reconfiguring"):
@@ -314,53 +321,22 @@ proc internalRestart(
       waitFor nimbus.snapWire.stop()
 
     # Reaching here, all of the peers will have gone due to the long time
-    # it takes to import the database.
-    #
-    # Also, the beacon syncer depends on the header cache module which in
-    # turn uses sort of a hard KVT reference not managed by the `CoreDb`.
-    # So it must be released and re-assignd.
+    # it takes to import the state DB from snap sync (unless trivial.) So
+    # the easiest action is to simply restart the beacon syncer.
     waitFor nimbus.beaconSyncRef.stop()
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-    # Pruning needs to be stopped and restarted on the new upcoming fork.
-    if nimbus.backgroundPruner.isNil.not:
-      waitFor nimbus.backgroundPruner.stop()
-      nimbus.backgroundPruner = BackgroundPrunerRef(nil)
-    if nimbus.balPruner.isNil.not:
-      waitFor nimbus.balPruner.stop()
-      nimbus.balPruner = BalPrunerRef(nil)
+    # FIXME. Needs to be updated or removed when DB inmort is fully integrated
+    when false:
+      # Pruning needs to be stopped and restarted on the new upcoming fork.
+      if nimbus.backgroundPruner.isNil.not:
+        waitFor nimbus.backgroundPruner.stop()
+        nimbus.backgroundPruner = BackgroundPrunerRef(nil)
+      if nimbus.balPruner.isNil.not:
+        waitFor nimbus.balPruner.stop()
+        nimbus.balPruner = BalPrunerRef(nil)
 
-  # Update database
-  block updateDb:
-    # FIXME.
-    # This section will be reworked. Rather than accepting a new initialised
-    # DB, the current one will be loaded by snap data assuming it is empty.
-    # There is no recourse if that fails (e.g. state root mismatch.)
-    com.db.close()
-    let
-      params = config.computeNetworkParams()
-      dataDir = config.dataDir(params)
-    dataDir.ecdbDirSwap(newDbPath).isOkOr:
-      fatal "Cannot update database", dataDir, newDbPath, error
-      QuitFailure.onException("Exception while shutting down"):
-        waitFor nimbus.closeWait()
-      quit(QuitFailure)
-
-    # Reassign updated DB. This is managed transparently by the `CoreDb`
-    # wrapper, the sole exception being an unmanaged KVT table for the
-    # header cache. This is handled below (see `beaconSyncRef.refresh()`.)
-    when compileOption("threads"):
-      let
-        taskpool = setupTaskpool(config.numThreads)
-        dbOpts = config.getCoreDbOpts(params, taskpool.numThreads)
-      AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
-      com.taskpool = taskpool
-      com.db.mpt.taskpool = taskpool
-    else:
-      dbOpts = config.getCoreDbOpts(params, 0)
-      AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
-
-  # Force `com` and other modules to ajust. History and forks have leapt
+  # Force `com` and other modules to ajust. History and forks have lept
   # forward. So modules must update accordingly.
   com.refresh()
 
@@ -370,13 +346,17 @@ proc internalRestart(
       " stops here and needs to be manually restarted."
     quit(QuitSuccess)
 
+  # Ditto for FC module
   nimbus.fc.refresh()
-  QuitFailure.onException("Cannot initialise RPC client history"):
-    nimbus.fc.portal = HistoryExpiryRef.init(config, com)
-  nimbus.txPool.refresh()
 
-  # Reinitialise pruning as it depends og the current fork.
-  nimbus.setupPruning(config, com)
+  # FIXME. Needs to be updated or removed when DB inmort is fully integrated
+  when false:
+    QuitFailure.onException("Cannot initialise RPC client history"):
+      nimbus.fc.portal = HistoryExpiryRef.init(config, com)
+    nimbus.txPool.refresh()
+
+    # Reinitialise pruning as it depends og the current fork.
+    nimbus.setupPruning(config, com)
 
   # Restart beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init()
