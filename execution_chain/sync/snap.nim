@@ -17,14 +17,14 @@ import
   ../core/chain,
   ../networking/p2p,
   ./snap/[snap_desc, worker],
-  ./snap/worker/helpers,
+  ./snap/worker/[helpers, import_coredb],
   ./[sync_sched, wire_protocol]
 
 from ./beacon
   import BeaconSyncRef, start
 
 export
-  snap_desc
+  snap_desc, import_coredb
 
 logScope:
   topics = "snap sync"
