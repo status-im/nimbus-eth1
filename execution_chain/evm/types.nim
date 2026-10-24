@@ -44,7 +44,8 @@ type
     tx*               : ptr Transaction
 
   BaseVMState* = ref object of RootObj
-    com*              : CommonRef
+    comOwner          : CommonRef
+    comPtr            : pointer
     ledger*           : LedgerRef
     parent*           : Header
     blockCtx*         : BlockContext
@@ -147,6 +148,17 @@ type
 
   TracerRef* = ref object of RootObj
     flags*: set[TracerFlags]
+
+template com*(vmState: BaseVMState): CommonRef =
+  cast[CommonRef](vmState.comPtr)
+
+func `com=`*(vmState: BaseVMState, com: CommonRef) =
+  vmState.comOwner = com
+  vmState.comPtr = cast[pointer](com)
+
+func borrowCom*(vmState: BaseVMState, com: CommonRef) =
+  vmState.comOwner = nil
+  vmState.comPtr = cast[pointer](com)
 
 # Transaction level
 # This is called once fo each transaction

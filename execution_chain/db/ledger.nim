@@ -75,7 +75,8 @@ type
     overlayStorage: Table[UInt256, UInt256]
 
   LedgerRef* = ref object
-    txFrame*: CoreDbTxRef
+    txFrameOwner: CoreDbTxRef
+    txFramePtr: pointer
     savePoint: LedgerSpRef
 
     isDirty: bool
@@ -173,6 +174,17 @@ const
 
 template logTxt(info: static[string]): static[string] =
   "LedgerRef " & info
+
+template txFrame*(ledger: LedgerRef): CoreDbTxRef =
+  cast[CoreDbTxRef](ledger.txFramePtr)
+
+func `txFrame=`*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
+  ledger.txFrameOwner = txFrame
+  ledger.txFramePtr = cast[pointer](txFrame)
+
+func borrowTxFrame*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
+  ledger.txFrameOwner = nil
+  ledger.txFramePtr = cast[pointer](txFrame)
 
 const
   MissingNodeErrors = {HikeBranchUnresolvedEdge, HikeDanglingEdge}

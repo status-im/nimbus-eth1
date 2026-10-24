@@ -36,6 +36,7 @@
 
 {.push raises: [].}
 
+from ../evm/types import com
 import
   metrics,
   eth/common/blocks,
