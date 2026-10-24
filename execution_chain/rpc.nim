@@ -13,7 +13,7 @@ import
   chronicles,
   websock/websock,
   json_rpc/rpcserver,
-  ./rpc/[common, cors, debug, engine_api, jwt_auth, rpc_server, server_api],
+  ./rpc/[common, cors, debug, engine_api, jwt_auth, rpc_server, server_api, testing],
   ./[conf, nimbus_desc]
 
 export
@@ -23,7 +23,8 @@ export
   jwt_auth,
   cors,
   rpc_server,
-  server_api
+  server_api,
+  testing
 
 const DefaultChunkSize = 1024*1024
 
@@ -53,6 +54,8 @@ func installRPC(server: RpcServer,
   if RpcFlag.Debug in flags:
     setupDebugRpc(com, nimbus.txPool, server)
 
+  if RpcFlag.Testing in flags:
+    setupTestingRpc(nimbus.beaconEngine, server)
 
 proc newRpcWebsocketHandler(): RpcWebSocketHandler =
   let rng = bearSslRng(HmacDrbgContext.new())
