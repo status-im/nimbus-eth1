@@ -7,7 +7,7 @@
 cd "$(dirname "${BASH_SOURCE[0]}")"/..
 
 # exit codes
-readonly E_OK=0 E_UNCHECKABLE=2
+readonly E_OK=0 E_MISMATCH=1 E_UNCHECKABLE=2
 
 # Print the commit a submodule is pinned at in the given repo (committed pin,
 # not the working tree). Prints nothing if the path is not a submodule there.
@@ -70,43 +70,57 @@ if [[ "$1" == "--update" ]]; then
     fi
   done
 else
-  outdated=0
-  rows=""
-  for dep in $COMMON; do
+  missing=""
+  # columns of the invalid submodules (submodule, eth1 ref, eth2 ref)
+  declare -a c0=() c1=() c2=()
+  # single pass over nimbus-eth2's submodules: classify each as valid, invalid
+  # (pinned older than eth2), or missing (not vendored in eth1)
+  for name in $(ls vendor/nimbus-eth2/vendor/ -1); do
+    dep="vendor/$name"
     eth1_commit=$(pinned_commit . "$dep")
     eth2_commit=$(pinned_commit vendor/nimbus-eth2 "$dep")
-    # skip deps that are not submodules on one or both sides, or already equal
-    [ -z "$eth1_commit" ] && continue
+    # not a submodule in eth2 (e.g. a plain file) -> ignore
     [ -z "$eth2_commit" ] && continue
+    # not a submodule in eth1 -> missing
+    if [ -z "$eth1_commit" ]; then
+      url=$(git -C vendor/nimbus-eth2 config --file .gitmodules --get "submodule.$dep.url")
+      missing+="missing: $dep"$'\n'"  git submodule add $url $dep"$'\n'
+      continue
+    fi
+    # equal -> valid
     [ "$eth1_commit" = "$eth2_commit" ] && continue
     # the eth2 commit must be present in the eth1 submodule to compare history
     ensure_commit "$dep" "$eth2_commit" || fail_uncheckable "$dep" "$eth2_commit"
-    # eth1 is OK when the eth2 commit is an ancestor of the eth1 commit
-    # (i.e. the eth2 commit appears in the history of the eth1 commit)
+    # valid when the eth2 commit is an ancestor of the eth1 commit (i.e. the
+    # eth2 commit appears in the history of the eth1 commit)
     if git -C "$dep" merge-base --is-ancestor "$eth2_commit" "$eth1_commit"; then
-      : # eth1 is equal or newer than eth2
-    else
-      eth1_ref=$(git -C "$dep" log -1 --format='%h (%cd)' --date=short "$eth1_commit")
-      eth2_ref=$(git -C vendor/nimbus-eth2/"$dep" log -1 --format='%h (%cd)' --date=short "$eth2_commit")
-      rows+="| \`${dep}\` | \`${eth1_ref}\` | \`${eth2_ref}\` |"$'\n'
-      outdated=$((outdated+1))
+      continue
     fi
+    # invalid: eth1 is pinned older than eth2
+    c0+=("$dep")
+    c1+=("$(git -C "$dep" log -1 --format='%h (%cd)' --date=short "$eth1_commit")")
+    c2+=("$(git -C vendor/nimbus-eth2/"$dep" log -1 --format='%h (%cd)' --date=short "$eth2_commit")")
   done
-  for dep in $(ls vendor/nimbus-eth2/vendor/ -1); do
-    if [ ! -d "vendor/$dep" ]; then
-      url=$(git -C vendor/nimbus-eth2 config --file .gitmodules --get "submodule.vendor/$dep.url")
-      echo "missing: $dep"
-      echo "  git submodule add $url vendor/$dep"
-    fi
-  done
-  if [ "$outdated" -gt 0 ]; then
-    summary="## Submodules pinned older than nimbus-eth2"$'\n\n'"| Submodule | eth1 | eth2 |"$'\n'"| --- | --- | --- |"$'\n'"$rows"
-    # always show the mismatch in the script output
-    printf '%s\n' "$summary"
-    # and also append it to the job summary when running in GitHub Actions
-    [ -n "$GITHUB_STEP_SUMMARY" ] && printf '%s\n' "$summary" >> "$GITHUB_STEP_SUMMARY"
-    echo "warning: $outdated eth1 submodule(s) pinned older than their nimbus-eth2 counterpart (see job summary)"
+  # print the invalid submodules as a space-aligned markdown table (the workflow
+  # tees this to the job summary in CI)
+  if [ "${#c0[@]}" -gt 0 ]; then
+    h0="Submodule"; h1="eth1"; h2="eth2"
+    w0=${#h0}; w1=${#h1}; w2=${#h2}
+    for x in "${c0[@]}"; do [ ${#x} -gt "$w0" ] && w0=${#x}; done
+    for x in "${c1[@]}"; do [ ${#x} -gt "$w1" ] && w1=${#x}; done
+    for x in "${c2[@]}"; do [ ${#x} -gt "$w2" ] && w2=${#x}; done
+    dashes() { printf '%*s' "$1" '' | tr ' ' '-'; }
+    echo "## Submodules pinned older than nimbus-eth2"
+    echo
+    printf '| %-*s | %-*s | %-*s |\n' "$w0" "$h0" "$w1" "$h1" "$w2" "$h2"
+    printf '| %s | %s | %s |\n' "$(dashes "$w0")" "$(dashes "$w1")" "$(dashes "$w2")"
+    for i in "${!c0[@]}"; do
+      printf '| %-*s | %-*s | %-*s |\n' "$w0" "${c0[$i]}" "$w1" "${c1[$i]}" "$w2" "${c2[$i]}"
+    done
+    printf '\n'
   fi
-  # do not fail the job; outdated submodules are reported in the job summary
+  [ -n "$missing" ] && printf '%s' "$missing"
+  # return an error when there's a mismatch so the CI job fails
+  [ "${#c0[@]}" -gt 0 ] && exit "$E_MISMATCH"
   exit "$E_OK"
 fi

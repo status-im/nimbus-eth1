@@ -28,4 +28,5 @@ jobs:
 
       - name: Check eth1 submodules are not older than nimbus-eth2
         run: |
-          bash scripts/check_vendor_eth2.sh
+          set -o pipefail
+          bash scripts/check_vendor_eth2.sh | tee -a "$GITHUB_STEP_SUMMARY"
