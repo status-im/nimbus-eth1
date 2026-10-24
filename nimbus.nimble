@@ -8,7 +8,7 @@
 mode = ScriptMode.Verbose
 
 packageName   = "nimbus"
-version       = "0.4.3"
+version       = "0.4.4"
 author        = "Status Research & Development GmbH"
 description   = "An Ethereum client for Resource-Restricted Devices"
 license       = "Apache License 2.0"
