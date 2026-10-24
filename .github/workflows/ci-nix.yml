@@ -37,6 +37,13 @@ jobs:
           submodules: recursive
           lfs: false
 
+      - uses: logos-co/setup-nix-cache-action@bc3136708c99ea52e2ad4573afdd05731ec779ef
+        with:
+          attic-endpoint:     'https://cache.nix.free.technology'
+          attic-token-ci:     '${{ secrets.ATTIC_TOKEN_CI }}'
+          attic-token-public: '${{ secrets.ATTIC_TOKEN_PUBLIC }}'
+          install-nix: false
+
       - name: 'Run Nix build for ${{ matrix.nixpkg }}'
         shell: bash
         run: nix build --fallback -L '.?submodules=1#${{ matrix.nixpkg }}'

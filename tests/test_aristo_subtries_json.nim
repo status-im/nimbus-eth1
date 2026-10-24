@@ -195,7 +195,7 @@ suite "Aristo subtries json tests":
         paths[keccak256(address.data())] = slots
 
         var proofNodes: seq[seq[byte]]
-        txFrame.multiProof(paths, proofNodes).expect("ok")
+        txFrame.multiProof(paths, [], proofNodes).expect("ok")
         let nodes = toNodesTable(proofNodes)
 
         check:
@@ -227,7 +227,7 @@ suite "Aristo subtries json tests":
         paths[keccak256(address.data())] = slots
 
       var proofNodes: seq[seq[byte]]
-      txFrame.multiProof(paths, proofNodes).expect("ok")
+      txFrame.multiProof(paths, [], proofNodes).expect("ok")
       let nodes = toNodesTable(proofNodes)
 
       check:
@@ -265,7 +265,7 @@ suite "Aristo subtries json tests":
     paths[keccak256(address.data())] = slotPaths
 
     var proofNodes: seq[seq[byte]]
-    ledger.txFrame.multiProof(paths, proofNodes).expect("ok")
+    ledger.txFrame.multiProof(paths, [], proofNodes).expect("ok")
     let nodes = toNodesTable(proofNodes)
 
     let
@@ -300,6 +300,90 @@ suite "Aristo subtries json tests":
     check:
       fullTrieLedger.getStateRoot() != stateRoot
       subtrieLedger.getStateRoot() == fullTrieLedger.getStateRoot()
+
+  test "Branch collapse onto a node absent from the witness":
+    # The witness proves a and e, so S is known only by its hash:
+    #
+    #              [R: branch]
+    #              /0        \5
+    #        [ext 0]        [leaf e]
+    #           |
+    #       [B: branch]
+    #        /0      \1
+    #   [leaf a]    {S: branch}
+    #                /0    \1
+    #              s1      s2
+    #
+    # c (0,0,2) goes next to S in B, b (0,1) diverges above B.
+    let
+      a = pathOf([0, 0, 0])
+      b = pathOf([0, 1])
+      c = pathOf([0, 0, 2])
+      e = pathOf([5])
+      acc = CoreDbAccount(balance: 1.u256, codeHash: EMPTY_CODE_HASH)
+
+    type Dbs = object
+      full: CoreDbTxRef    # holds the whole trie
+      witness: CoreDbTxRef # holds only the witness of a and e
+
+    proc setup(): Dbs =
+      let full = newCoreDbRef(DefaultDbMemory).baseTxFrame().txFrameBegin()
+      for path in [a, pathOf([0, 0, 1, 0]), pathOf([0, 0, 1, 1]), e]:
+        doAssert full.mergeAccount(path, acc).isOk()
+      var paths: Table[Hash32, seq[Hash32]]
+      paths[a] = @[]
+      paths[e] = @[]
+      var proofNodes: seq[seq[byte]]
+      full.multiProof(paths, [], proofNodes).expect("ok")
+      let witness = newCoreDbRef(DefaultDbMemory).baseTxFrame().txFrameBegin()
+      doAssert witness.putSubtrie(full.getStateRoot().get(), toNodesTable(proofNodes)).isOk()
+      Dbs(full: full, witness: witness)
+
+    # Each change is applied to both databases
+    proc delete(dbs: Dbs, path: Hash32): bool =
+      dbs.full.deleteAccount(path).isOk() and dbs.witness.deleteAccount(path).isOk()
+
+    proc insert(dbs: Dbs, path: Hash32): bool =
+      dbs.full.mergeAccount(path, acc).isOk() and dbs.witness.mergeAccount(path, acc).isOk()
+
+    proc rootsMatch(dbs: Dbs): bool =
+      dbs.witness.getStateRoot().get() == dbs.full.getStateRoot().get()
+
+    proc witnessHasUnprovenCollapse(dbs: Dbs): bool =
+      LedgerRef.init(dbs.witness).hasUnprovenCollapse()
+
+    block: # Deleting a collapses B onto S, which needs S
+      let dbs = setup()
+      check:
+        dbs.delete(a)
+        dbs.rootsMatch()
+        dbs.witnessHasUnprovenCollapse()
+
+    block: # Inserting c restores B
+      let dbs = setup()
+      check:
+        dbs.delete(a)
+        dbs.insert(c)
+        dbs.rootsMatch()
+        not dbs.witnessHasUnprovenCollapse()
+
+    block: # Inserting b splits above B, which stays collapsed
+      let dbs = setup()
+      check:
+        dbs.delete(a)
+        dbs.insert(b)
+        dbs.rootsMatch()
+        dbs.witnessHasUnprovenCollapse()
+
+    block: # R collapses onto the collapsed B, then a re-insert restores B
+      let dbs = setup()
+      check:
+        dbs.delete(a)
+        dbs.delete(e)
+        dbs.witnessHasUnprovenCollapse()
+        dbs.insert(a)
+        dbs.rootsMatch()
+        not dbs.witnessHasUnprovenCollapse()
 
   test "Branch shared by a branch parent and an extension parent":
     let

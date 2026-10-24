@@ -362,13 +362,14 @@ proc proof*(
 proc multiProof*(
     acc: CoreDbTxRef;
     paths: Table[Hash32, seq[Hash32]];
+    topNodes: openArray[RootedVertexID];
     multiProof: var seq[seq[byte]]
       ): CoreDbRc[void] =
   ## Returns a multiproof for every account and storage path specified
-  ## in the paths table. All rlp-encoded trie nodes from all account
-  ## and storage proofs are returned in a single list.
+  ## in the paths table, plus the top node of each of the `topNodes`
+  ## vertices. All rlp-encoded trie nodes are returned in a single list.
 
-  acc.aTx.makeMultiProof(paths, multiProof).isOkOr:
+  acc.aTx.makeMultiProof(paths, topNodes, multiProof).isOkOr:
     return err(error.toError("", ProofCreate))
 
   ok()

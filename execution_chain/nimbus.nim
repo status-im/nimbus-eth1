@@ -212,6 +212,21 @@ proc sharedNatConfig(): NatConfig =
   else:
     NatConfig(hasExtIp: false, nat: NatNone)
 
+proc consensusNatPorts(
+    ConfType: typedesc[BeaconNodeConf | LightClientConf], tcpPort, udpPort: Port
+): seq[PortSpec] =
+  ## Ports the consensus thread opens.
+  let conf = ConfType.loadWithBanners(clientId, copyright, [specBanner], true).valueOr:
+    writePanicLine error # Logging not yet set up
+    quit QuitFailure
+
+  var res = @[(port: udpPort, protocol: PortProtocol.UDP)] # discv5, always on
+  if conf.tcpEnabled:
+    res.add((port: tcpPort, protocol: PortProtocol.TCP))
+  if conf.quicEnabled:
+    res.add((port: conf.quicPort, protocol: PortProtocol.UDP))
+  res
+
 proc dataDir*(config: NimbusConf): string =
   string config.dataDirFlag.get(
     OutDir defaultDataDir("", config.network.loadEth2Network().cfg.name)
@@ -438,18 +453,20 @@ proc runCombinedClient() =
 
   # `nim-eth` NAT keeps its renewal thread, close channel and `addQuitProc` in
   # process-wide globals, so entering it from both threads orphans a thread
-  # handle and joins it twice at exit, hanging shutdown. Map all four ports once.
+  # handle and joins it twice at exit, hanging shutdown. Map all ports once.
   block setupSharedNat:
     let ecConfig = ecconf.makeConfig(ignoreUnknown = true)
+    var ports =
+      if config.light:
+        consensusNatPorts(LightClientConf, bnTcpPort, bnUdpPort)
+      else:
+        consensusNatPorts(BeaconNodeConf, bnTcpPort, bnUdpPort)
+    ports.add((port: ecTcpPort, protocol: PortProtocol.TCP))
+    ports.add((port: ecUdpPort.get(ecTcpPort), protocol: PortProtocol.UDP))
     natExtIp = setupAddress(
       ecConfig.nat,
       ecConfig.listenAddress,
-      @[
-        (port: bnTcpPort, protocol: PortProtocol.TCP),
-        (port: bnUdpPort, protocol: PortProtocol.UDP),
-        (port: ecTcpPort, protocol: PortProtocol.TCP),
-        (port: ecUdpPort.get(ecTcpPort), protocol: PortProtocol.UDP),
-      ],
+      ports,
       NimbusName & " " & NimbusVersion,
     ).ip
 

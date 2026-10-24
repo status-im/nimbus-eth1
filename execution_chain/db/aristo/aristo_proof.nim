@@ -189,6 +189,7 @@ proc makeStorageMultiProof(
 proc makeMultiProof*(
     db: AristoTxRef;
     paths: Table[Hash32, seq[Hash32]], # maps each account path to a list of storage paths
+    topNodes: openArray[RootedVertexID]; # vertices whose top node alone is added
     multiProof: var seq[seq[byte]]
       ): Result[void, AristoError] =
   # Short path for empty pre-state trie, no nodes exist
@@ -210,6 +211,14 @@ proc makeMultiProof*(
 
     if exists:
       ?db.makeStorageMultiProof(accPath, stoPaths, nodesCache, proofNodes)
+
+  for rvid in topNodes:
+    # The extension of an ExtBranch, or the node itself for other vertices
+    let vtx = db.getVtx(rvid)
+    if vtx.isValid:
+      let node = vtx.toNode(rvid.root, db).valueOr:
+        return err(PartChnNodeConvError)
+      proofNodes.incl(node.to(array[2, seq[byte]])[0])
 
   multiProof = proofNodes.toSeq()
 

@@ -64,7 +64,7 @@ proc postExecutionCreate(c: Computation, child: Computation, newAccountCharged: 
       c.returnData = move(child.output)
 
 proc execSubCreate(c: Computation; childMsg: Message;
-                   codeHash: Hash32; code: CodeBytesRef): EvmResultVoid =
+                   codeHash: Opt[Hash32]; code: CodeBytesRef): EvmResultVoid =
   ## Create new VM -- helper for `Create`-like operations
 
   # need to provide explicit <c> and <child> for capturing in chainTo proc()
@@ -101,11 +101,11 @@ proc execSubCreate(c: Computation; childMsg: Message;
   c.gasMeter.stateGasLeft = 0.GasInt
 
   c.chainTo(child):
-    if child.isSuccess:
+    if child.isSuccess and codeHash.isSome:
       # Code validation/deposit has finished, but an enclosing call or the
       # transaction itself can still revert. Preserve the executed jump filter
       # in the caller's savepoint until all of those frames commit.
-      c.vmState.ledger.cacheCodeOnCommit(codeHash, code)
+      c.vmState.ledger.cacheCodeOnCommit(codeHash.get, code)
     postExecutionCreate(c, child, newAccountCharged)
     ok()
 
@@ -178,9 +178,7 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
       return ok()
 
   var
-    codeHash = keccak256(cpt.memory.read(memPos, memLen))
-    code = cpt.vmState.ledger.peekCode(codeHash).valueOr:
-      CodeBytesRef.init(cpt.memory.read(memPos, memLen))
+    code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
     childMsg = Message(
       kind:          CallKind.Create,
       depth:         cpt.msg.depth + 1,
@@ -190,7 +188,7 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
                        cpt.vmState,
                        cpt.msg.currentTarget),
       )
-  cpt.execSubCreate(childMsg, codeHash, code)
+  cpt.execSubCreate(childMsg, Opt.none(Hash32), code)
 
 # ---------------------
 
@@ -272,7 +270,7 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
                        salt,
                        codeHash),
       )
-  cpt.execSubCreate(childMsg, codeHash, code)
+  cpt.execSubCreate(childMsg, Opt.some(codeHash), code)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries

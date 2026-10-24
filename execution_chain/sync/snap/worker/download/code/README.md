@@ -30,6 +30,10 @@ Representation rules for contract codes
 Download and updating rules for contract codes
 ----------------------------------------------
 
+For a missing contract code the account must be re-fetched, so that after BAL
+update the code hash has the latest version which is needed for fetching the
+contract code.
+
 While updating a contract code in a quasi multi-threaded environment
 by downloading *snap* data, the following actions take place.
 
@@ -42,14 +46,3 @@ by downloading *snap* data, the following actions take place.
   + otherwise update and save the contract code address on the *MissingBlob*
     table
 * Remove the lock record
-
-Consequences
-------------
-
-After a state root change due to BAL forwarding, updating a missing contract
-code would require an update of the corresponding account record in order to
-fetch the current code via *codeHash*, which is stored in the account record.
-
-For that reason, all missing contract code addresses and the corresponding
-account records will be deleted. The account will then be declared missing
-before BAL forwarding takes place.

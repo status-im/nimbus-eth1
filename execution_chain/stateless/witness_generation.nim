@@ -15,6 +15,7 @@ import
   minilru,
   eth/common,
   ../db/[ledger, core_db],
+  ../db/aristo/aristo_desc/desc_identifiers,
   ./witness_types
 
 export common, ledger, witness_types, byteutils
@@ -22,7 +23,7 @@ export common, ledger, witness_types, byteutils
 proc build*(
     T: type Witness,
     witnessKeys: WitnessTable,
-    collapsedSiblings: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]],
+    collapsedSiblings: seq[RootedVertexID],
     preStateLedger: LedgerRef,
 ): T =
   var
@@ -68,23 +69,10 @@ proc build*(
     for stoPath in stoPaths:
       witness.addKey(stoPreimages.getOrDefault(stoPath))
 
-  # Merge collapsed sibling paths from branch collapses during deletion.
-  # For account-trie collapses sibStoPath is none. For storage-trie collapses
-  # sibAccPath is the account and sibStoPath is the storage path to prove.
-  for (sibAccPath, sibStoPath) in collapsedSiblings:
-    if sibStoPath.isNone():
-      # Account-trie collapse: ensure the account path has a proof entry
-      if sibAccPath notin proofPaths:
-        proofPaths[sibAccPath] = @[]
-    else:
-      # Storage-trie collapse: add storage path under its account
-      proofPaths.withValue(sibAccPath, v):
-        v[].add(sibStoPath.get())
-      do:
-        proofPaths[sibAccPath] = @[sibStoPath.get()]
-
+  # Collapsed siblings from branch collapses during deletion: only their top
+  # pre-state node is needed.
   var multiProof: seq[seq[byte]]
-  preStateLedger.txFrame.multiProof(proofPaths, multiProof).isOkOr:
+  preStateLedger.txFrame.multiProof(proofPaths, collapsedSiblings, multiProof).isOkOr:
     raiseAssert "Failed to get multiproof: " & $$error
 
   # Sort the proof nodes lexicographically as is done in execution-specs:

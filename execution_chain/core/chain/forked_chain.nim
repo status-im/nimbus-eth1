@@ -15,6 +15,7 @@ import
   chronicles,
   results,
   chronos,
+  metrics,
   ../../common,
   ../../db/[core_db, fcu_db, payload_body_db, tx_frame_db],
   ../../evm/types,
@@ -45,6 +46,26 @@ export
   common,
   core_db
 
+declareCounter nec_dag_block_processing_duration_seconds,
+  "Cumulative time spent processing (validating) blocks"
+
+declareCounter nec_dag_base_updates,
+  "Number of base updates (base block moves) performed"
+
+declareCounter nec_dag_base_update_duration_seconds,
+  "Cumulative time spent updating the base"
+
+declareCounter nec_dag_prunings, "Number of blocks pruned from the forked chain"
+
+declareCounter nec_dag_pruning_duration_seconds,
+  "Cumulative time spent pruning (finalization) branches"
+
+declareGauge nec_dag_heads,
+  "Number of candidate chain heads in the forked chain"
+
+declareGauge nec_dag_fcu_head, "" &
+  "Block number of the canonical fork-choice head"
+
 const
   BaseDistance = 128'u64
   PersistBatchSize = 4'u64
@@ -61,7 +82,7 @@ const
     ## network load the loop may never go idle, and we don't want to stop
     ## processing entirely.
 
-func appendBlock(c: ForkedChainRef,
+proc appendBlock(c: ForkedChainRef,
          parent: BlockRef,
          blk: Block,
          blkHash: Hash32,
@@ -88,6 +109,8 @@ func appendBlock(c: ForkedChainRef,
 
   # It's a branch
   c.heads.add newBlock
+  nec_dag_heads.set(c.heads.len.int64)
+
   newBlock
 
 func findHeadPos(c: ForkedChainRef, hash: Hash32): Result[BlockRef, string] =
@@ -217,10 +240,11 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   b.header.reset()   # frees extraData seq immediately
   b.txHashes.reset()
 
-func updateHead(c: ForkedChainRef, head: BlockRef) =
+proc updateHead(c: ForkedChainRef, head: BlockRef) =
   ## Update head if the new head is different from current head. The head is
   ## FC state, saved with the snapshot. The canonical head on disk is the base.
   c.fcuHead = FcuHashAndNumber(hash: head.hash, number: head.number)
+  nec_dag_fcu_head.set(head.number.int64)
 
 proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
   # Pruning
@@ -247,6 +271,8 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
   if c.heads.len == 1:
     return
 
+  let pruneStart = Moment.now()
+
   func reachable(head, fin: BlockRef): bool =
     var it = head
     while it.isOk and it.notFinalized:
@@ -269,6 +295,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
           break
         c.deleteBlockData(it)
         c.removeBlockFromCache(it)
+        nec_dag_prunings.inc(1)
 
       if head == c.latest:
         updateLatest = true
@@ -296,6 +323,9 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
 
     doAssert(candidate.isNil.not)
     c.latest = candidate
+
+  nec_dag_pruning_duration_seconds.inc((Moment.now() - pruneStart).fseconds())
+  nec_dag_heads.set(c.heads.len.int64)
 
 proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
   ##
@@ -402,14 +432,20 @@ proc processUpdateBase(c: ForkedChainRef) =
     startTime = Moment.now()
     base = c.baseQueue.popFirst()
     count = c.updateBase(base)
-    endTime = Moment.now()
-
-  c.persistedCount += count
-  c.lastBaseDur += endTime - startTime
 
   const minLogInterval = 11.seconds # ~once per slot
 
   if count > 0:
+    let
+      endTime = Moment.now()
+      updateBaseDur = endTime - startTime
+
+    c.persistedCount += count
+    c.lastBaseDur += updateBaseDur
+
+    nec_dag_base_update_duration_seconds.inc(updateBaseDur.fseconds)
+    nec_dag_base_updates.inc(1)
+
     # Log something every time base changes but avoid spamming the INF log
     # during bursts of finalized blocks (ie when light client gives a head)
     logScope:
@@ -423,7 +459,7 @@ proc processUpdateBase(c: ForkedChainRef) =
       dbSnapshots = c.baseTxFrame.aTx.db.snapshots.len()
       updateBaseDur = c.lastBaseDur
 
-    if (endTime - c.lastBaseLogTime >= minLogInterval):
+    if (endTime >= c.lastBaseLogTime + minLogInterval):
       info "Finalized blocks persisted"
       c.lastBaseLogTime = endTime
       c.persistedCount = 0
@@ -788,7 +824,9 @@ proc importBlock*(
 
     orphan = c.quarantine.popOrphan(newParent.hash)
 
-  debug "Block validated", validationDur = Moment.now() - startTime
+  let validationDur = Moment.now() - startTime
+  nec_dag_block_processing_duration_seconds.inc(validationDur.fseconds())
+  debug "Block validated", validationDur
 
   if orphan.isSome():
     # Enqueue the orphan for import after its parent, but before any other blocks. We're
@@ -898,6 +936,8 @@ proc setHead*(c: ForkedChainRef, headHash: Hash32): Result[void, string] =
   if c.fcuSafe.number > head.number:
     # The old safe block was discarded, clamp it to the new head.
     c.fcuSafe = FcuHashAndNumber(hash: head.hash, number: head.number)
+
+  nec_dag_heads.set(c.heads.len.int64)
 
   ok()
 

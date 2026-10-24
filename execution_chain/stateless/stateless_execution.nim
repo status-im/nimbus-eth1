@@ -39,6 +39,9 @@ func toExecutionWitness*(w: ExecutionWitnessWithKeys): ExecutionWitness =
     res.state.add(ByteList[MAX_BYTES_PER_WITNESS_NODE].init(node))
   for code in w.codes:
     res.codes.add(ByteList[MAX_BYTES_PER_CODE].init(code))
+  # Witness.build emits at most MAX_WITNESS_HEADERS headers, as BLOCKHASH only
+  # reaches back that far.
+  doAssert w.headers.len <= MAX_WITNESS_HEADERS, "Too many headers in witness"
   for header in w.headers:
     discard res.headers.add(ByteList[MAX_BYTES_PER_HEADER].init(header))
   res
@@ -115,6 +118,9 @@ proc statelessProcessBlock*(
     skipPostExecBalCheck = not memoryVmState.balTrackerEnabled,
   )
   doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
+
+  if memoryVmState.ledger.hasUnprovenCollapse():
+    return err("Witness lacks the sibling node of a collapsed branch")
 
   ok()
 

@@ -16,18 +16,15 @@ Representation rules for storage sub-MPTs
 
   + a valid *storageRoot* field of the corresponding account record
   + a *dirtyStorage* field reset to *false* of the corresponding account record
-  + *no StoMissingIntv* table record (which lists missing storage slot ranges)
+  + no *StoMissingIntv* table record (which lists missing storage slot ranges)
   + a non-empty *FlatSlot* table of storage slots (i.e. sub-MPT leafs)
   + *no* lock record for this sub-MPT
 
-* A post-complete storage sub-MPT (after applying BALs) consists of
+* A complete storage sub-MPT after applying BALs consists of
 
   + a *storageRoot* field of the corresponding account record set
     to `zeroHash32`
-  + a *dirtyStorage* field set to *false* of the corresponding account record
-  + *no StoMissingIntv* table record (which lists missing storage slot ranges)
-  + a non-empty *FlatSlot* table of storage slots (i.e. sub-MPT leafs)
-  + *no* lock record for this sub-MPT
+  + the rest being the same as with the sub-MPT after just downloading
 
 * A partial, non-complete storage sub-MPT just downloaded consists of
 
@@ -38,8 +35,18 @@ Representation rules for storage sub-MPTs
   + a possibly empty *FlatSlot* table of storage slots (i.e. sub-MPT leafs)
   + *no* lock record for this sub-MPT
 
+* A partial, non-complete storage sub-MPT after applying BALs consists of
+
+  + a *storageRoot* field of the corresponding account record set
+    to `zeroHash32`
+  + the rest being the same as with the partial sub-MPT after just downloading
+
 Download and updating rules for storage sub-MPTs
 ------------------------------------------------
+
+For a partial storage sub-MPTs the account must be re-fetched, after BAL
+update so that the storage root can be updated which is needed for completing
+the storage tree from the updated state.
 
 While updating a partial storage sub-MPT in a quasi multi-threaded environment
 by downloading *snap* data, the following actions take place.
@@ -53,25 +60,6 @@ by downloading *snap* data, the following actions take place.
   + otherwise update and save the sub-MPT record on the *StoMissingIntv* table
 * Remove the lock record
 
-Consequences
-------------
-
-For a partial storage sub-MPT, a change of storage slots due to BAL forwarding
-cannot happen (is not allowed) because it would need a change the *storageRoot*
-field of the corresponding account record.
-
-In particular, after a state root change due to BAL forwarding, updating a
-a partial storage sub-MPT code would also require an update of the
-corresponding account record in order to fetch the current data via the
-*storageRoot*, which is stored in the account record.
-
-Instead, before BAL forwarding the whole account and storage sub-MPT (and
-contract code) will be deleted, and the account declared missing so that it
-can be re-fetched, along with the new *storageRoot*.
-
-So, all partial storage sub-MPTs and the corresponding account records will be
-deleted before BAL forwarding takes place.
-
-By prioritising non-empty partial storage sub-MPTs, it is expected that there
-is some reduction of downloaded storage slots that go to waste when preparing
-for BAL forwarding.
+As a consequence, there can only be one peer working on a storage tree at the
+same time. This differs from managing accounts which can be completed in
+quasi paralell. This might change in future if it turns out too slow.

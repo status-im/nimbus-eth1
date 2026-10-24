@@ -31,7 +31,7 @@ export
 proc importCoreDb*(
     ctx: SnapCtxRef;
     info: static[string];
-      ): Opt[void] =
+      ): Opt[AristoImportStats] =
   ## Import the flat tables into a version of CoreDb/Aristo, different from
   ## the active one. If successful, the installation path is returned.
   ##
@@ -52,7 +52,7 @@ proc importCoreDb*(
     return err()
 
   ctx.pool.newCoreDb.newDbPath = string db2Dir
-  ok()
+  ok(txStats)
 
 # ------------------------------------------------------------------------------
 # End

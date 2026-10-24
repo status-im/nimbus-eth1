@@ -79,18 +79,16 @@ type
       ## When true, records collapsed siblings during deletion for witness
       ## generation.
 
-    collapsedSiblings*: seq[
-      tuple[
-        sibAccPath: Hash32, sibStoPath: Opt[Hash32], stoRoot: VertexID, brVid: VertexID
-      ]
-    ]
-      ## Records collapsed siblings for witness generation. For each entry:
-      ## `sibAccPath` is the account path; `sibStoPath` is the sibling storage
-      ## path (none for account-trie collapses). When `brVid` is valid, the
-      ## entry is a deferred StoLeaf collapse. On witness building the
-      ## `getCollapsedSiblings` checks the vertex type at (stoRoot, brVid)
-      ## in the final trie before including it.
+    collapsedSiblings*: seq[tuple[sibling: RootedVertexID, brVid: VertexID]]
+      ## Vertices that branches collapsed onto during deletion, whose pre-state
+      ## nodes the witness needs. When `brVid` is valid, the entry is a StoLeaf
+      ## collapse that `getCollapsedSiblings` drops if (sibling.root, brVid)
+      ## no longer holds a StoLeaf in the final trie.
       ## Only populated when collectWitness is true.
+
+    unprovenCollapses*: seq[RootedVertexID]
+      ## Stateless only. Where a `BoundaryNodeRef` with `unprovenCollapse` set
+      ## was put. Entries may be stale; `getVtx` tells if one is still there.
 
     snapshot*: Snapshot
       ## Optional snapshot containing the cumulative changes from ancestors and
