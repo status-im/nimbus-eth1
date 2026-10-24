@@ -18,6 +18,7 @@ import
   eth/common/[addresses, hashes, block_access_lists],
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
+  ../concurrency/maybe_owned,
   ../constants,
   ../block_access_list/[bal_overlay, bal_utils],
   ./[access_list as ac_access_list, core_db, storage_types],
@@ -75,8 +76,7 @@ type
     overlayStorage: Table[UInt256, UInt256]
 
   LedgerRef* = ref object
-    txFrameOwner: CoreDbTxRef
-    txFramePtr: pointer
+    txFrameRef: MaybeOwned[CoreDbTxRef]
     savePoint: LedgerSpRef
 
     isDirty: bool
@@ -178,15 +178,13 @@ template logTxt(info: static[string]): static[string] =
   "LedgerRef " & info
 
 template txFrame*(ledger: LedgerRef): CoreDbTxRef =
-  cast[CoreDbTxRef](ledger.txFramePtr)
+  ledger.txFrameRef.get()
 
 func `txFrame=`*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
-  ledger.txFrameOwner = txFrame
-  ledger.txFramePtr = cast[pointer](txFrame)
+  ledger.txFrameRef.own(txFrame)
 
 func borrowTxFrame*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
-  ledger.txFrameOwner = nil
-  ledger.txFramePtr = cast[pointer](txFrame)
+  ledger.txFrameRef.borrow(txFrame)
 
 const
   MissingNodeErrors = {HikeBranchUnresolvedEdge, HikeDanglingEdge}

@@ -16,7 +16,8 @@ import
   ./transient_storage,
   ../db/ledger,
   ../common/[common, evmforks],
-  ../block_access_list/bal_tracker
+  ../block_access_list/bal_tracker,
+  ../concurrency/maybe_owned
 
 from ../common/hardforks import HardFork
 
@@ -44,8 +45,7 @@ type
     tx*               : ptr Transaction
 
   BaseVMState* = ref object of RootObj
-    comOwner          : CommonRef
-    comPtr            : pointer
+    comRef            : MaybeOwned[CommonRef]
     ledger*           : LedgerRef
     parent*           : Header
     blockCtx*         : BlockContext
@@ -150,15 +150,13 @@ type
     flags*: set[TracerFlags]
 
 template com*(vmState: BaseVMState): CommonRef =
-  cast[CommonRef](vmState.comPtr)
+  vmState.comRef.get()
 
 func `com=`*(vmState: BaseVMState, com: CommonRef) =
-  vmState.comOwner = com
-  vmState.comPtr = cast[pointer](com)
+  vmState.comRef.own(com)
 
 func borrowCom*(vmState: BaseVMState, com: CommonRef) =
-  vmState.comOwner = nil
-  vmState.comPtr = cast[pointer](com)
+  vmState.comRef.borrow(com)
 
 # Transaction level
 # This is called once fo each transaction
