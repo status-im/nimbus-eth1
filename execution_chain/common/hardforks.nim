@@ -13,6 +13,7 @@ import
   std/strutils,
   eth/common/[base, headers],
   stew/endians2,
+  stew/shims/macros,
   json_serialization,
   ../utils/utils,
   ./evmforks
@@ -144,8 +145,6 @@ type
     max*   : uint64
     baseFeeUpdateFraction*: uint64
 
-  # if you add more fork block
-  # please update forkBlockField constant too
   ChainConfig* = ref object
     chainId*            : ChainId
     homesteadBlock*     : Opt[BlockNumber]
@@ -200,44 +199,20 @@ type
     name*: string
     time*: Opt[EthTime]
 
-func countTimeFields(): int {.compileTime.} =
-  var z = ChainConfig()
-  for name, _ in fieldPairs(z[]):
-    if name.endsWith("Time"):
-      inc result
-
-func countBlockFields(): int {.compileTime.} =
-  var z = ChainConfig()
-  for name, _ in fieldPairs(z[]):
-    if name.endsWith("Block"):
-      inc result
-
-const
-  timeFieldsCount = countTimeFields()
-  blockFieldsCount = countBlockFields()
-
-func collectTimeFields(): array[timeFieldsCount, string] =
-  var z = ChainConfig()
-  var i = 0
-  for name, _ in fieldPairs(z[]):
-    if name.endsWith("Time"):
-      result[i] = name
-      inc i
-
-func collectBlockFields(): array[blockFieldsCount, string] =
-  var z = ChainConfig()
-  var i = 0
-  for name, _ in fieldPairs(z[]):
-    if name.endsWith("Block"):
-      result[i] = name
-      inc i
+func collectFields(suffix: string): seq[string] {.compileTime.} =
+  var names: seq[string]
+  for field in recordFields(ChainConfig):
+    let name = field.name.identName
+    if name.endsWith(suffix):
+      names.add name
+  names
 
 const
   # this table is used for generate
   # code at compile time to check
   # the order of blok number in ChainConfig
-  forkBlockField* = collectBlockFields()
-  forkTimeField* = collectTimeFields()
+  forkBlockField* = collectFields("Block")
+  forkTimeField* = collectFields("Time")
 
 
 func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThreshold =
