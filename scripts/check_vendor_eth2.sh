@@ -84,7 +84,7 @@ else
     # not a submodule in eth1 -> missing
     if [ -z "$eth1_commit" ]; then
       url=$(git -C vendor/nimbus-eth2 config --file .gitmodules --get "submodule.$dep.url")
-      missing+="missing: $dep"$'\n'"  git submodule add $url $dep"$'\n'
+      missing+="  git submodule add $url $dep"$'\n'
       continue
     fi
     # equal -> valid
@@ -121,7 +121,10 @@ else
     done
     printf '\n'
   fi
-  [ -n "$missing" ] && printf '%s' "$missing"
+  if [ -n "$missing" ]; then
+    echo "## Submodules in eth2 but not in eth1"
+    printf '%s' "$missing"
+  fi
   # return an error when there's a mismatch so the CI job fails
   [ "${#c0[@]}" -gt 0 ] && exit "$E_MISMATCH"
   exit "$E_OK"
