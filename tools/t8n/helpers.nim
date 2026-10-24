@@ -165,6 +165,8 @@ proc parseTxJson*(txo: TxObject, chainId: ChainId): Result[Transaction, string] 
     required(maxFeePerGas)
     optional(accessList)
     required(authorizationList)
+  of TxType5, TxEip8141:
+    return err("unsupported transaction type: " & $tx.txType)
 
   # Ignore chainId if txType == TxLegacy
   if tx.txType > TxLegacy and tx.chainId != chainId:
