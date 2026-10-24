@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[].}
+
 import
   results,
   chronicles,
@@ -15,13 +17,14 @@ import
   web3/primitives,
   json_rpc/errors,
   ../../core/tx_pool,
+  ../../core/inclusion_list,
+  ../../db/ledger,
+  ../../evm/[types, state],
   ../web3_eth_conv,
   ../beacon_engine,
   ../payload_conv,
   ./api_utils,
   ./api_witness
-
-{.push gcsafe, raises:[].}
 
 logScope:
   topics = "beacon engine"
@@ -198,15 +201,21 @@ func validateExecutionRequest(
     previousRequestType = requestType.int
   Opt.none(PayloadStatus)
 
+proc decodeIL(inclusionList: Opt[InclusionList]): Opt[DecodedILRef] =
+  if inclusionList.isNone:
+    return Opt.none(DecodedILRef)
+
+  Opt.some(decodeIL(inclusionList.value))
+
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
                  executionRequests = Opt.none(seq[seq[byte]]),
+                 inclusionList = Opt.none(InclusionList),
                  withWitness = false):
                    Future[PayloadStatus] {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
-
   trace "Engine API request received",
     meth = "newPayload",
     number = payload.blockNumber,
@@ -225,6 +234,11 @@ proc newPayload*(ben: BeaconEngineRef,
     let res = validateExecutionRequest(executionRequests.value, apiVersion)
     if res.isSome:
       return res.value
+
+  if apiVersion >= Version.V6:
+    if inclusionList.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": inclusionList is expected from execution payload")
 
   let
     com = ben.com
@@ -276,7 +290,7 @@ proc newPayload*(ben: BeaconEngineRef,
       number = header.number, hash = blockHash.short
     return
       if withWitness:
-        validStatus(blockHash, ben.collectWitness(blk))
+        validStatus(blockHash, witness = ben.collectWitness(blk))
       else:
         validStatus(blockHash)
 
@@ -292,8 +306,10 @@ proc newPayload*(ben: BeaconEngineRef,
   # our live chain. As such, payload execution will not permit reorgs and thus
   # will not trigger a sync cycle. That is fine though, if we get a fork choice
   # update after legit payload executions.
-  let parent = chain.headerByHash(header.parentHash).valueOr:
-    return ben.delayPayloadImport(blockHash, blk, blockAccessList)
+  let
+    decodedIL = decodeIL(inclusionList)
+    parent = chain.headerByHash(header.parentHash).valueOr:
+      return ben.delayPayloadImport(blockHash, blk, blockAccessList, decodedIL)
 
   # We have an existing parent, do some sanity checks to avoid the beacon client
   # triggering too early
@@ -320,7 +336,7 @@ proc newPayload*(ben: BeaconEngineRef,
     return invalidStatus(parent.computeBlockHash, "Invalid timestamp")
 
   if not chain.haveBlockAndState(header.parentHash):
-    chain.quarantine.addOrphan(blockHash, blk, blockAccessList)
+    chain.quarantine.addOrphan(blockHash, blk, blockAccessList, decodedIL)
     warn "State not available, ignoring new payload",
       hash   = blockHash.short,
       number = header.number,
@@ -334,7 +350,7 @@ proc newPayload*(ben: BeaconEngineRef,
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
 
-  (await chain.importBlock(blk, blockAccessList)).isOkOr:
+  (await chain.importBlock(blk, blockAccessList, decodedIL)).isOkOr:
     warn "Error importing block",
       number = header.number,
       hash = blockHash.short,
@@ -356,7 +372,10 @@ proc newPayload*(ben: BeaconEngineRef,
     gasUsed = header.gasUsed,
     blobGas = header.blobGasUsed.get(0'u64)
 
+  let
+    validIL = chain.lastInclusionListSatisfied
+
   if withWitness:
-    validStatus(blockHash, ben.collectWitness(blk))
+    validStatus(blockHash, validIL, ben.collectWitness(blk))
   else:
-    validStatus(blockHash)
+    validStatus(blockHash, validIL)

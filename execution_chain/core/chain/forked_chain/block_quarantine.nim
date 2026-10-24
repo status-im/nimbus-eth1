@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,7 +12,8 @@ import
   std/tables,
   results,
   minilru,
-  eth/common/[blocks, block_access_lists]
+  eth/common/[blocks, block_access_lists],
+  ../../inclusion_list
 
 
 type
@@ -23,7 +24,7 @@ type
     ## This only stores blocks that cannot be linked to the
     ## ForkedChain due to missing ancestor(s).
 
-    orphans: LruCache[Hash32, (Block, Opt[BlockAccessListRef])]
+    orphans: LruCache[Hash32, (Block, Opt[BlockAccessListRef], Opt[DecodedILRef])]
       ## Blocks that we don't have a parent for - when we resolve the
       ## parent, we can proceed to resolving the block as well - we
       ## index this by parentHash.
@@ -43,7 +44,7 @@ const
 
 func init*(T: type Quarantine): T =
   T(
-    orphans: LruCache[Hash32, (Block, Opt[BlockAccessListRef])].init(MaxOrphans),
+    orphans: LruCache[Hash32, (Block, Opt[BlockAccessListRef], Opt[DecodedILRef])].init(MaxOrphans),
     headers: LruCache[Hash32, Header].init(MaxTrackedHeaders),
   )
 
@@ -51,12 +52,13 @@ func addOrphan*(
     quarantine: var Quarantine,
     blockHash: Hash32,
     blk: Block,
-    blockAccessList: Opt[BlockAccessListRef]
+    blockAccessList: Opt[BlockAccessListRef],
+    inclusionList: Opt[DecodedILRef]
   ) =
-  quarantine.orphans.put(blk.header.parentHash, (blk, blockAccessList))
+  quarantine.orphans.put(blk.header.parentHash, (blk, blockAccessList, inclusionList))
   quarantine.headers.put(blockHash, blk.header)
 
-func popOrphan*(quarantine: var Quarantine, parentHash: Hash32): Opt[(Block, Opt[BlockAccessListRef])] =
+func popOrphan*(quarantine: var Quarantine, parentHash: Hash32): Opt[(Block, Opt[BlockAccessListRef], Opt[DecodedILRef])] =
   quarantine.orphans.pop(parentHash)
 
 func hasOrphans*(quarantine: Quarantine): bool =

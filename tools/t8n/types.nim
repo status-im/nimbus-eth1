@@ -58,6 +58,7 @@ type
     parentBeaconBlockRoot*: Opt[Hash32]
     depositContractAddress*: Opt[Address]
     slotNumber*: Opt[uint64]
+    parentSlotNumber*: Opt[uint64]
 
   TxObject* = object
     `type`*: Opt[uint64]
