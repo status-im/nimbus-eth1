@@ -73,9 +73,15 @@ proc statelessProcessBlock*(
   if memoryTxFrame.getStateRoot().get() != preStateRoot:
     return err("Witness subtrie state root mismatch")
 
-  # Load the contract code into the database indexed by code hash.
+  # Load the contract code into the database indexed by code hash. The empty
+  # code needs no entry: accounts without code never look it up.
+  # Note: The spec and other clients accept an empty code entry too on the
+  # guest side, but no host adds it in the witness.
   for c in witness.codes:
-    doAssert memoryTxFrame.persistCodeByHash(keccak256(c.asSeq()), c.asSeq()).isOk()
+    if c.len == 0:
+      continue
+    memoryTxFrame.persistCodeByHash(keccak256(c.asSeq()), c.asSeq()).isOkOr:
+      return err("Unable to load witness code: " & error)
 
   # Load the block hashes into the database indexed by block number.
   for i, h in verified.headers:
