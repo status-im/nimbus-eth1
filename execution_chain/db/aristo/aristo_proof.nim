@@ -166,6 +166,15 @@ proc makeStorageProofs*(
 
   ok(proofs)
 
+template inclHashed(proofNodes: var HashSet[seq[byte]], node: seq[byte]) =
+  # Embedded (<32 byte) nodes are left out as in the spec, their parent holds
+  # them. The root nodes of the account and storage tries are always larger.
+  # TODO: Doing this in `chainRlpNodes` would also align eth_getProof with
+  # other clients, but the chain-based verifier then needs to decode
+  # embedded nodes from their parent.
+  if node.len >= 32:
+    proofNodes.incl(node)
+
 proc makeStorageMultiProof(
     db: AristoTxRef;
     accPath: Hash32;
@@ -182,7 +191,7 @@ proc makeStorageMultiProof(
       var proof: seq[seq[byte]]
       discard ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
       for node in proof:
-        multiProof.incl(node)
+        multiProof.inclHashed(node)
 
   ok()
 
@@ -207,7 +216,7 @@ proc makeMultiProof*(
     var accProof: seq[seq[byte]]
     let exists = ?db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data, nodesCache, accProof)
     for node in accProof:
-      proofNodes.incl(node)
+      proofNodes.inclHashed(node)
 
     if exists:
       ?db.makeStorageMultiProof(accPath, stoPaths, nodesCache, proofNodes)
@@ -218,7 +227,7 @@ proc makeMultiProof*(
     if vtx.isValid:
       let node = vtx.toNode(rvid.root, db).valueOr:
         return err(PartChnNodeConvError)
-      proofNodes.incl(node.to(array[2, seq[byte]])[0])
+      proofNodes.inclHashed(node.to(array[2, seq[byte]])[0])
 
   multiProof = proofNodes.toSeq()
 
@@ -296,21 +305,24 @@ proc trackRlpNodes(
      ): Result[seq[byte], AristoError]
      {.gcsafe, raises: [RlpError]} =
   ## Verify rlp-encoded node chain created by `chainRlpNodes()`.
-  let nodeHash = topKey.to(Hash32)
-
-  if visitedNodes.contains(nodeHash):
-    return err(PartTrkFollowUpKeyMismatch)
-  if nodeHash notin nodes:
-    if start:
-      return err(PartTrkFollowUpKeyMismatch)
+  let nextNode =
+    if 0 < topKey.len and topKey.len < 32:
+      @(topKey.data) # embedded node, held by its parent
     else:
-      return err(PartTrkLinkExpected)
+      let nodeHash = topKey.to(Hash32)
+      if visitedNodes.contains(nodeHash):
+        return err(PartTrkFollowUpKeyMismatch)
+      if nodeHash notin nodes:
+        if start:
+          return err(PartTrkFollowUpKeyMismatch)
+        else:
+          return err(PartTrkLinkExpected)
+      visitedNodes.incl(nodeHash)
+      nodes.getOrDefault(nodeHash)
   if path.len == 0:
     return err(PartTrkEmptyPath)
-  visitedNodes.incl(nodeHash)
 
   # Verify key against rlp-node
-  let nextNode = nodes.getOrDefault(nodeHash)
   nextNode.verifyAgainstKey(topKey, start)
 
   let (nextKey, path) = nextNode.verifyRlp()
@@ -385,17 +397,22 @@ proc convertLeaf(
   ok(node)
 
 proc convertSubtrie(
-    key: Hash32,
+    key: HashKey,
     src: Table[Hash32, seq[byte]],
     dst: var Table[HashKey, NodeRef],
     isStorage: static bool): Result[void, AristoError] {.gcsafe, raises: [RlpError]} =
   # Precondition: trieNodes have already been validated using verifyProof
   # Does not allocate any vertex ids when creating the VertexRef types.
-  if key notin src:
-    # Since we are processing a subtrie some nodes are expected to be missing
-    return ok()
-
-  var rlpNode = rlpFromBytes(src.getOrDefault(key))
+  var rlpNode =
+    if key.len < 32:
+      # Embedded node: decode it from its own bytes, the witness need not list it
+      rlpFromBytes(key.data)
+    else:
+      let h = key.to(Hash32)
+      if h notin src:
+        # Since we are processing a subtrie some nodes are expected to be missing
+        return ok()
+      rlpFromBytes(src.getOrDefault(h))
 
   let node =
     case rlpNode.listLen()
@@ -407,14 +424,14 @@ proc convertSubtrie(
         let n = ?convertLeaf(link, segm, isStorage)
         if not isStorage and AccLeafRef(n.vtx).stoID.isValid:
           # Convert the storage subtrie
-          ?convertSubtrie(n.key[0].to(Hash32), src, dst, isStorage = true)
+          ?convertSubtrie(n.key[0], src, dst, isStorage = true)
         n
       else: # Extension node
         let k = HashKey.fromBytes(link).valueOr:
           return err(PartTrkLinkExpected)
 
         # Convert the child branch node which will be merged with this extension node
-        ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
+        ?convertSubtrie(k, src, dst, isStorage)
 
         if dst.contains(k):
           # The child stays in `dst`: the same branch may also hang directly
@@ -443,16 +460,14 @@ proc convertSubtrie(
             return err(PartTrkLinkExpected)
         if k.len() > 0:
           discard branch.setUsed(i.uint8, true)
-          ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
+          ?convertSubtrie(k, src, dst, isStorage)
         key[i] = k
       NodeRef(key: key, vtx: branch)
 
     else:
       return err(PartTrkGarbledNode)
 
-  let hashKey = HashKey.fromBytes(key.data).valueOr:
-    return err(PartTrkLinkExpected)
-  dst[hashKey] = node
+  dst[key] = node
 
   ok()
 
@@ -497,13 +512,7 @@ proc putSubtrie(
       for n, subvid in node.vtx.pairs():
         let
           r = (rvid.root, subvid)
-          k = if node.key[n].len() < 32:
-                # Embedded nodes are stored in the nodes map indexed by
-                # a HashKey containing a hash of the node data rather than
-                # a HashKey containing the embedded node itself
-                node.key[n].to(Hash32).to(HashKey)
-              else:
-                node.key[n]
+          k = node.key[n]
         if nodes.contains(k):
           ?db.putSubtrie(k, nodes, r)
         else:
@@ -543,7 +552,7 @@ proc putSubtrie*(
 
   try:
     var convertedNodes: Table[HashKey, NodeRef]
-    ?convertSubtrie(stateRoot, nodes, convertedNodes, isStorage = false)
+    ?convertSubtrie(key, nodes, convertedNodes, isStorage = false)
     ?db.putSubtrie(key, convertedNodes)
   except RlpError:
     return err(PartTrkRlpError)
