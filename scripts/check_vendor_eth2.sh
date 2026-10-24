@@ -120,6 +120,7 @@ else
       printf '| %-*s | %-*s | %-*s |\n' "$w0" "${c0[$i]}" "$w1" "${c1[$i]}" "$w2" "${c2[$i]}"
     done
     printf '\n'
+    printf "Run 'scripts/check_vendor_eth2.sh --update' to fix\n"
   fi
   if [ -n "$missing" ]; then
     echo "## Submodules in eth2 but not in eth1"
