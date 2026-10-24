@@ -21,7 +21,7 @@ import
   ../../evm/precompiles,
   ../../evm/interpreter/gas_costs,
   ../../block_access_list/[bal_builder, bal_overlay, bal_tracker],
-  ../../concurrency/[shared_types, utils],
+  ../../concurrency/shared_types,
   ../eip6110,
   ../eip7691,
   ./process_transaction,
