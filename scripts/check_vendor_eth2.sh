@@ -71,6 +71,7 @@ if [[ "$1" == "--update" ]]; then
   done
 else
   outdated=0
+  rows=""
   for dep in $COMMON; do
     eth1_commit=$(pinned_commit . "$dep")
     eth2_commit=$(pinned_commit vendor/nimbus-eth2 "$dep")
@@ -85,12 +86,9 @@ else
     if git -C "$dep" merge-base --is-ancestor "$eth2_commit" "$eth1_commit"; then
       : # eth1 is equal or newer than eth2
     else
-      eth1_info=$(git -C "$dep" show -s --format="%h (%ad)" --date=short "$eth1_commit")
-      eth2_info=$(git -C vendor/nimbus-eth2/"$dep" show -s --format="%h (%ad)" --date=short "$eth2_commit")
-      # anchor the warning on the submodule's line in .gitmodules
-      line=$(grep -nF "[submodule \"$dep\"]" .gitmodules | head -n1 | cut -d: -f1)
-      [ -z "$line" ] && line=1
-      echo "::warning file=.gitmodules,line=${line}::${dep} is pinned older than nimbus-eth2: eth1 ${eth1_info} vs eth2 ${eth2_info}"
+      eth1_ref=$(git -C "$dep" log -1 --format='%h (%cd)' --date=short "$eth1_commit")
+      eth2_ref=$(git -C vendor/nimbus-eth2/"$dep" log -1 --format='%h (%cd)' --date=short "$eth2_commit")
+      rows+="| \`${dep}\` | \`${eth1_ref}\` | \`${eth2_ref}\` |"$'\n'
       outdated=$((outdated+1))
     fi
   done
@@ -102,8 +100,13 @@ else
     fi
   done
   if [ "$outdated" -gt 0 ]; then
-    echo "warning: $outdated eth1 submodule(s) pinned older than their nimbus-eth2 counterpart (see annotations)"
+    summary="## Submodules pinned older than nimbus-eth2"$'\n\n'"| Submodule | eth1 | eth2 |"$'\n'"| --- | --- | --- |"$'\n'"$rows"
+    # always show the mismatch in the script output
+    printf '%s\n' "$summary"
+    # and also append it to the job summary when running in GitHub Actions
+    [ -n "$GITHUB_STEP_SUMMARY" ] && printf '%s\n' "$summary" >> "$GITHUB_STEP_SUMMARY"
+    echo "warning: $outdated eth1 submodule(s) pinned older than their nimbus-eth2 counterpart (see job summary)"
   fi
-  # do not fail the job; outdated submodules are reported as warnings above
+  # do not fail the job; outdated submodules are reported in the job summary
   exit "$E_OK"
 fi
