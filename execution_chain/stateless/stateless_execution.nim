@@ -136,6 +136,9 @@ template statelessProcessBlock*(
 ): Result[void, string] =
   statelessProcessBlock(witness, id, chainConfigForNetwork(id), blk)
 
+template append(w: var RlpWriter, tx: gloas.Transaction) =
+  w.appendRawBytes(distinctBase tx)
+
 # https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/execution_engine/validation_helpers.py#L1
 func toBlock(
     p: ExecutionPayload, parentBeaconBlockRoot: Opt[Hash32], requestsHash: Opt[Hash32]
@@ -161,7 +164,7 @@ func toBlock(
       ommersHash: EMPTY_UNCLE_HASH,
       coinbase: p.fee_recipient,
       stateRoot: Hash32(p.state_root.data),
-      transactionsRoot: orderedTrieRoot(txs),
+      transactionsRoot: orderedTrieRoot(p.transactions),
       receiptsRoot: Hash32(p.receipts_root.data),
       logsBloom: Bloom(p.logs_bloom.data),
       difficulty: 0.u256,
