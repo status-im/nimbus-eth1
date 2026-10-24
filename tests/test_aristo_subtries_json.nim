@@ -6,13 +6,14 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/os,
+  std/[os, sequtils],
   unittest2,
   stint,
   eth/common/[hashes, addresses, accounts, accounts_rlp],
   eth/rlp,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/[ledger, core_db],
+  ../execution_chain/db/aristo/aristo_proof,
   ../execution_chain/common/[chain_config_loader, genesis]
 
 proc getGenesisAlloc(filePath: string): GenesisAlloc =
@@ -268,6 +269,10 @@ suite "Aristo subtries json tests":
     ledger.txFrame.multiProof(paths, [], proofNodes).expect("ok")
     let nodes = toNodesTable(proofNodes)
 
+    proc hasEmbeddedChild(node: seq[byte]): bool =
+      let r = rlpFromBytes(node)
+      r.listLen() == 17 and (0 ..< 16).anyIt(r.listElem(it).isList())
+
     let
       subtrieDb = newCoreDbRef(DefaultDbMemory)
       subtrieTxFrame = subtrieDb.baseTxFrame().txFrameBegin()
@@ -276,8 +281,14 @@ suite "Aristo subtries json tests":
       paths.len() == 1
       proofNodes.len() > 0
       nodes.len() > 0
+      # As in the spec, embedded (<32 byte) nodes are only held by their parent
+      proofNodes.anyIt(it.hasEmbeddedChild())
+      proofNodes.allIt(it.len() >= 32)
       subtrieTxFrame.putSubtrie(stateRoot, nodes).isOk()
       subtrieTxFrame.getStateRoot().get() == stateRoot
+    let storageRoot = ledger.getStorageRoot(address)
+    for p in slotPaths:
+      check verifyProof(nodes, storageRoot, p).value() == Opt.some(@[1'u8])
 
     # Get the values from the subtrie
     let
