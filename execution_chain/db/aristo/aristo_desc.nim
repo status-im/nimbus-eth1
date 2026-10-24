@@ -79,11 +79,12 @@ type
       ## When true, records collapsed siblings during deletion for witness
       ## generation.
 
-    collapsedSiblings*: seq[tuple[sibling: RootedVertexID, brVid: VertexID]]
+    collapsedSiblings*: seq[
+      tuple[sibling: RootedVertexID, brVid: VertexID, brPfxLen: uint8]]
       ## Vertices that branches collapsed onto during deletion, whose pre-state
-      ## nodes the witness needs. When `brVid` is valid, the entry is a StoLeaf
-      ## collapse that `getCollapsedSiblings` drops if (sibling.root, brVid)
-      ## no longer holds a StoLeaf in the final trie.
+      ## nodes the witness needs. `getCollapsedSiblings` drops an entry if
+      ## (sibling.root, brVid) holds a branch with prefix length `brPfxLen`
+      ## again in the final trie, i.e. a later insert restored it.
       ## Only populated when collectWitness is true.
 
     unprovenCollapses*: seq[RootedVertexID]

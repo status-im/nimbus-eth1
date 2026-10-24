@@ -963,19 +963,17 @@ template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
 proc getCollapsedSiblings*(ledger: LedgerRef): seq[RootedVertexID] =
-  ## Collapsed siblings for witness generation. StoLeaf collapses (brVid
-  ## valid) are only included if brVid is still a StoLeaf in the final trie.
-  ## A branch there means a later insertion expanded it again, no auxiliary
-  ## needed.
+  ## Collapsed siblings for witness generation. Persist runs per transaction,
+  ## so a later insert in the block may restore a collapsed branch. The spec
+  ## applies the block's writes at once and only needs the sibling if the
+  ## final trie still lacks that branch.
   let db = ledger.txFrame.aTx
   var res: seq[RootedVertexID]
-  for (sibling, brVid) in db.collapsedSiblings:
-    if brVid.isValid:
-      let vtx = db.getVtx((sibling.root, brVid))
-      if vtx.isValid and vtx.vType == StoLeaf:
-        res.add(sibling)
-    else:
-      res.add(sibling)
+  for (sibling, brVid, brPfxLen) in db.collapsedSiblings:
+    let vtx = db.getVtx((sibling.root, brVid))
+    if vtx.isValid and vtx.vType in Branches and vtx.pfx.len == int(brPfxLen):
+      continue # restored by a later insert
+    res.add(sibling)
   res
 
 proc hasUnprovenCollapse*(ledger: LedgerRef): bool =

@@ -138,10 +138,9 @@ proc deleteImpl(
 
     if db.collectWitness:
       # The witness needs the pre-state node of the vertex the branch collapsed
-      # onto. A storage leaf collapse also records the branch vid, so that the
-      # entry is dropped if a later insert restores the branch.
-      db.collapsedSiblings.add(
-        ((hike.root, vid), if nxt.vType == StoLeaf: br.vid else: VertexID(0)))
+      # onto, unless a later insert in the block restores the branch. Record
+      # where the branch was, and its prefix length, to check that at the end.
+      db.collapsedSiblings.add(((hike.root, vid), br.vid, uint8(brVtx.pfx.len)))
 
     ok(vtx)
   else:

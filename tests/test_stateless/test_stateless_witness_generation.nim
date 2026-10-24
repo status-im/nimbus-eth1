@@ -11,6 +11,7 @@
 {.used.}
 
 import
+  std/tables,
   stew/byteutils,
   unittest2,
   ../../execution_chain/db/core_db/memory_only,
@@ -157,3 +158,157 @@ suite "Stateless: Witness Generation":
       witness.keys[3] == slot2.toBytesBE()
       witness.keys[4] == slot3.toBytesBE()
       witness.validateKeys(witnessKeys).isOk()
+
+suite "Stateless: Witness Generation - collapses undone later in the block":
+  func nibble(path: Hash32, i: int): int =
+    let b = path.data[i div 2]
+    int(if i mod 2 == 0: b shr 4 else: b and 0x0f)
+
+  template findSlot(cond: untyped): UInt256 =
+    ## First slot whose hashed path satisfies `cond` (on the injected `path`)
+    var res = 0.u256
+    for i in 1 .. 100_000:
+      let path {.inject.} = keccak256(i.u256.toBytesBE())
+      if cond:
+        res = i.u256
+        break
+    doAssert res != 0.u256
+    res
+
+  proc statelessLedger(witness: Witness, preStateRoot: Hash32): LedgerRef =
+    ## A ledger loaded from the witness only, as the guest uses
+    var nodes: Table[Hash32, seq[byte]]
+    for node in witness.state:
+      nodes[keccak256(node)] = node
+    let frame = newCoreDbRef(DefaultDbMemory).baseTxFrame()
+    doAssert frame.putSubtrie(preStateRoot, nodes).isOk()
+    LedgerRef.init(frame, false, stateless = true)
+
+  proc writeSlots(ledger: LedgerRef, contract: Address, txs: openArray[(UInt256, UInt256)]) =
+    ## Each (slot, value) write is its own transaction
+    for (slot, value) in txs:
+      ledger.setStorage(contract, slot, value)
+      ledger.persist()
+
+  setup:
+    let
+      memDB = newCoreDbRef DefaultDbMemory
+      preState = LedgerRef.init(memDB.baseTxFrame(), false)
+      contract = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
+
+  test "Storage collapse onto a branch, restored by a re-insert":
+    # Storage trie:
+    #
+    #          [root branch]
+    #          /           \
+    #     [leaf a]     [branch B]
+    #                   /      \
+    #             [leaf s1]  [leaf s2]
+    #
+    # tx1 deletes a: the root collapses onto B.
+    # tx2 re-inserts a: the root branch is back, so B is not needed.
+    let
+      a = 1.u256
+      pa = keccak256(a.toBytesBE())
+      s1 = findSlot(nibble(path, 0) != nibble(pa, 0))
+      ps1 = keccak256(s1.toBytesBE())
+      s2 = findSlot(nibble(path, 0) == nibble(ps1, 0) and nibble(path, 1) != nibble(ps1, 1))
+      txs = [(a, 0.u256), (a, 2.u256)]
+    preState.writeSlots(contract, [(a, 1.u256), (s1, 1.u256), (s2, 1.u256)])
+
+    # Host: run the block and build the witness
+    let host = LedgerRef.init(memDB.baseTxFrame().txFrameBegin(), false, collectWitness = true)
+    host.writeSlots(contract, txs)
+    let witness =
+      Witness.build(host.getWitnessKeys(), host.getCollapsedSiblings(), preState)
+
+    # Guest: run the block on the witness only
+    let guest = witness.statelessLedger(preState.getStateRoot())
+    guest.writeSlots(contract, txs)
+
+    check:
+      host.getCollapsedSiblings().len == 0
+      guest.fatalError.isNone()
+      not guest.hasUnprovenCollapse()
+      guest.getStateRoot() == host.getStateRoot()
+
+  test "Account collapse onto a leaf, restored by a re-create":
+    # State trie:
+    #
+    #        [root branch]
+    #        /           \
+    #   [leaf x]      [leaf y]
+    #
+    # tx1 destroys x: the root collapses onto y's leaf.
+    # tx2 re-creates x: the root branch is back, so y's leaf is not needed.
+    var x, y: Address
+    x.data[19] = 1
+    for i in 2 .. 255:
+      y.data[19] = byte(i)
+      if nibble(keccak256(y.data), 0) != nibble(keccak256(x.data), 0):
+        break
+    preState.setBalance(x, 1.u256)
+    preState.setBalance(y, 1.u256)
+    preState.persist()
+
+    # Host: run the block and build the witness
+    let host = LedgerRef.init(memDB.baseTxFrame().txFrameBegin(), false, collectWitness = true)
+    host.selfDestruct(x)
+    host.persist()
+    host.setBalance(x, 2.u256)
+    host.persist()
+    let witness =
+      Witness.build(host.getWitnessKeys(), host.getCollapsedSiblings(), preState)
+
+    # Guest: run the block on the witness only
+    let guest = witness.statelessLedger(preState.getStateRoot())
+    guest.selfDestruct(x)
+    guest.persist()
+    guest.setBalance(x, 2.u256)
+    guest.persist()
+
+    check:
+      host.getCollapsedSiblings().len == 0
+      guest.fatalError.isNone()
+      not guest.hasUnprovenCollapse()
+      guest.getStateRoot() == host.getStateRoot()
+
+  test "Storage collapse onto a leaf, split higher up by an insert":
+    # Storage trie:
+    #
+    #          [root branch]
+    #          /           \
+    #     [leaf k]     [extension]
+    #                       |
+    #                  [branch E]
+    #                   /      \
+    #              [leaf a]  [leaf s]
+    #
+    # tx1 deletes a: E collapses onto s's leaf.
+    # tx2 inserts d, which leaves the path of a and s inside the extension:
+    # the trie splits above E, which stays collapsed, so s's leaf is needed.
+    let
+      k = 1.u256
+      a = findSlot(nibble(path, 0) != nibble(keccak256(k.toBytesBE()), 0))
+      pa = keccak256(a.toBytesBE())
+      s = findSlot(nibble(path, 0) == nibble(pa, 0) and
+        nibble(path, 1) == nibble(pa, 1) and nibble(path, 2) != nibble(pa, 2))
+      d = findSlot(nibble(path, 0) == nibble(pa, 0) and nibble(path, 1) != nibble(pa, 1))
+      txs = [(a, 0.u256), (d, 2.u256)]
+    preState.writeSlots(contract, [(k, 1.u256), (a, 1.u256), (s, 1.u256)])
+
+    # Host: run the block and build the witness
+    let host = LedgerRef.init(memDB.baseTxFrame().txFrameBegin(), false, collectWitness = true)
+    host.writeSlots(contract, txs)
+    let witness =
+      Witness.build(host.getWitnessKeys(), host.getCollapsedSiblings(), preState)
+
+    # Guest: run the block on the witness only
+    let guest = witness.statelessLedger(preState.getStateRoot())
+    guest.writeSlots(contract, txs)
+
+    check:
+      host.getCollapsedSiblings().len == 1 # s's leaf
+      guest.fatalError.isNone()
+      not guest.hasUnprovenCollapse()
+      guest.getStateRoot() == host.getStateRoot()
