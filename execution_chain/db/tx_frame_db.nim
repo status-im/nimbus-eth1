@@ -45,7 +45,7 @@ proc storeTxFrame*(
   blob.add aristoBlob.len.uint32.toBytesBE
   blob.add aristoBlob
 
-  target.putMove(txFrameKey(blockHash).toOpenArray, blob)
+  target.put(txFrameKey(blockHash).toOpenArray, blob)
 
 proc loadTxFrameAsChild*(
     srcBase: CoreDbTxRef;

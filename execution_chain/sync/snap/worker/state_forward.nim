@@ -31,17 +31,25 @@ template applySlotChanges(
       ): auto =
   ## Async template
   ##
-  ## Apply BAL to storage slots. This assumes to have partial storage sub-MPTs
-  ## cleared. But it would matter if there were a stray one as it would still
-  ## be partial and be cleared later.
+  ## Apply BAL to storage slots. Partially downloaded MPTs are updated within
+  ## the range of covered/downloaded intervals.
   ##
   var bodyRc = Opt[void].err()
   block body:
+    let
+      stoState = adb.getStoMissingIntv(accPath, info).valueOr:
+        break body                                  # err()
+      missing = if stoState.isSome(): stoState.unsafeGet().ranges
+                else: ItemKeyRangeSet(nil)
     for w in slots:
       if w.changes.len != 0:
-        let
-          slotKey = w.slot.computeSlotKey()
-          slotValue = w.changes[^1].newValue
+        let slotKey = w.slot.computeSlotKey()
+        if not missing.isNil and
+           missing.covered slotKey.to(ItemKey):
+          # Will be downloaded at a later stage
+          continue
+
+        let slotValue = w.changes[^1].newValue
         if slotValue == 0:
           adb.delFlatSlot(accPath, slotKey, info).isOkOr:
             break body                              # err()
@@ -70,10 +78,14 @@ template applyCodeChange(
     if newCode.len == 0:
       adb.delFlatCode(accPath, info).isOkOr:
         break body                                  # err()
+      adb.delMissingBlob(accPath, info).isOkOr:     # no more missing (if any)
+        break body
       bodyRc = typeof(bodyRc).ok(EMPTY_CODE_HASH)
       break body
 
     adb.putFlatCode(accPath, newCode, info).isOkOr:
+      break body
+    adb.delMissingBlob(accPath, info).isOkOr:       # no more missing (if any)
       break body
 
     bodyRc = typeof(bodyRc).ok(newCode.keccak256)

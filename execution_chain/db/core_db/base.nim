@@ -223,18 +223,6 @@ proc put*(
 
   ok()
 
-proc putMove*(
-    kvt: CoreDbTxRef;
-    key: openArray[byte];
-    val: var seq[byte];
-      ): CoreDbRc[void] =
-  ## Variant of `put()` that takes over ownership of `val` instead of
-  ## copying it - the caller must not use `val` after this call
-  kvt.kvt.putMove(key, val).isOkOr:
-    return err(error.toError(""))
-
-  ok()
-
 proc hasKeyRc*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[bool] =
   ## For the argument `key` return `true` if `get()` returned a value on
   ## that argument, `false` if it returned `GetNotFound`, and an error
@@ -374,13 +362,14 @@ proc proof*(
 proc multiProof*(
     acc: CoreDbTxRef;
     paths: Table[Hash32, seq[Hash32]];
+    topNodes: openArray[RootedVertexID];
     multiProof: var seq[seq[byte]]
       ): CoreDbRc[void] =
   ## Returns a multiproof for every account and storage path specified
-  ## in the paths table. All rlp-encoded trie nodes from all account
-  ## and storage proofs are returned in a single list.
+  ## in the paths table, plus the top node of each of the `topNodes`
+  ## vertices. All rlp-encoded trie nodes are returned in a single list.
 
-  acc.aTx.makeMultiProof(paths, multiProof).isOkOr:
+  acc.aTx.makeMultiProof(paths, topNodes, multiProof).isOkOr:
     return err(error.toError("", ProofCreate))
 
   ok()
@@ -505,7 +494,7 @@ proc txFrameBegin*(
 proc parent*(tx: CoreDbTxRef): CoreDbTxRef =
   assert not tx.kvt.isNil()
   assert not tx.aTx.parent.isNil()
-  CoreDbTxRef(kvt: tx.kvt, aTx: tx.aTx.parent)
+  CoreDbTxRef(kvt: tx.kvt, aTx: tx.aTx.parent, blockHashFn: tx.blockHashFn)
 
 proc checkpoint*(tx: CoreDbTxRef, blockNumber: BlockNumber, skipSnapshot = false) =
   tx.aTx.checkpoint(blockNumber, skipSnapshot)

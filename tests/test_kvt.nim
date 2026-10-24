@@ -298,6 +298,22 @@ suite "Kvt on RocksDB":
       not kvt.hasKey([byte 0, 1, 2])
       kvt.get([byte 0, 1, 3]).expect("entry") == @[byte 0, 1, 6]
 
+  test "hasKey and sorted multiGet":
+    let kvt = db.kvt
+    check:
+      kvt.put([byte 0, 1, 1], [byte 0, 1, 4]).isOk()
+      kvt.put([byte 0, 1, 3], [byte 0, 1, 6]).isOk()
+
+    var values = newSeq[Opt[seq[byte]]](3)
+    check:
+      kvt.hasKey([byte 0, 1, 1])
+      not kvt.hasKey([byte 0, 1, 2])
+      kvt.multiGet(
+        [@[byte 0, 1, 1], @[byte 0, 1, 2], @[byte 0, 1, 3]], values,
+        sortedInput = true).isOk()
+      values == @[
+        Opt.some(@[byte 0, 1, 4]), Opt.none(seq[byte]), Opt.some(@[byte 0, 1, 6])]
+
   test "MultiGet - empty keys":
     let keys: seq[seq[byte]] = @[]
     var values: seq[Opt[seq[byte]]] = @[]

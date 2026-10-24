@@ -21,7 +21,9 @@ const
     "eest_zkevm"
   ]
 
-const skipFiles = []
+const skipFiles = [
+  "",
+]
 
 runEESTSuite(
   eestReleases,

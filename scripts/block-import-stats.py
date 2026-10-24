@@ -1,3 +1,7 @@
+# /// script
+# dependencies = ["pandas", "matplotlib"]
+# ///
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,13 +17,11 @@ register_matplotlib_converters()
 
 def readStats(name: str):
     df = pd.read_csv(name).convert_dtypes()
-    # at least one item - let it lag in the beginning until we reach the min
-    # block number or the table will be empty
     df.set_index("block_number", inplace=True)
-    df.time /= 1000000000
+    df = df.assign(time=df["time"] / 1000000000)
     df.drop(columns=["gas"], inplace=True)
-    df["bps"] = df.blocks / df.time
-    df["tps"] = df.txs / df.time
+    df.loc[:, "bps"] = df["blocks"] / df["time"]
+    df.loc[:, "tps"] = df["txs"] / df["time"]
     return df
 
 
@@ -38,24 +40,94 @@ def prettySecs(s: float):
         return f"{sign}{ss}s"
 
 
-def formatBins(df: pd.DataFrame, bins: int):
-    if bins > 0:
-        bins = np.linspace(
-            df.block_number.iloc[0] - df.blocks.iloc[0],
-            df.block_number.iloc[-1],
-            bins,
-            dtype=int,
-        )
-        return df.groupby(pd.cut(df["block_number"], bins), observed=True)
-    else:
-        return df
+def cumulative(df):
+    """Cumulative blocks/txs/time vs block number. block_number is one past
+    the last imported block of a chunk, so the cumulative is zero at the
+    block before the first import."""
+    c = df.assign(
+        cum_blocks=df["blocks"].cumsum(),
+        cum_txs=df["txs"].cumsum(),
+        cum_time=df["time"].cumsum(),
+    )
+    first = df.index[0] - df.blocks.iloc[0] - 1
+    lead = pd.DataFrame(
+        {"cum_blocks": [0], "cum_txs": [0], "cum_time": [0.0]},
+        index=pd.Index([first], name="block_number"),
+    )
+    return pd.concat([lead, c])[["cum_blocks", "cum_txs", "cum_time"]]
 
 
-def write_markdown_output(file,df_stats, df, baseline_name, contender_name):
+def evaluate(c, points):
+    # Linear interpolation of the full cumulative curve at the given
+    # points; points are always inside c's index range, so np.interp
+    # never extrapolates
+    points = np.asarray(points, dtype="int64")
+    x = c.index.to_numpy(dtype="int64")
+    out = {col: np.interp(points, x, c[col].to_numpy(dtype="float64")) for col in c.columns}
+    return pd.DataFrame(out, index=pd.Index(points, name="block_number"))
+
+
+def addDiffs(df):
+    df.loc[:, "bpsd"] = (df["bps_y"] - df["bps_x"]) / df["bps_x"]
+    df.loc[:, "tpsd"] = (df["tps_y"] - df["tps_x"]) / df["tps_x"].replace(0, 1)
+    df.loc[:, "timed"] = (df["time_y"] - df["time_x"]) / df["time_x"]
+    return df
+
+
+def bucketStats(ex, ey, lo, hi, bins):
+    # Bucket boundaries; the cumulative at a sample point covers blocks up
+    # to one before it, so a bucket ending at edges[i] - 1 is evaluated at
+    # edges[i]
+    edges = np.unique(np.linspace(lo, hi + 1, bins + 1).astype(int))
+    r = evaluate(ex, np.concatenate([[lo - 1], edges[1:]]))
+    s = evaluate(ey, np.concatenate([[lo - 1], edges[1:]]))
+    n = len(edges) - 1
+    stats = pd.DataFrame(
+        {
+            "bps_x": np.diff(r["cum_blocks"].to_numpy(dtype="float64"))
+            / np.diff(r["cum_time"].to_numpy(dtype="float64")),
+            "bps_y": np.diff(s["cum_blocks"].to_numpy(dtype="float64"))
+            / np.diff(s["cum_time"].to_numpy(dtype="float64")),
+            "tps_x": np.diff(r["cum_txs"].to_numpy(dtype="float64"))
+            / np.diff(r["cum_time"].to_numpy(dtype="float64")),
+            "tps_y": np.diff(s["cum_txs"].to_numpy(dtype="float64"))
+            / np.diff(s["cum_time"].to_numpy(dtype="float64")),
+            "time_x": np.diff(r["cum_time"].to_numpy(dtype="float64")),
+            "time_y": np.diff(s["cum_time"].to_numpy(dtype="float64")),
+        },
+        index=[f"[{lo}, {edges[1] - 1}]"]
+        + [f"({edges[i]}, {edges[i + 1] - 1}]" for i in range(1, n)],
+    )
+    return addDiffs(stats)
+
+
+def perRowStats(baseline, contender, lo, hi):
+    """Per-row rates on the union of both sample points within [lo, hi];
+    the side without a sample at a point gets its rate interpolated."""
+    grid = sorted(set(baseline.index) | set(contender.index))
+    grid = [p for p in grid if lo <= p <= hi + 1]
+    px = baseline[["bps", "tps", "time"]].reindex(grid).interpolate(
+        method="index", limit_direction="both"
+    )
+    py = contender[["bps", "tps", "time"]].reindex(grid).interpolate(
+        method="index", limit_direction="both"
+    )
+    df = pd.DataFrame(
+        {
+            "block_number": grid,
+            "bps_x": px["bps"].to_numpy(),
+            "bps_y": py["bps"].to_numpy(),
+            "tps_x": px["tps"].to_numpy(),
+            "tps_y": py["tps"].to_numpy(),
+            "time_x": px["time"].to_numpy(),
+            "time_y": py["time"].to_numpy(),
+        }
+    )
+    return addDiffs(df)
+
+
+def write_markdown_output(file, df_stats, total_blocks, time_xt, time_yt, baseline_name, contender_name):
     """Write statistics in markdown table format to a file"""
-    total_blocks = df.block_number.max() - df.block_number.min()
-    time_xt = df.time_x.sum()
-    time_yt = df.time_y.sum()
     timet = time_yt - time_xt
 
     file.write(f"\n## {os.path.basename(baseline_name)} vs {os.path.basename(contender_name)}\n\n")
@@ -84,7 +156,7 @@ def write_markdown_output(file,df_stats, df, baseline_name, contender_name):
     file.write("\n(+) = more is better, (-) = less is better\n")
 
 
-def write_standard_output(df_stats, df, baseline_name, contender_name):
+def write_standard_output(df_stats, total_blocks, time_xt, time_yt, baseline_name, contender_name):
     print(f"{os.path.basename(baseline_name)} vs {os.path.basename(contender_name)}")
     print(df_stats.to_string(
         formatters=dict.fromkeys(["bpsd", "tpsd", "timed"], "{:,.2%}".format)
@@ -92,9 +164,6 @@ def write_standard_output(df_stats, df, baseline_name, contender_name):
                    | dict.fromkeys(["time_x", "time_y"], prettySecs),
     ))
 
-    total_blocks = df.block_number.max() - df.block_number.min()
-    time_xt = df.time_x.sum()
-    time_yt = df.time_y.sum()
     timet = time_yt - time_xt
 
     print(f"\nblocks: {total_blocks}, baseline: {prettySecs(time_xt)}, contender: {prettySecs(time_yt)}")
@@ -130,9 +199,8 @@ def main():
     start = max(min(baseline.index), min(contender.index))
     end = min(max(baseline.index), max(contender.index))
 
-    # Check if there's any overlap in the time ranges
-    if start > max(max(baseline.index), max(contender.index)) or end < min(min(baseline.index), min(contender.index)):
-        print(f"Error: No overlapping time ranges between baseline and contender datasets")
+    if start > end:
+        print(f"Error: No overlapping block ranges between baseline and contender datasets")
         print(f"Baseline range: {min(baseline.index)} to {max(baseline.index)}")
         print(f"Contender range: {min(contender.index)} to {max(contender.index)}")
         exit(1)
@@ -140,25 +208,39 @@ def main():
     baseline = baseline.loc[start:end]
     contender = contender.loc[start:end]
 
-    # Join the two frames then interpolate - this helps dealing with runs that
-    # haven't been using the same chunking and/or max-blocks
-    df = baseline.merge(contender, on=("block_number", "blocks"), how="outer")
-    df = df.interpolate(method="index").reindex(contender.index)
-    df.reset_index(inplace=True)
+    # block_number is one past the last imported block of each chunk, so the
+    # comparable range runs from the latest first import to the earliest
+    # last import
+    lo = max(
+        baseline.index[0] - baseline.blocks.iloc[0],
+        contender.index[0] - contender.blocks.iloc[0],
+    )
+    hi = min(baseline.index[-1], contender.index[-1]) - 1
+    lo = max(lo, min_block_number)
+    if lo > hi:
+        print(f"Error: No blocks in range {lo} to {hi}")
+        exit(1)
 
-    if df.block_number.iloc[-1] > min_block_number + df.block_number.iloc[0]:
-        cutoff = min(
-            df.block_number.iloc[-1] - min_block_number,
-            min_block_number,
-            )
-        df = df[df.block_number >= cutoff]
+    ex = cumulative(baseline)
+    ey = cumulative(contender)
 
-    df["bpsd"] = (df.bps_y - df.bps_x) / df.bps_x
-    df["tpsd"] = (df.tps_y - df.tps_x) / df.tps_x.replace(0, 1)
-    df["timed"] = (df.time_y - df.time_x) / df.time_x
+    # Totals over [lo, hi] from the cumulative curves, evaluated at the
+    # block before lo and one past hi
+    total_blocks = hi - lo + 1
+    tx = evaluate(ex, [lo - 1, hi + 1])["cum_time"].to_numpy(dtype="float64")
+    ty = evaluate(ey, [lo - 1, hi + 1])["cum_time"].to_numpy(dtype="float64")
+    time_xt = tx[1] - tx[0]
+    time_yt = ty[1] - ty[0]
+
+    if args.bins > 0:
+        stats_df = bucketStats(ex, ey, lo, hi, args.bins)
+    else:
+        stats_df = perRowStats(baseline, contender, lo, hi)
 
     if args.plot:
         plt.rcParams["axes.grid"] = True
+
+        df = perRowStats(baseline, contender, lo, hi)
 
         fig = plt.figure()
         bps = fig.add_subplot(2, 2, 1, title="Blocks per second (more is better)")
@@ -182,17 +264,11 @@ def main():
         fig.subplots_adjust(bottom=0.05, right=0.95, top=0.95, left=0.05)
         plt.show()
 
-    stats_df = formatBins(df, args.bins).agg(
-        dict.fromkeys(["bps_x", "bps_y", "tps_x", "tps_y"], "mean")
-        | dict.fromkeys(["time_x", "time_y"], "sum")
-        | dict.fromkeys(["bpsd", "tpsd", "timed"], "mean")
-    )
-
     if args.markdown_output:
         with open(args.markdown_output, 'w') as f:
-            write_markdown_output(f, stats_df, df, args.baseline, args.contender)
+            write_markdown_output(f, stats_df, total_blocks, time_xt, time_yt, args.baseline, args.contender)
     else:
-        write_standard_output(stats_df, df, args.baseline, args.contender)
+        write_standard_output(stats_df, total_blocks, time_xt, time_yt, args.baseline, args.contender)
 
 if __name__ == "__main__":
     main()

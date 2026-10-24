@@ -260,7 +260,7 @@ const
 
   # -----------
 
-  nCoreDbImportPersistBatch* = 512 * 1024
+  nCoreDbImportPersistBatch* = 256 * 1024
     ## When importing accounts, storage, and contract codes the caches are
     ## regularly saved to disk after this many items have benn processed.
     ## This constant defines a memory/time trade off. The lower the value,

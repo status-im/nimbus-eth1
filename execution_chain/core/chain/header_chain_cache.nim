@@ -172,7 +172,7 @@ func decodePayload(data: seq[byte]; T: type): T =
 
 proc putInfo(db: KvtDbRef; state: HccDbInfo) =
   var data = encodePayload(state)
-  db.putMove(HccDbInfoKey.toOpenArray, data).isOkOr:
+  db.put(HccDbInfoKey.toOpenArray, data).isOkOr:
     raiseAssert MsgPfx & "put(info) failed: " & $error
 
 proc getInfo(db: KvtDbRef): Opt[HccDbInfo] =
@@ -194,7 +194,7 @@ proc putHeader(db: KvtDbRef; h: Header) =
   ## Store the argument `header` indexed by block number, and the hash lookup
   ## of the parent header.
   var data = encodePayload(h)
-  db.putMove(beaconHeaderKey(h.number).toOpenArray, data).isOkOr:
+  db.put(beaconHeaderKey(h.number).toOpenArray, data).isOkOr:
     raiseAssert MsgPfx & "put(header) failed: " & $error
 
   let parNumData = (h.number-1).toBytesBE

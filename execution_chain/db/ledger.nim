@@ -15,11 +15,11 @@ import
   chronicles,
   results,
   minilru,
-  eth/common/[addresses, hashes],
+  eth/common/[addresses, hashes, block_access_lists],
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
   ../constants,
-  ../block_access_list/bal_overlay,
+  ../block_access_list/[bal_overlay, bal_utils],
   ./[access_list as ac_access_list, core_db, storage_types],
   ./aristo/[aristo_blobify, aristo_desc, aristo_get]
 
@@ -150,10 +150,12 @@ type
     dirty: Table[Address, AccountRef]
     selfDestruct: HashSet[Address]
     accessList: ac_access_list.AccessList
-    deployedCodeHashes: HashSet[Hash32]
-      ## Caches codeHashes deployed via CREATE in this savepoint.
     pendingCode: Table[Hash32, CodeBytesRef]
       ## Executed initcode awaiting successful commit of all enclosing frames.
+    writtenCode: Table[Hash32, CodeBytesRef]
+      ## Code set in this savepoint, by code hash (stateless execution and
+      ## witness collection only). Reads of that hash later in the block are
+      ## served from it, so the witness omits that code.
 
 const
   resetFlags = {
@@ -384,6 +386,16 @@ proc cachedCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
     return Opt.some(held[])
   Opt.none(CodeBytesRef)
 
+func writtenCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
+  ## Code set earlier in the block in a save point that is still active. A
+  ## reverted write is dropped with its save point.
+  var sp = ledger.savePoint
+  while sp != nil:
+    sp.writtenCode.withValue(codeHash, code):
+      return Opt.some(code[])
+    sp = sp.parentSavePoint
+  Opt.none(CodeBytesRef)
+
 proc persistCode(acc: AccountRef, ledger: LedgerRef) =
   if acc.code.len != 0 and not acc.code.persisted:
     if ledger.holdCode:
@@ -497,13 +509,14 @@ template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
       # EXTCODESIZE calls from messing up the code cache and thus causing
       # recomputation of the jump destination table
       var rc = ledger.txFrame.getCodeLenByHash(acc.statement.codeHash)
-
-      return rc.valueOr:
+      if rc.isOk:
+        return rc.value
+      ledger.writtenCode(acc.statement.codeHash).valueOr:
         # A non-empty code hash whose length is missing from the database: record
         # a fatalError but still return 0 so the async EVM continues.
         warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=rc.error
         ledger.fatalError = Opt.some("getCodeSize(): failed to fetch code length from database")
-        0
+        return 0
 
   acc.code.len()
 
@@ -555,7 +568,7 @@ proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   ledger.savePoint.dirty.mergeAndReset(savePoint.dirty)
   ledger.savePoint.accessList.mergeAndReset(savePoint.accessList)
   ledger.savePoint.selfDestruct.mergeAndReset(savePoint.selfDestruct)
-  ledger.savePoint.deployedCodeHashes.mergeAndReset(savePoint.deployedCodeHashes)
+  ledger.savePoint.writtenCode.mergeAndReset(savePoint.writtenCode)
 
   if ledger.savePoint.parentSavePoint.isNil:
     for codeHash, code in savePoint.pendingCode:
@@ -592,6 +605,7 @@ proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   ledger.fatalError = Opt.none(string)
   ledger.balOverlay = Opt.none(BlockAccessListOverlay)
   ledger.witnessKeys.clear()
+  ledger.savePoint.writtenCode.clear()
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
   let acc = ledger.getAccount(address, false)
@@ -608,25 +622,13 @@ proc getNonce*(ledger: LedgerRef, address: Address): AccountNonce =
   if acc.isNil: EMPTY_ACCOUNT.nonce
   else: acc.statement.nonce
 
-func isDeployedCode(ledger: LedgerRef, codeHash: Hash32): bool =
-  ## Check if codeHash was deployed in any currently active save point.
-  ## A deployment only counts while every save point it lives in is still
-  ## active: reverted deployments are rolled back and must not suppress
-  ## witness entries.
-  var sp = ledger.savePoint
-  while sp != nil:
-    if codeHash in sp.deployedCodeHashes:
-      return true
-    sp = sp.parentSavePoint
-  false
-
-proc recordCodeRead(ledger: LedgerRef, address: Address, acc: AccountRef) =
-  ## Mark the code as touched in the witness keys, unless the code was
-  ## deployed earlier in this block.
+proc recordCodeRead(ledger: LedgerRef, address: Address, codeHash: Hash32) =
+  ## Mark the code as touched in the witness keys if the read is served from
+  ## the pre-state: the code is not empty and was not written earlier in this
+  ## block.
   ## We overwrite any existing false entry so codeTouched is set to true
   ## even if the account was previously accessed without touching the code.
-  if acc.isNil or acc.statement.codeHash == EMPTY_CODE_HASH or
-      not ledger.isDeployedCode(acc.statement.codeHash):
+  if codeHash != EMPTY_CODE_HASH and ledger.writtenCode(codeHash).isNone():
     ledger.witnessKeys[(address, Opt.none(UInt256))] = true
 
 proc getCode*(ledger: LedgerRef,
@@ -634,8 +636,8 @@ proc getCode*(ledger: LedgerRef,
               returnHash: static[bool] = false): auto =
   let acc = ledger.getAccount(address, false)
 
-  if ledger.collectWitness:
-    ledger.recordCodeRead(address, acc)
+  if ledger.collectWitness and not acc.isNil:
+    ledger.recordCodeRead(address, acc.statement.codeHash)
 
   if acc.isNil:
     when returnHash:
@@ -649,11 +651,12 @@ proc getCode*(ledger: LedgerRef,
         ledger.cachedCode(acc.statement.codeHash).valueOr:
           var rc = ledger.txFrame.getCodeByHash(acc.statement.codeHash)
           if rc.isErr:
-            # A non-empty code hash with no code in the database: record a fatalError
-            # but still return empty code so the async EVM continues.
-            warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=rc.error
-            ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
-            CodeBytesRef()
+            ledger.writtenCode(acc.statement.codeHash).valueOr:
+              # A non-empty code hash with no code in the database: record a fatalError
+              # but still return empty code so the async EVM continues.
+              warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=rc.error
+              ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
+              CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
             ledger.code.put(acc.statement.codeHash, newCode)
@@ -667,13 +670,12 @@ proc getCode*(ledger: LedgerRef,
     acc.code
 
 proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
-  if ledger.collectWitness:
-    let lookupKey = (address, Opt.none(UInt256))
-    ledger.witnessKeys[lookupKey] = true
-
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
     return CodeBytesRef()
+
+  if ledger.collectWitness:
+    ledger.recordCodeRead(address, acc.original.statement.codeHash)
 
   if acc.original.code.isNil:
     acc.original.code =
@@ -681,8 +683,9 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
         ledger.cachedCode(acc.original.statement.codeHash).valueOr:
           var rc = ledger.txFrame.getCodeByHash(acc.original.statement.codeHash)
           if rc.isErr:
-            warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=rc.error
-            CodeBytesRef()
+            ledger.writtenCode(acc.original.statement.codeHash).valueOr:
+              warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=rc.error
+              CodeBytesRef()
           else:
             let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
             ledger.code.put(acc.original.statement.codeHash, newCode)
@@ -695,8 +698,8 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
 proc getCodeSize*(ledger: LedgerRef, address: Address): int =
   let acc = ledger.getAccount(address, false)
 
-  if ledger.collectWitness:
-    ledger.recordCodeRead(address, acc)
+  if ledger.collectWitness and not acc.isNil:
+    ledger.recordCodeRead(address, acc.statement.codeHash)
 
   if acc.isNil:
     return 0
@@ -781,10 +784,11 @@ proc addBalance*(
       let acc = ledger.getAccount(address)
       if acc.isEmpty:
         ledger.makeDirty(address).flags.incl Touched
-    elif ledger.collectWitness:
+    elif ledger.collectWitness or ledger.stateless:
       # The reference implementation reads the account even for a zero-value
       # credit (e.g. zero-amount withdrawals, zero-fee coinbase payments), so
-      # the address must be part of the execution witness.
+      # the address must be part of the execution witness, and stateless
+      # execution must be able to fail when the witness lacks its proof.
       discard ledger.getAccount(address, shouldCreate = false)
     return
   ledger.setBalance(address, ledger.getBalance(address) + delta)
@@ -828,8 +832,8 @@ proc setCode*(ledger: LedgerRef, address: Address, code: seq[byte]) =
     # a given that it will be executed within LRU range
     acc.code = ledger.code.get(codeHash).valueOr(CodeBytesRef.init(code))
     acc.flags.incl CodeChanged
-    if ledger.collectWitness and code.len > 0:
-      ledger.savePoint.deployedCodeHashes.incl(codeHash)
+    if (ledger.collectWitness or ledger.stateless) and code.len > 0:
+      ledger.savePoint.writtenCode[codeHash] = acc.code
 
 proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
   let acc = ledger.getAccount(address)
@@ -858,6 +862,40 @@ proc clearStorage*(ledger: LedgerRef, address: Address) =
     # both getStorage and getCommittedStorage will
     # return wrong value
     acc.original.storage.clear()
+
+proc applyBlockAccessList*(ledger: LedgerRef, bal: BlockAccessList, txCount: int) =
+  ## Set the block access list's final state for indices up to `txCount` on
+  ## the ledger's accounts, for the next persist to write.
+  let boundary = txCount + 1
+  for accChanges in bal:
+    let
+      address = accChanges.address
+      balancePos = accChanges.balanceChanges.findLastWriteBefore(boundary)
+      noncePos = accChanges.nonceChanges.findLastWriteBefore(boundary)
+      codePos = accChanges.codeChanges.findLastWriteBefore(boundary)
+    var acc: AccountRef
+
+    if balancePos >= 0 or noncePos >= 0 or codePos >= 0:
+      acc = ledger.makeDirty(address)
+      acc.flags.incl LeafExists
+      if balancePos >= 0:
+        acc.statement.balance = accChanges.balanceChanges[balancePos].postBalance
+      if noncePos >= 0:
+        acc.statement.nonce = accChanges.nonceChanges[noncePos].newNonce
+      if codePos >= 0:
+        ledger.setCode(address, accChanges.codeChanges[codePos].newCode)
+      if acc.isEmpty:
+        acc.flags.incl Touched
+
+    for slotChanges in accChanges.storageChanges:
+      let changePos = slotChanges.changes.findLastWriteBefore(boundary)
+      if changePos < 0:
+        continue
+      if acc.isNil:
+        acc = ledger.makeDirty(address)
+        acc.flags.incl LeafExists
+      acc.overlayStorage[slotChanges.slot] = slotChanges.changes[changePos].newValue
+      acc.flags.incl StorageChanged
 
 proc deleteAccount(ledger: LedgerRef, address: Address) =
   # make sure all savePoints already committed
@@ -936,23 +974,32 @@ proc clearEmptyAccounts(ledger: LedgerRef) =
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
-proc getCollapsedSiblings*(
-    ledger: LedgerRef
-): seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]] =
+proc getCollapsedSiblings*(ledger: LedgerRef): seq[RootedVertexID] =
   ## Collapsed siblings for witness generation. StoLeaf collapses (brVid
   ## valid) are only included if brVid is still a StoLeaf in the final trie.
   ## A branch there means a later insertion expanded it again, no auxiliary
   ## needed.
   let db = ledger.txFrame.aTx
-  var res: seq[tuple[sibAccPath: Hash32, sibStoPath: Opt[Hash32]]]
-  for (accPath, sibStoPath, stoRoot, brVid) in db.collapsedSiblings:
+  var res: seq[RootedVertexID]
+  for (sibling, brVid) in db.collapsedSiblings:
     if brVid.isValid:
-      let vtx = db.getVtx((stoRoot, brVid))
+      let vtx = db.getVtx((sibling.root, brVid))
       if vtx.isValid and vtx.vType == StoLeaf:
-        res.add((accPath, sibStoPath))
+        res.add(sibling)
     else:
-      res.add((accPath, sibStoPath))
+      res.add(sibling)
   res
+
+proc hasUnprovenCollapse*(ledger: LedgerRef): bool =
+  ## Stateless only: true if a branch that collapsed onto a child absent from
+  ## the witness is still collapsed. The witness then lacks that child.
+  let db = ledger.txFrame.aTx
+  for rvid in db.unprovenCollapses:
+    let vtx = db.getVtx(rvid)
+    if vtx.isValid and vtx.vType == BoundaryNode and
+        BoundaryNodeRef(vtx).unprovenCollapse:
+      return true
+  false
 
 template clearWitnessKeys*(ledger: LedgerRef) =
   ledger.witnessKeys.clear()
@@ -960,8 +1007,8 @@ template clearWitnessKeys*(ledger: LedgerRef) =
 template clearCollapsedSiblings*(ledger: LedgerRef) =
   ledger.txFrame.aTx.collapsedSiblings.setLen(0)
 
-template clearDeployedCodeHashes*(ledger: LedgerRef) =
-  ledger.savePoint.deployedCodeHashes.clear()
+template clearWrittenCode*(ledger: LedgerRef) =
+  ledger.savePoint.writtenCode.clear()
 
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
   # Range checks must be done earlier, any miss here treated as an error:
@@ -1054,7 +1101,7 @@ proc persist*(ledger: LedgerRef,
   if clearWitness:
     ledger.clearWitnessKeys()
     ledger.clearCollapsedSiblings()
-    ledger.clearDeployedCodeHashes()
+    ledger.clearWrittenCode()
     ledger.clearBlockHashesCache()
 
 proc storeHeldCode*(ledger: LedgerRef): Result[void, string] =
@@ -1211,7 +1258,7 @@ proc isAccountAlive*(ledger: ReadOnlyLedger, address: Address): bool = isAccount
 proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAccount(distinctBase ledger, address)
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase ledger, address)
-proc inAccessList*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase ledger, address)
+proc inAccessList*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase ledger, address, slot)
 proc getLiveAccount*(ledger: ReadOnlyLedger, address: Address): AccountRef = getLiveAccount(distinctBase ledger, address)
 proc getDirtyAccount*(ledger: ReadOnlyLedger, address: Address): AccountRef = getDirtyAccount(distinctBase ledger, address)
 

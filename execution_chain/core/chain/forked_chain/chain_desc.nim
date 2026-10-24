@@ -13,6 +13,7 @@
 import
   std/[tables, deques],
   chronos,
+  metrics,
   minilru,
   ../../../common,
   ../../../db/[core_db, fcu_db],
@@ -20,6 +21,9 @@ import
   ../../../portal/portal,
   ./block_quarantine,
   ./chain_branch
+
+declareGauge nec_finalized_block_number, "" &
+  "Block number of the latest known finalized block (fork-choice finality)"
 
 from ../../../block_access_list/bal_builder import BlockAccessListRef
 
@@ -40,10 +44,6 @@ type
     kind*: ImportErrorKind
     msg*:  string
 
-  QueueItem* = object
-    responseFut*: Future[Result[ImportOutcome, ImportError]].Raising([CancelledError])
-    handler*: proc(): Future[Result[ImportOutcome, ImportError]] {.async: (raises: [CancelledError]).}
-
   ForkedChainRef* = ref object
     com*: CommonRef
     hashToBlock* : Table[Hash32, BlockRef]
@@ -57,8 +57,16 @@ type
       # Queue of blocks that will become base.
       # This queue will be filled by `importBlock` or `forkChoice`.
       # Then consumed by the `processQueue` async worker.
+    baseLoop*: Future[void].Raising([])
+      # Async worker that consumes the `baseQueue` and updates the base block.
 
-    lastBaseLogTime*: EthTime
+    lastBaseLogTime*: Moment
+    lastBaseDur*: Duration
+
+    lastImportYield*: Moment
+      # Time of the last event-loop yield during block import. Used to yield
+      # per batch of work (not per block) so that import stays fast while still
+      # giving the network a chance to run.
 
     lastFcuTime*: EthTime
       # Time of the latest forkchoice update request from the `CL`, zero if
@@ -113,10 +121,9 @@ type
     fcuSafe*: FcuHashAndNumber
       # Tracking current head and safe block of FC serialization.
 
-    queue*: AsyncQueue[QueueItem]
-    processingQueueLoop*: Future[void].Raising([CancelledError])
-      # Prevent async re-entrancy messing up FC state
-      # on both `importBlock` and `forkChoice`.
+    importLock*: AsyncLock
+      # Block import lock used to queue block import requests and prevent
+      # concurrent imports from messing up the FC state.
 
     badBlocks*: LruCache[Hash32, (Block, Opt[BlockAccessListRef])]
       # Recent blocks that failed validation for any reason,
@@ -135,10 +142,12 @@ type
 # These functions are private to ForkedChainRef
 # ------------------------------------------------------------------------------
 
-func tryUpdatePendingFCU*(c: ForkedChainRef, finHash: Hash32, number: uint64): bool =
+proc tryUpdatePendingFCU*(c: ForkedChainRef, finHash: Hash32, number: uint64): bool =
   c.pendingFCU = zeroHash32
   if number > c.latestFinalized.number:
     c.latestFinalized = FcuHashAndNumber(number: number, hash: finHash)
+    nec_finalized_block_number.set(number.int64)
+
     return true
   # false
 

@@ -130,14 +130,16 @@ proc mergeAccAndSto(
       db2.db2.persist tx2
       count = 0
 
-  # Verify storage sub-MPT if there is a storage root
+  # Verify storage sub-MPT if there is a storage root. It is set to zero by
+  # the BAL forwarder when there were changes to the sub-MPT. If the sub-MPT
+  # was complete, no `storeageRoot` update will have taken place.
   if account.storageRoot != zeroHash32:
     var stoRoot = tx2.fetchStorageRoot(accPath).valueOr:
-      error info & ": Failed computing storage root",
+      error info & ": Failed computing storage root", nSlots,
         accPath=accPath.toStr, `error`=($$error)
       return err()
     if account.storageRoot != stoRoot:
-      error info & ": Mismatch with pre-set storage root",
+      error info & ": Mismatch with pre-set storage root", nSlots,
         accPath=accPath.toStr, stoRoot=stoRoot.toStr,
         expected=account.storageRoot.toStr
       return err()
@@ -181,20 +183,22 @@ proc importFlatImpl(
     # Verify that the code and storage are properly updated. No need to
     # test the `storageRoot` as it will be reset to `zeroHash32` when BAL
     # forwarding.
-    var nErrors = 0
-    if w.data.dirtyCode:
-      nErrors.inc
-    if w.data.dirtyStorage:
-      nErrors.inc
-    if w.data.account.codeHash == zeroHash32:
-      nErrors.inc
-    if 0 < nErrors:
+    block noErrorsOk:
+      block checkErrors:
+        if w.data.dirtyCode:
+          break checkErrors
+        if w.data.dirtyStorage:
+          break checkErrors
+        if w.data.account.codeHash == zeroHash32:
+          break checkErrors
+        break noErrorsOk
       error info & ": Account record is incomplete",
         accPath=w.accPath.toStr,
         dirtyStorage=w.data.dirtyStorage,
         dirtyCode=w.data.dirtyCode,
+        storageRoot=w.data.account.storageRoot.toStr,
         codeHash=w.data.account.codeHash.toStr
-      return ok((0,0))
+      return ok((0,0,0))
 
     if w.data.account.storageRoot == EMPTY_ROOT_HASH:
       # Save account only
@@ -207,7 +211,8 @@ proc importFlatImpl(
       tx2.persistCodeByHash(w.data.account.codeHash, code).isOkOr:
         error info & ": Failed storing contract code", accPath=w.accPath.toStr,
           codeHash=w.data.account.codeHash.toStr, nCode=code.len, `error`=error
-        return ok((0,0))
+        return ok((0,0,0))
+      u.nCodes.inc
       count.inc
 
     u.nAccounts.inc

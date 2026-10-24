@@ -29,7 +29,7 @@ EEST_DEVNET_URL="https://github.com/ethereum/execution-specs/releases/download/$
 
 # --- zkevm Release ---
 EEST_ZKEVM_NAME="tests-zkevm"
-EEST_ZKEVM_VERSION="v21.0.1"
+EEST_ZKEVM_VERSION="v21.0.6"
 EEST_ZKEVM_DIR="${FIXTURES_DIR}/eest_zkevm"
 EEST_ZKEVM_ARCHIVE="fixtures_zkevm.tar.gz"
 EEST_ZKEVM_URL="https://github.com/ethereum/execution-specs/releases/download/${EEST_ZKEVM_NAME}%40${EEST_ZKEVM_VERSION}/${EEST_ZKEVM_ARCHIVE}"
@@ -48,6 +48,14 @@ EEST_ZKEVM_BENCHMARK_VERSION="v21.0.5"
 EEST_ZKEVM_BENCHMARK_DIR="${FIXTURES_DIR}/eest_zkevm_benchmark"
 EEST_ZKEVM_BENCHMARK_ARCHIVE="fixtures_zkevm-benchmark_0030M.tar.gz"
 EEST_ZKEVM_BENCHMARK_URL="https://github.com/ethereum/execution-specs/releases/download/${EEST_ZKEVM_BENCHMARK_NAME}%40${EEST_ZKEVM_BENCHMARK_VERSION}/${EEST_ZKEVM_BENCHMARK_ARCHIVE}"
+
+# --- Amsterdam Benchmark Release ---
+# One tarball per gas value, selecting 200M version.
+EEST_BENCHMARK_AMSTERDAM_NAME="tests-zkevm-benchmark"
+EEST_BENCHMARK_AMSTERDAM_VERSION="v21.0.5"
+EEST_BENCHMARK_AMSTERDAM_DIR="${FIXTURES_DIR}/eest_benchmark_amsterdam"
+EEST_BENCHMARK_AMSTERDAM_ARCHIVE="fixtures_zkevm-benchmark_0200M.tar.gz"
+EEST_BENCHMARK_AMSTERDAM_URL="https://github.com/ethereum/execution-specs/releases/download/${EEST_BENCHMARK_AMSTERDAM_NAME}%40${EEST_BENCHMARK_AMSTERDAM_VERSION}/${EEST_BENCHMARK_AMSTERDAM_ARCHIVE}"
 
 download_and_extract() {
   local url="$1"
@@ -128,9 +136,12 @@ for release in "${RELEASES[@]}"; do
     zkevm_benchmark)
       download_and_extract "${EEST_ZKEVM_BENCHMARK_URL}" "${EEST_ZKEVM_BENCHMARK_DIR}" "${EEST_ZKEVM_BENCHMARK_NAME}" "${EEST_ZKEVM_BENCHMARK_VERSION}" "${EEST_ZKEVM_BENCHMARK_ARCHIVE}"
       ;;
+    benchmark_amsterdam)
+      download_and_extract "${EEST_BENCHMARK_AMSTERDAM_URL}" "${EEST_BENCHMARK_AMSTERDAM_DIR}" "${EEST_BENCHMARK_AMSTERDAM_NAME}" "${EEST_BENCHMARK_AMSTERDAM_VERSION}" "${EEST_BENCHMARK_AMSTERDAM_ARCHIVE}"
+      ;;
     *)
       echo "Unknown EEST release: ${release}" >&2
-      echo "Known releases: ${DEFAULT_RELEASES[*]} benchmark zkevm_benchmark" >&2
+      echo "Known releases: ${DEFAULT_RELEASES[*]} benchmark benchmark_amsterdam zkevm_benchmark" >&2
       exit 1
       ;;
   esac

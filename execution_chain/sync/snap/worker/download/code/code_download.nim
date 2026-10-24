@@ -238,8 +238,9 @@ template codeDownloadCommit*(
   ##
   ## Get ready for state forward procedure using BAL.
   ##
-  ## In particular, for missing contract codes and lock records, its
-  ## correspnding accounts are deleted.
+  ## In particular, for missing contract codes the account must be re-fetched
+  ## so that the code hash can be updated. This is needed for fetching the
+  ## updated contract code.
   ##
   var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
@@ -247,28 +248,33 @@ template codeDownloadCommit*(
       error info & ": Cannot commit unsynced accounts ranges"
       bodyRc = typeof(bodyRc).err(ENoDataAvailable)
       break body
+    if ctx.accUnproc.borrowed.chunks != 0:          # clean accounts registry?
+      error info & ": Cannot update dirty unprocessed ranges",
+        nBorrowedChunks=ctx.accUnproc.borrowed.chunks
+      bodyRc = typeof(bodyRc).err(ENoDataAvailable)
+      break body                                    # failed
 
     let adb = ctx.pool.cacheDB
 
-    # Collect paths for missing contract codes.
-    var accPaths: seq[Hash32]
-    for key in adb.walkMissingBlob:
-      accPaths.add key
+    # Process missing contract codes.
+    var nMissCode {.inject,used.} = 0
+    for accPath in adb.walkMissingBlob():
+      # Mark account deleted while leaving the record in the database.
+      discard ctx.accUnproc.unprocessed.merge(accPath.to(ItemKey))
+      nMissCode.inc
       timer.yieldThread()
 
-    # Collect stale code locks (if any)
-    let nMissCode {.inject.} = accPaths.len
-    for key in adb.walkCodeLock:
-      accPaths.add key
-
+    # Delete all accounts for contract code storage locks which should
+    # never happen in the first place.
+    let accPaths = adb.walkCodeLock.toSeq()
     for accPath in accPaths:
       ctx.deleteAccount(accPath, timer, info).isOkOr:
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body
 
-    if 0 < accPaths.len:
-      chronicles.info info & ": Cleared missing contract codes",
-        nMissCode, nCodeLock=(accPaths.len-nMissCode)
+    if 0 < accPaths.len or 0 < nMissCode:
+      warn info & ": Cleared locked contract codes",
+        nMissCode, nCodeLock=accPaths.len
 
     bodyRc = typeof(bodyRc).ok()
     # End `block body`

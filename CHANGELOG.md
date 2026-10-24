@@ -1,3 +1,58 @@
+2026-10-24 v0.4.4
+=================
+
+The Nimbus Ethereum client `v0.4.4` beta and verified proxy are `high-urgency` for Hoodi, due to unscheduling its Glamsterdam fork activation per https://blog.ethereum.org/2026/10/22/glamsterdam-hoodi-delay and `low-urgency` for other networks.
+
+### Improvements
+
+- Unschedule Hoodi Glamsterdam activation:
+  https://github.com/status-im/nimbus-eth1/pull/5059
+  https://github.com/status-im/nimbus-eth1/pull/5065
+
+- Map consensus QUIC port during NAT setup:
+  https://github.com/status-im/nimbus-eth1/pull/5052
+
+- Add `--with-state-root` option to importing:
+  https://github.com/status-im/nimbus-eth1/pull/4853
+
+- Cap incoming connections at two thirds of max-peers:
+  https://github.com/status-im/nimbus-eth1/pull/4972
+
+- Optimize `CREATE` opcode:
+  https://github.com/status-im/nimbus-eth1/pull/5058
+
+- Optimize jumpdest position calculation:
+  https://github.com/status-im/nimbus-eth1/pull/4998
+
+- Add Glamsterdam header support to verified proxy:
+  https://github.com/status-im/nimbus-eth1/pull/4984
+
+- Add block processing duration metrics:
+  https://github.com/status-im/nimbus-eth1/pull/5056
+
+### Fixes
+
+- Update CA certificate store to remove eMudhra certificates:
+  https://github.com/status-im/nimbus-eth1/pull/5063
+
+- Fix improper rejection of transaction signatures:
+  https://github.com/status-im/nimbus-eth1/pull/5028
+
+- Detect header mismatch during beacon sync:
+  https://github.com/status-im/nimbus-eth1/pull/5029
+
+- Fix potential crash in decoding EVM revert reasons:
+  https://github.com/status-im/nimbus-eth1/pull/5025
+
+- Track slot number in verified proxy EVM state:
+  https://github.com/status-im/nimbus-eth1/pull/5018
+
+- Increase BAL retention window:
+  https://github.com/status-im/nimbus-eth1/pull/4815
+
+- Fix Nix remote build examples:
+  https://github.com/status-im/nimbus-eth1/pull/4987
+
 2026-10-17 v0.4.3
 =================
 

@@ -472,7 +472,7 @@ proc runCreateCacheTests() =
   let initcode = hexToSeqByte("600656605b005b60016000f3")
   let codeHash = keccak256(initcode)
 
-  for creationOp in [Create, Create2]:
+  for creationOp in [Create2]:
     let op = creationOp
     suite $op & " initcode cache":
       setup:
@@ -498,10 +498,7 @@ proc runCreateCacheTests() =
           not executed.persisted
 
         let expectedAddress =
-          if op == Create2:
-            generateSafeAddress(factoryAddress, ZERO_CONTRACTSALT, initcode)
-          else:
-            generateAddress(factoryAddress, 1)
+          generateSafeAddress(factoryAddress, ZERO_CONTRACTSALT, initcode)
         check cold.finalStack[0] == UInt256.fromBytesBE(expectedAddress.data)
         check ledger.getCode(expectedAddress) == [0x00.byte]
 
@@ -600,6 +597,25 @@ proc runCreateCacheTests() =
         require c.isSuccess
         check c.finalStack == @[0.u256]
         check ledger.peekCode(codeHash).isNone
+
+  test "CREATE neither looks up nor caches its initcode":
+    let vm = initVMEnv("Cancun")
+    defer: vm.dispose()
+    let ledger = vm.ledger
+    ledger.setNonce(factoryAddress, 1)
+    let cached = CodeBytesRef.init(initcode)
+    ledger.code.put(codeHash, cached)
+    let outer = ledger.beginSavePoint()
+    let c = vm.runFactory(factoryCode(Create), initcode)
+    require c.isSuccess
+    require c.finalStack.len == 1
+    check:
+      c.finalStack[0] == UInt256.fromBytesBE(generateAddress(factoryAddress, 1).data)
+      ledger.getCode(generateAddress(factoryAddress, 1)) == [0x00.byte]
+      cached.jumpdests.len == 0
+      outer.pendingCode.len == 0
+    ledger.commit(outer)
+    check ledger.peekCode(codeHash).get == cached
 
   test "top-level deployment initcode is not admitted":
     let vm = initVMEnv("Cancun")
