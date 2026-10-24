@@ -487,6 +487,11 @@ type
         defaultValueDesc: $RpcFlag.Eth
         name: "ws-api" .}: seq[string]
 
+      rpcTotalDifficulty* {.
+        desc: "Include totalDifficulty in RPC block objects for pre-merge blocks"
+        defaultValue: false
+        name: "rpc-total-difficulty" .}: bool
+
       historyExpiry* {.
         desc: "Enable the data from Portal Network"
         defaultValue: false
