@@ -99,7 +99,9 @@ else
     # invalid: eth1 is pinned older than eth2
     c0+=("$dep")
     c1+=("$(git -C "$dep" log -1 --format='%h (%cd)' --date=short "$eth1_commit")")
-    c2+=("$(git -C vendor/nimbus-eth2/"$dep" log -1 --format='%h (%cd)' --date=short "$eth2_commit")")
+    # read the eth2 commit info from the eth1 checkout (ensure_commit has fetched
+    # it in there); the nimbus-eth2/vendor submodules may not be initialized
+    c2+=("$(git -C "$dep" log -1 --format='%h (%cd)' --date=short "$eth2_commit")")
   done
   # print the invalid submodules as a space-aligned markdown table (the workflow
   # tees this to the job summary in CI)
