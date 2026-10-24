@@ -210,10 +210,11 @@ proc loadCallCode(c: Computation, flags: set[MsgFlags]): CodeBytesRef =
   ##
   ## Precompiles execute natively and don't need their account, but the spec's
   ## `call()` does `get_account(code_address)` before precompile dispatch, so the
-  ## account access must appear in the witness. Replicate that read only when a
-  ## witness is being collected, keeping normal precompile calls on the fast path.
+  ## account access must appear in the witness, and stateless execution must
+  ## fail when the witness lacks its proof. Replicate that read only in those
+  ## two cases, keeping normal precompile calls on the fast path.
   if MsgFlags.Precompile in flags:
-    if c.vmState.collectWitness:
+    if c.vmState.collectWitness or c.vmState.stateless:
       discard c.vmState.readOnlyLedger.getCode(c.msg.delegateTo)
     return CodeBytesRef(nil)
 
