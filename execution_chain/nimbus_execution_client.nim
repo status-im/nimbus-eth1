@@ -203,6 +203,9 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
   # Optional state montitor logger
   if config.beaconSyncTicker:
     nimbus.beaconSyncRef.configTicker(enable=true)
+  if config.beaconSyncLoopInterval.isSome:
+    nimbus.beaconSyncRef.configLoopInterval(
+      chronos.milliseconds(config.beaconSyncLoopInterval.unsafeGet.int))
 
   # Configure snap sync if enabled. When done it will resume beacon sync.
   if config.snapSyncEnabled:
@@ -358,6 +361,9 @@ proc internalRestart(
   nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
   if config.beaconSyncTicker:
     nimbus.beaconSyncRef.configTicker(enable=true)
+  if config.beaconSyncLoopInterval.isSome:
+    nimbus.beaconSyncRef.configLoopInterval(
+      chronos.milliseconds(config.beaconSyncLoopInterval.unsafeGet.int))
   if not nimbus.beaconSyncRef.start():
     fatal "Cannot restart beacon syncer"
     quit(QuitFailure)
