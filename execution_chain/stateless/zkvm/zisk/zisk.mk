@@ -32,7 +32,7 @@ ZKVM_GLUE := $(ZISK_DIR)newlib_glue.c
 
 check_zisk_staticlib:
 	@[ -f "$(ZISK_LIB)" ] || { echo "ERROR: ZisK static library not found at $(ZISK_LIB)"; \
-		echo "  build it from a zisk checkout with:"; \
+		echo "  build it from a zisk v1.3.2-alpha checkout with:"; \
 		echo "    cargo +nightly build -p ziskos-staticlib --release \\"; \
 		echo "      --target riscv64im-unknown-none-elf -Z build-std=core,alloc \\"; \
 		echo "      --config 'profile.release.lto=\"fat\"' --features panic-handler"; \
