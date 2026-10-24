@@ -82,3 +82,17 @@ procSuite "Stateless Execution Tests":
       var partial = witness
       partial.state.asSeq.delete(dropIdx)
       check statelessProcessBlock(partial, com, blk).isErr()
+
+  asyncTest "Stateless witness with an empty code entry":
+    # The empty code is the code of every account without code, so a witness
+    # may list it. Execution must not fail on it.
+    var blk: EthBlock
+    for i in 1..100:
+      era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
+      check (await fc.importBlock(blk)).isOk()
+
+    var witness =
+      fc.getExecutionWitness(blk.header.computeBlockHash()).expect("ok").toExecutionWitness()
+    witness.codes.add(ByteList[MAX_BYTES_PER_CODE].init(newSeq[byte]()))
+
+    check statelessProcessBlock(witness, com, blk).isOk()
