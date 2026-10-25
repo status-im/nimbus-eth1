@@ -326,37 +326,12 @@ proc internalRestart(
     waitFor nimbus.beaconSyncRef.stop()
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-    # FIXME. Needs to be updated or removed when DB inmort is fully integrated
-    when false:
-      # Pruning needs to be stopped and restarted on the new upcoming fork.
-      if nimbus.backgroundPruner.isNil.not:
-        waitFor nimbus.backgroundPruner.stop()
-        nimbus.backgroundPruner = BackgroundPrunerRef(nil)
-      if nimbus.balPruner.isNil.not:
-        waitFor nimbus.balPruner.stop()
-        nimbus.balPruner = BalPrunerRef(nil)
-
   # Force `com` and other modules to ajust. History and forks have lept
   # forward. So modules must update accordingly.
   com.refresh()
 
-  if true:
-    warn "Snap sync was successful and a new DB is available." &
-      " The modules update code has to be re-worked. So the EL" &
-      " stops here and needs to be manually restarted."
-    quit(QuitSuccess)
-
   # Ditto for FC module
   nimbus.fc.refresh()
-
-  # FIXME. Needs to be updated or removed when DB inmort is fully integrated
-  when false:
-    QuitFailure.onException("Cannot initialise RPC client history"):
-      nimbus.fc.portal = HistoryExpiryRef.init(config, com)
-    nimbus.txPool.refresh()
-
-    # Reinitialise pruning as it depends og the current fork.
-    nimbus.setupPruning(config, com)
 
   # Restart beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init()
