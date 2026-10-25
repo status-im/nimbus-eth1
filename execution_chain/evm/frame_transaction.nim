@@ -20,12 +20,6 @@ from eth/common/receipts import Log, FrameReceipt, Topic
 
 export FrameReceipt
 
-const
-  CHANGE_FLAG_NONCE   = 0x01
-  CHANGE_FLAG_BALANCE = 0x02
-  CHANGE_FLAG_STORAGE = 0x04
-  CHANGE_FLAG_CODE    = 0x08
-
 type
   AccountSlot* = object
     address*: Address
@@ -78,17 +72,31 @@ type
     after*: UInt256
     # The slot value as of the reading instruction.
 
-  DeployedContract* = object
-    # Entry of the `contracts_deployed` table: an address whose code hash
-    # changed from the empty-code hash to the hash of code that is not an
-    # [EIP-7702] delegation designator.
-    # [EIP-7702]: https://eips.ethereum.org/EIPS/eip-7702
+  CodeChange* = object
+    # Entry of the `codes_changed` table: an address whose code hash
+    # differs from its transaction prestate value.
 
     address*: Address
-    # The address of the newly deployed contract.
+    # The account whose code changed.
 
-    codeHash*: Hash32
+    before*: Hash32
+    # The code hash at the start of the transaction.
+
+    after*: Hash32
     # The code hash as of the reading instruction.
+
+  NonceChange* = object
+    # Entry of the `nonces_changed` table: an address whose nonce differs
+    # from its transaction prestate value.
+
+    address*: Address
+    # The account whose nonce changed.
+
+    before*: AccountNonce
+    # The nonce at the start of the transaction.
+
+    after*: AccountNonce
+    # The nonce as of the reading instruction.
 
   TransactionDiffRef* = ref object
     # The transaction's state diff, in the canonical enumeration order:
@@ -101,8 +109,11 @@ type
     slots*: seq[SlotChange]
     # The `slots_changed` table.
 
-    deployed*: seq[DeployedContract]
-    # The `contracts_deployed` table.
+    codes*: seq[CodeChange]
+    # The `codes` table.
+
+    nonces*: seq[NonceChange]
+    # The `nonces` table.
 
     events*: seq[Log]
     # The `events_count` table: every event the transaction's completed
@@ -152,9 +163,10 @@ proc transactionDiff*(ledger: ReadOnlyLedger, snapshot: FrameSnapshotRef): Trans
         after : acc.statement().balance,
       )
     if acc.codeChangedToSomething:
-      txd.deployed.add DeployedContract(
+      txd.codes.add CodeChange(
         address : address,
-        codeHash: acc.statement().codeHash,
+        before: acc.originalStatement().codeHash,
+        after: acc.statement().codeHash,
       )
     if acc.storageChanged:
       let slots = fillAndSortSlots(acc)
@@ -178,34 +190,6 @@ proc transactionDiff*(ledger: ReadOnlyLedger, snapshot: FrameSnapshotRef): Trans
 
   txd
 
-proc accountChangeFlags*(ledger: ReadOnlyLedger, txd: TransactionDiffRef, address: Address): UInt256 =
-  ## Return the `account_change_flags` bitmask of an account: one bit per
-  ## field of the account tuple, following its `(nonce, balance,
-  ## storage_root, code_hash)` order, set when the field's net value
-  ## differs from the transaction prestate.
-  ##
-  ## An account with neither an account write nor a changed slot has no
-  ## set bit, and no live state is read to establish that.
-
-  let acc = ledger.getDirtyAccount(address)
-  if acc.isNil:
-    return 0.u256
-
-  var flags = 0'u
-  if acc.nonceChanged:
-    flags = flags or CHANGE_FLAG_NONCE
-  if acc.balanceChanged:
-    flags = flags or CHANGE_FLAG_BALANCE
-  if acc.codeChanged:
-    flags = flags or CHANGE_FLAG_CODE
-  if acc.storageChanged:
-    for change in txd.slots:
-      if change.address == address:
-        flags = flags or CHANGE_FLAG_STORAGE
-        break
-
-  flags.u256
-
 func tableEntry*[T](table: openArray[T], index: int): EvmResultVoid =
   ## Return the entry of a diff table at an index, or exceptionally halt
   ## when the index is out of bounds.
@@ -221,13 +205,21 @@ func slotAddress*(diff: TransactionDiffRef, index: int): EvmResult[UInt256] =
   ? tableEntry(diff.slots, index)
   ok(UInt256.fromBytesBE(diff.slots[index].address.data))
 
-func deployedAddress*(diff: TransactionDiffRef, index: int): EvmResult[UInt256] =
-  ? tableEntry(diff.deployed, index)
-  ok(UInt256.fromBytesBE(diff.deployed[index].address.data))
+func codeAddress*(diff: TransactionDiffRef, index: int): EvmResult[UInt256] =
+  ? tableEntry(diff.codes, index)
+  ok(UInt256.fromBytesBE(diff.codes[index].address.data))
 
-func deployedCodeHash*(diff: TransactionDiffRef, index: int): EvmResult[UInt256] =
-  ? tableEntry(diff.deployed, index)
-  ok(UInt256.fromBytesBE(diff.deployed[index].codeHash.data))
+func codeBefore*(diff: TransactionDiffRef, index: int): EvmResult[UInt256] =
+  ? tableEntry(diff.codes, index)
+  ok(UInt256.fromBytesBE(diff.codes[index].before.data))
+
+func codeAfter*(diff: TransactionDiffRef, index: int): EvmResult[UInt256] =
+  ? tableEntry(diff.codes, index)
+  ok(UInt256.fromBytesBE(diff.codes[index].after.data))
+
+func nonceAddress*(diff: TransactionDiffRef, index: int): EvmResult[UInt256] =
+  ? tableEntry(diff.nonces, index)
+  ok(UInt256.fromBytesBE(diff.nonces[index].address.data))
 
 func eventTopicsCount*(diff: TransactionDiffRef, index: int): EvmResult[UInt256] =
   ? tableEntry(diff.events, index)
@@ -248,64 +240,3 @@ func eventTopic*(diff: TransactionDiffRef, index: int, position: int): EvmResult
   if position >= diff.events[index].topics.len:
     return err(opErr(EvmInvalidParam))
   ok(UInt256.fromBytesBE(diff.events[index].topics[position].data))
-
-func slotIndicesLen*(diff: TransactionDiffRef, address: Address): UInt256 =
-  var count = 0
-  for z in diff.slots:
-    if z.address == address:
-      inc count
-  count.u256
-
-func eventIndicesLen*(diff: TransactionDiffRef, address: Address): UInt256 =
-  var count = 0
-  for z in diff.events:
-    if z.address == address:
-      inc count
-  count.u256
-
-func slotIndicesOf*(diff: TransactionDiffRef, address: Address, index: int): EvmResult[UInt256] =
-  var count = 0
-  for i, z in diff.slots:
-    if z.address == address:
-      if count == index:
-        return ok(i.u256)
-      inc count
-  err(opErr(EvmInvalidParam))
-
-func eventIndicesOf*(diff: TransactionDiffRef, address: Address, index: int): EvmResult[UInt256] =
-  var count = 0
-  for i, z in diff.events:
-    if z.address == address:
-      if count == index:
-        return ok(i.u256)
-      inc count
-  err(opErr(EvmInvalidParam))
-
-func eventIndicesWithTopicLen*(diff: TransactionDiffRef, topic: Topic): UInt256 =
-  ## Return the `events_count` indices of the events carrying `topic` in
-  ## any indexed position (`topic1` to `topic3`), the per-topic view
-  ## `TXDIFF` exposes, in emission order. The signature topic `topic0`
-  ## identifies the event type and is excluded.
-  var count = 0
-  for event in diff.events:
-    for i in 1..<event.topics.len:
-      if event.topics[i] == topic:
-        inc count
-        break
-  count.u256
-
-func eventIndicesWithTopic*(diff: TransactionDiffRef, topic: Topic, index: int): EvmResult[UInt256] =
-  ## Return the `events_count` indices of the events carrying `topic` in
-  ## any indexed position (`topic1` to `topic3`), the per-topic view
-  ## `TXDIFF` exposes, in emission order. The signature topic `topic0`
-  ## identifies the event type and is excluded.
-  var count = 0
-  for w, event in diff.events:
-    for i in 1..<event.topics.len:
-      if event.topics[i] == topic:
-        if count == index:
-          return ok(w.u256)
-        inc count
-        break
-
-  err(opErr(EvmInvalidParam))

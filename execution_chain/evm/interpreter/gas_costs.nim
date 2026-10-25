@@ -215,9 +215,6 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
 
   # ############### Opcode gas functions ##############################
 
-  func `prefix gasDummy`(value: UInt256): GasInt {.nimcall.} =
-    discard
-      
   func `prefix gasExp`(value: UInt256): GasInt {.nimcall.} =
     ## Value is the exponent
 
@@ -701,7 +698,6 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           SigParam:       fixed GasBase,
           SigDataCopy:    memExpansion `prefix gasCopy`,
           TxTrace:        fixed GasWarmStorageRead,
-          TxDiff:         dynamic `prefix gasDummy`,
           EventDataCopy:  memExpansion `prefix gasCopy`,
 
           # e0s

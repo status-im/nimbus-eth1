@@ -112,7 +112,7 @@ proc createEVMFromFrame(vmState: BaseVMState,
     ? vmState.chargeFrameStateGas(CREATE_ACCOUNT_STATE_GAS, "create EVM from frame")
 
   let
-    isStaticFrame = frame.mode == VERIFY_MODE or frame.mode == POST_TX_MODE
+    isStaticFrame = frame.mode == VERIFY_MODE or frame.mode == ASSERT_MODE
     msg = Message(
       kind:              CallKind.Call,
       gas:               0,
@@ -373,7 +373,7 @@ proc processFrames(vmState: BaseVMState): Result[TransactionOutput, string] =
 
     vmState.refundCounter += refundCounter
 
-    if frame.mode == POST_TX_MODE and receipt.status == FRAME_STATUS_FAILURE:
+    if frame.mode == ASSERT_MODE and receipt.status == FRAME_STATUS_FAILURE:
       # The assertion failed: the execution body is reverted
       # unconditionally, overriding any atomic batch. Without a
       # validation prefix there is no body to revert, and the
@@ -404,7 +404,7 @@ proc processFrames(vmState: BaseVMState): Result[TransactionOutput, string] =
 
     if prefixCheckpoint.isNone and vmState.payer.isSome:
       # The validation prefix ended with this frame: checkpoint
-      # the state a failing `POST_TX_MODE` frame restores to.
+      # the state a failing `ASSERT_MODE` frame restores to.
       # `validateTxEip8141` bans approval scope on batch
       # frames, so no batch is open.
       doAssert openBatch.isNone
