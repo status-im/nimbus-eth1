@@ -41,7 +41,7 @@ const
   DEFAULT_MODE* = 0
   VERIFY_MODE*  = 1
   SENDER_MODE*  = 2
-  POST_TX_MODE* = 3
+  ASSERT_MODE* = 3
 
 const
   FRAME_ENTRY_POINT*      = address"0x00000000000000000000000000000000000000aa"
@@ -111,7 +111,7 @@ func validateTxEip8141*(tx: Transaction, intrinsic: IntrinsicGas): Result[void, 
     # EIP-7906: `POST_TX` frames form a contiguous trailing suffix
     # of the frame list, so the diff they observe is the
     # transaction's final outcome.
-    if frame.mode == POST_TX_MODE:
+    if frame.mode == ASSERT_MODE:
       hasPostTxFrame = true
     elif hasPostTxFrame:
       return err("invalid tx: frame after a POST_TX frame is not POST_TX")
@@ -135,7 +135,7 @@ func validateTxEip8141*(tx: Transaction, intrinsic: IntrinsicGas): Result[void, 
       # The flag is valid only on `DEFAULT` and `SENDER` frames, and
       # no batch may end on a `POST_TX` frame, so unrolling a failed
       # batch can never skip an assertion.
-      if frame.mode == POST_TX_MODE:
+      if frame.mode == ASSERT_MODE:
         return err("invalid tx: POST_TX frames cannot have atomic flag")
 
       # must not be last frame
@@ -146,7 +146,7 @@ func validateTxEip8141*(tx: Transaction, intrinsic: IntrinsicGas): Result[void, 
       if tx.frames[i + 1].mode == VERIFY_MODE:
         return err("invalid tx: atomic batch frame must never contain VERIFY frames")
 
-      if tx.frames[i + 1].mode == POST_TX_MODE:
+      if tx.frames[i + 1].mode == ASSERT_MODE:
         return err("invalid tx: atomic batches cannot contain POST_TX frames")
 
     # Approval scope is disallowed on every frame of an atomic

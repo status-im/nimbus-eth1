@@ -19,14 +19,13 @@ import
   ../../types,
   ../gas_costs,
   ../op_codes,
-  ./oph_helpers,
   ./oph_defs
 
 from ../../../transaction/call_types import SCHEME_ARBITRARY
 
 from ../../../core/eip8141 import
   resolveFrameTarget,
-  POST_TX_MODE,
+  ASSERT_MODE,
   APPROVE_SCOPE_MASK,
   ATOMIC_BATCH_FLAG,
   attemptApproval
@@ -60,7 +59,7 @@ proc approveOp(cpt: VmCpt): EvmResultVoid =
     frame = vmState.getFrame(frameIndex)
     resolvedTarget = tx.resolveFrameTarget(frame)
 
-  if frame.mode == POST_TX_MODE:
+  if frame.mode == ASSERT_MODE:
     return err(opErr(StaticContext))
 
   # Only the frame's resolved target may approve.
@@ -345,7 +344,7 @@ proc sigDataCopyOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.writePadded(sig.signature, memPos, dataPos, len)
   ok()
 
-func postTxFrameSnapshot(vmState: BaseVMState): EvmResult[FrameSnapshotRef] =
+func assertFrameSnapshot(vmState: BaseVMState): EvmResult[FrameSnapshotRef] =
   ## Return the executing frame transaction's context, or exceptionally
   ## halt unless the executing frame is a `POST_TX` frame.
   ##
@@ -359,7 +358,7 @@ func postTxFrameSnapshot(vmState: BaseVMState): EvmResult[FrameSnapshotRef] =
     snapshot = vmState.frameCtx.snapshot
     frame = vmState.getFrame(snapshot.currentFrameIndex)
 
-  if frame.mode != POST_TX_MODE:
+  if frame.mode != ASSERT_MODE:
     return err(opErr(EvmInvalidParam))
 
   ok(snapshot)
@@ -374,26 +373,31 @@ func requireReservedZero(operand: int): EvmResultVoid =
 const
   TRACE_BALANCES_CHANGED = 0x00
   TRACE_SLOTS_CHANGED = 0x01
-  TRACE_CONTRACTS_DEPLOYED = 0x02
-  TRACE_BALANCE_ADDRESS = 0x03
-  TRACE_BALANCE_BEFORE = 0x04
-  TRACE_BALANCE_AFTER = 0x05
-  TRACE_SLOT_ADDRESS = 0x06
-  TRACE_SLOT_KEY = 0x07
+  TRACE_CODES_CHANGED = 0x02
+  TRACE_NONCES_CHANGED = 0x03
+  TRACE_BALANCE_ADDRESS = 0x04
+  TRACE_BALANCE_BEFORE = 0x05
+  TRACE_BALANCE_AFTER = 0x06
+  TRACE_SLOT_ADDRESS = 0x07
   TRACE_SLOT_BEFORE = 0x08
   TRACE_SLOT_AFTER = 0x09
-  TRACE_DEPLOYED_ADDRESS = 0x0A
-  TRACE_DEPLOYED_CODEHASH = 0x0B
-  TRACE_EVENTS_COUNT = 0x0C
-  TRACE_EVENT_ADDRESS = 0x0D
-  TRACE_EVENT_TOPIC_COUNT = 0x0E
-  TRACE_EVENT_TOPIC_0 = 0x0F
-  TRACE_EVENT_TOPIC_1 = 0x10
-  TRACE_EVENT_TOPIC_2 = 0x11
-  TRACE_EVENT_TOPIC_3 = 0x12
-  TRACE_EVENT_DATA_LEN = 0x13
-  TRACE_GAS_PRE_CHARGE = 0x14
-  TRACE_GAS_PAYER = 0x15
+  TRACE_SLOT_KEY = 0x0A
+  TRACE_CODE_ADDRESS = 0x0B
+  TRACE_CODE_BEFORE = 0x0C
+  TRACE_CODE_AFTER = 0x0D
+  TRACE_NONCE_ADDRESS = 0x0E
+  TRACE_NONCE_BEFORE = 0x0F
+  TRACE_NONCE_AFTER = 0x10
+  TRACE_EVENTS_COUNT = 0x11
+  TRACE_EVENT_ADDRESS = 0x12
+  TRACE_EVENT_TOPIC_COUNT = 0x13
+  TRACE_EVENT_TOPIC_0 = 0x14
+  TRACE_EVENT_TOPIC_1 = 0x15
+  TRACE_EVENT_TOPIC_2 = 0x16
+  TRACE_EVENT_TOPIC_3 = 0x17
+  TRACE_EVENT_DATA_LEN = 0x18
+  TRACE_GAS_PRE_CHARGE = 0x19
+  TRACE_GAS_PAYER = 0x1A
 
 proc txTraceOp(cpt: VmCpt): EvmResultVoid =
   ## 0xb6, Reads the state diff of the current transaction.
@@ -405,7 +409,7 @@ proc txTraceOp(cpt: VmCpt): EvmResultVoid =
   var value {.noinit.}: UInt256
 
   let
-    frameSnapshot = ? postTxFrameSnapshot(cpt.vmState)
+    frameSnapshot = ? assertFrameSnapshot(cpt.vmState)
     diff = cpt.vmState.transactionDiff(frameSnapshot)
 
   case param
@@ -415,9 +419,12 @@ proc txTraceOp(cpt: VmCpt): EvmResultVoid =
   of TRACE_SLOTS_CHANGED:
     ? requireReservedZero(index)
     value = diff.slots.len.u256
-  of TRACE_CONTRACTS_DEPLOYED:
+  of TRACE_CODES_CHANGED:
     ? requireReservedZero(index)
-    value = diff.deployed.len.u256
+    value = diff.codes.len.u256
+  of TRACE_NONCES_CHANGED:
+    ? requireReservedZero(index)
+    value = diff.nonces.len.u256
   of TRACE_BALANCE_ADDRESS:
     value = ? diff.balanceAddress(index)
   of TRACE_BALANCE_BEFORE:
@@ -428,19 +435,29 @@ proc txTraceOp(cpt: VmCpt): EvmResultVoid =
     value = diff.balances[index].after
   of TRACE_SLOT_ADDRESS:
     value = ? diff.slotAddress(index)
-  of TRACE_SLOT_KEY:
-    ? tableEntry(diff.slots, index)
-    value = diff.slots[index].key
   of TRACE_SLOT_BEFORE:
     ? tableEntry(diff.slots, index)
     value = diff.slots[index].before
   of TRACE_SLOT_AFTER:
     ? tableEntry(diff.slots, index)
     value = diff.slots[index].after
-  of TRACE_DEPLOYED_ADDRESS:
-    value = ? diff.deployedAddress(index)
-  of TRACE_DEPLOYED_CODEHASH:
-    value = ? diff.deployedCodeHash(index)
+  of TRACE_SLOT_KEY:
+    ? tableEntry(diff.slots, index)
+    value = diff.slots[index].key
+  of TRACE_CODE_ADDRESS:
+    value = ? diff.codeAddress(index)
+  of TRACE_CODE_BEFORE:
+    value = ? diff.codeBefore(index)
+  of TRACE_CODE_AFTER:
+    value = ? diff.codeAfter(index)
+  of TRACE_NONCE_ADDRESS:
+    value = ? diff.nonceAddress(index)
+  of TRACE_NONCE_BEFORE:
+    ? tableEntry(diff.nonces, index)
+    value = diff.nonces[index].before.u256
+  of TRACE_NONCE_AFTER:
+    ? tableEntry(diff.nonces, index)
+    value = diff.nonces[index].after.u256
   of TRACE_EVENTS_COUNT:
     ? requireReservedZero(index)
     value = diff.events.len.u256
@@ -474,127 +491,8 @@ proc txTraceOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsTop value
   ok()
 
-const
-  DIFF_SLOT_BEFORE = 0x00
-  DIFF_SLOT_AFTER = 0x01
-  DIFF_BALANCE_BEFORE = 0x02
-  DIFF_BALANCE_AFTER = 0x03
-  DIFF_CODEHASH_BEFORE = 0x04
-  DIFF_CODEHASH_AFTER = 0x05
-  DIFF_ADDRESS_SLOTS_COUNT = 0x06
-  DIFF_ADDRESS_SLOT_INDEX = 0x07
-  DIFF_ADDRESS_EVENTS_COUNT = 0x08
-  DIFF_ADDRESS_EVENT_INDEX = 0x09
-  DIFF_ACCOUNT_CHANGE_FLAGS = 0x0A
-  DIFF_TOPIC_EVENTS_COUNT = 0x0B
-  DIFF_TOPIC_EVENT_INDEX = 0x0C
-
-proc txDiffOp(cpt: VmCpt): EvmResultVoid =
-  ## 0xb7, Ask specific entry of enumerated state diff.
-  ? cpt.stack.lsCheck(3)
-  let
-    param = cpt.stack.lsPeekMemRef(^1)
-    topic = cpt.stack.lsPeekTopic(^2)
-    indexOperand = cpt.stack.lsPeekMemRef(^3)
-
-    address = cpt.stack.lsPeekAddress(^2)
-    slotKey = cpt.stack.lsPeekInt(^3)
-
-  cpt.stack.lsShrink(2)
-  var
-    value {.noinit.}: UInt256
-    gasCost = 0.GasInt
-
-  case param
-  of DIFF_SLOT_BEFORE, DIFF_SLOT_AFTER:
-    # STATE ACCESS (STATE-DEPENDENT GAS)
-    gasCost = cpt.gasEip8038AccountCheck(address, slotKey)
-  of DIFF_BALANCE_BEFORE, DIFF_BALANCE_AFTER,
-     DIFF_CODEHASH_BEFORE, DIFF_CODEHASH_AFTER:
-    # STATE ACCESS (STATE-DEPENDENT GAS)
-    gasCost = cpt.gasEip8038AccountCheck(address)
-  else:
-    # GAS (STATE-INDEPENDENT)
-    const GAS_OPCODE_TXTRACE = WARM_ACCESS
-    gasCost = GAS_OPCODE_TXTRACE
-
-  ? cpt.opcodeGasCost(TxDiff, gasCost, reason = "TxDiff fee")
-
-  # OPERATION
-  let
-    frameSnapshot = ? postTxFrameSnapshot(cpt.vmState)
-    balTracker = cpt.vmState.balTracker
-    ledger = cpt.vmState.readOnlyLedger
-
-  case param
-  of DIFF_SLOT_BEFORE, DIFF_SLOT_AFTER:
-    # The live read records the access. An unwritten slot reads the
-    # same value before and after.
-    if cpt.balTrackerEnabled:
-      balTracker.trackStorageRead(address, slotKey)
-    if param == DIFF_SLOT_BEFORE:
-      value = ledger.getCommittedStorage(address, slotKey)
-    else:
-      value = ledger.getStorage(address, slotKey)
-  of DIFF_BALANCE_BEFORE, DIFF_BALANCE_AFTER,
-     DIFF_CODEHASH_BEFORE, DIFF_CODEHASH_AFTER:
-    ? requireReservedZero(indexOperand)
-    if cpt.balTrackerEnabled:
-      balTracker.trackAddressAccess(address)
-
-    let
-      liveAccount = ledger.getLiveAccount(address)
-    if param == DIFF_BALANCE_BEFORE:
-      if liveAccount.isNil:
-        value = 0.u256
-      else:
-        value = liveAccount.originalStatement().balance
-    elif param == DIFF_BALANCE_AFTER:
-      if liveAccount.isNil:
-        value = 0.u256
-      else:
-        value = liveAccount.statement().balance
-    elif param == DIFF_CODEHASH_BEFORE:
-      if liveAccount.isNil:
-        value.initFromBytesBE(EMPTY_CODE_HASH.data)
-      else:
-        value.initFromBytesBE(liveAccount.originalStatement().codeHash.data)
-    else:
-      if liveAccount.isNil:
-        value.initFromBytesBE(EMPTY_CODE_HASH.data)
-      else:
-        value.initFromBytesBE(liveAccount.statement().codeHash.data)
-  else:
-    let
-      diff = cpt.vmState.transactionDiff(frameSnapshot)
-
-    case param
-    of DIFF_ADDRESS_SLOTS_COUNT:
-      ? requireReservedZero(indexOperand)
-      value = diff.slotIndicesLen(address)
-    of DIFF_ADDRESS_SLOT_INDEX:
-      value = ? diff.slotIndicesOf(address, indexOperand)
-    of DIFF_ADDRESS_EVENTS_COUNT:
-      ? requireReservedZero(indexOperand)
-      value = diff.eventIndicesLen(address)
-    of DIFF_ADDRESS_EVENT_INDEX:
-      value = ? diff.eventIndicesOf(address, indexOperand)
-    of DIFF_ACCOUNT_CHANGE_FLAGS:
-      ? requireReservedZero(indexOperand)
-      value = accountChangeFlags(ledger, diff, address)
-    of DIFF_TOPIC_EVENTS_COUNT:
-      ? requireReservedZero(indexOperand)
-      value = diff.eventIndicesWithTopicLen(topic)
-    of DIFF_TOPIC_EVENT_INDEX:
-      value = ? diff.eventIndicesWithTopic(topic, indexOperand)
-    else:
-      return err(opErr(EvmInvalidParam))
-
-  cpt.stack.lsTop value
-  ok()
-
 proc eventDataCopyOp(cpt: VmCpt): EvmResultVoid =
-  ## 0xb8, Copies event data to memory.
+  ## 0xB7, Copies event data to memory.
   ? cpt.stack.lsCheck(4)
   let
     eventIndex = cpt.stack.lsPeekMemRef(^1)
@@ -608,7 +506,7 @@ proc eventDataCopyOp(cpt: VmCpt): EvmResultVoid =
     reason = "EventDataCopy fee")
 
   let
-    frameSnapshot = ? postTxFrameSnapshot(cpt.vmState)
+    frameSnapshot = ? assertFrameSnapshot(cpt.vmState)
     diff = cpt.vmState.transactionDiff(frameSnapshot)
 
   ? tableEntry(diff.events, eventIndex)
@@ -676,14 +574,7 @@ const
      exec: txTraceOp),
 
 
-     (opCode: TxDiff,       ## 0xb7, Ask specific entry of enumerated state diff.
-     forks: VmOpBogotaAndLater,
-     name: "TxDiff",
-     info: "Ask specific entry of enumerated state diff",
-     exec: txDiffOp),
-
-
-     (opCode: EventDataCopy,## 0xb8, Copies event data to memory.
+     (opCode: EventDataCopy,## 0xb7, Copies event data to memory.
      forks: VmOpBogotaAndLater,
      name: "EventDataCopy",
      info: "Copies event data to memory",
