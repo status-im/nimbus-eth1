@@ -425,8 +425,9 @@ proc setupCommonRef*(
 
   # Must not snap sync on a non-empty state DB.
   var emptyStateDb = false
-  if config.snapSyncEnabled:
-    coreDB.verifyEmptyStateDb "Cannot snap sync on a pre-initialised state DB"
+  if config.cmd != NimbusCmd.`import`:
+    if config.snapSyncEnabled:
+      coreDB.verifyEmptyStateDb "Cannot snap sync on a pre-initialised state DB"
     emptyStateDb = true
 
   let com = CommonRef.new(
