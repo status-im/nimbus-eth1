@@ -16,15 +16,15 @@ proc workaround*(): int {.exportc.} =
   return int(Future[Quantity]().internalValue)
 
 import
-  std/[os, net, options, strformat, terminal, typetraits],
+  std/[os, net, options, terminal, typetraits],
   stew/io2,
   chronos/threadsync,
   chronicles,
   metrics,
   metrics/chronos_httpserver,
-  nimcrypto/sysrand,
   eth/enr/enr,
   eth/net/nat,
+  json_rpc/rpcchannels,
   eth/p2p/discoveryv5/random2,
   beacon_chain/spec/[engine_authentication],
   beacon_chain/validators/keystore_management,
@@ -187,20 +187,21 @@ type
     tcpPort: Port
     udpPort: Port
     elSync: bool
+    channel: RpcChannelPtrs
 
   ExecutionThreadConfig = object
     tsp: ThreadSignalPtr
     tcpPort: Port
     udpPort: Option[Port]
+    channel: RpcChannelPtrs
 
   LightThreadConfig = object
     tsp: ThreadSignalPtr
     tcpPort: Port
     udpPort: Port
+    channel: RpcChannelPtrs
 
 var
-  jwtKey: JwtSharedKey
-
   natExtIp: Opt[IpAddress]
     ## Resolved once by the main thread - see `setupSharedNat`
 
@@ -246,14 +247,19 @@ proc stopOnSignal(tsp: ThreadSignalPtr) {.async: (raises: [CancelledError]).} =
   ProcessState.scheduleStop("nimbus")
 
 proc elSyncLoop(
-    dag: ChainDAGRef, url: EngineApiUrl
+    dag: ChainDAGRef, elManager: ELManager
 ) {.async: (raises: [CancelledError]).} =
   while true:
     await sleepAsync(12.seconds)
 
     # TODO trigger only when the EL needs syncing
     try:
-      await syncToEngineApi(dag, url)
+      let channel = elManager.channel()
+      if channel == nil:
+        debug "Channel not ready"
+        continue
+
+      await syncToEngineApi(dag, channel)
     except CatchableError as exc:
       # This can happen when the EL is busy doing some work, specially on
       # startup
@@ -264,14 +270,8 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
     stderr.writeLine error # Logging not yet set up
     quit QuitFailure
 
-  let engineUrl =
-    EngineApiUrl.init(&"http://127.0.0.1:{defaultEngineApiPort}/", Opt.some(jwtKey))
-
   config.metricsEnabled = false
-  config.elUrls.add EngineApiUrlConfigValue(
-    url: engineUrl.url, jwtSecret: some toHex(distinctBase(jwtKey))
-  )
-
+  config.elUrls = @[EngineApiUrlConfigValue(channel: Opt.some(p.channel))]
   config.statusBarEnabled = false # Multi-threading issues due to logging
   config.tcpPort = p.tcpPort
   config.udpPort = p.udpPort
@@ -300,7 +300,7 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
     return
 
   if p.elSync:
-    discard elSyncLoop(node.dag, engineUrl)
+    discard elSyncLoop(node.dag, node.elManager)
 
   dynamicLogScope(comp = "bn"):
     if node.nickname != "":
@@ -317,13 +317,8 @@ proc runLightClientThread(p: LightThreadConfig) {.thread.} =
     stderr.writeLine error # Logging not yet set up
     quit QuitFailure
 
-  let engineUrl =
-    EngineApiUrl.init(&"http://127.0.0.1:{defaultEngineApiPort}/", Opt.some(jwtKey))
-
   config.metricsEnabled = false
-  config.elUrls.add EngineApiUrlConfigValue(
-    url: engineUrl.url, jwtSecret: some toHex(distinctBase(jwtKey))
-  )
+  config.elUrls = @[EngineApiUrlConfigValue(channel: Opt.some(p.channel))]
   config.tcpPort = p.tcpPort
   config.udpPort = p.udpPort
   config.nat = sharedNatConfig() # NAT is done once, on the main thread
@@ -344,11 +339,8 @@ proc runLightClientThread(p: LightThreadConfig) {.thread.} =
 proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
   var config = makeConfig(ignoreUnknown = true)
   config.metricsEnabled = false
-  config.engineApiEnabled = true
-  config.engineApiPort = Port(defaultEngineApiPort)
-  config.engineApiAddress = defaultAdminListenAddress
-  config.jwtSecret.reset()
-  config.jwtSecretValue = some toHex(distinctBase(jwtKey))
+  config.engineApiEnabled = false
+  config.engineApiChannelEnabled = true
   config.agentString = "nimbus"
   config.tcpPort = p.tcpPort
   config.udpPortFlag = p.udpPort
@@ -378,16 +370,14 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
     com.db.close()
 
   dynamicLogScope(comp = "ec"):
-    nimbus_execution_client.runExeClient(config, com, params, p.tsp.justWait())
+    nimbus_execution_client.runExeClient(
+      config, com, params, p.tsp.justWait(), channel = Opt.some p.channel
+    )
 
   # Stop the other thread as well, in case `runExeClient` stopped early
   waitFor p.tsp.fire()
 
 proc runCombinedClient() =
-  # Make it harder to connect to the (internal) engine - this will of course
-  # go away
-  discard randomBytes(distinctBase(jwtKey))
-
   const banner = ClientId & "\p\pSubcommand options can also be used with the main node, see `beaconNode --help`, `executionClient --help` and `lightClient --help`"
 
   var config = NimbusConf.loadWithBanners(
@@ -472,6 +462,9 @@ proc runCombinedClient() =
 
   let bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
 
+  var channel: RpcChannel
+  let pairs = channel.open()
+
   if config.light:
     # The light client drives the EL directly via the Engine API, so the
     # beacon-node CL-driven EL sync loop (`elSyncLoop`/`--el-sync`) must not run.
@@ -483,6 +476,7 @@ proc runCombinedClient() =
         tsp: bnStop,
         tcpPort: bnTcpPort,
         udpPort: bnUdpPort,
+        channel: pairs,
       )
     )
   else:
@@ -490,10 +484,11 @@ proc runCombinedClient() =
       bnThread,
       runBeaconNode,
       BeaconThreadConfig(
-        tsp: bnStop, 
-        tcpPort: bnTcpPort, 
-        udpPort: bnUdpPort, 
-        elSync: config.elSync
+        tsp: bnStop,
+        tcpPort: bnTcpPort,
+        udpPort: bnUdpPort,
+        elSync: config.elSync,
+        channel: pairs,
       )
     )
 
@@ -503,7 +498,9 @@ proc runCombinedClient() =
   createThread(
     ecThread,
     runExecutionClient,
-    ExecutionThreadConfig(tsp: ecStop, tcpPort: ecTcpPort, udpPort: ecUdpPort),
+    ExecutionThreadConfig(
+      tsp: ecStop, tcpPort: ecTcpPort, udpPort: ecUdpPort, channel: pairs
+    ),
   )
 
   # Shut the whole process down if either worker thread exits on its own (e.g. an
