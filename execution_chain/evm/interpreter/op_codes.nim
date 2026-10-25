@@ -189,10 +189,9 @@ type
     SigParam =       0xb4, ## Gives access to signature-scoped metadata.
     SigDataCopy =    0xb5, ## Copies a signature’s raw signature bytes into the contract’s memory.
     TxTrace =        0xb6, ## Reads the state diff of the current transaction.
-    TxDiff =         0xb7, ## Ask specific entry of enumerated state diff.
-    EventDataCopy =  0xb8, ## Copies event data to memory.
+    EventDataCopy =  0xb7, ## Copies event data to memory.
 
-    Nop0xB9, Nop0xBA, Nop0xBB, Nop0xBC,
+    Nop0xB8, Nop0xB9, Nop0xBA, Nop0xBB, Nop0xBC,
     Nop0xBD, Nop0xBE, Nop0xBF, Nop0xC0, Nop0xC1, Nop0xC2,
     Nop0xC3, Nop0xC4, Nop0xC5, Nop0xC6, Nop0xC7, Nop0xC8,
     Nop0xC9, Nop0xCA, Nop0xCB, Nop0xCC, Nop0xCD, Nop0xCE,
