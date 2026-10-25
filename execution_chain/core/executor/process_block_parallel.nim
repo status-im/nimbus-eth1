@@ -21,7 +21,7 @@ import
   ../../evm/precompiles,
   ../../evm/interpreter/gas_costs,
   ../../block_access_list/[bal_builder, bal_overlay, bal_tracker],
-  ../../concurrency/[shared_types, utils],
+  ../../concurrency/shared_types,
   ../eip6110,
   ../eip7691,
   ./process_transaction,
@@ -102,18 +102,15 @@ proc recoverAndPrefetchTask*(
   # Create the ledger without triggering a ref count increment on the txFrame
   # which is owned by the main/parent thread.
   let ledger = LedgerRef()
-  ledger.txFrame.borrowRef(ctx[].txFrame)
-  defer:
-    ledger.txFrame.unborrowRef()
+  ledger.borrowTxFrame(ctx[].txFrame)
   discard ledger.beginSavePoint()
 
   # Create the vmState without triggering a ref count increment on the common object
   # which is owned by the main/parent thread.
   let vmState = BaseVMState()
-  vmState.com.borrowRef(ctx[].com)
+  vmState.borrowCom(ctx[].com)
   defer:
     vmState.dispose()
-    vmState.com.unborrowRef()
   vmState.ledger = ledger
   assign(vmState.parent, ctx[].parent)
   assign(vmState.blockCtx, ctx[].blockCtx)
@@ -358,9 +355,7 @@ proc processTxTask(
   # Create the ledger without triggering a ref count increment on the txFrame
   # which is owned by the main/parent thread.
   let ledger = LedgerRef()
-  ledger.txFrame.borrowRef(ctx[].txFrame)
-  defer:
-    ledger.txFrame.unborrowRef()
+  ledger.borrowTxFrame(ctx[].txFrame)
   ledger.balOverlay =
     Opt.some(BlockAccessListOverlay.init(ctx[].balPtr, e[].txIndex + 1))
   discard ledger.beginSavePoint()
@@ -368,10 +363,9 @@ proc processTxTask(
   # Create the vmState without triggering a ref count increment on the common object
   # which is owned by the main/parent thread.
   let vmState = BaseVMState()
-  vmState.com.borrowRef(ctx[].com)
+  vmState.borrowCom(ctx[].com)
   defer:
     vmState.dispose()
-    vmState.com.unborrowRef()
   vmState.ledger = ledger
   assign(vmState.parent, ctx[].parent)
   assign(vmState.blockCtx, ctx[].blockCtx)

@@ -18,6 +18,7 @@ import
   eth/common/[addresses, hashes, block_access_lists],
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
+  ../concurrency/maybe_owned,
   ../constants,
   ../block_access_list/[bal_overlay, bal_utils],
   ./[access_list as ac_access_list, core_db, storage_types],
@@ -75,7 +76,7 @@ type
     overlayStorage: Table[UInt256, UInt256]
 
   LedgerRef* = ref object
-    txFrame*: CoreDbTxRef
+    txFrameRef: MaybeOwned[CoreDbTxRef]
     savePoint: LedgerSpRef
 
     isDirty: bool
@@ -175,6 +176,15 @@ const
 
 template logTxt(info: static[string]): static[string] =
   "LedgerRef " & info
+
+template txFrame*(ledger: LedgerRef): CoreDbTxRef =
+  ledger.txFrameRef.get()
+
+func `txFrame=`*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
+  ledger.txFrameRef.own(txFrame)
+
+func borrowTxFrame*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
+  ledger.txFrameRef.borrow(txFrame)
 
 const
   MissingNodeErrors = {HikeBranchUnresolvedEdge, HikeDanglingEdge}
