@@ -362,13 +362,16 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
       # TODO https://github.com/status-im/nim-taskpools/issues/6
       #      share taskpool between bn and ec
       taskpool = setupTaskpool(int config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config, params, taskpool.numThreads)
+      setupData = setupCommonRef(config, params, taskpool.numThreads)
+      com = setupData.com
+
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config, params, 0)
+    let setupData = setupCommonRef(config, params, 0)
+    com = setupData.com
 
-  if keyCacheEnabled:
+  if setupData.keyCacheEnabled:
     # Make sure key cache isn't empty
     discard com.db.mpt.txRef.computeStateRoot(skipLayers = true).valueOr:
       fatal "Cannot compute root keys", msg = error

@@ -24,35 +24,56 @@ import
 export
   coredb_desc
 
+logScope:
+  topics = "snap sync"
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc importCoreDb*(
+    db: CoreDbRef;
+    tx: CoreDbTxRef;
+    adb: CacheDbRef;
+    info: static[string];
+    stopOnError = false;
+      ): Opt[CoredbImportStats] =
+  ## Import the flat tables into a version of CoreDb.
+  ##
+  let
+    status = ?adb.getAccMissingIntv(info)
+    header = ?adb.getHeader(status.number, info)
+    txStats = db.importFlat(tx, adb, stopOnError, info) # import data
+
+  if 0 < txStats.nErrors:
+    error info & ": Error importing snap data", number=status.number, txStats
+    return err()
+
+  let txStateRoot = ?tx.fetchStateRoot(info)
+  if header.stateRoot != txStateRoot:
+    error info & ": Dtate roots differ when importing snap data",
+      number=status.number, stateRoot=header.stateRoot.toStr,
+      expected=txStateRoot.toStr, txStats
+    return err()
+
+  ok(txStats)
+
+proc importCoreDb*(
     ctx: SnapCtxRef;
     info: static[string];
-      ): Opt[AristoImportStats] =
-  ## Import the flat tables into a version of CoreDb/Aristo, different from
-  ## the active one. If successful, the installation path is returned.
+    stopOnError = true;
+      ): Opt[CoredbImportStats] =
+  ## Import the flat tables into a temporary CoreDb version. After assembly,
+  ## the temporary database is closed and wiped.
+  ##
+  ## This function is for debugging, only.
   ##
   let
     adb = ctx.pool.cacheDB
-    status = ?adb.getAccMissingIntv(info)
-    header = ?adb.getHeader(status.number, info)
+    db2 = CoreDb2Ref.init(ctx)
+  defer: db2.destroy()
 
-    tx2 = CoreDb2Ref.init(ctx, clean=true)          # open, clear left overs
-    txStats = ?tx2.importFlat(adb, info)            # import data
-    txStateRoot = ?tx2.fetchStateRoot(info)
-    db2Dir = tx2.dbDir
-  defer: tx2.destroy()
-
-  if header.stateRoot != txStateRoot:
-    error info & ": Oops, state roots differ", number=status.number,
-      stateRoot=header.stateRoot.toStr, expected=txStateRoot.toStr, txStats
-    return err()
-
-  ctx.pool.newCoreDb.newDbPath = string db2Dir
-  ok(txStats)
+  db2.db2.importCoreDb(db2.tx2, adb, info, stopOnError)
 
 # ------------------------------------------------------------------------------
 # End
