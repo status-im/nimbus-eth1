@@ -527,6 +527,12 @@ proc putSubtrie(
   else:
     db.layersPutVtx(rvid, node.vtx)
 
+  # `key` is the hash of this node's witness bytes, i.e. the key computeKey would
+  # derive, so keep it: otherwise the first state root re-encodes and re-hashes
+  # every branch just loaded. Leaf keys are not cached.
+  if key.len == 32 and node.vtx.vType in Branches:
+    db.layersMergeKey(rvid, key)
+
   ok()
 
 proc putSubtrie*(
