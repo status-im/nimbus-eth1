@@ -218,7 +218,7 @@ proc singleRunStart*(
     # event has been irretrievably missed. So the header cache needs to be
     # cleared.
     ctx.hdrCache.clear()
-    ctx.pool.standByMode = false                    # leave stand-by mode
+    ctx.pool.standByMode = BeaconServerMode.singleRun # leave stand-by mode
     ctx.pool.stopBase = Opt.some(baseHeader)        # set stop header
     ctx.pool.stopNotifier = notify                  # register notifier
 
@@ -255,7 +255,7 @@ proc resetSingleRun*(ctx: BeaconCtxRef): Result[void,ResetLingerError] =
     return err(NotApplicable)
 
   # Reset to stand-by mode
-  ctx.pool.standByMode = true
+  ctx.pool.standByMode = BeaconServerMode.standBy
   ctx.pool.stopBase = Opt.none(Header)
   ctx.pool.stopNotifier = BeaconNotifier(nil)
   ok()
@@ -352,7 +352,7 @@ proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
 proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
-  if ctx.pool.standByMode:                          # waiting for clear
+  if ctx.pool.standByMode == BeaconServerMode.standBy: # waiting for clear
     return
 
   if ctx.hibernate and                              # only in idle mode

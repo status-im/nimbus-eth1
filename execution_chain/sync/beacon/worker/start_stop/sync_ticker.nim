@@ -43,7 +43,7 @@ type
     blkStagedBottom: BlockNumber
 
     state: BeaconState
-    standByMode: bool
+    standByMode: BeaconServerMode
     nSyncPeers: int
     eta: chronos.Duration
 
@@ -101,8 +101,8 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
   if elapsed <= tickerLogInterval:
     return
 
-  if data.standByMode:
-    if t.lastStats.standByMode and
+  if data.standByMode == BeaconServerMode.standBy:
+    if t.lastStats.standByMode == BeaconServerMode.standBy and
        elapsed <= tickerLogStandByMax:
       return
   elif data == t.lastStats and
@@ -170,7 +170,7 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
   t.lastStats = data
   t.visited = now
 
-  if data.standByMode:
+  if data.standByMode == BeaconServerMode.standBy:
     debug "Sync stand-by mode", up, eta, nP, B, L,
       D, H, T, F
   else:

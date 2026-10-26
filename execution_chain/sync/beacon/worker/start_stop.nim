@@ -80,18 +80,17 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   # unknown head from peers (see `api_forkchoice.nim`). The mechanism reuses
   # the same `initTarget` activation pipeline that the `--debug-beacon-sync-
   # target` CLI flag drives.
-  if ctx.pool.standByMode:
-    # But wait. It makes no sense to try syncing against a block hash in
-    # stand-by mode from the FCU. All that will happen is a header chain
-    # download which will be discarded afterwards. No blocks import will
-    # take place.
-    ctx.pool.chain.com.headerTargetRequest = HeaderTargetRequestCB(nil)
-  else:
+  if ctx.pool.standByMode == BeaconServerMode.none:
     ctx.pool.chain.com.headerTargetRequest = proc(hash, finHash: Hash32) =
       let fin =
         if finHash == zeroHash32: Opt.none(Hash32)
         else: Opt.some(finHash)
       ctx.headersTargetRequest(hash, isFinal = false, "fcu", finHash = fin)
+  else:
+    # It makes no sense to try syncing against a block hash in stand-by mode
+    # from the FCU. All that will happen is a header chain download which will
+    # be discarded afterwards. No blocks import will take place.
+    ctx.pool.chain.com.headerTargetRequest = HeaderTargetRequestCB(nil)
 
   # Set up ticker
   if ctx.pool.syncTickerOk:
