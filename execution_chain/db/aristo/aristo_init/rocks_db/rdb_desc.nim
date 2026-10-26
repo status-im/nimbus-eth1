@@ -24,9 +24,15 @@ import
 
 export lru, rocksdb_desc
 
-const AdmKey* = default(seq[byte])
+const
+  AdmKey* = default(seq[byte])
+
+  MAX_CACHED_VERTEX_SIZE* = 87
+    ## Longer vertex records are not kept in `rdVtxLru`
 
 type
+  RdbVtxBuf* = ArrayBuf[MAX_CACHED_VERTEX_SIZE, byte]
+
   RdbWriteEventCb* =
     proc(session: WriteBatchRef): bool {.gcsafe, raises: [].}
       ## Call back closure function that passes the the write session handle
@@ -58,7 +64,7 @@ type
     rdKeyLru*: ConcurrentLruCache[RootedVertexID,HashKey] ## Read cache
     rdKeySize*: int
 
-    rdVtxLru*: ConcurrentLruCache[RootedVertexID,VertexBuf] ## Read cache
+    rdVtxLru*: ConcurrentLruCache[RootedVertexID,RdbVtxBuf] ## Read cache
     rdVtxSize*: int
 
     rdBranchLru*: ConcurrentLruCache[RootedVertexID, (VertexID, uint16)]
@@ -110,6 +116,23 @@ template to*(v: VertexType, T: type RdbVertexType): RdbVertexType =
   of VertexType.Branch: RdbVertexType.Branch
   of VertexType.ExtBranch: RdbVertexType.ExtBranch
   of VertexType.BoundaryNode: raiseAssert "BoundaryNode is stateless-only and never persisted"
+
+template fitsVtxLru*(vtxBuf: VertexBuf): bool =
+  vtxBuf.len <= MAX_CACHED_VERTEX_SIZE
+
+template toVtxLru(cached: var RdbVtxBuf, vtxBuf: VertexBuf) =
+  copyMem(addr cached.buf[0], addr vtxBuf.buf[0], MAX_CACHED_VERTEX_SIZE)
+  cached.n = typeof(cached.n)(vtxBuf.len)
+
+template putVtxLru*(rdb: var RdbInst, rvid: RootedVertexID, vtxBuf: VertexBuf) =
+  var cached {.noinit.}: RdbVtxBuf
+  cached.toVtxLru(vtxBuf)
+  rdb.rdVtxLru.put(rvid, cached)
+
+template updateVtxLru*(rdb: var RdbInst, rvid: RootedVertexID, vtxBuf: VertexBuf): bool =
+  var cached {.noinit.}: RdbVtxBuf
+  cached.toVtxLru(vtxBuf)
+  rdb.rdVtxLru.update(rvid, cached)
 
 template inc*(v: var RdbLruCounter, hit: bool) =
   discard v[hit].fetchAdd(1, moRelaxed)

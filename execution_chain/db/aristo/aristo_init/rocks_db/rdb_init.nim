@@ -92,7 +92,7 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
 
   rdb.rdVtxSize =
     opts.rdbVtxCacheSize div
-    (sizeof(RootedVertexID) + sizeof(VertexBuf) + lruOverhead)
+    (sizeof(RootedVertexID) + sizeof(typeof(rdb.rdVtxLru).V) + lruOverhead)
 
   rdb.rdBranchSize =
     opts.rdbBranchCacheSize div

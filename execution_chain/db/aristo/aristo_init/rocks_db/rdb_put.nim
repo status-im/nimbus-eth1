@@ -113,10 +113,13 @@ proc putVtx*(
     else:
       rdb.rdBranchLru.del(rvid)
       
-      if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-        rdb.rdVtxLru.put(rvid, vtxBuf)
+      if vtxBuf.fitsVtxLru():
+        if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+          rdb.putVtxLru(rvid, vtxBuf)
+        else:
+          discard rdb.updateVtxLru(rvid, vtxBuf)
       else:
-        discard rdb.rdVtxLru.update(rvid, vtxBuf)
+        rdb.rdVtxLru.del(rvid)
 
 
     if key.isValid:

@@ -165,10 +165,11 @@ proc getKey*(
       (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
     rdb.rdKeyLru.put(rvid, res.value())
 
-  if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+  if res.isNone() and vtxBuf.fitsVtxLru() and
+      rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
     # Don't invalidate vertex cache entries because of key reads - the latter
     # follow a different access pattern!
-    rdb.rdVtxLru.put(rvid, vtxBuf)
+    rdb.putVtxLru(rvid, vtxBuf)
 
   let vtx =
     if res.isNone():
@@ -282,8 +283,9 @@ proc getKeys*(
         (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
       rdb.rdKeyLru.put(rvid, res.value())
 
-    if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-      rdb.rdVtxLru.put(rvid, vtxBufs[j])
+    if res.isNone() and vtxBufs[j].fitsVtxLru() and
+        rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+      rdb.putVtxLru(rvid, vtxBufs[j])
 
     keyvtxs[i] =
       if res.isSome():
@@ -359,8 +361,8 @@ proc getVtx*(
     if res.value.vType == Branch:
       let vtx = BranchRef(res.value())
       rdb.rdBranchLru.put(rvid, (vtx.startVid, vtx.used))
-    else:
-      rdb.rdVtxLru.put(rvid, vtxBuf)
+    elif vtxBuf.fitsVtxLru():
+      rdb.putVtxLru(rvid, vtxBuf)
 
   ok res.value()
 
