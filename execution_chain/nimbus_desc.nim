@@ -25,7 +25,8 @@ import
   ./beacon/beacon_engine,
   ./common,
   ./pruner,
-  ./bal_pruner
+  ./bal_pruner,
+  json_rpc/rpcchannels
 
 when enabledLogLevel == TRACE:
   import std/sequtils
@@ -50,6 +51,7 @@ type
   NimbusNode* = ref object
     httpServer*: NimbusHttpServerRef
     engineApiServer*: NimbusHttpServerRef
+    engineApiChannel*: RpcChannelServer
     ethNode*: EthereumNode
     fc*: ForkedChainRef
     txPool*: TxPoolRef
