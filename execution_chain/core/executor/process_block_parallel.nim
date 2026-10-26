@@ -20,7 +20,7 @@ import
   ../../evm/types,
   ../../evm/precompiles,
   ../../evm/interpreter/gas_costs,
-  ../../block_access_list/[bal_builder, bal_overlay, bal_tracker],
+  ../../block_access_list/[bal_builder, bal_overlay, bal_tracker, bal_utils],
   ../../concurrency/[shared_types, utils],
   ../eip6110,
   ../eip7691,
