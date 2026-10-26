@@ -14,7 +14,7 @@ import
   std/tables,
   eth/eip1559,
   eth/common/[blocks, hashes, accounts, headers, addresses],
-  ../db/[ledger, core_db],
+  ../db/[core_db, ledger, storage_types],
   ../db/core_db/memory_only,
   ../constants,
   ../utils/utils,
@@ -102,6 +102,17 @@ proc writeGenesis*(params: NetworkParams, db: CoreDbTxRef): Header =
       time: Opt.some(params.genesis.timestamp))
     fork = map.toHardFork(forkDeterminer)
   writeGenesis(params.genesis, db, fork)
+
+proc flushGenesisAccounts*(g: Genesis, db: CoreDbTxRef) =
+  # The genesis state root was computed by using the account data. These
+  # accounts are removed.
+  for accAddr in g.alloc.keys:
+    let
+      accPath = accAddr.computeAccPath()
+      data = db.fetchAccount(accPath).expect "valid account"
+    db.deleteAccount(accPath).expect "account deleted"
+    if data.codeHash != EMPTY_CODE_HASH:
+      db.del(contractHashKey(data.codeHash).toOpenArray).expect "code deleted"
 
 proc genesisBlockHash*(params: NetworkParams): Hash32 =
   let db = newCoreDbRef(AristoDbMemory)
