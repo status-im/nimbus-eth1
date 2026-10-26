@@ -15,9 +15,24 @@ import
   ../../execution_api/[conversions, execution_types],
   ../beacon/[beacon_engine, web3_eth_conv],
   ../common/common,
-  ../core/pooled_txs,
+  ../core/[eip4844, eip7594, pooled_txs],
   ../core/tx_pool/tx_item,
   ../transaction
+
+proc validateBlobWrapper(
+    ptx: PooledTransaction, com: CommonRef, timestamp: EthTime
+): Result[void, string] =
+  if ptx.blobsBundle.isNil:
+    return err("blob transaction must be in its network form with blobs, " &
+      "commitments and proofs")
+  if com.isOsakaOrLater(timestamp):
+    if ptx.blobsBundle.wrapperVersion != WrapperVersionEIP7594:
+      return err("blob transaction wrapper version 1 expected from Osaka")
+    validateBlobTransactionWrapper7594(ptx)
+  else:
+    if ptx.blobsBundle.wrapperVersion != WrapperVersionEIP4844:
+      return err("blob transaction wrapper version 0 expected before Osaka")
+    validateBlobTransactionWrapper4844(ptx)
 
 proc setupTestingRpc*(ben: BeaconEngineRef, server: RpcServer) =
   server.rpc(EthJson):
@@ -29,17 +44,20 @@ proc setupTestingRpc*(ben: BeaconEngineRef, server: RpcServer) =
       ## Builds a payload on `parentHash` from exactly `transactions`, or from
       ## the pool when null, without touching the canonical chain.
       let
+        com = ben.com
         txs =
           if transactions.isSome:
             var items: seq[TxItemRef]
             for raw in transactions.get:
               let
-                tx = ethTx(raw)
-                sender = tx.recoverSenderCached().valueOr:
+                ptx = decodePooledTx(distinctBase(raw))
+                sender = ptx.tx.recoverSenderCached().valueOr:
                   raise newException(ValueError, "invalid transaction signature")
-              items.add TxItemRef.new(
-                PooledTransaction(tx: tx), tx.computeRlpHash, sender,
-                distinctBase(raw).len.uint64)
+                (size, id) = getEncodedLengthAndHash(ptx.tx)
+              if ptx.tx.txType == TxEip4844:
+                ptx.validateBlobWrapper(com, ethTime attrs.timestamp).isOkOr:
+                  raise newException(ValueError, error)
+              items.add TxItemRef.new(ptx, id, sender, size.uint64)
             Opt.some(items)
           else:
             Opt.none(seq[TxItemRef])
@@ -48,9 +66,8 @@ proc setupTestingRpc*(ben: BeaconEngineRef, server: RpcServer) =
             Opt.some(distinctBase(extraData.get))
           else:
             Opt.none(seq[byte])
-        bundle = ben.generateExecutionBundle(parentHash, attrs, txs, extra).valueOr:
+        bundle = ben.generateTestingBundle(parentHash, attrs, txs, extra).valueOr:
           raise newException(ValueError, error)
-        com = ben.com
         timestamp = ethTime bundle.payload.timestamp
 
       if com.isAmsterdamOrLater(timestamp):

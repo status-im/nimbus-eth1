@@ -61,6 +61,7 @@ declareGauge   nec_txpool_last_block_value,
 
 export
   TxPoolRef,
+  PosPayloadAttr,
   TxError,
   TxItemRef,
   MAX_TXS_PER_ACCOUNT
@@ -130,6 +131,7 @@ export
   contains,
   removeTx,
   removeExpiredTxs,
+  updateVmState,
   getBlobAndProofV1,
   getBlobAndProofV2,
   getBlobCellAndProofV1
@@ -142,6 +144,7 @@ export
 # contains(xp: TxPoolRef, id: Hash32): bool
 # removeTx(xp: TxPoolRef, id: Hash32)
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)
+# updateVmState(xp: TxPoolRef)
 # getBlobAndProofV1(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1]
 # getBlobAndProofV2(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2]
 
@@ -185,7 +188,8 @@ proc assembleBlock*(
     parentHash: Hash32,
     someBaseFee: bool = false,
     gasLimit: Opt[GasInt] = Opt.none(GasInt),
-    txs = Opt.none(seq[TxItemRef])
+    txs = Opt.none(seq[TxItemRef]),
+    extraData = Opt.none(seq[byte])
 ): Result[AssembledBlock, string] =
   # Packing mutates the ledger (tx nonces/balances are persisted) and the
   # per-block accumulators (blobGasUsed, gas counters, receipts), and
@@ -212,7 +216,7 @@ proc assembleBlock*(
 
   # Run EVM with most profitable transactions
   var
-    pst = xp.packerVmExec(txs).valueOr:
+    pst = xp.packerVmExec(txs, extraData).valueOr:
       return err(error)
     blk = EthBlock(
       header: pst.assembleHeader(xp)
@@ -275,10 +279,11 @@ proc assembleBlock*(
     else:
       Opt.none(BlockAccessListRef)
 
-  nec_txpool_packed_total.inc(blk.txs.len)
-  nec_txpool_last_block_txs.set(blk.txs.len.int64)
-  nec_txpool_last_block_value.set(
-    (pst.blockValue div 1_000_000_000.u256).truncate(int64))
+  if txs.isNone:
+    nec_txpool_packed_total.inc(blk.txs.len)
+    nec_txpool_last_block_txs.set(blk.txs.len.int64)
+    nec_txpool_last_block_value.set(
+      (pst.blockValue div 1_000_000_000.u256).truncate(int64))
   # Packing prunes stale-nonce txs directly via tx_tabs, bypassing removeTx, so
   # refresh the size gauges here to keep them from drifting.
   xp.updatePoolSizeMetrics()
@@ -295,6 +300,7 @@ proc assembleBlock*(
 # ------------------------------------------------------------------------------
 
 export
+  posAttrs,
   feeRecipient,
   timestamp,
   prevRandao,
@@ -302,6 +308,7 @@ export
   parentBeaconBlockRoot,
   slotNumber
 
+# posAttrs(xp: TxPoolRef): PosPayloadAttr
 # feeRecipient(xp: TxPoolRef): Address
 # timestamp(xp: TxPoolRef): EthTime
 # prevRandao(xp: TxPoolRef): Bytes32
@@ -314,6 +321,7 @@ export
 # ------------------------------------------------------------------------------
 
 export
+  `posAttrs=`,
   `feeRecipient=`,
   `timestamp=`,
   `prevRandao=`,
@@ -322,6 +330,7 @@ export
   `slotNumber=`,
   `targetGasLimit=`
 
+# `posAttrs=`(xp: TxPoolRef, val: PosPayloadAttr)
 # `feeRecipient=`(xp: TxPoolRef, val: Address)
 # `timestamp=`(xp: TxPoolRef, val: EthTime)
 # `prevRandao=`(xp: TxPoolRef, val: Bytes32)

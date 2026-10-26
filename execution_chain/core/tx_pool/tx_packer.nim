@@ -39,6 +39,7 @@ type
   TxPacker = ref object
     # Packer state
     vmState: BaseVMState
+    extraData: seq[byte]
     numBlobPerBlock: int
     txsRlpSize: uint64
     withdrawalsRlpSize: uint64
@@ -108,7 +109,7 @@ func rlpUintLen(v: uint64): uint64 =
   if v < 128: 1'u64
   else: 1'u64 + rlpLengthBytes(v)
 
-proc prospectiveHeaderFixedSize(xp: TxPoolRef): uint64 =
+proc prospectiveHeaderFixedSize(xp: TxPoolRef, extraData: seq[byte]): uint64 =
   ## RLP payload size of the post-Osaka header, minus `gasUsed` and
   ## `blobGasUsed` — the only fields whose encoded size depends on the packed
   ## txs. Everything else is either known before packing starts or fixed-width
@@ -122,7 +123,7 @@ proc prospectiveHeaderFixedSize(xp: TxPoolRef): uint64 =
     gasLimit:      vmState.blockCtx.gasLimit,
     gasUsed:       0,
     timestamp:     xp.timestamp,
-    extraData:     getExtraData(com),
+    extraData:     extraData,
     baseFeePerGas: Opt.some(xp.baseFee.u256),
   )
   if com.isShanghaiOrLater(xp.timestamp):
@@ -170,11 +171,12 @@ func classifyPackedNext(vmState: BaseVMState): bool =
 # Private functions: packer packerVmExec() helpers
 # ------------------------------------------------------------------------------
 
-proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
+proc vmExecInit(xp: TxPoolRef, extraData: Opt[seq[byte]]): Result[TxPacker, string] =
   let
     vmState = xp.vmState
     packer = TxPacker(
       vmState: vmState,
+      extraData: extraData.get(getExtraData(vmState.com)),
       numBlobPerBlock: 0,
       blockValue: 0.u256,
       stateRoot: vmState.parent.stateRoot,
@@ -185,7 +187,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
   if xp.nextFork >= FkShanghai:
     packer.withdrawalsRlpSize = rlp.getEncodedLength(xp.withdrawals).uint64
   if xp.nextFork >= FkOsaka:
-    packer.headerFixedSize = xp.prospectiveHeaderFixedSize()
+    packer.headerFixedSize = xp.prospectiveHeaderFixedSize(packer.extraData)
 
   # Setup block access list tracker for pre‑execution system calls
   if vmState.balTrackerEnabled:
@@ -207,30 +209,24 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
 
   ok(packer)
 
-proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
-  ## Greedily collect & compact items as long as the accumulated `gasLimit`
-  ## values are below the maximum block size.
+template packItem(pst: var TxPacker; item: TxItemRef; skip, stop: untyped) =
   let
     vmState = pst.vmState
 
   # Nothing fits once less gas than the cheapest possible tx needs is left
   if vmState.blockCtx.gasLimit - vmState.blockGasUsed < vmState.fork.minTxGas:
-    return StopCollecting
+    stop("block gas limit reached")
 
-  # Same check `processTransaction` starts with, minus building its error
-  # message. The pool then skips the sender's later txs, as they can't fit
-  # without this one.
-  template doesNotFit(_: untyped) =
-    return ContinueWithNextAccount
-
+  # Same check `processTransaction` starts with. The pool then skips the
+  # sender's later txs, as they can't fit without this one.
   let intrinsic = item.tx.intrinsicGas(vmState.hardFork, item.sender)
-  checkBlockGasCapacity(vmState, item.tx, intrinsic, doesNotFit)
+  checkBlockGasCapacity(vmState, item.tx, intrinsic, skip)
 
   # EIP-4844
   if item.tx.txType == TxEip4844:
     # EIP-7594
     if vmState.fork >= FkOsaka and item.tx.versionedHashes.len.uint64 > MAX_BLOBS_PER_TX:
-      return ContinueWithNextAccount
+      skip("too many blobs in transaction: " & $item.tx.versionedHashes.len)
 
     let
       maxBlobs = vmState.com.maxBlobs
@@ -243,14 +239,14 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
         else:
           maxForkBlobsPerBlock
     if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlock:
-      return ContinueWithNextAccount
+      skip("blobs per block exceed limit of " & $maxBlobsPerBlock)
 
   # EIP-7934: a tx that cannot fit within the block RLP size limit must not
   # be executed at all, otherwise the header gas values, receipts and the
   # EIP-7928 block access list would commit to a tx missing from the body
   if vmState.fork >= FkOsaka and
       pst.prospectiveBlockSize(item) > MAX_RLP_BLOCK_SIZE.uint64:
-    return ContinueWithNextAccount
+    skip("block would exceed MAX_RLP_BLOCK_SIZE")
 
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(pst.packedTxs.len() + 1)
@@ -260,8 +256,8 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
             intrinsic = Opt.some(intrinsic))
   if rc.isErr:
     if vmState.classifyPackedNext():
-      return ContinueWithNextAccount
-    return StopCollecting
+      skip(rc.error)
+    stop(rc.error)
 
   # Finish book-keeping
   let inx = pst.packedTxs.len
@@ -280,7 +276,21 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   pst.blockValue += rc.value.txFee
   pst.txsRlpSize += item.rlpSize
 
+proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
+  ## Greedily collect & compact items as long as the accumulated `gasLimit`
+  ## values are below the maximum block size.
+  template skip(_: untyped) =
+    return ContinueWithNextAccount
+  template stop(_: untyped) =
+    return StopCollecting
+  pst.packItem(item, skip, stop)
   ContinueWithNextAccount
+
+proc vmExecPackItem(pst: var TxPacker; item: TxItemRef): Result[void, string] =
+  template fail(msg: untyped) =
+    return err("transaction " & $item.id & " could not be included: " & msg)
+  pst.packItem(item, fail, fail)
+  ok()
 
 proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   let
@@ -337,17 +347,16 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 
 proc packerVmExec*(
     xp: TxPoolRef,
-    txs = Opt.none(seq[TxItemRef])
+    txs = Opt.none(seq[TxItemRef]),
+    extraData = Opt.none(seq[byte])
 ): Result[TxPacker, string] =
   ## Execute as much transactions as possible, or exactly `txs` when given.
-  var pst = xp.vmExecInit.valueOr:
+  var pst = xp.vmExecInit(extraData).valueOr:
     return err(error)
 
   if txs.isSome:
     for item in txs.get:
-      discard pst.vmExecGrabItem(item)
-      if pst.packedTxs.len == 0 or pst.packedTxs[^1] != item:
-        return err("transaction could not be included: " & $item.id)
+      ?pst.vmExecPackItem(item)
   elif xp.isOrdered:
     for item in xp.byOrder:
       let rc = pst.vmExecGrabItem(item)
@@ -380,7 +389,7 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
     gasLimit:      vmState.blockCtx.gasLimit,
     gasUsed:       vmState.cumulativeGasUsed,
     timestamp:     xp.timestamp,
-    extraData:     getExtraData(com),
+    extraData:     pst.extraData,
     mixHash:       xp.prevRandao,
     nonce:         default(Bytes8),
     baseFeePerGas: Opt.some(xp.baseFee.u256),

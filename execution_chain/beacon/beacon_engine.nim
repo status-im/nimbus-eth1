@@ -169,15 +169,16 @@ proc generateExecutionBundle*(
     if xp.timestamp <= headBlock.timestamp:
       return err "timestamp must be strictly later than parent"
 
+    if extraData.isSome and extraData.get.len > 32:
+      return err "extraData length should not exceed 32 bytes"
+
     # someBaseFee = true: make sure bundle.blk.header
     # have the same blockHash with generated payload
-    var bundle = xp.assembleBlock(someBaseFee = true,
+    let bundle = xp.assembleBlock(someBaseFee = true,
                                   parentHash = headHash,
-                                  txs = txs).valueOr:
+                                  txs = txs,
+                                  extraData = extraData).valueOr:
       return err(error)
-
-    if extraData.isSome:
-      bundle.blk.header.extraData = extraData.get
 
     if bundle.blk.header.extraData.len > 32:
       return err "extraData length should not exceed 32 bytes"
@@ -187,6 +188,21 @@ proc generateExecutionBundle*(
       blobsBundle: bundle.blobsBundle,
       blockValue: bundle.blockValue,
       executionRequests: bundle.executionRequests)
+
+proc generateTestingBundle*(
+  ben: BeaconEngineRef,
+  headHash: Hash32,
+  attrs: PayloadAttributes,
+  txs: Opt[seq[TxItemRef]],
+  extraData: Opt[seq[byte]]
+): Result[ExecutionBundle, string] =
+  let
+    xp = ben.txPool
+    posAttrs = xp.posAttrs
+  defer:
+    xp.posAttrs = posAttrs
+    xp.updateVmState()
+  ben.generateExecutionBundle(headHash, attrs, txs, extraData)
 
 proc buildLoop(ben: BeaconEngineRef) {.async: (raises: [CancelledError]).} =
   while true:
