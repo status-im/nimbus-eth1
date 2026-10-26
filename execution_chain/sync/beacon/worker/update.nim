@@ -235,23 +235,30 @@ proc resetSingleRun*(ctx: BeaconCtxRef): Result[void,ResetLingerError] =
   ## has to be called again. If the system could be set to `idle` the function
   ## returns `true`, otherwise `false`.
   ##
-  if ctx.pool.stopBase.isSome():
-    case ctx.pool.syncState:
-    of idle:
-      return ok()
-    of BeaconState.headers:
-      ctx.subState.cancelRequest = true
-      return err(DownloadCancelled)
-    of headersCancel:
-      return err(DownloadCancelled)
-    of headersFinish:
-      return err(AboutFinishing)
-    of linger:
-      ctx.subState.cancelRequest = true
-      return ok()
-    else:
-      discard
-  err(NotApplicable)
+  if ctx.pool.stopBase.isNone():
+    return err(NotApplicable)
+
+  case ctx.pool.syncState:
+  of idle:
+    discard                                         # reset to stand-by mode
+  of BeaconState.headers:
+    ctx.subState.cancelRequest = true
+    return err(DownloadCancelled)
+  of headersCancel:
+    return err(DownloadCancelled)
+  of headersFinish:
+    return err(AboutFinishing)
+  of linger:
+    ctx.subState.cancelRequest = true
+    discard                                         # reset to stand-by mode
+  else:
+    return err(NotApplicable)
+
+  # Reset to stand-by mode
+  ctx.pool.standByMode = true
+  ctx.pool.stopBase = Opt.none(Header)
+  ctx.pool.stopNotifier = BeaconNotifier(nil)
+  ok()
 
 proc updateBeaconState*(ctx: BeaconCtxRef; info: static[string]) =
   ## Update internal state when needed

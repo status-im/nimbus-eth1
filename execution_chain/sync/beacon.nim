@@ -104,6 +104,7 @@ proc config*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
+    standBy = false;
       ) =
   ## Complete `BeaconSyncRef` descriptor initialisation.
   ##
@@ -129,6 +130,7 @@ proc config*(
   desc.addBeaconSyncProtocol(eth68)
 
   desc.ctx.pool.chain = chain
+  desc.ctx.pool.standByMode = standBy
 
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
@@ -150,15 +152,10 @@ proc configTicker*(desc: BeaconSyncRef, enable: bool) =
 
 # -----------------
 
-proc start*(desc: BeaconSyncRef; standBy = false): bool =
-  ## This function returns `true` if the current stand-by mode is available.
-  ## Once started, this mode cannot be changed.
-  ##
+proc start*(desc: BeaconSyncRef): bool =
   doAssert not desc.ctx.isNil
-  if desc.ctx.pool.hdrCache.isNil:
-    if desc.startSync(standBy):
-      desc.ctx.pool.standByMode = standBy
-      return true
+  if not desc.isRunning():
+    return desc.startSync(desc.ctx.pool.standByMode)
   # false
 
 proc singleRun*(
@@ -189,9 +186,6 @@ proc singleReset*(desc: BeaconSyncRef):  Result[void,ResetLingerError] =
   desc.ctx.resetSingleRun().isOkOr:
     return  err(error)
   discard desc.startSync(standBy = true)            # enter stand-by mode again
-  desc.ctx.pool.standByMode = true                  # ditto
-  desc.ctx.pool.stopBase = Opt.none(Header)
-  desc.ctx.pool.stopNotifier = BeaconNotifier(nil)
   ok()
 
 proc stop*(desc: BeaconSyncRef) {.async.} =

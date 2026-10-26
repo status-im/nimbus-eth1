@@ -188,7 +188,8 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
 
   # Configure beacon syncer.
   nimbus.beaconSyncRef = BeaconSyncRef.init()
-  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
+  nimbus.beaconSyncRef.config(
+    nimbus.ethNode, nimbus.fc, config.maxPeers, standBy=config.snapSyncEnabled)
 
   # Optional for pre-setting the sync target (e.g. for debugging)
   if config.beaconSyncTarget.isSome():
@@ -320,9 +321,6 @@ proc internalRestart(
     if nimbus.snapWire.isNil.not and not config.snapSyncEnabled:
       waitFor nimbus.snapWire.stop()
 
-    # Reaching here, all of the peers will have gone due to the long time
-    # it takes to import the state DB from snap sync (unless trivial.) So
-    # the easiest action is to simply restart the beacon syncer.
     waitFor nimbus.beaconSyncRef.stop()
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
@@ -357,19 +355,17 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, para
 
   # Not starting any syncer if there is definitely no way to run it. This
   # avoids polling (i.e. waiting for instructions) and some logging.
-  block startSyncer:
-    if not nimbus.beaconSyncRef.isNil:
-      if nimbus.snapSyncRef.isNil:
-        # Run full sync by starting beacon sync now.
-        if nimbus.beaconSyncRef.start():
-          break startSyncer
-      else:
-        # Start snap sync which will use beacon sync in stand-by mode.
-        # When done, the system will resume full beacon sync.
-        if nimbus.snapSyncRef.start(nimbus.beaconSyncRef):
-          break startSyncer
+  if nimbus.beaconSyncRef.isNil:
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
+  else:
+    if not nimbus.beaconSyncRef.start():
+      fatal "Cannot start beacon syncer"
+      quit(QuitFailure)
+    if not nimbus.snapSyncRef.isNil and
+       not nimbus.snapSyncRef.start(nimbus.beaconSyncRef):
+      fatal "Cannot start snap syncer"
+      quit(QuitFailure)
 
   nimbus.setupPruning(config, com)
 
