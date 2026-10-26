@@ -5,17 +5,17 @@
     "name": "00000000000055",
     "namespace": "default",
     "uid": "b60d04f6-8713-47f5-961c-348ca7395439",
-    "resourceVersion": "1790330542993015",
-    "generation": 22,
+    "resourceVersion": "1793028797832012",
+    "generation": 29,
     "creationTimestamp": "2026-07-23T09:26:04Z",
     "labels": {
       "grafana.app/deprecatedInternalID": "4063479426818048"
     },
     "annotations": {
       "grafana.app/createdBy": "user:afsymvffaw3k0c",
-      "grafana.app/saved-from-ui": "Grafana v13.2.2 (1bea008f7e)",
+      "grafana.app/saved-from-ui": "Grafana v13.2.4 (0e79aef9d9)",
       "grafana.app/updatedBy": "user:afsymvffaw3k0c",
-      "grafana.app/updatedTimestamp": "2026-09-25T10:02:22Z"
+      "grafana.app/updatedTimestamp": "2026-10-26T15:33:17Z"
     }
   },
   "spec": {
@@ -162,7 +162,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "13.2.4",
             "spec": {
               "options": {
                 "annotations": {
@@ -296,31 +296,6 @@
                         "value": {
                           "fixedColor": "super-light-purple",
                           "mode": "fixed"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "CL_head",
-                          "CL_finalised"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
                         }
                       }
                     ]
@@ -485,7 +460,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "13.2.4",
             "spec": {
               "options": {
                 "annotations": {
@@ -740,7 +715,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "13.2.4",
             "spec": {
               "options": {
                 "annotations": {
@@ -905,30 +880,6 @@
                         }
                       }
                     ]
-                  },
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "distance_to_sync"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
                   }
                 ]
               }
@@ -982,7 +933,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "13.2.4",
             "spec": {
               "options": {
                 "annotations": {
@@ -1196,7 +1147,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "13.2.4",
             "spec": {
               "options": {
                 "annotations": {
@@ -1354,7 +1305,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "13.2.4",
             "spec": {
               "options": {
                 "annotations": {
@@ -1513,7 +1464,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "13.2.4",
             "spec": {
               "options": {
                 "annotations": {
@@ -1635,6 +1586,28 @@
                       },
                       "spec": {
                         "editorMode": "builder",
+                        "expr": "nec_snap_storage_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "instant": false,
+                        "legendFormat": "storage_coverage",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "bfsyo1ibaja4gc"
+                      },
+                      "spec": {
+                        "editorMode": "builder",
                         "expr": "nec_snap_download_window{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
                         "instant": false,
                         "legendFormat": "download_window",
@@ -1675,7 +1648,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.2",
+            "version": "13.2.4",
             "spec": {
               "options": {
                 "annotations": {
@@ -1777,6 +1750,22 @@
                         }
                       }
                     ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "scope": "series",
+                      "options": "storage_coverage"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "light-orange",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
                   }
                 ]
               }
@@ -1835,10 +1824,23 @@
               "x": 12,
               "y": 6,
               "width": 12,
-              "height": 6,
+              "height": 5,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-4"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
+              "x": 12,
+              "y": 11,
+              "width": 12,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-8"
               }
             }
           },
@@ -1858,23 +1860,10 @@
           {
             "kind": "GridLayoutItem",
             "spec": {
-              "x": 12,
-              "y": 12,
-              "width": 12,
-              "height": 5,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-8"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
               "x": 0,
               "y": 17,
               "width": 12,
-              "height": 5,
+              "height": 4,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-5"
@@ -1886,8 +1875,8 @@
             "spec": {
               "x": 12,
               "y": 17,
-              "width": 11,
-              "height": 5,
+              "width": 12,
+              "height": 4,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-6"
