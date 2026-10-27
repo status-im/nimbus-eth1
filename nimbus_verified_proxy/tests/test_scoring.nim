@@ -9,6 +9,7 @@
 {.push raises: [].}
 
 import
+  std/options,
   unittest2,
   chronos,
   stint,
@@ -24,7 +25,7 @@ import
 
 let scoringEngineConf = RpcVerificationEngineConf(
   chainId: 1.u256,
-  trustedBlockRoot: TEST_TBR,
+  trustedBlockRoot: some(TEST_TBR),
   maxBlockWalk: 1,
   headerStoreLen: 16,
   accountCacheLen: 1,

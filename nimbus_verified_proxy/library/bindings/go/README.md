@@ -36,7 +36,7 @@ const config = `{
   "logLevel":         "INFO"
 }`
 
-ctx, err := verifproxy.Start(config, nil, nil)
+ctx, err := verifproxy.Start(config, nil, nil, nil)
 if err != nil {
     log.Fatal(err)
 }
@@ -69,7 +69,7 @@ period (the beacon slot duration). Requests made before the first successful `Sy
 | Field | Description |
 |---|---|
 | `eth2Network` | Network name: `mainnet`, `sepolia`, `hoodi`, or an OP Stack network (`op-mainnet`, `base-mainnet`, `op-sepolia`) |
-| `trustedBlockRoot` | A trusted checkpoint block root (hex) used to bootstrap the light client |
+| `trustedBlockRoot` | A trusted checkpoint block root (hex) used to bootstrap the light client. Optional when a `Storage` holds a non-stale checkpoint |
 | `executionApiUrls` | Comma-separated execution layer JSON-RPC URLs |
 | `beaconApiUrls` | Comma-separated beacon API URLs |
 | `opExecutionApiUrls` | Comma-separated L2 (op-geth) execution JSON-RPC URLs. Only used for OP Stack networks |
@@ -80,6 +80,22 @@ When an OP Stack network is configured, the primary engine verifies the L1 the r
 settles to (so `eth_*` calls target L1) and a secondary L2 engine is served under the `op_`
 namespace. Call it through the same `CallRpc`, e.g.
 `ctx.CallRpc("op_getBalance", params, timeout)`.
+
+## Checkpoint storage
+
+Pass a `Storage` to `Start` to persist the light client checkpoint (~25 KB)
+across restarts. On the first `Sync` the stored checkpoint is restored unless it is older
+than the weak subjectivity period, in which case the proxy bootstraps from
+`trustedBlockRoot`. Every new finalized header is written back.
+
+```go
+type Storage interface {
+    Get(key string) (value []byte, found bool, err error)
+    Put(key string, value []byte) error
+}
+
+ctx, err := verifproxy.Start(config, nil, nil, myStorage)
+```
 
 ## Custom transports
 
@@ -94,7 +110,7 @@ beaconTransport := func(url, endpoint, params string) (json.RawMessage, error) {
     // forward to your own beacon client
 }
 
-ctx, err := verifproxy.Start(config, execTransport, beaconTransport)
+ctx, err := verifproxy.Start(config, execTransport, beaconTransport, nil)
 ```
 
 ## API
@@ -102,7 +118,8 @@ ctx, err := verifproxy.Start(config, execTransport, beaconTransport)
 ```go
 // Start initialises the proxy. It does not sync; call Sync afterwards.
 // Pass nil transports to use the default HTTP implementations.
-func Start(configJson string, exec ExecTransportFunc, beacon BeaconTransportFunc) (*Context, error)
+// Pass a nil storage to disable checkpoint persistence.
+func Start(configJson string, exec ExecTransportFunc, beacon BeaconTransportFunc, storage Storage) (*Context, error)
 
 // Sync advances the light client once (nvp_eth_sync).
 // A timeout <= 0 uses the default request timeout (5s).

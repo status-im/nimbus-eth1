@@ -29,7 +29,8 @@ import
   ../op/op_frontend,
   ./types,
   ./c_execution_backend,
-  ./c_beacon_backend
+  ./c_beacon_backend,
+  ./c_storage
 
 import ./c_frontend
 export c_frontend
@@ -86,8 +87,12 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [ProxyErro
     eth2Network = some(jsonNode.getOrDefault("eth2Network").getStr("mainnet"))
     trustedBlockRoot =
       try:
-        Eth2Digest.fromHex(jsonNode["trustedBlockRoot"].getStr())
-      except KeyError as e:
+        let raw = jsonNode.getOrDefault("trustedBlockRoot").getStr("")
+        if raw.len == 0:
+          none(Eth2Digest)
+        else:
+          some(Eth2Digest.fromHex(raw))
+      except ValueError as e:
         raise newException(
           ProxyError, "Couldn't parse `trustedBlockRoot` from JSON config: " & e.msg
         )
@@ -205,6 +210,8 @@ proc run*(
     configJson: string,
     executionTransportProc: ExecutionTransportProc,
     beaconTransportProc: BeaconTransportProc,
+    storageGetProc: StorageGetProc,
+    storagePutProc: StoragePutProc,
 ) {.async: (raises: [ProxyError, CancelledError]).} =
   let config = VerifiedProxyConf.load(configJson)
 
@@ -328,6 +335,10 @@ proc run*(
 
   engine.state = EngineState(archive: useArchive)
 
+  if storageGetProc != nil and storagePutProc != nil:
+    engine.storage =
+      Opt.some(getLightClientStorage(ctx, storageGetProc, storagePutProc))
+
   ctx.engine = engine
   ctx.frontend = engine.getExecutionApiFrontend()
 
@@ -378,6 +389,8 @@ proc startVerifProxy(
     configJson: cstring,
     executionTransportProc: ExecutionTransportProc,
     beaconTransportProc: BeaconTransportProc,
+    storageGetProc: StorageGetProc,
+    storagePutProc: StoragePutProc,
 ): ptr Context {.exported.} =
   let ctx = Context.new().toUnmanagedPtr()
   ctx.stop = false
@@ -386,7 +399,10 @@ proc startVerifProxy(
     setupForeignThreadGc()
 
   try:
-    waitFor run(ctx, $configJson, executionTransportProc, beaconTransportProc)
+    waitFor run(
+      ctx, $configJson, executionTransportProc, beaconTransportProc, storageGetProc,
+      storagePutProc,
+    )
   except CatchableError:
     ctx.destroy()
     return nil

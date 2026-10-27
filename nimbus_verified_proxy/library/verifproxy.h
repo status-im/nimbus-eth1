@@ -40,6 +40,7 @@ typedef struct Context Context;
 #define RET_ERROR       -1 // when the call to eth api frontend failed with an error
 #define RET_CANCELLED   -2 // when the call to the eth api frontend was cancelled
 #define RET_DESER_ERROR -3 // when an error occured while deserializing arguments from C to Nim
+#define RET_NOT_FOUND   -4 // when a storage get finds no value for the key
 
 /**
  * Callback used for all asynchronous ETH API calls.
@@ -68,7 +69,7 @@ typedef void (*TransportDeliveryCallback)(int status, char *res, void *userData)
  * (Must be implemented in the application using the verified proxy library)
  *
  * Use execCtxUrl / execCtxName / execCtxParams to read request
- * data from userData. Call cb(userData, status, result) when done.
+ * data from userData. Call cb(status, result, userData) when done.
  *
  * @param ctx       Execution context.
  * @param cb        Delivery callback — must be called exactly once.
@@ -93,16 +94,41 @@ typedef void (*ExecutionTransportProc)(Context *ctx, TransportDeliveryCallback c
 typedef void (*BeaconTransportProc)(Context *ctx, TransportDeliveryCallback cb, void *userData);
 
 /**
- * Deliver an execution-transport response back into Nim.
- * Must be called by the ExecutionTransportProc implementation when done.
+ * Delivery callback passed to storage functions. Implementations must call this
+ * exactly once when the storage operation completes.
+ *
+ * @param status    RET_SUCCESS, RET_NOT_FOUND (get only), RET_ERROR, or RET_CANCELLED.
+ * @param data      Value bytes for a successful get (C-owned, Nim copies them), NULL otherwise.
+ * @param len       Length of data.
+ * @param userData  Opaque storage context pointer originally passed to the storage function.
  */
-void deliverExecutionTransport(int status, char *result, void *userData);
+typedef void (*StorageDeliveryCallback)(int status, const uint8_t *data, int len, void *userData);
 
 /**
- * Deliver a beacon-transport response back into Nim.
- * Must be called by the BeaconTransportProc implementation when done.
+ * Storage function used to read a value by key.
+ * (Must be implemented in the application using the verified proxy library)
+ *
+ * @param ctx       Execution context.
+ * @param key       Key to read (Nim-owned, valid until cb is called).
+ * @param cb        Delivery callback — must be called exactly once.
+ * @param userData  Opaque storage context, pass it back to cb.
  */
-void deliverBeaconTransport(int status, char *result, void *userData);
+typedef void (*StorageGetProc)(Context *ctx, const char *key, StorageDeliveryCallback cb, void *userData);
+
+/**
+ * Storage function used to write a value by key, replacing any previous value.
+ * (Must be implemented in the application using the verified proxy library)
+ *
+ * @param ctx       Execution context.
+ * @param key       Key to write (Nim-owned, valid until cb is called).
+ * @param data      Value bytes (Nim-owned, valid until cb is called — copy them if
+ *                  the write completes later).
+ * @param len       Length of data.
+ * @param cb        Delivery callback — must be called exactly once, data is ignored.
+ * @param userData  Opaque storage context, pass it back to cb.
+ */
+typedef void (*StoragePutProc)(Context *ctx, const char *key, const uint8_t *data, int len,
+                               StorageDeliveryCallback cb, void *userData);
 
 /* Transport context accessors — return pointers into Nim-managed memory.
  * Valid until cb is called. Do NOT free the returned strings. */
@@ -124,10 +150,18 @@ const char *beaconCtxParams(void *userData);
  *                              JSON-RPC calls
  * @param beaconTransport       Function pointer of the function that implements the transport for
  *                              Beacon API calls
+ * @param storageGet            Storage read function used to restore the light client checkpoint.
+ * @param storagePut            Storage write function used to persist the light client checkpoint.
+ *                              Pass NULL for either to disable storage. On the first sync the proxy
+ *                              restores the stored checkpoint unless it is stale, in which case it
+ *                              bootstraps from trustedBlockRoot. Every new finalized header is then
+ *                              written back. Values are ~25 KB; in browsers prefer IndexedDB over
+ *                              localStorage.
  * @return                      Pointer to a new Context object representing the running proxy,
  *                              or NULL on failure. Must be freed using freeContext() when no longer needed.
  */
-ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, ExecutionTransportProc executionTransport, BeaconTransportProc beaconTransport);
+ETH_RESULT_USE_CHECK Context *startVerifProxy(char* configJson, ExecutionTransportProc executionTransport, BeaconTransportProc beaconTransport,
+                                              StorageGetProc storageGet, StoragePutProc storagePut);
 
 /**
  * Free strings allocated by Nim. This currently include the JSON encoded result 
