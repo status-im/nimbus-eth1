@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -75,8 +77,68 @@ func beaconTransport(_ string, endpoint, _ string) (json.RawMessage, error) {
 	return nil, fmt.Errorf("beacon: no mock for %s", endpoint)
 }
 
+const testConfigNoRoot = `{
+	"eth2Network":      "mainnet",
+	"executionApiUrls": "http://127.0.0.1:19999",
+	"beaconApiUrls":    "http://127.0.0.1:19998",
+	"logLevel":         "FATAL",
+	"logStdout":        "None",
+	"syncHeaderStore":  true,
+	"freezeAtSlot":     14018020
+}`
+
+type memStorage struct {
+	mu     sync.Mutex
+	values map[string][]byte
+}
+
+func (s *memStorage) Get(key string) ([]byte, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	v, ok := s.values[key]
+	return v, ok, nil
+}
+
+func (s *memStorage) Put(key string, value []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.values[key] = value
+	return nil
+}
+
+func TestVerifProxyStorageRestore(t *testing.T) {
+	storage := &memStorage{values: map[string][]byte{}}
+
+	ctx, err := verifproxy.Start(testConfig, execTransport, beaconTransport, storage)
+	require.NoError(t, err)
+	require.NoError(t, ctx.Sync(callTimeout))
+	require.NoError(t, ctx.Stop())
+
+	_, found, _ := storage.Get("lc_checkpoint")
+	require.True(t, found)
+
+	var bootstraps atomic.Int32
+	countingBeacon := func(url, endpoint, params string) (json.RawMessage, error) {
+		if endpoint == "getLightClientBootstrap" {
+			bootstraps.Add(1)
+		}
+		return beaconTransport(url, endpoint, params)
+	}
+
+	ctx, err = verifproxy.Start(testConfigNoRoot, execTransport, countingBeacon, storage)
+	require.NoError(t, err)
+	defer ctx.Stop()
+
+	require.NoError(t, ctx.Sync(callTimeout))
+	require.Equal(t, int32(0), bootstraps.Load())
+
+	blockNumber, err := ctx.CallRpc("eth_blockNumber", "[]", callTimeout)
+	require.NoError(t, err)
+	require.NotEmpty(t, blockNumber)
+}
+
 func TestVerifProxy(t *testing.T) {
-	ctx, err := verifproxy.Start(testConfig, execTransport, beaconTransport)
+	ctx, err := verifproxy.Start(testConfig, execTransport, beaconTransport, nil)
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
 	defer ctx.Stop()

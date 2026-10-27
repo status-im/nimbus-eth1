@@ -16,7 +16,7 @@ proc newExecTransportCtx*(url, name, params: string): TransportExecutionContext 
 
 proc deliverExecutionTransport*(
     status: cint, res: cstring, userData: pointer
-) {.cdecl, exportc, gcsafe, raises: [].} =
+) {.cdecl, gcsafe, raises: [].} =
   let tctx = cast[TransportExecutionContext](userData)
   let response =
     if res != nil:
