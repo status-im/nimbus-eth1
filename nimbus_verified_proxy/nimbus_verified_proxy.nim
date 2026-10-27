@@ -20,9 +20,8 @@ import
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/[forks, beaconstate],
-  beacon_chain/[
-    conf, beacon_clock, buildinfo, filepath, nimbus_binary_common, process_state
-  ],
+  beacon_chain/
+    [conf, beacon_clock, buildinfo, filepath, nimbus_binary_common, process_state],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
@@ -242,7 +241,8 @@ proc run(
     let dataDir = config.dataDir.get()
     secureCreatePath(dataDir).isOkOr:
       raise newException(
-        ProxyError, "Couldn't create data directory " & dataDir & ": " & ioErrorMsg(error)
+        ProxyError,
+        "Couldn't create data directory " & dataDir & ": " & ioErrorMsg(error),
       )
     lcDbBackend = SqStoreRef.init(dataDir, "nvp_" & l1NetworkName).valueOr:
       raise newException(ProxyError, "Couldn't open light client database: " & error)
@@ -254,7 +254,8 @@ proc run(
       )
     ).valueOr:
       lcDbBackend.close()
-      raise newException(ProxyError, "Couldn't initialize light client database: " & error)
+      raise
+        newException(ProxyError, "Couldn't initialize light client database: " & error)
     engine.storage = Opt.some(getLightClientStorage(lcDb))
     info "Persisting light client checkpoint", dataDir
 
