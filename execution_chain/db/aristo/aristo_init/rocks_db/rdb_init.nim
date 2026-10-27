@@ -13,18 +13,53 @@
 
 {.push raises: [].}
 
-import std/strformat, results,   ../../[aristo_blobify, aristo_desc], ./rdb_desc, ../../../opts
+import std/[cpuinfo, strformat], results,   ../../[aristo_blobify, aristo_desc], ./rdb_desc, ../../../opts
 
 # ------------------------------------------------------------------------------
 # Private constructor
 # ------------------------------------------------------------------------------
 
-const lruOverhead = 20 # Approximate LRU cache overhead per entry based on minilru sizes
+const
+  lruOverhead = 20 # Approximate LRU cache overhead per entry based on minilru sizes
+  accTrafficShare = 276 # Per mille of rdb cache lookups hitting the account trie
 
-proc dumpCacheStats(keySize, vtxSize, branchSize: int) =
+proc initLru[V](lru: var RdbTrieLru[V], budget: int, threadSafe: bool) =
+  ## Split closest to `accTrafficShare` that holds no fewer entries in no more
+  ## real memory than a single cache keyed by `RootedVertexID` - memory left
+  ## over by the storage part only grows the account part within its tables
+  type
+    AccLru = ConcurrentLruCache[VertexID, V]
+    StoLru = ConcurrentLruCache[RootedVertexID, V]
+  let
+    shards = if threadSafe: 1 shl defaultShardBits(countProcessors()) else: 1
+    unsplit = budget div (sizeof(RootedVertexID) + sizeof(V) + lruOverhead)
+    target = StoLru.realBytes(unsplit, shards)
+    targetShare = accTrafficShare.float / 1000
+  var
+    accSize = 0
+    stoSize = unsplit
+    bestDist = targetShare
+  if unsplit > 0:
+    for step in 1 .. 240:
+      let
+        accFit = AccLru.capacityForBytes(target div 400 * step, shards)
+        sto = StoLru.capacityForBytes(target - AccLru.realBytes(accFit, shards), shards)
+        acc = min(
+          AccLru.tableCapacity(accFit, shards),
+          AccLru.capacityForBytes(target - StoLru.realBytes(sto, shards), shards),
+        )
+      if acc + sto >= unsplit:
+        let dist = abs(acc.float / float(acc + sto) - targetShare)
+        if dist < bestDist or (dist == bestDist and acc + sto > accSize + stoSize):
+          accSize = acc
+          stoSize = sto
+          bestDist = dist
+  lru.init(accSize, stoSize, threadSafe)
+
+proc dumpCacheStats(keySize, vtxSize, branchSize: tuple[acc, sto: int]) =
   block vtx:
     var misses, hits: uint64
-    echo "vtxLru(", vtxSize, ")"
+    echo "vtxLru(World=", vtxSize.acc, " Account=", vtxSize.sto, ")"
     echo "   state    vtype       miss        hit      total hitrate"
     for state in RdbStateType:
       for vtype in RdbVertexType:
@@ -42,7 +77,7 @@ proc dumpCacheStats(keySize, vtxSize, branchSize: int) =
 
   block key:
     var misses, hits: uint64
-    echo "keyLru(", keySize, ") "
+    echo "keyLru(World=", keySize.acc, " Account=", keySize.sto, ")"
 
     echo "   state       miss        hit      total hitrate"
 
@@ -61,7 +96,7 @@ proc dumpCacheStats(keySize, vtxSize, branchSize: int) =
 
   block key:
     var misses, hits: uint64
-    echo "branchLru(", branchSize, ") "
+    echo "branchLru(World=", branchSize.acc, " Account=", branchSize.sto, ")"
 
     echo "   state       miss        hit      total hitrate"
 
@@ -86,26 +121,9 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   ## Database backend constructor
   rdb.baseDb = baseDb
 
-  # bytes -> entries based on overhead estimates
-  rdb.rdKeySize =
-    opts.rdbKeyCacheSize div (sizeof(RootedVertexID) + sizeof(HashKey) + lruOverhead)
-
-  rdb.rdVtxSize =
-    opts.rdbVtxCacheSize div
-    (sizeof(RootedVertexID) + sizeof(VertexBuf) + lruOverhead)
-
-  rdb.rdBranchSize =
-    opts.rdbBranchCacheSize div
-    (sizeof(RootedVertexID) + sizeof(typeof(rdb.rdBranchLru).V) + lruOverhead)
-
-  if opts.threadSafeCaches:
-    rdb.rdKeyLru.init(rdb.rdKeySize)
-    rdb.rdVtxLru.init(rdb.rdVtxSize)
-    rdb.rdBranchLru.init(rdb.rdBranchSize)
-  else:
-    rdb.rdKeyLru.init(rdb.rdKeySize, shardBits = 0, threadSafe = false)
-    rdb.rdVtxLru.init(rdb.rdVtxSize, shardBits = 0, threadSafe = false)
-    rdb.rdBranchLru.init(rdb.rdBranchSize, shardBits = 0, threadSafe = false)
+  rdb.rdKeyLru.initLru(opts.rdbKeyCacheSize, opts.threadSafeCaches)
+  rdb.rdVtxLru.initLru(opts.rdbVtxCacheSize, opts.threadSafeCaches)
+  rdb.rdBranchLru.initLru(opts.rdbBranchCacheSize, opts.threadSafeCaches)
   rdb.rdbPrintStats = opts.rdbPrintStats
   rdb.threadSafeCaches = opts.threadSafeCaches
 
@@ -117,14 +135,11 @@ proc close*(rdb: var RdbInst, wipe: bool) =
   rdb.rdKeyLru.dispose()
   rdb.rdVtxLru.dispose()
   rdb.rdBranchLru.dispose()
-  rdb.rdKeyLru.reset()
-  rdb.rdVtxLru.reset()
-  rdb.rdBranchLru.reset()
 
   let
-    ks = rdb.rdKeySize
-    vs = rdb.rdVtxSize
-    bs = rdb.rdBranchSize
+    ks = (rdb.rdKeyLru.accSize, rdb.rdKeyLru.stoSize)
+    vs = (rdb.rdVtxLru.accSize, rdb.rdVtxLru.stoSize)
+    bs = (rdb.rdBranchLru.accSize, rdb.rdBranchLru.stoSize)
   rdb.baseDb.close(wipe)
   if rdb.rdbPrintStats:
     dumpCacheStats(ks, vs, bs)

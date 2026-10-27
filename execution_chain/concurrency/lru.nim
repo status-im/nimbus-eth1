@@ -89,6 +89,9 @@ type
 
 const fillRatio = 0.8
 
+template tableSize(nodesLen: int): int =
+  nextPowerOfTwo(int(ceil(nodesLen.float / fillRatio)))
+
 template targetLen(i: int): int =
   # Similar growth strategy as `seq` itself - the 1.5 value is common in growth
   # strategies due to it being close to the golden ratio which ends up working
@@ -305,7 +308,7 @@ proc grow[K, V](v: var LruCache[K, V], newSize: uint32) =
     v.nodes[v.nodes[0].prev].next = oldSize
     v.nodes[0].prev = newSize - 1
 
-  let newTableSize = nextPowerOfTwo(int(ceil(newSize.float / fillRatio)))
+  let newTableSize = tableSize(newSize.int)
   if v.bucketsLen >= newTableSize: # nextPowerOfTwo rounds up effectively..
     return
 
@@ -734,6 +737,52 @@ template numShards*[K, V](lru: ConcurrentLruCache[K, V]): int =
     numShards(lru.shardBits)
   else:
     1
+
+func realBytes*[K, V](
+    T: type ConcurrentLruCache[K, V], capacity, shardCount: int
+): int =
+  ## Shared memory held by the node lists and hash tables of a cache with
+  ## `capacity` entries spread over `shardCount` shards, once every shard is full
+  if capacity <= 0:
+    return 0
+  let shardCapacity = (capacity + shardCount - 1) div shardCount
+  shardCount * (
+    (shardCapacity + 1) * sizeof(LruNode[K, V]) +
+    tableSize(shardCapacity + 1) * sizeof(LruBucket)
+  )
+
+func tableCapacity*[K, V](
+    T: type ConcurrentLruCache[K, V], capacity, shardCount: int
+): int =
+  ## Largest capacity whose hash tables are no larger than those of a cache
+  ## with `capacity` entries
+  if capacity <= 0:
+    return 0
+  let buckets = tableSize((capacity + shardCount - 1) div shardCount + 1)
+  var nodesLen = int(float(buckets) * fillRatio)
+  while nodesLen > 1 and tableSize(nodesLen) > buckets:
+    dec nodesLen
+  shardCount * (nodesLen - 1)
+
+func capacityForBytes*[K, V](
+    T: type ConcurrentLruCache[K, V], bytes, shardCount: int
+): int =
+  ## Largest capacity whose `realBytes` fits in `bytes` - a multiple of
+  ## `shardCount` so that every shard gets the same capacity
+  let shardBytes = bytes div shardCount
+  var
+    best = 0
+    buckets = 1
+  while buckets * sizeof(LruBucket) < shardBytes:
+    var nodesLen = min(
+      int(float(buckets) * fillRatio),
+      (shardBytes - buckets * sizeof(LruBucket)) div sizeof(LruNode[K, V]),
+    )
+    while nodesLen > 1 and tableSize(nodesLen) > buckets:
+      dec nodesLen
+    best = max(best, nodesLen - 1)
+    buckets *= 2
+  best * shardCount
 
 proc init*[K, V](
     lru: var ConcurrentLruCache[K, V],

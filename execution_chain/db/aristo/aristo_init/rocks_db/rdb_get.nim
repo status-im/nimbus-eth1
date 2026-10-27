@@ -162,10 +162,10 @@ proc getKey*(
 
   # Update cache and return - in peek mode, avoid evicting cache items
   if res.isSome() and
-      (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
+      (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.hasRoom(rvid)):
     rdb.rdKeyLru.put(rvid, res.value())
 
-  if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+  if res.isNone() and rdb.rdVtxLru.hasRoom(rvid):
     # Don't invalidate vertex cache entries because of key reads - the latter
     # follow a different access pattern!
     rdb.rdVtxLru.put(rvid, vtxBuf)
@@ -279,10 +279,10 @@ proc getKeys*(
       res = vtxBufs[j].data().deblobify(HashKey)
 
     if res.isSome() and
-        (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.len < rdb.rdKeyLru.capacity):
+        (GetVtxFlag.PeekCache notin flags or rdb.rdKeyLru.hasRoom(rvid)):
       rdb.rdKeyLru.put(rvid, res.value())
 
-    if res.isNone() and rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+    if res.isNone() and rdb.rdVtxLru.hasRoom(rvid):
       rdb.rdVtxLru.put(rvid, vtxBufs[j])
 
     keyvtxs[i] =

@@ -38,20 +38,9 @@ proc begin*(rdb: var RdbInst): SharedWriteBatchRef =
 
 proc rollback*(rdb: var RdbInst, session: SharedWriteBatchRef) =
   if not session.isClosed():
-    rdb.rdKeyLru.dispose()
-    rdb.rdVtxLru.dispose()
-    rdb.rdBranchLru.dispose()
-    rdb.rdKeyLru.reset()
-    rdb.rdVtxLru.reset()
-    rdb.rdBranchLru.reset()
-    if rdb.threadSafeCaches:
-      rdb.rdKeyLru.init(rdb.rdKeySize)
-      rdb.rdVtxLru.init(rdb.rdVtxSize)
-      rdb.rdBranchLru.init(rdb.rdBranchSize)
-    else:
-      rdb.rdKeyLru.init(rdb.rdKeySize, shardBits = 0, threadSafe = false)
-      rdb.rdVtxLru.init(rdb.rdVtxSize, shardBits = 0, threadSafe = false)
-      rdb.rdBranchLru.init(rdb.rdBranchSize, shardBits = 0, threadSafe = false)
+    rdb.rdKeyLru.clear(rdb.threadSafeCaches)
+    rdb.rdVtxLru.clear(rdb.threadSafeCaches)
+    rdb.rdBranchLru.clear(rdb.threadSafeCaches)
     session.close()
 
 proc commit*(rdb: var RdbInst, session: SharedWriteBatchRef): Result[void,(AristoError,string)] =
@@ -106,21 +95,21 @@ proc putVtx*(
     if vtx.vType == Branch:
       let vtx = BranchRef(vtx)
       rdb.rdVtxLru.del(rvid)
-      if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
+      if rdb.rdBranchLru.hasRoom(rvid):
         rdb.rdBranchLru.put(rvid, (vtx.startVid, vtx.used))
       else:
         discard rdb.rdBranchLru.update(rvid, (vtx.startVid, vtx.used))
     else:
       rdb.rdBranchLru.del(rvid)
       
-      if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+      if rdb.rdVtxLru.hasRoom(rvid):
         rdb.rdVtxLru.put(rvid, vtxBuf)
       else:
         discard rdb.rdVtxLru.update(rvid, vtxBuf)
 
 
     if key.isValid:
-      if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
+      if rdb.rdKeyLru.hasRoom(rvid):
         rdb.rdKeyLru.put(rvid, key)
       else:
         discard rdb.rdKeyLru.update(rvid, key)

@@ -113,6 +113,9 @@ func `-`*(a, b: VertexID): uint64 = (a.uint64 - b.uint64)
 func `==`*(a, b: RootedVertexID): bool {.inline.} =
   a.vid == b.vid and a.root == b.root
 
+func hash*(vid: VertexID): Hash {.inline.} =
+  cast[Hash](rapidhashNano(cast[array[8, byte]](vid)))
+
 func hash*(rvid: RootedVertexID): Hash {.inline.} =
   static: doAssert sizeof(RootedVertexID) == 2 * sizeof(VertexID) # no padding
   cast[Hash](rapidhashNano(cast[array[16, byte]](rvid)))

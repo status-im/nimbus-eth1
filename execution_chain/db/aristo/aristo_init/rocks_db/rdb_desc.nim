@@ -27,6 +27,15 @@ export lru, rocksdb_desc
 const AdmKey* = default(seq[byte])
 
 type
+  RdbTrieLru*[V] = object
+    ## Read cache split by trie - the account trie part is keyed by the bare
+    ## `VertexID` while static vids repeat across storage tries, which are
+    ## therefore keyed by `RootedVertexID`
+    acc*: ConcurrentLruCache[VertexID, V]
+    sto*: ConcurrentLruCache[RootedVertexID, V]
+    accSize*: int
+    stoSize*: int
+
   RdbWriteEventCb* =
     proc(session: WriteBatchRef): bool {.gcsafe, raises: [].}
       ## Call back closure function that passes the the write session handle
@@ -42,27 +51,9 @@ type
     baseDb*: RocksDbInstanceRef
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
 
-    # Note that the key type `VertexID` for LRU caches requires that there is
-    # strictly no vertex ID re-use.
-    #
-    # Otherwise, in some fringe cases one might remove a vertex with key
-    # `(root1,vid)` and insert another vertex with key `(root2,vid)` while
-    # re-using the vertex ID `vid`. Without knowledge of `root1` and `root2`,
-    # the LRU cache will return the same vertex for `(root2,vid)` also for
-    # `(root1,vid)`.
-    #
-    # The other alternaive would be to use the key type `RootedVertexID` which
-    # is less memory and time efficient (the latter one due to internal LRU
-    # handling of the longer key.)
-    #
-    rdKeyLru*: ConcurrentLruCache[RootedVertexID,HashKey] ## Read cache
-    rdKeySize*: int
-
-    rdVtxLru*: ConcurrentLruCache[RootedVertexID,VertexBuf] ## Read cache
-    rdVtxSize*: int
-
-    rdBranchLru*: ConcurrentLruCache[RootedVertexID, (VertexID, uint16)]
-    rdBranchSize*: int
+    rdKeyLru*: RdbTrieLru[HashKey]               ## Read cache
+    rdVtxLru*: RdbTrieLru[VertexBuf]             ## Read cache
+    rdBranchLru*: RdbTrieLru[(VertexID, uint16)] ## Read cache
 
     rdbPrintStats*: bool               ## Print statistics on closure
     threadSafeCaches*: bool
@@ -110,6 +101,81 @@ template to*(v: VertexType, T: type RdbVertexType): RdbVertexType =
   of VertexType.Branch: RdbVertexType.Branch
   of VertexType.ExtBranch: RdbVertexType.ExtBranch
   of VertexType.BoundaryNode: raiseAssert "BoundaryNode is stateless-only and never persisted"
+
+template isAcc[V](lru: RdbTrieLru[V], rvid: RootedVertexID): bool =
+  rvid.root == STATE_ROOT_VID and lru.accSize > 0
+
+proc init*[V](lru: var RdbTrieLru[V], accSize, stoSize: int, threadSafe: bool) =
+  lru.accSize = accSize
+  lru.stoSize = stoSize
+  if threadSafe:
+    lru.acc.init(accSize)
+    lru.sto.init(stoSize)
+  else:
+    lru.acc.init(accSize, shardBits = 0, threadSafe = false)
+    lru.sto.init(stoSize, shardBits = 0, threadSafe = false)
+
+proc dispose*[V](lru: var RdbTrieLru[V]) =
+  lru.acc.dispose()
+  lru.sto.dispose()
+  lru.acc.reset()
+  lru.sto.reset()
+
+proc clear*[V](lru: var RdbTrieLru[V], threadSafe: bool) =
+  lru.dispose()
+  lru.init(lru.accSize, lru.stoSize, threadSafe)
+
+func hasRoom*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID): bool {.inline.} =
+  if lru.isAcc(rvid):
+    lru.acc.len < lru.acc.capacity
+  else:
+    lru.sto.len < lru.sto.capacity
+
+func peek*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID): Opt[V] {.inline, noinit.} =
+  if lru.isAcc(rvid):
+    result = lru.acc.peek(rvid.vid)
+  else:
+    result = lru.sto.peek(rvid)
+
+proc get*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID): Opt[V] {.inline, noinit.} =
+  if lru.isAcc(rvid):
+    result = lru.acc.get(rvid.vid)
+  else:
+    result = lru.sto.get(rvid)
+
+proc del*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID) {.inline.} =
+  if lru.isAcc(rvid):
+    lru.acc.del(rvid.vid)
+  else:
+    lru.sto.del(rvid)
+
+template put*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID, val: V) =
+  if lru.isAcc(rvid):
+    lru.acc.put(rvid.vid, val)
+  else:
+    lru.sto.put(rvid, val)
+
+template update*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID, val: V): bool =
+  if lru.isAcc(rvid):
+    lru.acc.update(rvid.vid, val)
+  else:
+    lru.sto.update(rvid, val)
+
+template withGet*[V](
+    lru: var RdbTrieLru[V], rvid: RootedVertexID, value, body: untyped
+) =
+  if lru.isAcc(rvid):
+    lru.acc.withGet(rvid.vid, value, body)
+  else:
+    lru.sto.withGet(rvid, value, body)
+
+template withPeek*[V](
+    lru: var RdbTrieLru[V], rvid: RootedVertexID, value, body: untyped
+) =
+  if lru.isAcc(rvid):
+    lru.acc.withPeek(rvid.vid, value, body)
+  else:
+    lru.sto.withPeek(rvid, value, body)
 
 template inc*(v: var RdbLruCounter, hit: bool) =
   discard v[hit].fetchAdd(1, moRelaxed)
