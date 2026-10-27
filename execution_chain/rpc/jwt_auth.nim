@@ -59,7 +59,7 @@ type
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc verifyTokenHS256(token: string, key: JwtSharedKey): Result[void, JwtError] =
+proc verifyTokenHS256*(token: string, key: JwtSharedKey): Result[void, JwtError] =
   let p = token.split('.')
   if p.len != 3:
     return err(jwtTokenInvNumSegments)

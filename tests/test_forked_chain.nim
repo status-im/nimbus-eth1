@@ -1691,7 +1691,7 @@ suite "ForkedChainRef tests":
       check restarted.headerByHash(blk.blockHash).isErr
       check restarted.blockByHash(blk.blockHash).isErr
       check restarted.blockBodyByHash(blk.blockHash).isErr
-      check restarted.payloadBodyV1ByHash(blk.blockHash).isErr
+      check restarted.payloadBodyByHash(blk.blockHash, false).isErr
       check restarted.receiptsByBlockHash(blk.blockHash).isErr
     # Base and the canonical blocks below it are on disk
     check restarted.headerByHash(blk3.blockHash).isOk

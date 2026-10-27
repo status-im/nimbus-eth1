@@ -13,13 +13,14 @@ import
   chronicles,
   websock/websock,
   json_rpc/rpcserver,
-  ./rpc/[common, cors, debug, engine_api, jwt_auth, rpc_server, server_api, testing],
+  ./rpc/[common, cors, debug, engine_api, engine_rest_api, jwt_auth, rpc_server, server_api, testing],
   ./[conf, nimbus_desc]
 
 export
   common,
   debug,
   engine_api,
+  engine_rest_api,
   jwt_auth,
   cors,
   rpc_server,
@@ -159,6 +160,10 @@ proc addEngineApiServices(handlers: var seq[RpcHandlerProc],
     info "Engine WebSocket API enabled", url = "ws://" & $address
 
   if config.engineApiEnabled:
+    if config.engineApiRestEnabled:
+      handlers.add newEngineRestHandlerProc(newEngineRestRouter(nimbus.beaconEngine))
+      info "Engine SSZ API (experimental) enabled", url = "http://" & $address & "/engine/v1"
+
     let server = newRpcHttpHandler()
     setupEngineAPI(nimbus.beaconEngine, server)
     installRPC(server, nimbus, config, com, serverApi, {RpcFlag.Eth})
@@ -190,6 +195,10 @@ proc addServices(handlers: var seq[RpcHandlerProc],
     handlers.addHandler(server)
 
   if config.rpcEnabled or config.engineApiEnabled:
+    if config.engineApiEnabled and config.engineApiRestEnabled:
+      handlers.add newEngineRestHandlerProc(newEngineRestRouter(nimbus.beaconEngine))
+      info "Engine SSZ API (experimental) enabled", url = "http://" & $address & "/engine/v1"
+
     let server = newRpcHttpHandler()
     if config.engineApiEnabled:
       setupEngineAPI(nimbus.beaconEngine, server)
@@ -210,6 +219,10 @@ proc setupRpc*(nimbus: NimbusNode, config: ExecutionClientConf,
                com: CommonRef, params: NetworkParams) =
   if not config.engineApiEnabled:
     warn "Engine API disabled, the node will not respond to consensus client updates (enable with `--engine-api`)"
+
+  if config.engineApiRestEnabled and not config.engineApiEnabled:
+    warn "--debug-engine-api-rest has no effect without --engine-api: the REST API " &
+      "shares the JSON-RPC Engine API's listener and port"
 
   if not config.serverEnabled:
     return

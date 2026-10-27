@@ -13,11 +13,13 @@ import
   std/typetraits,
   json_rpc/rpcserver,
   ../../execution_api/[conversions, execution_types],
-  ../beacon/[beacon_engine, web3_eth_conv],
+  ../beacon/[beacon_engine, payload_conv, web3_eth_conv],
   ../common/common,
   ../core/[eip4844, eip7594, pooled_txs],
   ../core/tx_pool/tx_item,
   ../transaction
+
+from ./engine_ssz_conv import toForkedPayloadAttributes
 
 proc validateBlobWrapper(
     ptx: PooledTransaction, com: CommonRef, timestamp: EthTime
@@ -66,34 +68,35 @@ proc setupTestingRpc*(ben: BeaconEngineRef, server: RpcServer) =
             Opt.some(distinctBase(extraData.get))
           else:
             Opt.none(seq[byte])
-        bundle = ben.generateTestingBundle(parentHash, attrs, txs, extra).valueOr:
+        bundle = ben.generateTestingBundle(parentHash, toForkedPayloadAttributes(attrs), txs, extra).valueOr:
           raise newException(ValueError, error)
-        timestamp = ethTime bundle.payload.timestamp
+        payload = executionPayload(bundle.blk, bundle.blockAccessList)
+        timestamp = ethTime payload.timestamp
 
       if com.isAmsterdamOrLater(timestamp):
         EthJson.encode(GetPayloadV6Response(
-          executionPayload: bundle.payload.V4,
+          executionPayload: payload.V4,
           blockValue: bundle.blockValue,
           blobsBundle: bundle.blobsBundle.V2,
           executionRequests: bundle.executionRequests.get,
         )).JsonString
       elif com.isOsakaOrLater(timestamp):
         EthJson.encode(GetPayloadV5Response(
-          executionPayload: bundle.payload.V3,
+          executionPayload: payload.V3,
           blockValue: bundle.blockValue,
           blobsBundle: bundle.blobsBundle.V2,
           executionRequests: bundle.executionRequests.get,
         )).JsonString
       elif com.isPragueOrLater(timestamp):
         EthJson.encode(GetPayloadV4Response(
-          executionPayload: bundle.payload.V3,
+          executionPayload: payload.V3,
           blockValue: bundle.blockValue,
           blobsBundle: bundle.blobsBundle.V1,
           executionRequests: bundle.executionRequests.get,
         )).JsonString
       else:
         EthJson.encode(GetPayloadV3Response(
-          executionPayload: bundle.payload.V3,
+          executionPayload: payload.V3,
           blockValue: bundle.blockValue,
           blobsBundle: bundle.blobsBundle.V1,
         )).JsonString
