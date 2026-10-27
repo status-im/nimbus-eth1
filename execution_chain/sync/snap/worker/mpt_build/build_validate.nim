@@ -52,15 +52,22 @@ proc validate*[T: SnapAccount|StorageItem](
       if db.merge(leaf).isErr:
         return err()
       lastKey = key
+    if db.atRightEnd and 0 < db.leafs.len:          # check right leaf
+      if db.leafs[^1][0].to(ItemKey) == lastKey:    # is also part of `leafs[]`
+        db.atValidatedEnd = true                    # flag it
 
     discard db.finalise()
     if db.isComplete():
+      if leafs.len == 0:                            # edge case
+        doAssert db.atRightEnd
+        db.atValidatedEnd = true
       return ok(db)
   err()
 
 proc rightMost*(db: NodeTrieRef): bool =
-  ## Returns `true` if there can be no more leafs to the right
-  db.atRightEnd
+  ## Returns `true` if there can be no more leafs with path greater than the
+  ## `leafs[]` argument from the `validate()` directive.
+  db.atValidatedEnd
 
 # ------------------------------------------------------------------------------
 # End
