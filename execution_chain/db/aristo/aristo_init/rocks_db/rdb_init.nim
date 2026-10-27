@@ -23,23 +23,29 @@ const
   lruOverhead = 20 # Approximate LRU cache overhead per entry based on minilru sizes
   accTrafficShare = 276 # Per mille of rdb cache lookups hitting the account trie
 
-proc initLru[V](lru: var RdbTrieLru[V], budget: int, threadSafe: bool) =
-  ## Split closest to `accTrafficShare` that holds no fewer entries in no more
-  ## real memory than a single cache keyed by `RootedVertexID` - memory left
-  ## over by the storage part only grows the account part within its tables
+type TrieSplit = tuple[acc, sto: int]
+
+func unsplitSize(V: typedesc, budget: int): int =
+  budget div (sizeof(RootedVertexID) + sizeof(V) + lruOverhead)
+
+func splitBytes(V: typedesc, split: TrieSplit, shards: int): int =
+  ConcurrentLruCache[VertexID, V].realBytes(split.acc, shards) +
+    ConcurrentLruCache[RootedVertexID, V].realBytes(split.sto, shards)
+
+func shareDist(split: TrieSplit): float =
+  abs(split.acc.float / float(split.acc + split.sto) - accTrafficShare.float / 1000)
+
+func trafficSplit(V: typedesc, unsplit, shards: int): TrieSplit =
+  ## Split closest to `accTrafficShare` holding no fewer entries in no more real
+  ## memory than the unsplit cache - memory left over by the storage part only
+  ## grows the account part within its tables
   type
     AccLru = ConcurrentLruCache[VertexID, V]
     StoLru = ConcurrentLruCache[RootedVertexID, V]
-  let
-    shards = if threadSafe: 1 shl defaultShardBits(countProcessors()) else: 1
-    unsplit = budget div (sizeof(RootedVertexID) + sizeof(V) + lruOverhead)
-    target = StoLru.realBytes(unsplit, shards)
-    targetShare = accTrafficShare.float / 1000
-  var
-    accSize = 0
-    stoSize = unsplit
-    bestDist = targetShare
+  result = (0, unsplit)
   if unsplit > 0:
+    let target = StoLru.realBytes(unsplit, shards)
+    var bestDist = accTrafficShare.float / 1000
     for step in 1 .. 240:
       let
         accFit = AccLru.capacityForBytes(target div 400 * step, shards)
@@ -48,13 +54,94 @@ proc initLru[V](lru: var RdbTrieLru[V], budget: int, threadSafe: bool) =
           AccLru.tableCapacity(accFit, shards),
           AccLru.capacityForBytes(target - StoLru.realBytes(sto, shards), shards),
         )
-      if acc + sto >= unsplit:
-        let dist = abs(acc.float / float(acc + sto) - targetShare)
-        if dist < bestDist or (dist == bestDist and acc + sto > accSize + stoSize):
-          accSize = acc
-          stoSize = sto
-          bestDist = dist
-  lru.init(accSize, stoSize, threadSafe)
+        split = (acc, sto)
+      if acc + sto >= unsplit and (
+        split.shareDist < bestDist or
+        (split.shareDist == bestDist and acc + sto > result.acc + result.sto)
+      ):
+        result = split
+        bestDist = split.shareDist
+
+func compactSplit(V: typedesc, unsplit, shards: int): TrieSplit =
+  ## Split holding as many entries as the unsplit cache in the least real
+  ## memory, with the account part at most half of the entries
+  result = (0, unsplit)
+  var
+    bestBytes = V.splitBytes(result, shards)
+    capacity = shards
+  while true:
+    let full = ConcurrentLruCache[RootedVertexID, V].tableCapacity(capacity, shards)
+    for split in [
+      (min(full, unsplit div 2), unsplit - min(full, unsplit div 2)),
+      (unsplit - min(full, unsplit), min(full, unsplit)),
+    ]:
+      if split[0] <= split[1] and V.splitBytes(split, shards) < bestBytes:
+        result = split
+        bestBytes = V.splitBytes(split, shards)
+    if full >= unsplit:
+      break
+    capacity = full + shards
+
+func largestSplit(V: typedesc, unsplit, budget, shards: int): TrieSplit =
+  ## Split holding the most entries in `budget` bytes with the account part at
+  ## most half of the entries - ties go to the one closest to `accTrafficShare`
+  type
+    AccLru = ConcurrentLruCache[VertexID, V]
+    StoLru = ConcurrentLruCache[RootedVertexID, V]
+  result = (0, unsplit)
+  var bestDist = accTrafficShare.float / 1000
+  for step in 1 .. 200:
+    let
+      accFit = AccLru.capacityForBytes(budget div 400 * step, shards)
+      sto = StoLru.capacityForBytes(budget - AccLru.realBytes(accFit, shards), shards)
+      acc = min(sto, AccLru.capacityForBytes(budget - StoLru.realBytes(sto, shards), shards))
+      split = (acc, sto)
+      total = acc + sto
+    if total > result.acc + result.sto or
+        (total == result.acc + result.sto and split.shareDist < bestDist):
+      result = split
+      bestDist = split.shareDist
+
+proc initLrus(rdb: var RdbInst, opts: DbOptions) =
+  ## The three caches together use the real memory their budgets would get
+  ## unsplit - key and vertex caches shrink to their unsplit entry count when
+  ## that leaves the branch cache more entries
+  type BranchVal = typeof(rdb.rdBranchLru).V
+  let
+    threadSafe = opts.threadSafeCaches
+    shards = if threadSafe: 1 shl defaultShardBits(countProcessors()) else: 1
+    keyUnsplit = HashKey.unsplitSize(opts.rdbKeyCacheSize)
+    vtxUnsplit = VertexBuf.unsplitSize(opts.rdbVtxCacheSize)
+    branchUnsplit = BranchVal.unsplitSize(opts.rdbBranchCacheSize)
+    target =
+      HashKey.splitBytes((0, keyUnsplit), shards) +
+      VertexBuf.splitBytes((0, vtxUnsplit), shards) +
+      BranchVal.splitBytes((0, branchUnsplit), shards)
+  var
+    best: tuple[key, vtx, branch: TrieSplit]
+    bestScore = (-1, -1)
+  for keySplit in [
+    HashKey.trafficSplit(keyUnsplit, shards), HashKey.compactSplit(keyUnsplit, shards)
+  ]:
+    for vtxSplit in [
+      VertexBuf.trafficSplit(vtxUnsplit, shards),
+      VertexBuf.compactSplit(vtxUnsplit, shards),
+    ]:
+      let
+        budget =
+          target - HashKey.splitBytes(keySplit, shards) -
+          VertexBuf.splitBytes(vtxSplit, shards)
+        branchSplit = BranchVal.largestSplit(branchUnsplit, budget, shards)
+        score = (
+          branchSplit.acc + branchSplit.sto,
+          keySplit.acc + keySplit.sto + vtxSplit.acc + vtxSplit.sto,
+        )
+      if score > bestScore:
+        best = (keySplit, vtxSplit, branchSplit)
+        bestScore = score
+  rdb.rdKeyLru.init(best.key.acc, best.key.sto, threadSafe)
+  rdb.rdVtxLru.init(best.vtx.acc, best.vtx.sto, threadSafe)
+  rdb.rdBranchLru.init(best.branch.acc, best.branch.sto, threadSafe)
 
 proc dumpCacheStats(keySize, vtxSize, branchSize: tuple[acc, sto: int]) =
   block vtx:
@@ -121,9 +208,7 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   ## Database backend constructor
   rdb.baseDb = baseDb
 
-  rdb.rdKeyLru.initLru(opts.rdbKeyCacheSize, opts.threadSafeCaches)
-  rdb.rdVtxLru.initLru(opts.rdbVtxCacheSize, opts.threadSafeCaches)
-  rdb.rdBranchLru.initLru(opts.rdbBranchCacheSize, opts.threadSafeCaches)
+  rdb.initLrus(opts)
   rdb.rdbPrintStats = opts.rdbPrintStats
   rdb.threadSafeCaches = opts.threadSafeCaches
 
