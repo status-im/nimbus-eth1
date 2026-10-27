@@ -42,12 +42,12 @@ proc blob(vtx: VertexRef): seq[byte] =
   vtx.blobifyTo(VOID_HASH_KEY, buf)
   @(buf.data())
 
-proc peekVia(lru: var RdbTrieLru[int], rvid: RootedVertexID): Opt[int] =
+proc peekVia(lru: var RdbTrieLru[int, int], rvid: RootedVertexID): Opt[int] =
   lru.withPeek(rvid, value):
     return Opt.some(value)
   Opt.none(int)
 
-proc getVia(lru: var RdbTrieLru[int], rvid: RootedVertexID): Opt[int] =
+proc getVia(lru: var RdbTrieLru[int, int], rvid: RootedVertexID): Opt[int] =
   lru.withGet(rvid, value):
     return Opt.some(value)
   Opt.none(int)
@@ -71,7 +71,7 @@ proc openRdb(dir: string, threadSafe: bool, wipe: bool): RdbInst =
 suite "Aristo RocksDB trie split caches":
   test "Routing keeps the account trie and storage tries apart":
     for threadSafe in [false, true]:
-      var lru: RdbTrieLru[int]
+      var lru: RdbTrieLru[int, int]
       lru.init(4096, 4096, threadSafe)
       lru.put(accRvid(2), 1)
       check:
@@ -101,7 +101,7 @@ suite "Aristo RocksDB trie split caches":
 
   test "An empty account part routes the account trie to the storage part":
     for threadSafe in [false, true]:
-      var lru: RdbTrieLru[int]
+      var lru: RdbTrieLru[int, int]
       lru.init(0, 4096, threadSafe)
       lru.put(accRvid(2), 1)
       check:
@@ -112,7 +112,7 @@ suite "Aristo RocksDB trie split caches":
       lru.dispose()
 
   test "Eviction and room checks are per trie":
-    var lru: RdbTrieLru[int]
+    var lru: RdbTrieLru[int, int]
     lru.init(4, 4, false)
     for i in 0 ..< 4:
       lru.put(stoRvid(0, uint64(i) + 2), i)
@@ -130,7 +130,7 @@ suite "Aristo RocksDB trie split caches":
 
   test "Clearing keeps the split":
     for threadSafe in [false, true]:
-      var lru: RdbTrieLru[int]
+      var lru: RdbTrieLru[int, int]
       lru.init(4096, 8192, threadSafe)
       lru.put(accRvid(2), 1)
       lru.put(stoRvid(0, 2), 2)
@@ -152,6 +152,28 @@ suite "Aristo RocksDB trie split caches":
     check:
       hash(VertexID(5)) == cast[Hash](rapidhashNano(cast[array[8, byte]](VertexID(5))))
       hash(VertexID(5)) != hash(VertexID(6))
+
+  test "Storage vertex records lose their hash key and fit 67 bytes":
+    let
+      ext = VertexRef(ExtBranchRef.init(
+        NibblesBuf.fromBytes(keyOf(1).data).slice(1),
+        VertexID(high(uint64)), 0xffff'u16))
+      leaf = VertexRef(StoLeafRef.init(
+        NibblesBuf.fromBytes(keyOf(2).data), high(UInt256)))
+    var keyed, keyless, leafBuf: VertexBuf
+    ext.blobifyTo(keyOf(3), keyed)
+    ext.blobifyTo(VOID_HASH_KEY, keyless)
+    leaf.blobifyTo(VOID_HASH_KEY, leafBuf)
+    var stripped, storedLeaf: StoVertexBuf
+    stripped.stripFrom(keyed)
+    storedLeaf.stripFrom(leafBuf)
+    check:
+      keyed.len == keyless.len + 32
+      @(stripped.data()) == @(keyless.data())
+      stripped.data().deblobify(VertexRef).expect("ext").blob() == ext.blob()
+      leafBuf.len == MAX_STO_VERTEX_BLOB_SIZE
+      @(storedLeaf.data()) == @(leafBuf.data())
+      sizeof(StoVertexBuf) == 68
 
   test "Cache capacities come from the per-trie budgets":
     let dir = mkdtemp(prefix = "rdb_trie_lru_", dir = getAppDir())
@@ -177,7 +199,7 @@ suite "Aristo RocksDB trie split caches":
       rdb.rdVtxLru.accCapacity ==
         (3 shl 20) div (sizeof(VertexID) + sizeof(VertexBuf) + lruOverhead)
       rdb.rdVtxLru.stoCapacity ==
-        (4 shl 20) div (sizeof(RootedVertexID) + sizeof(VertexBuf) + lruOverhead)
+        (4 shl 20) div (sizeof(RootedVertexID) + sizeof(StoVertexBuf) + lruOverhead)
       rdb.rdBranchLru.accCapacity ==
         (5 shl 20) div (sizeof(VertexID) + sizeof((VertexID, uint16)) + lruOverhead)
       rdb.rdBranchLru.stoCapacity == 0
@@ -197,12 +219,18 @@ suite "Aristo RocksDB trie split caches":
           default(StorageID)))
         stoLeaf0 = VertexRef(StoLeafRef.init(NibblesBuf.nibble(2), 7.u256))
         stoLeaf1 = VertexRef(StoLeafRef.init(NibblesBuf.nibble(3), 8.u256))
+        stoExt = VertexRef(ExtBranchRef.init(
+          NibblesBuf.nibble(4), VertexID(FIRST_DYNAMIC_VID + 30), 0x0300'u16))
+        stoMaxLeaf = VertexRef(StoLeafRef.init(
+          NibblesBuf.fromBytes(keyOf(5).data), high(UInt256)))
         writes = [
           (accRvid(10), accBranch, keyOf(1)),
           (stoRvid(0, 10), stoBranch, keyOf(2)),
           (accRvid(11), accLeaf, VOID_HASH_KEY),
           (stoRvid(0, 11), stoLeaf0, VOID_HASH_KEY),
           (stoRvid(1, 11), stoLeaf1, VOID_HASH_KEY),
+          (stoRvid(0, 12), stoExt, keyOf(6)),
+          (stoRvid(1, 12), stoMaxLeaf, VOID_HASH_KEY),
         ]
 
       block:
@@ -214,9 +242,15 @@ suite "Aristo RocksDB trie split caches":
         rdb.rdBranchLru.acc.len == 1
         rdb.rdBranchLru.sto.len == 1
         rdb.rdVtxLru.acc.len == 1
-        rdb.rdVtxLru.sto.len == 2
+        rdb.rdVtxLru.sto.len == 4
         rdb.rdKeyLru.acc.len == 1
-        rdb.rdKeyLru.sto.len == 1
+        rdb.rdKeyLru.sto.len == 2
+      var cachedExt: seq[byte]
+      rdb.rdVtxLru.withPeek(stoRvid(0, 12), cached):
+        cachedExt = @(cached.data())
+      var keylessExt: VertexBuf
+      stoExt.blobifyTo(VOID_HASH_KEY, keylessExt)
+      check cachedExt == @(keylessExt.data())
 
       for round in 0 ..< 2:
         for (rvid, vtx, key) in writes:
@@ -229,8 +263,8 @@ suite "Aristo RocksDB trie split caches":
               not gotKey.isValid
               gotVtx.blob() == vtx.blob()
         var
-          rvids: array[5, RootedVertexID]
-          keyvtxs: array[5, (HashKey, VertexRef)]
+          rvids: array[7, RootedVertexID]
+          keyvtxs: array[7, (HashKey, VertexRef)]
         for i, (rvid, _, _) in writes:
           rvids[i] = rvid
         check rdb.getKeys(rvids, keyvtxs, {}).isOk()

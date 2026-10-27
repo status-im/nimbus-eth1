@@ -24,9 +24,9 @@ const lruOverhead = 20 # Approximate LRU cache overhead per entry based on minil
 template capacity(K, V: typedesc, budget: int): int =
   budget div (sizeof(K) + sizeof(V) + lruOverhead)
 
-proc initLru[V](lru: var RdbTrieLru[V], accBudget, stoBudget: int, threadSafe: bool) =
+proc initLru[A, S](lru: var RdbTrieLru[A, S], accBudget, stoBudget: int, threadSafe: bool) =
   lru.init(
-    capacity(VertexID, V, accBudget), capacity(RootedVertexID, V, stoBudget), threadSafe
+    capacity(VertexID, A, accBudget), capacity(RootedVertexID, S, stoBudget), threadSafe
   )
 
 proc dumpCacheStats(keySize, vtxSize, branchSize: tuple[acc, sto: int]) =

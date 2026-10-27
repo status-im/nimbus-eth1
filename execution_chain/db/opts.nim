@@ -39,7 +39,7 @@ const
     ## A bit of space on top of the filter is left for data block caching
   defaultRdbAccVtxCacheSize* = 235 * 1024 * 1024
     ## Cache of leaves and extension branches in the account trie
-  defaultRdbStoVtxCacheSize* = 406 * 1024 * 1024
+  defaultRdbStoVtxCacheSize* = 332 * 1024 * 1024
     ## Cache of leaves and extension branches in the storage tries
   defaultRdbAccKeyCacheSize* = 390 * 1024 * 1024
     ## Hashes of branches in the account trie
@@ -47,7 +47,7 @@ const
     ## Hashes of branches in the storage tries
   defaultRdbAccBranchCacheSize* = 281 * 1024 * 1024
     ## Cache of branches in the account trie
-  defaultRdbStoBranchCacheSize* = 1168 * 1024 * 1024
+  defaultRdbStoBranchCacheSize* = 1259 * 1024 * 1024
     ## Cache of branches in the storage tries
   defaultAccLeafCacheSize* = 1280 * 1024
     ## Number of entries in the account leaf LRU cache, see `.accLeaves` field

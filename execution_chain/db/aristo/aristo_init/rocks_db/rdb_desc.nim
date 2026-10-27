@@ -24,15 +24,22 @@ import
 
 export lru, rocksdb_desc
 
-const AdmKey* = default(seq[byte])
+const
+  AdmKey* = default(seq[byte])
+
+  MAX_STO_VERTEX_BLOB_SIZE* = 67
+    ## Longest storage trie record once an embedded hash key is stripped - a
+    ## storage leaf with a 32-byte value and a 64-nibble path
 
 type
-  RdbTrieLru*[V] = object
+  StoVertexBuf* = ArrayBuf[MAX_STO_VERTEX_BLOB_SIZE, byte]
+
+  RdbTrieLru*[A, S] = object
     ## Read cache split by trie - the account trie part is keyed by the bare
     ## `VertexID` while static vids repeat across storage tries, which are
     ## therefore keyed by `RootedVertexID`
-    acc*: ConcurrentLruCache[VertexID, V]
-    sto*: ConcurrentLruCache[RootedVertexID, V]
+    acc*: ConcurrentLruCache[VertexID, A]
+    sto*: ConcurrentLruCache[RootedVertexID, S]
     accCapacity*: int
     stoCapacity*: int
 
@@ -51,9 +58,9 @@ type
     baseDb*: RocksDbInstanceRef
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
 
-    rdKeyLru*: RdbTrieLru[HashKey]               ## Read cache
-    rdVtxLru*: RdbTrieLru[VertexBuf]             ## Read cache
-    rdBranchLru*: RdbTrieLru[(VertexID, uint16)] ## Read cache
+    rdKeyLru*: RdbTrieLru[HashKey, HashKey]                         ## Read cache
+    rdVtxLru*: RdbTrieLru[VertexBuf, StoVertexBuf]                  ## Read cache
+    rdBranchLru*: RdbTrieLru[(VertexID, uint16), (VertexID, uint16)] ## Read cache
 
     rdbPrintStats*: bool               ## Print statistics on closure
     threadSafeCaches*: bool
@@ -102,11 +109,20 @@ template to*(v: VertexType, T: type RdbVertexType): RdbVertexType =
   of VertexType.ExtBranch: RdbVertexType.ExtBranch
   of VertexType.BoundaryNode: raiseAssert "BoundaryNode is stateless-only and never persisted"
 
-template isAcc[V](lru: RdbTrieLru[V], rvid: RootedVertexID): bool =
+template isAcc(lru: RdbTrieLru, rvid: RootedVertexID): bool =
   rvid.root == STATE_ROOT_VID and lru.accCapacity > 0
 
-proc init*[V](
-    lru: var RdbTrieLru[V], accCapacity, stoCapacity: int, threadSafe: bool
+func stripFrom*(buf: var StoVertexBuf, vtxBuf: VertexBuf) {.inline.} =
+  let
+    start = if (vtxBuf.buf[vtxBuf.len - 1] and 0x80) != 0: 32 else: 0
+    len = vtxBuf.len - start
+  doAssert len <= MAX_STO_VERTEX_BLOB_SIZE
+  copyMem(addr buf.buf[0], addr vtxBuf.buf[start], MAX_STO_VERTEX_BLOB_SIZE)
+  buf.n = typeof(buf.n)(len)
+  buf.buf[len - 1] = buf.buf[len - 1] and 0x7f
+
+proc init*[A, S](
+    lru: var RdbTrieLru[A, S], accCapacity, stoCapacity: int, threadSafe: bool
 ) =
   lru.accCapacity = accCapacity
   lru.stoCapacity = stoCapacity
@@ -117,62 +133,72 @@ proc init*[V](
     lru.acc.init(accCapacity, shardBits = 0, threadSafe = false)
     lru.sto.init(stoCapacity, shardBits = 0, threadSafe = false)
 
-proc dispose*[V](lru: var RdbTrieLru[V]) =
+proc dispose*[A, S](lru: var RdbTrieLru[A, S]) =
   lru.acc.dispose()
   lru.sto.dispose()
   lru.acc.reset()
   lru.sto.reset()
 
-proc clear*[V](lru: var RdbTrieLru[V], threadSafe: bool) =
+proc clear*[A, S](lru: var RdbTrieLru[A, S], threadSafe: bool) =
   lru.dispose()
   lru.init(lru.accCapacity, lru.stoCapacity, threadSafe)
 
-func hasRoom*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID): bool {.inline.} =
+func hasRoom*[A, S](lru: var RdbTrieLru[A, S], rvid: RootedVertexID): bool {.inline.} =
   if lru.isAcc(rvid):
     lru.acc.len < lru.acc.capacity
   else:
     lru.sto.len < lru.sto.capacity
 
-func peek*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID): Opt[V] {.inline, noinit.} =
+func peek*[V](lru: var RdbTrieLru[V, V], rvid: RootedVertexID): Opt[V] {.inline, noinit.} =
   if lru.isAcc(rvid):
     result = lru.acc.peek(rvid.vid)
   else:
     result = lru.sto.peek(rvid)
 
-proc get*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID): Opt[V] {.inline, noinit.} =
+proc get*[V](lru: var RdbTrieLru[V, V], rvid: RootedVertexID): Opt[V] {.inline, noinit.} =
   if lru.isAcc(rvid):
     result = lru.acc.get(rvid.vid)
   else:
     result = lru.sto.get(rvid)
 
-proc del*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID) {.inline.} =
+proc del*[A, S](lru: var RdbTrieLru[A, S], rvid: RootedVertexID) {.inline.} =
   if lru.isAcc(rvid):
     lru.acc.del(rvid.vid)
   else:
     lru.sto.del(rvid)
 
-template put*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID, val: V) =
+template put*[A, S](lru: var RdbTrieLru[A, S], rvid: RootedVertexID, val: A) =
   if lru.isAcc(rvid):
     lru.acc.put(rvid.vid, val)
   else:
-    lru.sto.put(rvid, val)
+    when A is S:
+      lru.sto.put(rvid, val)
+    else:
+      var stoVal {.noinit.}: S
+      stoVal.stripFrom(val)
+      lru.sto.put(rvid, stoVal)
 
-template update*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID, val: V): bool =
+template update*[A, S](lru: var RdbTrieLru[A, S], rvid: RootedVertexID, val: A): bool =
   if lru.isAcc(rvid):
     lru.acc.update(rvid.vid, val)
   else:
-    lru.sto.update(rvid, val)
+    when A is S:
+      lru.sto.update(rvid, val)
+    else:
+      var stoVal {.noinit.}: S
+      stoVal.stripFrom(val)
+      lru.sto.update(rvid, stoVal)
 
-template withGet*[V](
-    lru: var RdbTrieLru[V], rvid: RootedVertexID, value, body: untyped
+template withGet*[A, S](
+    lru: var RdbTrieLru[A, S], rvid: RootedVertexID, value, body: untyped
 ) =
   if lru.isAcc(rvid):
     lru.acc.withGet(rvid.vid, value, body)
   else:
     lru.sto.withGet(rvid, value, body)
 
-template withPeek*[V](
-    lru: var RdbTrieLru[V], rvid: RootedVertexID, value, body: untyped
+template withPeek*[A, S](
+    lru: var RdbTrieLru[A, S], rvid: RootedVertexID, value, body: untyped
 ) =
   if lru.isAcc(rvid):
     lru.acc.withPeek(rvid.vid, value, body)
