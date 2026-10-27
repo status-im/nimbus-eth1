@@ -54,7 +54,9 @@ proc restoreCheckpoint*(
   info "LC restored from storage", checkpointSlot
   true
 
-proc persistCheckpoint*(engine: RpcVerificationEngine) {.async: (raises: []).} =
+proc persistCheckpoint*(
+    engine: RpcVerificationEngine
+) {.async: (raises: [CancelledError]).} =
   let storage = engine.storage.valueOr:
     return
 
@@ -71,12 +73,7 @@ proc persistCheckpoint*(engine: RpcVerificationEngine) {.async: (raises: []).} =
     else:
       return
 
-  let res =
-    try:
-      await storage.save(cp)
-    except CancelledError:
-      return
-
+  let res = await storage.save(cp)
   if res.isErr():
     warn "Failed to persist LC checkpoint", checkpointSlot, err = res.error.errMsg
   else:

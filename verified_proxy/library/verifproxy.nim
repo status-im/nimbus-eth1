@@ -400,7 +400,11 @@ proc startVerifProxy(
 
   try:
     waitFor run(
-      ctx, $configJson, executionTransportProc, beaconTransportProc, storageGetProc,
+      ctx,
+      $configJson,
+      executionTransportProc,
+      beaconTransportProc,
+      storageGetProc,
       storagePutProc,
     )
   except CatchableError:

@@ -27,9 +27,12 @@ proc getLightClientStorage*(db: LightClientDB): LightClientStorage =
           let syncCommittee = db.getSyncCommittee(
             forkyHeader.beacon.slot.sync_committee_period
           ).valueOr:
-            return err((UnavailableDataError, "LC store lacks sync committee", UNTAGGED))
+            return
+              err((UnavailableDataError, "LC store lacks sync committee", UNTAGGED))
           return ok(
-            Opt.some(LightClientCheckpoint(header: header, syncCommittee: syncCommittee))
+            Opt.some(
+              LightClientCheckpoint(header: header, syncCommittee: syncCommittee)
+            )
           )
         else:
           return ok(Opt.none(LightClientCheckpoint))
@@ -45,6 +48,7 @@ proc getLightClientStorage*(db: LightClientDB): LightClientStorage =
           db.putLatestFinalizedHeader(cp.header)
           return ok()
         else:
-          return err((UnavailableDataError, "cannot store an empty LC header", UNTAGGED))
+          return
+            err((UnavailableDataError, "cannot store an empty LC header", UNTAGGED))
 
   LightClientStorage(load: loadProc, save: saveProc)
