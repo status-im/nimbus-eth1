@@ -33,8 +33,8 @@ type
     ## therefore keyed by `RootedVertexID`
     acc*: ConcurrentLruCache[VertexID, V]
     sto*: ConcurrentLruCache[RootedVertexID, V]
-    accSize*: int
-    stoSize*: int
+    accCapacity*: int
+    stoCapacity*: int
 
   RdbWriteEventCb* =
     proc(session: WriteBatchRef): bool {.gcsafe, raises: [].}
@@ -103,17 +103,19 @@ template to*(v: VertexType, T: type RdbVertexType): RdbVertexType =
   of VertexType.BoundaryNode: raiseAssert "BoundaryNode is stateless-only and never persisted"
 
 template isAcc[V](lru: RdbTrieLru[V], rvid: RootedVertexID): bool =
-  rvid.root == STATE_ROOT_VID and lru.accSize > 0
+  rvid.root == STATE_ROOT_VID and lru.accCapacity > 0
 
-proc init*[V](lru: var RdbTrieLru[V], accSize, stoSize: int, threadSafe: bool) =
-  lru.accSize = accSize
-  lru.stoSize = stoSize
+proc init*[V](
+    lru: var RdbTrieLru[V], accCapacity, stoCapacity: int, threadSafe: bool
+) =
+  lru.accCapacity = accCapacity
+  lru.stoCapacity = stoCapacity
   if threadSafe:
-    lru.acc.init(accSize)
-    lru.sto.init(stoSize)
+    lru.acc.init(accCapacity)
+    lru.sto.init(stoCapacity)
   else:
-    lru.acc.init(accSize, shardBits = 0, threadSafe = false)
-    lru.sto.init(stoSize, shardBits = 0, threadSafe = false)
+    lru.acc.init(accCapacity, shardBits = 0, threadSafe = false)
+    lru.sto.init(stoCapacity, shardBits = 0, threadSafe = false)
 
 proc dispose*[V](lru: var RdbTrieLru[V]) =
   lru.acc.dispose()
@@ -123,7 +125,7 @@ proc dispose*[V](lru: var RdbTrieLru[V]) =
 
 proc clear*[V](lru: var RdbTrieLru[V], threadSafe: bool) =
   lru.dispose()
-  lru.init(lru.accSize, lru.stoSize, threadSafe)
+  lru.init(lru.accCapacity, lru.stoCapacity, threadSafe)
 
 func hasRoom*[V](lru: var RdbTrieLru[V], rvid: RootedVertexID): bool {.inline.} =
   if lru.isAcc(rvid):

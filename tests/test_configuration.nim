@@ -444,11 +444,14 @@ proc configurationMain*() =
       check config.rocksdbWriteBufferSize == 34
       check config.rocksdbRowCacheSize == 35
       check config.rocksdbBlockCacheSize == 36
-      check config.rdbVtxCacheSize == 37
-      check config.rdbKeyCacheSize == 38
-      check config.rdbBranchCacheSize == 39
-      check config.accLeafCacheSize == 40
-      check config.stoLeafCacheSize == 41
+      check config.rdbAccVtxCacheSize == 37
+      check config.rdbStoVtxCacheSize == 38
+      check config.rdbAccKeyCacheSize == 39
+      check config.rdbStoKeyCacheSize == 40
+      check config.rdbAccBranchCacheSize == 41
+      check config.rdbStoBranchCacheSize == 42
+      check config.accLeafCacheSize == 43
+      check config.stoLeafCacheSize == 44
       check config.rdbPrintStats == true
       check config.rewriteDatadirId == true
       check config.eagerStateRootCheck == false

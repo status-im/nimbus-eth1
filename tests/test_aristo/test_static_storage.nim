@@ -255,8 +255,10 @@ suite "Aristo static storage vids":
       let
         dbOpts = DbOptions.init(
           maxOpenFiles = 64, writeBufferSize = 4 * 1024 * 1024, rowCacheSize = 0,
-          blockCacheSize = 8 * 1024 * 1024, rdbVtxCacheSize = 1024 * 1024,
-          rdbKeyCacheSize = 1024 * 1024, rdbBranchCacheSize = 1024 * 1024,
+          blockCacheSize = 8 * 1024 * 1024,
+          rdbAccVtxCacheSize = 1024 * 1024, rdbStoVtxCacheSize = 1024 * 1024,
+          rdbAccKeyCacheSize = 1024 * 1024, rdbStoKeyCacheSize = 1024 * 1024,
+          rdbAccBranchCacheSize = 1024 * 1024, rdbStoBranchCacheSize = 1024 * 1024,
           maxSnapshots = 2, parallelStateRootComputation = false, threadSafeCaches = false)
         cache = cacheCreateLRU(dbOpts.blockCacheSize, autoClose = true)
         baseDb = RocksDbInstanceRef

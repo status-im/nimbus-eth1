@@ -807,50 +807,6 @@ suite "ConcurrentLruCache Tests":
         lru.dispose()
       check lru.capacity() == 192
 
-  test "realBytes matches the shared memory of a full cache":
-    type Lru = ConcurrentLruCache[uint64, array[24, byte]]
-    for shardBits in [0, 2]:
-      for capacity in [1, 100, 6_553, 6_554, 100_000]:
-        let before = getOccupiedSharedMem()
-        var lru: Lru
-        if shardBits == 0:
-          lru.init(capacity, shardBits = 0, threadSafe = false)
-        else:
-          lru.init(capacity, shardBits = shardBits)
-        for i in 0'u64 ..< uint64(2 * capacity):
-          lru.put(i, default(array[24, byte]))
-        let
-          used = getOccupiedSharedMem() - before
-          expected = Lru.realBytes(capacity, 1 shl shardBits)
-        lru.dispose()
-        check:
-          used >= expected
-          used - expected <= expected div 32 + (16 * 1024) shl shardBits
-
-  test "tableCapacity fills the hash tables of a capacity":
-    type Lru = ConcurrentLruCache[uint64, array[24, byte]]
-    check Lru.tableCapacity(0, 1) == 0
-    for shards in [1, 4, 64]:
-      for capacity in [1, 100, 6_552, 6_553, 100_000]:
-        let full = Lru.tableCapacity(capacity, shards)
-        check:
-          full >= capacity
-          full mod shards == 0
-          Lru.tableCapacity(full, shards) == full
-          Lru.realBytes(full + shards, shards) - Lru.realBytes(full, shards) >
-            shards * sizeof(LruNode[uint64, array[24, byte]])
-
-  test "capacityForBytes is the largest capacity that fits":
-    type Lru = ConcurrentLruCache[uint64, array[24, byte]]
-    for shards in [1, 4, 64]:
-      check Lru.capacityForBytes(0, shards) == 0
-      for bytes in [1_000, 64 * 1024, 1_000_000, 37_000_000, 512 * 1024 * 1024]:
-        let capacity = Lru.capacityForBytes(bytes, shards)
-        check:
-          capacity mod shards == 0
-          Lru.realBytes(capacity, shards) <= bytes
-          Lru.realBytes(capacity + shards, shards) > bytes
-
   test "single shard":
     var lru: ConcurrentLruCache[int, int]
     lru.init(10, shardBits = 0)

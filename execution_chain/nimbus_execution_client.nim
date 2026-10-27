@@ -465,7 +465,7 @@ proc setupCommonRef*(
   com.extraData = config.extraData
   com.maxBlobs = config.maxBlobs
 
-  (com, dbOpts.rdbKeyCacheSize > 0, emptyStateDb)
+  (com, dbOpts.rdbAccKeyCacheSize + dbOpts.rdbStoKeyCacheSize > 0, emptyStateDb)
 
 # ------------------------------------------------------------------------------
 # Public functions, `main()` API

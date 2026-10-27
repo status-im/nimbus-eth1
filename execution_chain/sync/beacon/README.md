@@ -237,8 +237,10 @@ To start syncing, the following additional options apply to *nimbus*:
        --debug-rocksdb-max-open-files=384
        --debug-rocksdb-write-buffer-size=50331648
        --debug-rocksdb-block-cache-size=1073741824
-       --debug-rdb-key-cache-size=67108864
-       --debug-rdb-vtx-cache-size=268435456
+       --debug-rdb-acc-key-cache-size=20971520
+       --debug-rdb-sto-key-cache-size=46137344
+       --debug-rdb-acc-vtx-cache-size=98566144
+       --debug-rdb-sto-vtx-cache-size=169869312
 
 Also, to reduce the backlog for *nimbus-eth2* stored on disk, the following
 changes might be considered. In the file

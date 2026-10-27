@@ -11,7 +11,7 @@
 {.used.}
 
 import
-  std/[cpuinfo, os],
+  std/os,
   unittest2,
   tempfile,
   results,
@@ -52,20 +52,14 @@ proc getVia(lru: var RdbTrieLru[int], rvid: RootedVertexID): Opt[int] =
     return Opt.some(value)
   Opt.none(int)
 
-proc shardCount(threadSafe: bool): int =
-  if threadSafe: 1 shl defaultShardBits(countProcessors()) else: 1
-
-proc splitBytes[V](lru: RdbTrieLru[V], threadSafe: bool): int =
-  let shards = shardCount(threadSafe)
-  ConcurrentLruCache[VertexID, V].realBytes(lru.accSize, shards) +
-    ConcurrentLruCache[RootedVertexID, V].realBytes(lru.stoSize, shards)
-
 proc openRdb(dir: string, threadSafe: bool, wipe: bool): RdbInst =
   let
     opts = DbOptions.init(
       maxOpenFiles = 64, writeBufferSize = 4 * 1024 * 1024, rowCacheSize = 0,
-      blockCacheSize = 8 * 1024 * 1024, rdbVtxCacheSize = 1024 * 1024,
-      rdbKeyCacheSize = 1024 * 1024, rdbBranchCacheSize = 1024 * 1024,
+      blockCacheSize = 8 * 1024 * 1024,
+      rdbAccVtxCacheSize = 1024 * 1024, rdbStoVtxCacheSize = 1024 * 1024,
+      rdbAccKeyCacheSize = 1024 * 1024, rdbStoKeyCacheSize = 1024 * 1024,
+      rdbAccBranchCacheSize = 1024 * 1024, rdbStoBranchCacheSize = 1024 * 1024,
       maxSnapshots = 2, parallelStateRootComputation = false,
       threadSafeCaches = threadSafe)
     cache = cacheCreateLRU(opts.blockCacheSize, autoClose = true)
@@ -146,8 +140,8 @@ suite "Aristo RocksDB trie split caches":
         check:
           lru.acc.len == 0
           lru.sto.len == 0
-          lru.accSize == 4096
-          lru.stoSize == 8192
+          lru.accCapacity == 4096
+          lru.stoCapacity == 8192
           lru.acc.capacity == accCap
           lru.sto.capacity == stoCap
       lru.put(accRvid(2), 1)
@@ -159,68 +153,35 @@ suite "Aristo RocksDB trie split caches":
       hash(VertexID(5)) == cast[Hash](rapidhashNano(cast[array[8, byte]](VertexID(5))))
       hash(VertexID(5)) != hash(VertexID(6))
 
-  test "Caches never hold fewer entries and together use no more memory than unsplit":
-    for threadSafe in [false, true]:
-      let shards = shardCount(threadSafe)
-      for (keyMib, vtxMib, branchMib) in [
-        (0, 0, 0), (1, 1, 1), (32, 32, 32), (128, 653, 256), (0, 653, 2611),
-        (1280, 653, 1331), (2048, 32, 64),
-      ]:
-        var rdb: RdbInst
-        rdb.initLrus(DbOptions.init(
-          rdbKeyCacheSize = keyMib * 1024 * 1024, rdbVtxCacheSize = vtxMib * 1024 * 1024,
-          rdbBranchCacheSize = branchMib * 1024 * 1024, threadSafeCaches = threadSafe))
-        let
-          keyUnsplit = HashKey.unsplitSize(keyMib * 1024 * 1024)
-          vtxUnsplit = VertexBuf.unsplitSize(vtxMib * 1024 * 1024)
-          branchUnsplit = (VertexID, uint16).unsplitSize(branchMib * 1024 * 1024)
-          target =
-            HashKey.splitBytes((0, keyUnsplit), shards) +
-            VertexBuf.splitBytes((0, vtxUnsplit), shards) +
-            (VertexID, uint16).splitBytes((0, branchUnsplit), shards)
-        check:
-          rdb.rdKeyLru.accSize + rdb.rdKeyLru.stoSize >= keyUnsplit
-          rdb.rdVtxLru.accSize + rdb.rdVtxLru.stoSize >= vtxUnsplit
-          rdb.rdBranchLru.accSize + rdb.rdBranchLru.stoSize >= branchUnsplit
-          rdb.rdBranchLru.accSize <= rdb.rdBranchLru.stoSize
-          rdb.rdKeyLru.splitBytes(threadSafe) + rdb.rdVtxLru.splitBytes(threadSafe) +
-            rdb.rdBranchLru.splitBytes(threadSafe) <= target
-        rdb.rdKeyLru.dispose()
-        rdb.rdVtxLru.dispose()
-        rdb.rdBranchLru.dispose()
-
-  test "Default budgets give the freed memory to the branch cache":
-    func accShare[V](lru: RdbTrieLru[V]): float =
-      lru.accSize.float / float(lru.accSize + lru.stoSize)
-
-    func total[V](lru: RdbTrieLru[V]): int =
-      lru.accSize + lru.stoSize
-
-    block:
-      var rdb: RdbInst
-      rdb.initLrus(DbOptions.init(threadSafeCaches = false))
-      check:
-        rdb.rdKeyLru.total == HashKey.unsplitSize(defaultRdbKeyCacheSize)
-        rdb.rdVtxLru.total == VertexBuf.unsplitSize(defaultRdbVtxCacheSize)
-        rdb.rdBranchLru.total >
-          (VertexID, uint16).unsplitSize(defaultRdbBranchCacheSize) * 112 div 100
-        abs(rdb.rdBranchLru.accShare - 0.222) < 0.005
-      rdb.rdKeyLru.dispose()
-      rdb.rdVtxLru.dispose()
-      rdb.rdBranchLru.dispose()
-
-    block:
-      var rdb: RdbInst
-      rdb.initLrus(DbOptions.init(
-        rdbKeyCacheSize = 0,
-        rdbBranchCacheSize = defaultRdbKeyCacheSize + defaultRdbBranchCacheSize,
-        threadSafeCaches = false))
-      check:
-        rdb.rdVtxLru.total > VertexBuf.unsplitSize(defaultRdbVtxCacheSize) * 104 div 100
-        abs(rdb.rdVtxLru.accShare - 0.276) < 0.005
-        abs(rdb.rdBranchLru.accShare - 0.5) < 0.005
-      rdb.rdVtxLru.dispose()
-      rdb.rdBranchLru.dispose()
+  test "Cache capacities come from the per-trie budgets":
+    let dir = mkdtemp(prefix = "rdb_trie_lru_", dir = getAppDir())
+    defer:
+      try: removeDir(dir) except CatchableError: discard
+    let
+      opts = DbOptions.init(
+        rdbAccKeyCacheSize = 1 shl 20, rdbStoKeyCacheSize = 2 shl 20,
+        rdbAccVtxCacheSize = 3 shl 20, rdbStoVtxCacheSize = 4 shl 20,
+        rdbAccBranchCacheSize = 5 shl 20, rdbStoBranchCacheSize = 0,
+        threadSafeCaches = false)
+      cache = cacheCreateLRU(8 * 1024 * 1024, autoClose = true)
+      baseDb = RocksDbInstanceRef
+        .open(dir, opts.toDbOpts(), @[($VtxCF, opts.toCfOpts(cache, true))], true)
+        .expect("open")
+    var rdb: RdbInst
+    rdb.init(opts, baseDb)
+    check:
+      rdb.rdKeyLru.accCapacity ==
+        (1 shl 20) div (sizeof(VertexID) + sizeof(HashKey) + lruOverhead)
+      rdb.rdKeyLru.stoCapacity ==
+        (2 shl 20) div (sizeof(RootedVertexID) + sizeof(HashKey) + lruOverhead)
+      rdb.rdVtxLru.accCapacity ==
+        (3 shl 20) div (sizeof(VertexID) + sizeof(VertexBuf) + lruOverhead)
+      rdb.rdVtxLru.stoCapacity ==
+        (4 shl 20) div (sizeof(RootedVertexID) + sizeof(VertexBuf) + lruOverhead)
+      rdb.rdBranchLru.accCapacity ==
+        (5 shl 20) div (sizeof(VertexID) + sizeof((VertexID, uint16)) + lruOverhead)
+      rdb.rdBranchLru.stoCapacity == 0
+    rdb.close(wipe = false)
 
   test "RdbInst reads and writes both tries through the split caches":
     for threadSafe in [false, true]:
@@ -295,14 +256,14 @@ suite "Aristo RocksDB trie split caches":
       block:
         let session = rdb.begin()
         check rdb.putVtx(session, accRvid(12), accLeaf, VOID_HASH_KEY).isOk()
-        let sizes = (rdb.rdVtxLru.accSize, rdb.rdVtxLru.stoSize)
+        let sizes = (rdb.rdVtxLru.accCapacity, rdb.rdVtxLru.stoCapacity)
         rdb.rollback(session)
         check:
           rdb.rdVtxLru.acc.len == 0
           rdb.rdVtxLru.sto.len == 0
           rdb.rdKeyLru.acc.len == 0
           rdb.rdBranchLru.sto.len == 0
-          (rdb.rdVtxLru.accSize, rdb.rdVtxLru.stoSize) == sizes
+          (rdb.rdVtxLru.accCapacity, rdb.rdVtxLru.stoCapacity) == sizes
           rdb.getVtx(stoRvid(0, 11), {}).expect("getVtx").isValid
           rdb.rdVtxLru.sto.len == 1
       rdb.close(wipe = false)

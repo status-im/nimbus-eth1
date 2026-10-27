@@ -329,20 +329,35 @@ type
       defaultValue: defaultBlockCacheType
       name: "debug-rocksdb-block-cache-type" .}: RocksDbBlockCacheType
 
-    rdbVtxCacheSize {.
+    rdbAccVtxCacheSize {.
       hidden
-      defaultValue: defaultRdbVtxCacheSize
-      name: "debug-rdb-vtx-cache-size".}: int
+      defaultValue: defaultRdbAccVtxCacheSize
+      name: "debug-rdb-acc-vtx-cache-size".}: int
 
-    rdbKeyCacheSize {.
+    rdbStoVtxCacheSize {.
       hidden
-      defaultValue: defaultRdbKeyCacheSize
-      name: "debug-rdb-key-cache-size".}: int
+      defaultValue: defaultRdbStoVtxCacheSize
+      name: "debug-rdb-sto-vtx-cache-size".}: int
 
-    rdbBranchCacheSize {.
+    rdbAccKeyCacheSize {.
       hidden
-      defaultValue: defaultRdbBranchCacheSize
-      name: "debug-rdb-branch-cache-size".}: int
+      defaultValue: defaultRdbAccKeyCacheSize
+      name: "debug-rdb-acc-key-cache-size".}: int
+
+    rdbStoKeyCacheSize {.
+      hidden
+      defaultValue: defaultRdbStoKeyCacheSize
+      name: "debug-rdb-sto-key-cache-size".}: int
+
+    rdbAccBranchCacheSize {.
+      hidden
+      defaultValue: defaultRdbAccBranchCacheSize
+      name: "debug-rdb-acc-branch-cache-size".}: int
+
+    rdbStoBranchCacheSize {.
+      hidden
+      defaultValue: defaultRdbStoBranchCacheSize
+      name: "debug-rdb-sto-branch-cache-size".}: int
 
     accLeafCacheSize {.
       hidden
@@ -884,13 +899,19 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     writeBufferSize = config.rocksdbWriteBufferSize,
     rowCacheSize = config.rocksdbRowCacheSize,
     blockCacheSize = config.rocksdbBlockCacheSize,
-    rdbKeyCacheSize =
-      if noKeyCache: 0 else: config.rdbKeyCacheSize,
-    rdbVtxCacheSize = config.rdbVtxCacheSize,
-    rdbBranchCacheSize =
+    rdbAccKeyCacheSize =
+      if noKeyCache: 0 else: config.rdbAccKeyCacheSize,
+    rdbStoKeyCacheSize =
+      if noKeyCache: 0 else: config.rdbStoKeyCacheSize,
+    rdbAccVtxCacheSize = config.rdbAccVtxCacheSize,
+    rdbStoVtxCacheSize = config.rdbStoVtxCacheSize,
+    rdbAccBranchCacheSize =
       # The import command does not use the key cache - better give it to branch
-      if noKeyCache: config.rdbKeyCacheSize + config.rdbBranchCacheSize
-      else: config.rdbBranchCacheSize,
+      if noKeyCache: config.rdbAccKeyCacheSize + config.rdbAccBranchCacheSize
+      else: config.rdbAccBranchCacheSize,
+    rdbStoBranchCacheSize =
+      if noKeyCache: config.rdbStoKeyCacheSize + config.rdbStoBranchCacheSize
+      else: config.rdbStoBranchCacheSize,
     accLeafCacheSize = config.accLeafCacheSize,
     stoLeafCacheSize = config.stoLeafCacheSize,
     rdbPrintStats = config.rdbPrintStats,

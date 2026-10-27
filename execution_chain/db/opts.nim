@@ -37,12 +37,18 @@ const
     ## re-reads from file.
     ##
     ## A bit of space on top of the filter is left for data block caching
-  defaultRdbVtxCacheSize* = 653 * 1024 * 1024
-    ## Cache of branches and leaves in the state MPTs (world and account)
-  defaultRdbKeyCacheSize* = 1280 * 1024 * 1024
-    ## Hashes of the above
-  defaultRdbBranchCacheSize* = 1331 * 1024 * 1024
-    ## Cache of branches and leaves in the state MPTs (world and account)
+  defaultRdbAccVtxCacheSize* = 235 * 1024 * 1024
+    ## Cache of leaves and extension branches in the account trie
+  defaultRdbStoVtxCacheSize* = 406 * 1024 * 1024
+    ## Cache of leaves and extension branches in the storage tries
+  defaultRdbAccKeyCacheSize* = 390 * 1024 * 1024
+    ## Hashes of branches in the account trie
+  defaultRdbStoKeyCacheSize* = 839 * 1024 * 1024
+    ## Hashes of branches in the storage tries
+  defaultRdbAccBranchCacheSize* = 281 * 1024 * 1024
+    ## Cache of branches in the account trie
+  defaultRdbStoBranchCacheSize* = 1168 * 1024 * 1024
+    ## Cache of branches in the storage tries
   defaultAccLeafCacheSize* = 1280 * 1024
     ## Number of entries in the account leaf LRU cache, see `.accLeaves` field
     ## of the main Aristo descriptor
@@ -59,9 +65,12 @@ type DbOptions* = object # Options that are transported to the database layer
   writeBufferSize*: int
   rowCacheSize*: int
   blockCacheSize*: int
-  rdbVtxCacheSize*: int
-  rdbKeyCacheSize*: int
-  rdbBranchCacheSize*: int
+  rdbAccVtxCacheSize*: int
+  rdbStoVtxCacheSize*: int
+  rdbAccKeyCacheSize*: int
+  rdbStoKeyCacheSize*: int
+  rdbAccBranchCacheSize*: int
+  rdbStoBranchCacheSize*: int
   accLeafCacheSize*: int
   stoLeafCacheSize*: int
   rdbPrintStats*: bool
@@ -76,9 +85,12 @@ func init*(
     writeBufferSize = defaultWriteBufferSize,
     rowCacheSize = defaultRowCacheSize,
     blockCacheSize = defaultBlockCacheSize,
-    rdbVtxCacheSize = defaultRdbVtxCacheSize,
-    rdbKeyCacheSize = defaultRdbKeyCacheSize,
-    rdbBranchCacheSize = defaultRdbBranchCacheSize,
+    rdbAccVtxCacheSize = defaultRdbAccVtxCacheSize,
+    rdbStoVtxCacheSize = defaultRdbStoVtxCacheSize,
+    rdbAccKeyCacheSize = defaultRdbAccKeyCacheSize,
+    rdbStoKeyCacheSize = defaultRdbStoKeyCacheSize,
+    rdbAccBranchCacheSize = defaultRdbAccBranchCacheSize,
+    rdbStoBranchCacheSize = defaultRdbStoBranchCacheSize,
     accLeafCacheSize = defaultAccLeafCacheSize,
     stoLeafCacheSize = defaultStoLeafCacheSize,
     rdbPrintStats = false,
@@ -92,9 +104,12 @@ func init*(
     writeBufferSize: writeBufferSize,
     rowCacheSize: rowCacheSize,
     blockCacheSize: blockCacheSize,
-    rdbVtxCacheSize: rdbVtxCacheSize,
-    rdbKeyCacheSize: rdbKeyCacheSize,
-    rdbBranchCacheSize: rdbBranchCacheSize,
+    rdbAccVtxCacheSize: rdbAccVtxCacheSize,
+    rdbStoVtxCacheSize: rdbStoVtxCacheSize,
+    rdbAccKeyCacheSize: rdbAccKeyCacheSize,
+    rdbStoKeyCacheSize: rdbStoKeyCacheSize,
+    rdbAccBranchCacheSize: rdbAccBranchCacheSize,
+    rdbStoBranchCacheSize: rdbStoBranchCacheSize,
     accLeafCacheSize: accLeafCacheSize,
     stoLeafCacheSize: stoLeafCacheSize,
     rdbPrintStats: rdbPrintStats,

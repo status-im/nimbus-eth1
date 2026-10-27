@@ -62,9 +62,12 @@ proc makeBenchmarkOpts(): DbOptions =
     writeBufferSize = 8 * 1024 * 1024,
     rowCacheSize = 0,
     blockCacheSize = 64 * 1024 * 1024,
-    rdbVtxCacheSize = 2 * 1024 * 1024,
-    rdbKeyCacheSize = 4 * 1024 * 1024,
-    rdbBranchCacheSize = 2 * 1024 * 1024,
+    rdbAccVtxCacheSize = 2 * 1024 * 1024,
+    rdbStoVtxCacheSize = 2 * 1024 * 1024,
+    rdbAccKeyCacheSize = 4 * 1024 * 1024,
+    rdbStoKeyCacheSize = 4 * 1024 * 1024,
+    rdbAccBranchCacheSize = 2 * 1024 * 1024,
+    rdbStoBranchCacheSize = 2 * 1024 * 1024,
     maxSnapshots = 2,
   )
 
