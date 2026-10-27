@@ -37,10 +37,10 @@ template applySlotChanges(
   ##
   var bodyRc = Opt[void].err()
   block body:
-    let stoState = adb.getStoMissingIntv(accPath, info).valueOr:
+    let stoMiss = adb.getStoMissingIntv(accPath, info).valueOr:
       break body                                    # err()
-    stoState.isErrOr:
-      if stoState.unsafeGet().ranges.isFullRange():
+    stoMiss.isErrOr:
+      if stoMiss.unsafeGet().ranges.isFullRange():
         bodyRc = typeof(bodyRc).ok()
         break body
 
@@ -50,7 +50,7 @@ template applySlotChanges(
 
       # Check whether the slot key is in the unprocessed ranges.
       let slotKey = w.slot.computeSlotKey()
-      stoState.isErrOr:
+      stoMiss.isErrOr():
         if value.ranges.covered slotKey.to(ItemKey):
           # Well, it is. Not updating, will be downloaded at a later stage
           continue
@@ -76,7 +76,9 @@ template applyCodeChange(
       ): auto =
   ## Apply BAL to contract code
   ##
-  var bodyRc = Opt[void].err()
+  ## Returns `true` if a contract code was added or updated.
+  ##
+  var bodyRc = Opt[bool].err()
   block body:
     doAssert 0 < code.len
     let newCode = code[^1].newCode
@@ -86,7 +88,7 @@ template applyCodeChange(
         break body                                  # err()
       adb.delMissingBlob(accPath, info).isOkOr:     # no more missing (if any)
         break body
-      bodyRc = typeof(bodyRc).ok()
+      bodyRc = typeof(bodyRc).ok(false)             # deleted
       break body
 
     adb.putFlatCode(accPath, newCode, info).isOkOr:
@@ -94,7 +96,7 @@ template applyCodeChange(
     adb.delMissingBlob(accPath, info).isOkOr:       # no more missing (if any)
       break body
 
-    bodyRc = typeof(bodyRc).ok()
+    bodyRc = typeof(bodyRc).ok(true)
     # End `block body`
   bodyRc
 
@@ -102,7 +104,7 @@ template applyCodeChange(
 # Private functions
 # ------------------------------------------------------------------------------
 
-template applyAccountChanges(
+template applyAccChanges(
     ctx: SnapCtxRef;
     chng: AccountChanges;
     timer: TimerDataRef;
@@ -110,26 +112,16 @@ template applyAccountChanges(
       ): auto =
   ## Async template
   ##
-  ## Apply BAL to account, returns `true` if either the storage root or the
-  ## code hash was reset to zero.
+  ## Apply BAL to account, returns `true` if the storage root was reset to
+  ## zero. In that case, the accounts record must be reloaded and updated
+  ## later in the state download phase.
   ##
   var bodyRc = Opt[bool].err()
   block body:
-    if chng.storageChanges.len == 0 and
-       chng.balanceChanges.len == 0 and
-       chng.nonceChanges.len == 0 and
-       chng.codeChanges.len == 0:
-      bodyRc = typeof(bodyRc).ok(false)
-      break body                                    # nothing to do
-
-    # Check for accounts in the downloaded range, i.e. they are not registered
-    # for downloading. If an account is in the downloaded range, it is a new
-    # account and must be added. Otherwise, there is no knowledge whether this
-    # is a new account, or a partial update.
     let
       adb = ctx.pool.cacheDB
       accPath = chng.address.computeAccPath
-      accState = adb.getAccMissingIntv(info).valueOr:
+      accMiss = adb.getAccMissingIntv(info).valueOr:
         break body                                  # failed
 
       # Fetch account data record (might not exisit.)
@@ -138,31 +130,38 @@ template applyAccountChanges(
           `error`=error
         break body                                  # failed
 
-    # Get or create account data record.
+    # Get or create and account record to be modified.
     var
-      resetOk = false
+      resetHashOk = false                           # storageRoot or codeHash
       acc = maybeAcc.valueOr:
-        # A new account will be created if it is not in the range of accounts
-        # to be fetched, anyway
-        if accState.ranges.covered(accPath.to(ItemKey)):
+        # If this account record does not exists yet and is to be fetched
+        # in the next download round, then there is nothing to do, here.
+        if accMiss.ranges.covered(accPath.to(ItemKey)):
           bodyRc = typeof(bodyRc).ok(false)
           break body                                # ignore for now
+        # A new account will be created and silently added if it is not in
+        # the range of accounts to be fetched.
         emptyFlatAccData                            # new account
 
     timer.yieldThread()
 
-    # Apply change list to account and cache DB
+    # Apply BAL storage change list to storage sub-MPT
     if 0 < chng.storageChanges.len:
       adb.applySlotChanges(accPath, chng.storageChanges, timer, info).isOkOr:
         break body                                  # failed
       acc.account.storageRoot = zeroHash32          # no sto. root known anymore
-      resetOk = true
+      resetHashOk = true                            # req state download resolve
 
+    # Apply other BAL change lists to the account sub-entries.
     if 0 < chng.codeChanges.len:
-      adb.applyCodeChange(accPath, chng.codeChanges, info).isOkOr:
-        break body                                  # failed
-      acc.account.codeHash = zeroHash32             # no code hash known anymore
-      resetOk = true
+      let updatesOk =
+        adb.applyCodeChange(accPath, chng.codeChanges, info).valueOr:
+          break body
+      if updatesOk:
+        acc.account.codeHash = zeroHash32
+        resetHashOk = true
+      else:
+        acc.account.codeHash = EMPTY_CODE_HASH
 
     if 0 < chng.nonceChanges.len:
       acc.account.nonce = chng.nonceChanges[^1].newNonce
@@ -170,10 +169,56 @@ template applyAccountChanges(
     if 0 < chng.balanceChanges.len:
       acc.account.balance = chng.balanceChanges[^1].postBalance
 
-    adb.putFlatAcc(accPath, acc, info).isOkOr:      # update account
+    # Don't create empty accounts in flat state, see EIP-161.
+    # (ackn: Geth bal_apply.go:275.)
+    if acc.account.nonce == default(AccountNonce) and
+       acc.account.balance == default(UInt256) and
+       acc.account.codeHash == EMPTY_CODE_HASH:
+
+      if maybeAcc.isSome():
+        # Existing account got fully drained (e.g., pre-funded address that
+        # gets deployed to with init code that self-destructs). Delete the
+        # entry so the trie generation doesn't pick it up as an empty leaf
+        # (ackn: Geth bal_apply.go:283.)
+        let storageRoot = acc.account.storageRoot
+        if storageRoot != EMPTY_ROOT_HASH:
+          # The storage wiping shouldn't occur since the EIP-6780. Moan
+          # loudly if it happens (ackn: Geth bal_apply.go:292.)
+          warn info & ": Drained account, storage root not empty",
+            accPath=accPath.toStr, stoRoot=storageRoot.toStr
+          adb.delStoMissingIntv(accPath, info).isOkOr: # del storage accounting
+            break body
+          adb.clearFlatSlot(accPath, info).isOkOr:  # delete all storage slots
+            break body
+        else:
+          debug info & ": Drained account", accPath=accPath.toStr
+
+        adb.delFlatAcc(accPath, info).isOkOr:       # remove account record
+          break body
+        discard accMiss.ranges.merge(accPath.to(ItemKey))
+        adb.putAccMissingIntv(accMiss, info).isOkOr: # update on cache DB
+          break body
+
+      else:
+        # If this was a new account. This clause covers cases where the account
+        # is created and destroyed within the same transaction, or where its
+        # net state change across the block is zero. The empty->empty transition
+        # should be excluded from account update (ackn: Geth bal_apply.go:279.)
+
+        if 0 < chng.storageChanges.len:
+          # Make sure that the cache is clean. So subsequent usage of the
+          # same account is not pre-loaded with rubbish.
+          debug info & ": Drained account slots", accPath=accPath.toStr
+          adb.clearFlatSlot(accPath, info).isOkOr:  # delete all account slots
+            break body
+
+      bodyRc = typeof(bodyRc).ok(false)             # nothing to do
+      break body
+
+    adb.putFlatAcc(accPath, acc, info).isOkOr:      # persist account record
       break body                                    # failed
 
-    bodyRc = typeof(bodyRc).ok(resetOk)
+    bodyRc = typeof(bodyRc).ok(resetHashOk)
     # End `block body`
 
   bodyRc
@@ -202,7 +247,7 @@ template stateForward*(
       adb = ctx.pool.cacheDB
       accState = adb.getAccMissingIntv(info).valueOr:
         break body                                  # failed
-      pivotNum = accState.number
+      pivotNum {.inject.} = accState.number
 
     var
       changed: HashSet[Address]
@@ -221,7 +266,7 @@ template stateForward*(
         break
 
       for w in bal[]:
-        let changedOk = ctx.applyAccountChanges(w, timer, info).valueOr:
+        let changedOk = ctx.applyAccChanges(w, timer, info).valueOr:
           error info & ": Error applying BAL account changes", pivotNum, number,
             dist, accAddr=($w.address), accPath=w.address.computeAccPath.toStr
           break body                                # failed
