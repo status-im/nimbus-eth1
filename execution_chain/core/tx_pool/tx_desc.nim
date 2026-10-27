@@ -47,7 +47,7 @@ declareCounter nec_txpool_rejected_total, "Transactions rejected on add",
   labels = ["reason"]
 
 type
-  PosPayloadAttr = object
+  PosPayloadAttr* = object
     feeRecipient: Address
     timestamp   : EthTime
     prevRandao  : Bytes32
@@ -592,6 +592,9 @@ proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: Bi
 # PoS payload attributes getters
 # ------------------------------------------------------------------------------
 
+func posAttrs*(xp: TxPoolRef): PosPayloadAttr =
+  xp.pos
+
 func feeRecipient*(xp: TxPoolRef): Address =
   xp.pos.feeRecipient
 
@@ -613,6 +616,9 @@ func slotNumber*(xp: TxPoolRef): uint64 =
 # ------------------------------------------------------------------------------
 # PoS payload attributes setters
 # ------------------------------------------------------------------------------
+
+func `posAttrs=`*(xp: TxPoolRef, val: PosPayloadAttr) =
+  xp.pos = val
 
 func `feeRecipient=`*(xp: TxPoolRef, val: Address) =
   xp.pos.feeRecipient = val

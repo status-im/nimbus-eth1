@@ -147,7 +147,7 @@ proc readLatestGame*(
 
     # get the root claim of the latest game
     rootOut = ?(await l1Engine.makeCall(proxy, hashFnSig("rootClaim()"), l1Header))
-    outputRoot = (?abiDecode(rootOut, array[32, byte])).to(Hash32)
+    outputRoot = ?abiDecode(rootOut, Hash32)
 
     # get the block number for the latest game
     l2nOut = ?(await l1Engine.makeCall(proxy, hashFnSig("l2BlockNumber()"), l1Header))
@@ -165,8 +165,8 @@ proc readAnchorRoot*(
         anchorRegistryContract, hashFnSig("getAnchorRoot()"), l1Header
       )
     )
-    decoded = ?abiDecode(out0, (array[32, byte], UInt256))
-    outputRoot = decoded[0].to(Hash32)
+    decoded = ?abiDecode(out0, (Hash32, UInt256))
+    outputRoot = decoded[0]
     l2Number = base.BlockNumber(decoded[1].truncate(uint64))
 
   ok(L1OutputProposal(outputRoot: outputRoot, l2BlockNumber: l2Number))
