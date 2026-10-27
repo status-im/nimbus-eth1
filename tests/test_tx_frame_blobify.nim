@@ -532,5 +532,63 @@ suite "TxFrame blobify round-trip":
     loaded.dispose()
     src.dispose()
 
+  test "foldTxFrame: newer frame wins, folded newest first":
+    let coreDb = newCoreDbRef(AristoDbMemory)
+    let base = coreDb.baseTxFrame
+    template rv(n: int): RootedVertexID = (VertexID(1), VertexID(n))
+    template br(n: int): VertexRef = BranchRef.init(VertexID(n), 0x0003'u16)
+    let
+      older = coreDb.txFrameBegin()
+      newer = coreDb.txFrameBegin()
+      k1 = HashKey.fromBytes(Hash32.fromHex("0x" & "11".repeat(32)).data).expect("key")
+      k4 = HashKey.fromBytes(Hash32.fromHex("0x" & "44".repeat(32)).data).expect("key")
+      p1 = Hash32.fromHex("0x" & "a1".repeat(32))
+      p2 = Hash32.fromHex("0x" & "a2".repeat(32))
+      hOld = Hash32.fromHex("0x" & "41".repeat(32))
+      hNew = Hash32.fromHex("0x" & "42".repeat(32))
+
+    older.aTx.vTop = VertexID(10)
+    older.aTx.blockNumber = Opt.some(1'u64)
+    older.aTx.sTab[rv(2)] = br(20)
+    older.aTx.kMap[rv(2)] = k1
+    older.aTx.sTab[rv(3)] = br(30)
+    older.aTx.sTab[rv(4)] = br(40)
+    older.aTx.kMap[rv(4)] = k4
+    older.aTx.stoLeaves[p1] = StoLeafRef.init(default(NibblesBuf), 1.u256)
+    older.aTx.stoLeaves[p2] = StoLeafRef.init(default(NibblesBuf), 2.u256)
+
+    # Rewritten without a key yet, deleted, and a deleted leaf
+    newer.aTx.vTop = VertexID(11)
+    newer.aTx.blockNumber = Opt.some(2'u64)
+    newer.aTx.sTab[rv(2)] = br(21)
+    newer.aTx.sTab[rv(3)] = nil
+    newer.aTx.stoLeaves[p1] = nil
+
+    check base.storeTxFrame(older, hOld).isOk
+    check base.storeTxFrame(newer, hNew).isOk
+    older.dispose()
+    newer.dispose()
+
+    var data: TxFrameData
+    check base.foldTxFrame(data, hNew).get == Opt.some(2'u64)
+    check base.foldTxFrame(data, hOld).get == Opt.some(1'u64)
+
+    check data.vTop == VertexID(11)
+    check data.blockNumber == Opt.some(2'u64)
+    check BranchRef(data.sTab[rv(2)]).startVid == VertexID(21)
+    check rv(2) notin data.kMap
+    check data.sTab[rv(3)].isNil
+    check BranchRef(data.sTab[rv(4)]).startVid == VertexID(40)
+    check data.kMap[rv(4)] == k4
+    check data.stoLeaves[p1].isNil
+    check data.stoLeaves[p2].stoData == 2.u256
+
+  test "foldTxFrame: missing blob returns Err":
+    let coreDb = newCoreDbRef(AristoDbMemory)
+    var data: TxFrameData
+    let rc = coreDb.baseTxFrame.foldTxFrame(data, Hash32.fromHex("0x" & "43".repeat(32)))
+    check rc.isErr
+    check rc.error.error == KvtNotFound
+
 when isMainModule:
   discard

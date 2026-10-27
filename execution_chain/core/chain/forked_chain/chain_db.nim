@@ -98,25 +98,22 @@ proc writeCanonicalMappings*(c: ForkedChainRef, base: BlockRef) =
   db.setHead(base.hash).expect("write canonical head")
 
 proc loadFrame*(c: ForkedChainRef, b: BlockRef): Result[CoreDbTxRef, string] =
-  var blocks: seq[BlockRef]
+  var
+    data: TxFrameData
+    count = 0
   for it in ancestors(b):
     if it == c.base:
       break
-    blocks.add it
-
-  doAssert blocks.len > 0, "base has no frame blob"
-
-  let frame = c.baseTxFrame.loadTxFrameAsChild(c.baseTxFrame, blocks[^1].hash).valueOr:
-    return err($error)
-  for i in countdown(blocks.len-1, 0):
-    let it = blocks[i]
-    if i < blocks.len-1:
-      c.baseTxFrame.mergeTxFrame(frame, it.hash).isOkOr:
-        frame.dispose()
-        return err($error)
-    if frame.aTx.blockNumber != Opt.some(it.number):
-      frame.dispose()
+    let number = c.baseTxFrame.foldTxFrame(data, it.hash).valueOr:
+      return err($error)
+    if number != Opt.some(it.number):
       return err("corrupted FC: frame block number mismatch")
+    inc count
+
+  doAssert count > 0, "base has no frame blob"
+
+  let frame = c.baseTxFrame.txFrameFrom(data)
+  frame.aTx.level = c.baseTxFrame.aTx.level + count
   frame.blockHashFn = b.txFrame.blockHashFn
   ok frame
 
