@@ -23,6 +23,7 @@ import
   ./utils,
   ./genesis_params,
   ./header_store,
+  ./lc_storage,
   ./evm
 
 from eth/common/blocks import EMPTY_UNCLE_HASH
@@ -169,7 +170,7 @@ proc init*(
   # layer the beacon / light-client fields on top of the core
   engine.timeParams = metadata.cfg.timeParams
   engine.getBeaconTime = getBeaconTime
-  engine.trustedBlockRoot = some(config.trustedBlockRoot)
+  engine.trustedBlockRoot = config.trustedBlockRoot
   engine.lcStore = (ref ForkedLightClientStore)()
   engine.maxLightClientUpdates = config.maxLightClientUpdates
   engine.cfg = metadata.cfg
@@ -177,9 +178,13 @@ proc init*(
   engine.eip2935ForkTime = genesis.eip2935ForkTime
 
   proc onStoreInitialized() =
-    discard
+    if engine.storage.isSome():
+      asyncSpawn engine.persistCheckpoint()
 
   proc onFinalizedHeader() =
+    if engine.storage.isSome():
+      asyncSpawn engine.persistCheckpoint()
+
     if not config.syncHeaderStore:
       return
 
@@ -340,6 +345,9 @@ proc syncOnce*(
 
   if engine.lcProcessor == nil:
     return err((UnavailableDataError, "beacon not initialized", UNTAGGED))
+
+  if not engine.isLCStoreInitialized():
+    discard await engine.restoreCheckpoint()
 
   if not engine.isLCStoreInitialized():
     if engine.trustedBlockRoot.isNone:

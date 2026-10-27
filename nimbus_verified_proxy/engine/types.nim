@@ -256,6 +256,22 @@ type
     getLightClientFinalityUpdate*: LightClientFinalityUpdateProc
     getLightClientOptimisticUpdate*: LightClientOptimisticUpdateProc
 
+  # Light client checkpoint storage
+  LightClientCheckpoint* = object
+    header*: ForkedLightClientHeader
+    syncCommittee*: altair.SyncCommittee
+
+  LoadCheckpointProc* = proc(): Future[EngineResult[Opt[LightClientCheckpoint]]] {.
+    async: (raises: [CancelledError])
+  .}
+  SaveCheckpointProc* = proc(cp: LightClientCheckpoint): Future[EngineResult[void]] {.
+    async: (raises: [CancelledError])
+  .}
+
+  LightClientStorage* = object
+    load*: LoadCheckpointProc
+    save*: SaveCheckpointProc
+
   BackendCapability* = enum
     ChainId # eth_chainId
     GetBlockByHash # eth_getBlockByHash
@@ -314,6 +330,7 @@ type
     lcStore*: ref ForkedLightClientStore
     lcProcessor*: ref LightClientProcessor
     trustedBlockRoot*: Option[Eth2Digest]
+    storage*: Opt[LightClientStorage]
     getBeaconTime*: GetBeaconTimeFn
     timeParams*: TimeParams
     syncLock*: AsyncLock
@@ -343,7 +360,7 @@ type
     storageCacheLen*: int
     parallelBlockDownloads*: uint64
     maxLightClientUpdates*: uint64
-    trustedBlockRoot*: Eth2Digest
+    trustedBlockRoot*: Option[Eth2Digest]
     syncHeaderStore*: bool
     freezeAtSlot*: Slot
 

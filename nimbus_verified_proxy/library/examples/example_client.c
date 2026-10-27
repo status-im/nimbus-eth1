@@ -64,7 +64,7 @@ int main(void) {
         "  \"logLevel\": \"FATAL\""
         "}";
 
-    Context *ctx = startVerifProxy(config, execution_transport, beacon_transport);
+    Context *ctx = startVerifProxy(config, execution_transport, beacon_transport, NULL, NULL);
     if (!ctx) {
         fprintf(stderr, "startVerifProxy failed\n");
         return 1;
