@@ -22,7 +22,7 @@ import
   eth/common/hashes,
   results,
   ./core_db/[base, base_desc],
-  ./aristo/aristo_tx_blobify,
+  ./aristo/[aristo_desc, aristo_layers, aristo_tx_blobify, aristo_tx_frame],
   ./kvt/[kvt_desc],
   ./storage_types
 
@@ -82,6 +82,25 @@ proc loadTxFrameAsChild*(
   frame.aTx.blockNumber = aData.blockNumber
 
   ok frame
+
+proc mergeTxFrame*(
+    srcBase: CoreDbTxRef;
+    frame: CoreDbTxRef;
+    blockHash: Hash32;
+      ): CoreDbRc[void] =
+  let
+    child = ?srcBase.loadTxFrameAsChild(frame, blockHash)
+    parent = frame.aTx.parent
+  frame.aTx.mergeAndReset(child.aTx)
+  frame.aTx.parent = parent
+  child.aTx.dispose()
+  ok()
+
+proc spill*(tx: CoreDbTxRef) =
+  tx.aTx.dispose()
+
+func isSpilled*(tx: CoreDbTxRef): bool =
+  tx.aTx.level == disposedLevel
 
 proc deleteTxFrame*(
     db: CoreDbTxRef;

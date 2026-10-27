@@ -186,6 +186,16 @@ proc snapshotRejected(com: CommonRef, chain: ForkedChainRef): bool =
   let fc = ForkedChainRef.init(com)
   fc.deserialize().isErr and fc.hashToBlock.len == 1 and fc.latest == fc.base
 
+func frameInMemory(c: ForkedChainRef, blk: Block): bool =
+  let b = c.hashToBlock.getOrDefault(blk.blockHash)
+  not b.isNil and not b.txFrame.isSpilled
+
+proc hasFrameBlob(c: ForkedChainRef, blk: Block): bool =
+  c.baseTxFrame.hasKey(txFrameKey(blk.blockHash).toOpenArray)
+
+proc stateRootOf(c: ForkedChainRef, blk: Block): Hash32 =
+  c.txFrame(blk.blockHash).getStateRoot().expect("state root")
+
 func checkFinalizedMarkers(fc: ForkedChainRef, finalizedHash: Hash32): bool =
   let finBlk =
     try:
@@ -1253,7 +1263,7 @@ suite "ForkedChainRef tests":
     # Startup as `basicServices` does it: load the snapshot, then drop it
     let restored = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
     require restored.deserialize().isOk
-    check db.invalidateFcSnapshot().isOk
+    check db.invalidateFcSnapshot(keepFrames = true).isOk
     check not db.hasKey(fcStateKey(0).toOpenArray)
     check not db.hasKey(fcStateKey(1).toOpenArray)
 
@@ -1280,23 +1290,41 @@ suite "ForkedChainRef tests":
 
     db.kvt.getKvpFn = proc(key: openArray[byte]): Result[seq[byte], KvtError] =
       err(RdbBeDriverGetError)
-    check db.invalidateFcSnapshot().isErr
+    check db.invalidateFcSnapshot(keepFrames = false).isErr
     # The manifest is gone, the block entries are left for the retry
     check backendGet(fcStateKey(1).toOpenArray).isOk
     db.kvt.getKvpFn = backendGet
 
     db.kvt.delKvpFn = proc(key: openArray[byte]): Result[void, KvtError] =
       err(RdbBeDriverDelError)
-    check db.invalidateFcSnapshot().isErr
+    check db.invalidateFcSnapshot(keepFrames = false).isErr
     check db.get(fcStateKey(1).toOpenArray).isOk
     check chain.serialize(db).isErr
     db.kvt.delKvpFn = backendDel
 
-    check db.invalidateFcSnapshot().isOk
+    check db.invalidateFcSnapshot(keepFrames = false).isOk
     check db.get(fcStateKey(0).toOpenArray).isErr
     check db.get(fcStateKey(1).toOpenArray).isErr
 
-  test "snapshot invalidation deletes the frame blobs of its blocks":
+  test "a loaded snapshot keeps the frame blobs of its blocks":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+      db = chain.baseTxFrame
+    for blk in [blk1, blk2, blk3, B4]:
+      checkImportBlock(chain, blk)
+    check chain.serialize(db).isOk
+
+    let fc = ForkedChainRef.init(com)
+    require fc.deserialize().isOk
+    check db.invalidateFcSnapshot(keepFrames = true).isOk
+    check not db.hasKey(fcStateKey(0).toOpenArray)
+    for blk in [blk1, blk2, blk3, B4]:
+      check db.hasKey(txFrameKey(blk.blockHash).toOpenArray)
+    checkImportBlock(fc, blk4)
+    check fc.stateRootOf(blk3) == blk3.header.stateRoot
+
+  test "a rejected snapshot drops the frame blobs of its blocks":
     let
       com = env.newCom()
       chain = ForkedChainRef.init(com)
@@ -1313,7 +1341,7 @@ suite "ForkedChainRef tests":
 
     # Startup as `basicServices` does it. A block that is never imported
     # again (B4) must not keep its blob
-    check db.invalidateFcSnapshot().isOk
+    check db.invalidateFcSnapshot(keepFrames = false).isOk
     for blk in [blk1, blk2, blk3, B4]:
       check not db.hasKey(txFrameKey(blk.blockHash).toOpenArray)
 
@@ -1335,10 +1363,10 @@ suite "ForkedChainRef tests":
       if key == fcStateKey(3).toOpenArray:
         return err(RdbBeDriverDelError)
       backendDel(key)
-    check db.invalidateFcSnapshot().isErr
+    check db.invalidateFcSnapshot(keepFrames = false).isErr
     db.kvt.delKvpFn = backendDel
 
-    check db.invalidateFcSnapshot().isOk
+    check db.invalidateFcSnapshot(keepFrames = false).isOk
     for i in 0'u64 .. 4'u64:
       check not db.hasKey(fcStateKey(i).toOpenArray)
     for blk in [blk1, blk2, blk3]:
@@ -1355,7 +1383,7 @@ suite "ForkedChainRef tests":
     check chain.serialize(db).isOk
     let backendPut = db.kvt.putKvpFn
     db.kvt.putKvpFn = proc(key, value: openArray[byte]): Result[void, KvtError] =
-      if key.len > 0 and key[0] == byte(ord(DBKeyKind.txFrame)):
+      if key == fcStateKey(2).toOpenArray:
         return err(DataInvalid)
       backendPut(key, value)
     check chain.serialize(db).isErr
@@ -1645,7 +1673,7 @@ suite "ForkedChainRef tests":
     check db.put(hashIndexKey(root, 0), [1'u8]).isOk
     check db.put(fcStateKey(0).toOpenArray, [1'u8]).isOk
     check db.put(fcStateKey(1).toOpenArray, [1'u8]).isOk
-    check db.invalidateFcSnapshot().isOk
+    check db.invalidateFcSnapshot(keepFrames = false).isOk
     check not db.hasKey(fcStateKey(0).toOpenArray)
     check not db.hasKey(fcStateKey(1).toOpenArray)
     check db.hasKey(hashIndexKey(root, 0))
@@ -1742,6 +1770,83 @@ suite "ForkedChainRef tests":
     check vmState.ledger.txFrame == txFrame3
 
     vmState.dispose()
+
+  test "every imported block stores its frame blob":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    for blk in [blk1, blk2, blk3, B4]:
+      checkImportBlock(chain, blk)
+      check chain.hasFrameBlob(blk)
+
+  test "only the latest block keeps its frame in memory":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7]:
+      checkImportBlock(chain, blk)
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6]:
+      check not chain.frameInMemory(blk)
+    check chain.frameInMemory(blk7)
+
+  test "the state of a block without a frame in memory is rebuilt":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7]:
+      checkImportBlock(chain, blk)
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7]:
+      check chain.stateRootOf(blk) == blk.header.stateRoot
+
+  test "import on a parent without a frame in memory":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7]:
+      checkImportBlock(chain, blk)
+    for blk in [B4, B5, B6, B7, Fk7, blk8]:
+      checkImportBlock(chain, blk)
+      check chain.latestHash == blk.blockHash
+      check chain.latestTxFrame.getStateRoot().expect("state root") ==
+        blk.header.stateRoot
+    check chain.frameInMemory(blk8)
+    for blk in [B7, Fk7, blk7]:
+      check not chain.frameInMemory(blk)
+
+  test "base moves over blocks without a frame in memory":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7]:
+      checkImportBlock(chain, blk)
+    checkForkChoice(chain, blk7, blk5)
+    check chain.baseHash == blk4.blockHash
+    for blk in [blk1, blk2, blk3, blk4]:
+      checkPersisted(chain, blk)
+      check not chain.hasFrameBlob(blk)
+    for blk in [blk5, blk6, blk7]:
+      check chain.hasFrameBlob(blk)
+      check chain.stateRootOf(blk) == blk.header.stateRoot
+    checkImportBlock(chain, blk8)
+
+  test "a restart rebuilds only the latest frame":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    for blk in [blk1, blk2, blk3, blk4, B4, B5]:
+      checkImportBlock(chain, blk)
+    check chain.serialize(chain.baseTxFrame).isOk
+
+    let fc = ForkedChainRef.init(com)
+    check fc.deserialize().isOk
+    check fc.latestHash == B5.blockHash
+    check fc.frameInMemory(B5)
+    for blk in [blk1, blk2, blk3, blk4, B4]:
+      check not fc.frameInMemory(blk)
+      check fc.hasFrameBlob(blk)
+    checkImportBlock(fc, blk5)
+    checkImportBlock(fc, B6)
+    check fc.stateRootOf(blk5) == blk5.header.stateRoot
 
 procSuite "ForkedChain mainnet replay":
   # A short mainnet replay test to check that the first few hundred blocks can

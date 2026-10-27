@@ -15,6 +15,7 @@ import
   eth/common/blocks_rlp,
   ./chain_desc,
   ./chain_branch,
+  ./chain_db,
   ../../../db/core_db,
   ../../../db/fcu_db,
   ../../../db/storage_types,
@@ -79,31 +80,7 @@ proc getState(db: CoreDbTxRef): Opt[FcState] =
 
   err()
 
-proc loadBranchTxFrames(parent: BlockRef;
-                       head: BlockRef;
-                       srcBase: CoreDbTxRef): Result[void, string] =
-  ## Walk the branch from `parent` (exclusive, txFrame already set) up to
-  ## `head` (inclusive), materialising each block's txFrame from its
-  ## persisted blob as a child of the previous frame.
-  var blocks = newSeqOfCap[BlockRef](head.number - parent.number)
-  for it in ancestors(head):
-    if it.number > parent.number:
-      blocks.add it
-    else:
-      break
-
-  var p = parent
-  for i in countdown(blocks.len-1, 0):
-    let b = blocks[i]
-    let frame = srcBase.loadTxFrameAsChild(p.txFrame, b.hash).valueOr:
-      return err($error)
-    frame.blockHashFn = branchBlockHashFn(p, b.number, b.hash)
-    b.txFrame = frame
-    p = b
-
-  ok()
-
-proc loadAllTxFrames(fc: ForkedChainRef): Result[void, string] =
+proc stubAllTxFrames(fc: ForkedChainRef): Result[void, string] =
   # Should have no parent
   doAssert fc.base.parent.isNil
 
@@ -116,8 +93,13 @@ proc loadAllTxFrames(fc: ForkedChainRef): Result[void, string] =
   for head in fc.heads:
     for it in ancestors(head):
       if it.txFrame.isNil.not:
-        ?loadBranchTxFrames(it, head, fc.baseTxFrame)
         break
+      if not fc.baseTxFrame.hasKey(txFrameKey(it.hash).toOpenArray):
+        return err("corrupted FC: frame blob missing")
+      let frame = fc.baseTxFrame.txFrameBegin()
+      frame.spill()
+      frame.blockHashFn = branchBlockHashFn(it.parent, it.number, it.hash)
+      it.txFrame = frame
 
   ok()
 
@@ -133,25 +115,24 @@ func toString(list: openArray[BlockRef]): string =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc invalidateFcSnapshot*(db: CoreDbTxRef): CoreDbRc[void] =
+proc invalidateFcSnapshot*(db: CoreDbTxRef, keepFrames: bool): CoreDbRc[void] =
   # Indexed DAG entries are valid only as a complete snapshot. Once the
   # shared database changes, a restart must not load the old manifest.
   # Delete key by key: tx and receipt entries (`hashIndexKey`) carry no kind
   # prefix, so a range over the `fcState` kind byte would delete them too.
   # The manifest goes first. The block entries are numbered from 1 up and go
   # from the top down, so an interrupted run leaves 1..k for the next one.
-  # Each entry takes its block's frame blob along: a load copies the blob into
-  # memory, a rejected snapshot never reads it.
   ?db.del(fcStateKey(0).toOpenArray)
   var n = 0'u64
   while ?db.hasKeyRc(fcStateKey(n + 1).toOpenArray):
     inc n
   for i in countdown(n, 1'u64):
     let key = fcStateKey(i)
-    try:
-      ?db.deleteTxFrame(rlp.decode(?db.get(key.toOpenArray), StoredBlock).hash)
-    except RlpError:
-      discard # the entry does not decode, its block hash is unknown
+    if not keepFrames:
+      try:
+        ?db.deleteTxFrame(rlp.decode(?db.get(key.toOpenArray), StoredBlock).hash)
+      except RlpError:
+        discard # the entry does not decode, its block hash is unknown
     ?db.del(key.toOpenArray)
   ok()
 
@@ -176,21 +157,18 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
 
   # KVT writes are immediate. Invalidate the old manifest before replacing
   # its entries, then publish the new manifest only after every frame is saved.
-  ?txFrame.invalidateFcSnapshot()
+  ?txFrame.invalidateFcSnapshot(keepFrames = true)
   for i, b in blocks:
     let parentIndex = if b.parent.isNil: 0'u
                       else: slots.getOrDefault(b.parent.hash) + 1'u
     var encodedBlock = rlp.encode(StoredBlock(
       header: b.header, hash: b.hash, parentIndex: parentIndex))
     ?txFrame.put(blockIndexKey(i), encodedBlock)
-    if b != fc.base:
-      ?txFrame.storeTxFrame(b.txFrame, b.hash)
 
   var encodedState = rlp.encode(state)
   ?txFrame.put(FcStateKey.toOpenArray, encodedState)
 
   # Block data is in the shared KVT already, the snapshot adds the DAG layout
-  # and the in-memory state frames of the blocks above base
   info "Saved block DAG snapshot to database",
     base=fc.base.number,
     baseHash=fc.base.hash.short,
@@ -292,12 +270,10 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   restored.fcuHead = state.fcuHead
   restored.fcuSafe = state.fcuSafe
 
-  ?restored.loadAllTxFrames()
+  ?restored.stubAllTxFrames()
   for b in blocks:
     if b.txFrame.isNil:
       return err("corrupted FC: block is not reachable from a head")
-    if b != restored.base and b.txFrame.aTx.blockNumber != Opt.some(b.number):
-      return err("corrupted FC: frame block number mismatch")
 
   # Blocks above base have no tx lookup on disk, rebuild it from their bodies
   for b in blocks:
@@ -311,6 +287,8 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   restored.hashToBlock.withValue(restored.latestFinalized.hash, val):
     for it in loopNotFinalized(val[]):
       it.finalize()
+
+  ?restored.restoreFrame(restored.latest, snapshot = true)
 
   fc.base = restored.base
   fc.latest = restored.latest

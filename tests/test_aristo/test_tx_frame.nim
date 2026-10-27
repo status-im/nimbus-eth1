@@ -31,10 +31,45 @@ proc makeAccount(i: uint64): (Hash32, AristoAccount) =
   path.data()[0 .. 7] = i.toBytesBE()
   (path, AristoAccount(balance: i.u256, codeHash: EMPTY_CODE_HASH))
 
+proc makeHashedAccount(i: uint64): (Hash32, AristoAccount) =
+  (keccak256(i.toBytesBE()), AristoAccount(balance: i.u256 + 1, codeHash: EMPTY_CODE_HASH))
+
 const
   acc1 = makeAccount(1)
   acc2 = makeAccount(2)
   acc3 = makeAccount(3)
+
+template checkSpilledAncestors(db: AristoDbRef) =
+  var frames: seq[AristoTxRef]
+  var parent = db.baseTxFrame()
+  for n in 0'u64 ..< 3:
+    let tx = db.txFrameBegin(parent)
+    for i in n * 100 ..< (n + 1) * 100:
+      let acc = makeHashedAccount(i)
+      check tx.mergeAccount(acc[0], acc[1]).isOk()
+    tx.checkpoint(n + 1, skipSnapshot = false)
+    frames.add tx
+    parent = tx
+
+  frames[0].dispose()
+  frames[1].dispose()
+
+  let
+    tx4 = db.txFrameBegin(frames[2])
+    acc = makeHashedAccount(300)
+  check tx4.mergeAccount(acc[0], acc[1]).isOk()
+  let root = tx4.fetchStateRoot()
+
+  let expected = db.txFrameBegin(db.baseTxFrame())
+  for i in 0'u64 .. 300:
+    let acc = makeHashedAccount(i)
+    check expected.mergeAccount(acc[0], acc[1]).isOk()
+
+  check:
+    root.isOk()
+    root == expected.fetchStateRoot()
+    frames[0].kMap.len() == 0
+    frames[1].kMap.len() == 0
 
 suite "Aristo TxFrame":
   setup:
@@ -387,3 +422,10 @@ suite "Aristo TxFrame":
 
     let tx3 = db.txFrameBegin(db.baseTxFrame())
     tx3.checkpoint(2, skipSnapshot = false)
+
+  test "Keys at the levels of disposed ancestors go to the snapshot only":
+    db.parallelStateRootComputation = false
+    db.checkSpilledAncestors()
+
+  test "Keys at the levels of disposed ancestors go to the snapshot only - parallel":
+    db.checkSpilledAncestors()

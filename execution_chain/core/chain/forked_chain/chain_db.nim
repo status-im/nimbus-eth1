@@ -97,6 +97,44 @@ proc writeCanonicalMappings*(c: ForkedChainRef, base: BlockRef) =
         expect("write transaction lookup")
   db.setHead(base.hash).expect("write canonical head")
 
+proc loadFrame*(c: ForkedChainRef, b: BlockRef): Result[CoreDbTxRef, string] =
+  var blocks: seq[BlockRef]
+  for it in ancestors(b):
+    if it == c.base:
+      break
+    blocks.add it
+
+  doAssert blocks.len > 0, "base has no frame blob"
+
+  let frame = c.baseTxFrame.loadTxFrameAsChild(c.baseTxFrame, blocks[^1].hash).valueOr:
+    return err($error)
+  for i in countdown(blocks.len-1, 0):
+    let it = blocks[i]
+    if i < blocks.len-1:
+      c.baseTxFrame.mergeTxFrame(frame, it.hash).isOkOr:
+        frame.dispose()
+        return err($error)
+    if frame.aTx.blockNumber != Opt.some(it.number):
+      frame.dispose()
+      return err("corrupted FC: frame block number mismatch")
+  frame.blockHashFn = b.txFrame.blockHashFn
+  ok frame
+
+proc restoreFrame*(c: ForkedChainRef, b: BlockRef, snapshot: bool): Result[void, string] =
+  if b.txFrame.isSpilled:
+    let frame = ?c.loadFrame(b)
+    if snapshot:
+      frame.checkpoint(b.number, skipSnapshot = false)
+    b.txFrame.aTx = frame.aTx
+  ok()
+
+proc setLatest*(c: ForkedChainRef, b: BlockRef) =
+  let old = c.latest
+  if old != b and old != c.base and not old.txFrame.isNil:
+    old.txFrame.spill()
+  c.restoreFrame(b, snapshot = true).expect("frame blobs of a block above base")
+  c.latest = b
+
 proc deleteBlockData*(c: ForkedChainRef, b: BlockRef) =
   # Blocks above base have no number or tx lookups on disk to delete
   let db = c.baseTxFrame

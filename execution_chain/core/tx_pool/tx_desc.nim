@@ -194,7 +194,10 @@ func baseFee*(xp: TxPoolRef): GasInt =
 func excessBlobGas(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
 
+proc followLatest(xp: TxPoolRef) {.raises: [], gcsafe.}
+
 proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
+  xp.followLatest()
   xp.vmState.ledger.getNonce(account)
 
 proc getPendingNonce*(xp: TxPoolRef; account: Address): AccountNonce =
@@ -339,6 +342,11 @@ proc updateVmState*(xp: TxPoolRef) =
   ## Reset transaction environment on top of the latest block.
   xp.updateVmState(xp.chain.latestHeader, xp.chain.latestHash)
 
+proc followLatest(xp: TxPoolRef) =
+  if xp.chain.latestHash != xp.vmState.blockCtx.parentHash:
+    xp.pos.timestamp = max(xp.pos.timestamp, xp.chain.latestHeader.timestamp)
+    xp.updateVmState()
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -386,8 +394,7 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     # and base fee. The context timestamp only moves forward so that an
     # in-flight build cycle's slot timestamp (always beyond the head's) is
     # preserved.
-    xp.pos.timestamp = max(xp.pos.timestamp, xp.chain.latestHeader.timestamp)
-    xp.updateVmState()
+    xp.followLatest()
   elif xp.pos.timestamp != xp.vmState.blockCtx.timestamp:
     xp.updateVmState()
 
