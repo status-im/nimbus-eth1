@@ -355,6 +355,12 @@ type
       desc: "Number of entries in the storage leaf cache"
       name: "debug-sto-leaf-cache-size".}: int
 
+    stoStaticLookup {.
+      hidden
+      defaultValue: defaultStoStaticLookup
+      desc: "Resolve storage slot lookups through the storage trie's static vids"
+      name: "debug-sto-static-lookup".}: bool
+
     rdbPrintStats {.
       hidden
       desc: "Print RDB statistics at exit"
@@ -896,6 +902,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     parallelStateRootComputation = config.parallelStateRootComputation,
     threadSafeCaches = config.threadSafeCaches(),
     blockCacheType = config.rocksdbBlockCacheType,
+    stoStaticLookup = config.stoStaticLookup,
   )
 
 func jwtSecretOpt*(config: ExecutionClientConf): Opt[InputFile] =

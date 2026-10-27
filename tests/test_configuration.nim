@@ -312,6 +312,11 @@ proc configurationMain*() =
         config.threadSafeCaches() == false
         config.parallelFeaturesEnabled() == false
 
+    test "debug-sto-static-lookup":
+      check:
+        makeConfig(@[]).dbOptions().stoStaticLookup == true
+        makeConfig(@["--debug-sto-static-lookup=false"]).dbOptions().stoStaticLookup == false
+
     let rng = newRng()
     test "net-key random":
       let config = makeConfig(@["--net-key:random"])

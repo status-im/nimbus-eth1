@@ -47,7 +47,8 @@ proc init*(
   db.initInstance(opts.maxSnapshots, opts.parallelStateRootComputation,
       threadSafeCaches = opts.threadSafeCaches,
       accLeavesLruSize = opts.accLeafCacheSize,
-      stoLeavesLruSize = opts.stoLeafCacheSize).isOkOr:
+      stoLeavesLruSize = opts.stoLeafCacheSize,
+      stoStatic = opts.stoStaticLookup).isOkOr:
     db.closeFn(wipe = false)
     return err(error)
   
