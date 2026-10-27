@@ -218,7 +218,7 @@ proc singleRunStart*(
     # event has been irretrievably missed. So the header cache needs to be
     # cleared.
     ctx.hdrCache.clear()
-    ctx.pool.standByMode = false                    # leave stand-by mode
+    ctx.pool.standByMode = BeaconServerMode.singleRun # leave stand-by mode
     ctx.pool.stopBase = Opt.some(baseHeader)        # set stop header
     ctx.pool.stopNotifier = notify                  # register notifier
 
@@ -235,23 +235,30 @@ proc resetSingleRun*(ctx: BeaconCtxRef): Result[void,ResetLingerError] =
   ## has to be called again. If the system could be set to `idle` the function
   ## returns `true`, otherwise `false`.
   ##
-  if ctx.pool.stopBase.isSome():
-    case ctx.pool.syncState:
-    of idle:
-      return ok()
-    of BeaconState.headers:
-      ctx.subState.cancelRequest = true
-      return err(DownloadCancelled)
-    of headersCancel:
-      return err(DownloadCancelled)
-    of headersFinish:
-      return err(AboutFinishing)
-    of linger:
-      ctx.subState.cancelRequest = true
-      return ok()
-    else:
-      discard
-  err(NotApplicable)
+  if ctx.pool.stopBase.isNone():
+    return err(NotApplicable)
+
+  case ctx.pool.syncState:
+  of idle:
+    discard                                         # reset to stand-by mode
+  of BeaconState.headers:
+    ctx.subState.cancelRequest = true
+    return err(DownloadCancelled)
+  of headersCancel:
+    return err(DownloadCancelled)
+  of headersFinish:
+    return err(AboutFinishing)
+  of linger:
+    ctx.subState.cancelRequest = true
+    discard                                         # reset to stand-by mode
+  else:
+    return err(NotApplicable)
+
+  # Reset to stand-by mode
+  ctx.pool.standByMode = BeaconServerMode.standBy
+  ctx.pool.stopBase = Opt.none(Header)
+  ctx.pool.stopNotifier = BeaconNotifier(nil)
+  ok()
 
 proc updateBeaconState*(ctx: BeaconCtxRef; info: static[string]) =
   ## Update internal state when needed
@@ -345,7 +352,7 @@ proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
 proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
-  if ctx.pool.standByMode:                          # waiting for clear
+  if ctx.pool.standByMode == BeaconServerMode.standBy: # waiting for clear
     return
 
   if ctx.hibernate and                              # only in idle mode
