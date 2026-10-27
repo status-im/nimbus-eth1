@@ -686,42 +686,33 @@ proc init*(
 
   fc
 
-proc refresh*(fc: ForkedChainRef, eagerStateRoot = false) =
-  ## Flush internal caches and reassign database.
-  # TODO rewrite this function - it should not need to reset everything since
-  #      the FC necessarily must be empty as long as there's no base
-  doAssert false, "TODO fix this to only update the relevant parts and assert that the others haven't changed"
-  let newFc = ForkedChainRef.init(
-    com = fc.com,
-    baseDistance = fc.baseDistance,
-    persistBatchSize = fc.persistBatchSize,
-    dynamicBatchSize = fc.dynamicBatchSize,
-    eagerStateRoot)                                 # seems to be unused, though
+proc refresh*(fc: ForkedChainRef) =
+  ## Reinitialise FC module assuming the database was empty originially and
+  ## no atcvibe `base` header was available.
+  ##
+  if BlockNumber(0) < fc.base.header.number:
+    warn "Not refreshing a non-empty FC module",
+      baseNumber=fc.base.header.number
+    return
 
-  fc[].reset                                        # clear desctiptor
+  let
+    baseNum = fc.baseTxFrame.getSavedStateBlockNumber()
+    baseHash = fc.baseTxFrame.getBlockHash(baseNum).expect("baseHash exists")
+    baseBlock = BlockRef(
+      header  : fc.baseTxFrame.getBlockHeader(
+                      baseHash).expect("base header exists"),
+      txFrame : fc.baseTxFrame,
+      hash    : baseHash,
+      parent  : BlockRef(nil))
 
-  # Copy base settings
-  fc.com = newFc.com
-  fc.base = newFc.base
-  fc.latest = newFc.latest
-  fc.heads = newFc.heads
-  fc.hashToBlock = newFc.hashToBlock
-  fc.baseTxFrame = newFc.baseTxFrame
-  fc.baseDistance = newFc.baseDistance
-  fc.persistBatchSize = newFc.persistBatchSize
-  fc.dynamicBatchSize = newFc.dynamicBatchSize
-  fc.quarantine = newFc.quarantine
-  fc.fcuHead = newFc.fcuHead
-  fc.fcuSafe = newFc.fcuSafe
-  fc.baseQueue = newFc.baseQueue
-  fc.lastBaseLogTime = newFc.lastBaseLogTime
-  fc.lastImportYield = newFc.lastImportYield
-  fc.badBlocks = newFc.badBlocks
-  fc.importLock = newFc.importLock
+  fc.base = baseBlock
+  fc.latest = baseBlock
+  fc.heads = @[baseBlock]
+  fc.hashToBlock = {baseHash: baseBlock}.toTable
+  fc.fcuHead = FcuHashAndNumber(hash: baseHash, number: baseNum)
+  fc.fcuSafe = fc.fcuHead
 
-
-  # Force GC to clean up
-  newFc[].reset
+  baseBlock.finalize()
 
 proc importBlock*(
     c: ForkedChainRef,

@@ -22,7 +22,7 @@ import
   ../db/core_db/memory_only,
   ../evm/[types, state],
   ../core/[validate, executor/process_block],
-  ../block_access_list/bal_validation,
+  ../block_access_list/[bal_tracker, bal_validation],
   ./[witness_types, witness_verification, stateless_types]
 
 from beacon_chain/spec/datatypes/electra import
@@ -127,6 +127,15 @@ proc statelessProcessBlock*(
 
   if memoryVmState.ledger.hasUnprovenCollapse():
     return err("Witness lacks the sibling node of a collapsed branch")
+
+  # As in the spec, the payload's BAL is only checked against the one execution
+  # produces, through its hash in the header. Checking earlier does not remove
+  # the cost for worst-case: a well-formed but wrong BAL fails late.
+  # EIP-7928 caps the size of the BAL the block produces:
+  # https://github.com/ethereum/execution-specs/blob/3ebcb5d02126918eb2aad599b3cf286200d4f458/src/ethereum/forks/amsterdam/fork.py#L859
+  if memoryVmState.balTrackerEnabled:
+    ?memoryVmState.balTracker.getBlockAccessList().get().checkBalSize(
+      blk.header.gasLimit)
 
   ok()
 
@@ -324,20 +333,6 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
     return err("Invalid block hash")
 
   ?is_valid_versioned_hashes(input.new_payload_request.versionedHashes, blk)
-
-  # Early validation of the input BAL before execution, just like is done for the
-  # stateful path. Rejects invalid BALs early without paying the cost of block execution.
-  if com.isAmsterdamOrLater(blk.header.timestamp):
-    let
-      expectedBalHash = blk.header.blockAccessListHash.valueOr:
-        return err("Post-Amsterdam block header must have blockAccessListHash")
-
-      balBytes = input.new_payload_request.executionPayload.block_access_list.asSeq()
-      bal: BlockAccessListRef = new BlockAccessList
-
-    bal[] = BlockAccessList.decode(balBytes).valueOr:
-      return err("Failed to decode block access list: " & error)
-    ?bal.validate(expectedBalHash, blk.header.gasLimit)
 
   statelessProcessBlock(input.witness, com, blk)
 

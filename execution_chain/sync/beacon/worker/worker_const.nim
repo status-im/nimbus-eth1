@@ -24,6 +24,11 @@ type
     blocksCancel                   ## stop this syncer scrum
     blocksFinish                   ## get ready for `idle`
 
+  BeaconServerMode* = enum
+    none = 0                       ## Normal processing
+    standBy                        ## Wait for single run
+    singleRun                      ## Download header chain
+
   PerfClass* = enum
     rankingTooLow = 0              ## Lower mean throughput than others
     rankingOk                      ## Better mean throughput than some others
@@ -43,7 +48,7 @@ type
     # The following symbols are not used in fetch functions (see below
     # the symbol set `EUnusedForFetch`.)
     ENoDataAvailable               ## Empty response (often ignored)
-    EValidationError               ## B ogus data
+    EValidationError               ## Bogus data
 
 const
   EUnusedForFetch* = {ENoDataAvailable .. EValidationError}
