@@ -180,6 +180,12 @@ proc fetchAndLockStoList(
       error info & ": Error walking missing storage list", `error`=w.error
       return err(ECacheError)
 
+    # Check whether the storage sub-MPT for this account was cached at a
+    # previous session and the corresponding data record for this account
+    # has not been updated, yet.
+    if buddy.ctx.accUnproc.covered w.accPath.to(ItemKey):
+      continue                                      # come back later
+
     if w.data.ranges.isFullRange():
       stoFullQ.add w
       if fetchStorageBatchMax <= stoFullQ.len:      # add item unless seq-max
