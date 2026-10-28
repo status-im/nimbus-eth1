@@ -166,10 +166,18 @@ proc traceObjectToJson(t: TraceObject): JsonNode =
     result["blockHash"] = newJString(t.blockHash.get.to0xHex)
   if t.blockNumber.isSome:
     result["blockNumber"] = newJInt(t.blockNumber.get.int64)
-  if t.transactionHash.isSome:
-    result["transactionHash"] = newJString(t.transactionHash.get.to0xHex)
-  if t.transactionPosition.isSome:
-    result["transactionPosition"] = newJInt(t.transactionPosition.get)
+  if t.blockHash.isSome:
+    result["transactionHash"] =
+      if t.transactionHash.isSome: newJString(t.transactionHash.get.to0xHex)
+      else: newJNull()
+    result["transactionPosition"] =
+      if t.transactionPosition.isSome: newJInt(t.transactionPosition.get)
+      else: newJNull()
+  else:
+    if t.transactionHash.isSome:
+      result["transactionHash"] = newJString(t.transactionHash.get.to0xHex)
+    if t.transactionPosition.isSome:
+      result["transactionPosition"] = newJInt(t.transactionPosition.get)
 
 proc tracesToJson(traces: seq[TraceObject]): JsonNode =
   result = newJArray()
@@ -184,8 +192,6 @@ proc vmTraceOpToJson(op: VmTraceOp): JsonNode {.gcsafe.} =
   result["cost"] = newJInt(op.cost.BiggestInt)
   if op.op.len > 0:
     result["op"] = newJString(op.op)
-  if op.idx.len > 0:
-    result["idx"] = newJString(op.idx)
   if op.ex.isSome:
     let ex  = op.ex.get
     let exJ = newJObject()
@@ -234,6 +240,12 @@ func minHex(v: uint64): string =
 
 func word32(v: UInt256): string =
   "0x" & v.toBytesBE.to0xHex[2..^1]
+
+proc blockNotFound(tag: BlockTag): ref RpcResponseError =
+  let name =
+    if tag.kind == bidNumber: minHex(tag.number.uint64)
+    else: $tag
+  (ref RpcResponseError)(code: -32001, msg: "block " & name & " not found")
 
 proc markerJson(marker: string, a, b: JsonNode): JsonNode =
   result = newJObject()
@@ -304,7 +316,6 @@ proc replayTx(com: CommonRef, chain: ForkedChainRef, blk: Block,
     let sender = tx.recoverSenderCached().expect("valid signature")
     if idx == txIndex:
       vmState.tracer = tracerInst
-      tracerInst.idxPrefix = $txIndex & "-"
       if ttStateDiff in traceTypes:
         tracerInst.preSnap(vmState.ledger, sender)
         tracerInst.preSnap(vmState.ledger, blk.header.coinbase)
@@ -352,7 +363,9 @@ proc buildRewardTraces(com: CommonRef, header: Header, blk: Block,
   let reward = blockRewardWei(fork)
   if reward == 0.u256:
     return
-  var mainReward = reward
+  let mainReward = reward + (reward div 32.u256) * blk.uncles.len.u256
+  result.add rewardTraceObject(header.coinbase, mainReward,
+                               "block", blockHash, header.number)
   for uncle in blk.uncles:
     var uncleReward = uncle.number.u256 + 8.u256
     uncleReward    -= header.number.u256
@@ -360,9 +373,6 @@ proc buildRewardTraces(com: CommonRef, header: Header, blk: Block,
     uncleReward     = uncleReward div 8.u256
     result.add rewardTraceObject(uncle.coinbase, uncleReward,
                                  "uncle", blockHash, header.number)
-    mainReward += reward div 32.u256
-  result.add rewardTraceObject(header.coinbase, mainReward,
-                               "block", blockHash, header.number)
 
 proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let chain = txPool.chain
@@ -495,10 +505,10 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     proc trace_block(quantityTag: BlockTag): JsonNode {.raises: [RpcResponseError].} =
       let
         header    = chain.headerFromTag(quantityTag).valueOr:
-          raise invalidParams(error)
+          raise blockNotFound(quantityTag)
         blockHash = header.computeBlockHash()
         blk       = chain.blockByHash(blockHash).valueOr:
-          raise invalidParams("Block not found")
+          raise blockNotFound(quantityTag)
       let res = newJArray()
       for i in 0 ..< blk.transactions.len:
         let tracer = replayTx(com, chain, blk, i, blockHash,
@@ -537,10 +547,10 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
                                        traceTypes: seq[string]): JsonNode {.raises: [RpcResponseError].} =
       let
         header    = chain.headerFromTag(quantityTag).valueOr:
-          raise invalidParams(error)
+          raise blockNotFound(quantityTag)
         blockHash = header.computeBlockHash()
         blk       = chain.blockByHash(blockHash).valueOr:
-          raise invalidParams("Block not found")
+          raise blockNotFound(quantityTag)
         flags     = parseTraceTypes(traceTypes)
       let res = newJArray()
       for i in 0 ..< blk.transactions.len:
@@ -606,20 +616,9 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       if filterReq.mode.isSome and
          filterReq.mode.get notin ["intersection", "union"]:
         raise invalidParams("unknown filter mode")
-      let
-        fromTag    = filterReq.fromBlock.get(blockId("latest"))
-        toTag      = filterReq.toBlock.get(blockId("latest"))
-        fromHeader = chain.headerFromTag(fromTag).valueOr:
-          raise invalidParams("fromBlock not found")
-        toHeader   = chain.headerFromTag(toTag).valueOr:
-          raise invalidParams("toBlock not found")
-      var
-        traces:   seq[TraceObject]
-        blockNum = fromHeader.number
-      while blockNum <= toHeader.number:
-        let header    = chain.headerByNumber(blockNum).valueOr: break
-        let blockHash = header.computeBlockHash()
-        let blk       = chain.blockByHash(blockHash).valueOr: break
+      var traces: seq[TraceObject]
+
+      template collectBlock(header: Header, blockHash: Hash32, blk: Block) =
         for i in 0 ..< blk.transactions.len:
           let tracer = replayTx(com, chain, blk, i, blockHash,
                                 {TraceTypeFlag.ttTrace})
@@ -629,7 +628,28 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         for t in buildRewardTraces(com, header, blk, blockHash):
           if matchesFilter(t, filterReq):
             traces.add t
-        inc blockNum
+
+      if filterReq.blockHash.isSome:
+        let blockHash = filterReq.blockHash.get
+        let blk = chain.blockByHash(blockHash).valueOr:
+          raise (ref RpcResponseError)(code: -32001,
+            msg: "block " & blockHash.to0xHex & " not found")
+        collectBlock(blk.header, blockHash, blk)
+      else:
+        let
+          fromTag    = filterReq.fromBlock.get(blockId("latest"))
+          toTag      = filterReq.toBlock.get(blockId("latest"))
+          fromHeader = chain.headerFromTag(fromTag).valueOr:
+            raise blockNotFound(fromTag)
+          toHeader   = chain.headerFromTag(toTag).valueOr:
+            raise blockNotFound(toTag)
+        var blockNum = fromHeader.number
+        while blockNum <= toHeader.number:
+          let header    = chain.headerByNumber(blockNum).valueOr: break
+          let blockHash = header.computeBlockHash()
+          let blk       = chain.blockByHash(blockHash).valueOr: break
+          collectBlock(header, blockHash, blk)
+          inc blockNum
       let
         afterIdx = filterReq.after.get(0)
         count    = filterReq.count.get(traces.len)
