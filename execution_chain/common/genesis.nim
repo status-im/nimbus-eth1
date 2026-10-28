@@ -32,7 +32,7 @@ proc writeGenesisAlloc*(alloc: GenesisAlloc, db: CoreDbTxRef): Hash32 =
 
   for address, account in alloc:
     ledger.setNonce(address, account.nonce)
-    ledger.setBalance(address, account.balance)
+    ledger.addBalance(address, account.balance)
     ledger.setCode(address, account.code)
 
     for k, v in account.storage:
