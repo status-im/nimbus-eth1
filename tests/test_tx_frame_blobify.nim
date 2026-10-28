@@ -21,7 +21,7 @@ import
   ../execution_chain/core/tx_pool,
   ../execution_chain/core/pooled_txs,
   ../execution_chain/transaction,
-  ../execution_chain/db/aristo/[aristo_desc, aristo_tx_blobify],
+  ../execution_chain/db/aristo/[aristo_desc, aristo_get, aristo_tx_blobify],
   ../execution_chain/db/kvt/[kvt_desc],
   ../execution_chain/db/[storage_types, tx_frame_db, ledger],
   ../execution_chain/db/core_db/memory_only,
@@ -595,6 +595,45 @@ suite "TxFrame blobify round-trip":
     check data.snapshot.sto[p1][1] == 2
     check data.snapshot.sto[p2][0].stoData == 2.u256
     check data.snapshot.sto[p2][1] == 1
+
+  test "snapshotFrame: state the base frame holds in memory stays readable":
+    let coreDb = newCoreDbRef(AristoDbMemory)
+    let base = coreDb.baseTxFrame
+    template rv(n: int): RootedVertexID = (VertexID(1), VertexID(n))
+    template br(n: int): VertexRef = BranchRef.init(VertexID(n), 0x0003'u16)
+    let
+      p1 = Hash32.fromHex("0x" & "a1".repeat(32))
+      p2 = Hash32.fromHex("0x" & "a2".repeat(32))
+      h = Hash32.fromHex("0x" & "45".repeat(32))
+
+    # Written to the base frame but not persisted, like a test genesis
+    base.aTx.sTab[rv(2)] = br(20)
+    base.aTx.sTab[rv(4)] = br(40)
+    base.aTx.stoLeaves[p1] = StoLeafRef.init(default(NibblesBuf), 1.u256)
+
+    let blk = base.txFrameBegin()
+    blk.aTx.sTab[rv(3)] = br(30)
+    blk.aTx.sTab[rv(4)] = br(41)
+    blk.aTx.stoLeaves[p2] = StoLeafRef.init(default(NibblesBuf), 2.u256)
+    blk.checkpoint(1, skipSnapshot = false)
+    check base.storeTxFrame(blk, h).isOk
+    blk.detach()
+
+    var data: TxFrameSnapshot
+    check base.foldTxFrame(data, h, blk.aTx.level).get == Opt.some(1'u64)
+    let frame = base.snapshotFrame(data, blk.aTx.level)
+
+    # The block's own entries win over the base frame's
+    template startVid(n: int): VertexID =
+      let vtx = frame.aTx.getVtx(rv(n))
+      if vtx.isNil: VertexID(0) else: BranchRef(vtx).startVid
+    check startVid(2) == VertexID(20)
+    check startVid(3) == VertexID(30)
+    check startVid(4) == VertexID(41)
+    check p1 in frame.aTx.snapshot.sto
+    check p2 in frame.aTx.snapshot.sto
+
+    frame.dispose()
 
   test "foldTxFrame: missing blob returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)

@@ -22,7 +22,7 @@ import
   eth/common/hashes,
   results,
   ./core_db/[base, base_desc],
-  ./aristo/[aristo_desc, aristo_tx_blobify, aristo_tx_frame],
+  ./aristo/[aristo_desc, aristo_layers, aristo_tx_blobify, aristo_tx_frame],
   ./kvt/[kvt_desc],
   ./storage_types
 
@@ -118,6 +118,8 @@ proc snapshotFrame*(base: CoreDbTxRef; data: var TxFrameSnapshot; level: int): C
   frame.aTx.blockNumber = data.blockNumber
   frame.aTx.level       = level
   frame.aTx.snapshot    = move(data.snapshot)
+  # The base frame can hold changes that are not on disk yet
+  frame.aTx.snapshot.copyUnder(base.aTx)
   frame.aTx.snapshot.level = Opt.some(base.aTx.level)
   frame.aTx.detach()
   frame
