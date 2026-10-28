@@ -117,7 +117,7 @@ suite "Aristo RocksDB cache keys":
       ka == kb
       ca != cb
 
-    var lru: ConcurrentLruCache[RdbCacheKey, RdbKeyVal]
+    var lru: RdbKeyLru
     lru.init(16, shardBits = 0, threadSafe = false)
     lru.put(a, makeHashKey(1))
     check lru.get(a).get().key == makeHashKey(1)
@@ -164,7 +164,7 @@ suite "Aristo RocksDB cache keys":
 
   test "same static vid under three roots":
     for threadSafe in [false, true]:
-      var lru: ConcurrentLruCache[RdbCacheKey, RdbBranchVal]
+      var lru: RdbBranchLru
       if threadSafe:
         lru.init(64)
       else:
