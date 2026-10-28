@@ -81,6 +81,7 @@ proc toCfOpts*(opts: DbOptions, cache: CacheRef, bulk: bool): ColFamilyOptionsRe
   # https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters#how-to-use-it
   tableOpts.indexType = IndexType.twoLevelIndexSearch
   tableOpts.pinTopLevelIndexAndFilter = true
+  tableOpts.partitionPinningTier = PinningTier.all
   tableOpts.cacheIndexAndFilterBlocksWithHighPriority = true
   tableOpts.partitionFilters = true # Ribbon filter partitioning
 
