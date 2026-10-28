@@ -59,6 +59,10 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
   info "Suspending syncer", base=ctx.chain.baseNumber,
     head=ctx.chain.latestNumber, nSyncPeers=ctx.nSyncPeers()
 
+  # Done for stand-by/server mode
+  if ctx.pool.standByMode != BeaconServerMode.none:
+    return
+
   # A `CL` head update that arrived while the session was still open was
   # ignored by the header chain cache. Replay the latest one if it still
   # needs a sync, i.e. neither the head nor its parent is known to the `FC`
