@@ -26,7 +26,7 @@ import
   ./kvt/[kvt_desc],
   ./storage_types
 
-export base, base_desc, results, TxFrameData
+export base, base_desc, results, TxFrameData, TxFrameSnapshot
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -97,23 +97,45 @@ proc loadTxFrameAsChild*(
 
 proc foldTxFrame*(
     srcBase: CoreDbTxRef;
-    data: var TxFrameData;
+    data: var TxFrameSnapshot;
     blockHash: Hash32;
+    level: int;
       ): CoreDbRc[Opt[uint64]] =
-  ## Add the stored delta for `blockHash` under the newer deltas already
-  ## folded into `data`. Returns the stored block number.
+  ## Add the stored delta for `blockHash`, at `level`, under the newer deltas
+  ## already folded into `data`. Returns the stored block number.
   let blob = ?srcBase.getTxFrameBlob(blockHash)
 
-  let number = blob.toOpenArray(4, blob.high).deblobifyTxFrameInto(data).valueOr:
+  let number = blob.toOpenArray(4, blob.high).deblobifyTxFrameInto(data, level).valueOr:
     return err(error.toError("aristo deblobify"))
 
   ok number
 
-proc spill*(tx: CoreDbTxRef) =
-  tx.aTx.dispose()
+proc snapshotFrame*(base: CoreDbTxRef; data: var TxFrameSnapshot; level: int): CoreDbTxRef =
+  ## A detached frame at `level` whose only state is the folded snapshot,
+  ## not queued with the other snapshots
+  let frame = base.txFrameBegin()
+  frame.aTx.vTop        = data.vTop
+  frame.aTx.blockNumber = data.blockNumber
+  frame.aTx.level       = level
+  frame.aTx.snapshot    = move(data.snapshot)
+  frame.aTx.snapshot.level = Opt.some(base.aTx.level)
+  frame.aTx.detach()
+  frame
 
-func isSpilled*(tx: CoreDbTxRef): bool =
-  tx.aTx.level == disposedLevel
+proc statelessFrame*(base: CoreDbTxRef): CoreDbTxRef =
+  ## A block frame without state, it is replayed when needed
+  let frame = base.txFrameBegin()
+  frame.aTx.dispose()
+  frame
+
+func hasSnapshot*(tx: CoreDbTxRef): bool =
+  tx.aTx.snapshot.level.isSome()
+
+proc detach*(tx: CoreDbTxRef) =
+  tx.aTx.detach()
+
+proc trackSnapshot*(tx: CoreDbTxRef) =
+  tx.aTx.trackSnapshot()
 
 proc deleteTxFrame*(
     db: CoreDbTxRef;

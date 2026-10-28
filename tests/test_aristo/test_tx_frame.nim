@@ -429,3 +429,41 @@ suite "Aristo TxFrame":
 
   test "Keys at the levels of disposed ancestors go to the snapshot only - parallel":
     db.checkSpilledAncestors()
+
+  test "A detached frame is disposed once a child takes its snapshot":
+    let tx1 = db.txFrameBegin(db.baseTxFrame())
+    check tx1.mergeAccount(acc1[0], acc1[1]).isOk()
+    tx1.checkpoint(1, skipSnapshot = false)
+    tx1.detach()
+    check:
+      tx1.sTab.len == 0
+      tx1.fetchAccount(acc1[0]).isOk()
+
+    let tx2 = db.txFrameBegin(tx1)
+    check tx2.mergeAccount(acc2[0], acc2[1]).isOk()
+    tx2.checkpoint(2, skipSnapshot = false)
+    check:
+      tx1.level == disposedLevel
+      tx2.fetchAccount(acc1[0]).isOk()
+      tx2.fetchAccount(acc2[0]).isOk()
+
+  test "An evicted detached frame is disposed, a frame with its changes is not":
+    db.maxSnapshots = 1
+
+    let tx1 = db.txFrameBegin(db.baseTxFrame())
+    check tx1.mergeAccount(acc1[0], acc1[1]).isOk()
+    tx1.checkpoint(1, skipSnapshot = false)
+    tx1.detach()
+
+    let tx2 = db.txFrameBegin(db.baseTxFrame())
+    check tx2.mergeAccount(acc2[0], acc2[1]).isOk()
+    tx2.checkpoint(1, skipSnapshot = false)
+    check tx1.level == disposedLevel
+
+    let tx3 = db.txFrameBegin(db.baseTxFrame())
+    check tx3.mergeAccount(acc3[0], acc3[1]).isOk()
+    tx3.checkpoint(1, skipSnapshot = false)
+    check:
+      tx2.level != disposedLevel
+      tx2.snapshot.level.isNone()
+      tx2.fetchAccount(acc2[0]).isOk()

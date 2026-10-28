@@ -15,7 +15,7 @@ import
   pkg/chronos,
   pkg/unittest2,
   testutils,
-  std/[os, sets, strutils, tempfiles],
+  std/[heapqueue, os, sets, strutils, tempfiles],
   eth/common/blocks_rlp,
   ../execution_chain/common,
   ../execution_chain/conf,
@@ -188,7 +188,7 @@ proc snapshotRejected(com: CommonRef, chain: ForkedChainRef): bool =
 
 func frameInMemory(c: ForkedChainRef, blk: Block): bool =
   let b = c.hashToBlock.getOrDefault(blk.blockHash)
-  not b.isNil and not b.txFrame.isSpilled
+  not b.isNil and b.txFrame.hasSnapshot
 
 proc hasFrameBlob(c: ForkedChainRef, blk: Block): bool =
   c.baseTxFrame.hasKey(txFrameKey(blk.blockHash).toOpenArray)
@@ -1809,9 +1809,9 @@ suite "ForkedChainRef tests":
       check chain.latestHash == blk.blockHash
       check chain.latestTxFrame.getStateRoot().expect("state root") ==
         blk.header.stateRoot
-    check chain.frameInMemory(blk8)
-    for blk in [B7, Fk7, blk7]:
-      check not chain.frameInMemory(blk)
+    for blk in [B7, Fk7, blk8]:
+      check chain.frameInMemory(blk)
+    check not chain.frameInMemory(blk7)
 
   test "base moves over blocks without a frame in memory":
     let
@@ -1847,6 +1847,87 @@ suite "ForkedChainRef tests":
     checkImportBlock(fc, blk5)
     checkImportBlock(fc, B6)
     check fc.stateRootOf(blk5) == blk5.header.stateRoot
+
+  test "every fork head keeps its frame in memory":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    for blk in [blk1, blk2, blk3, B4, blk4, B5, blk5, C5, B6, blk6, C6, B7, blk7, C7]:
+      checkImportBlock(chain, blk)
+    check chain.heads.len == 3
+    for blk in [B7, blk7, C7]:
+      check chain.frameInMemory(blk)
+    for blk in [blk1, blk2, blk3, B4, blk4, B5, blk5, C5, B6, blk6, C6]:
+      check not chain.frameInMemory(blk)
+    checkImportBlock(chain, blk8)
+    check chain.frameInMemory(blk8)
+    check not chain.frameInMemory(blk7)
+    for blk in [B7, C7, blk8]:
+      check chain.stateRootOf(blk) == blk.header.stateRoot
+
+  test "a fork head past the snapshot limit spills the lowest other head":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    com.db.mpt.maxSnapshots = 3
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7, B4, C5, Fk7]:
+      checkImportBlock(chain, blk)
+      check com.db.mpt.snapshots.len <= 3
+    check chain.heads.len == 4
+    check not chain.frameInMemory(B4)
+    for blk in [blk7, C5, Fk7]:
+      check chain.frameInMemory(blk)
+    checkImportBlock(chain, B5)
+    check com.db.mpt.snapshots.len <= 3
+    check not chain.frameInMemory(C5)
+    for blk in [blk7, Fk7, B5, C5]:
+      check chain.stateRootOf(blk) == blk.header.stateRoot
+
+  test "a state read on a block without a snapshot evicts no fork head":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    com.db.mpt.maxSnapshots = 2
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7, B4]:
+      checkImportBlock(chain, blk)
+    for blk in [blk3, blk5]:
+      check chain.stateRootOf(blk) == blk.header.stateRoot
+    check com.db.mpt.snapshots.len == 2
+    check chain.frameInMemory(blk7)
+    check chain.frameInMemory(B4)
+    check not chain.frameInMemory(blk5)
+
+  test "pruned fork heads free their snapshots":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    com.db.mpt.maxSnapshots = 3
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7, B4, C5]:
+      checkImportBlock(chain, blk)
+    check com.db.mpt.snapshots.len == 3
+    checkForkChoice(chain, blk7, blk5)
+    check chain.heads.len == 1
+    check com.db.mpt.snapshots.len == 1
+    for blk in [Fk7, F8]:
+      checkImportBlock(chain, blk)
+    check com.db.mpt.snapshots.len == 2
+    check chain.frameInMemory(Fk7)
+    check chain.frameInMemory(F8)
+
+  test "base moves under several fork heads":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7, Fk7, F8, blk8]:
+      checkImportBlock(chain, blk)
+    check chain.heads.len == 3
+    checkForkChoice(chain, blk8, blk5)
+    check chain.baseHash == blk5.blockHash
+    for blk in [Fk7, F8, blk8]:
+      check chain.frameInMemory(blk)
+      check chain.stateRootOf(blk) == blk.header.stateRoot
+    checkImportBlock(chain, blk9)
+    check chain.stateRootOf(blk9) == blk9.header.stateRoot
 
 procSuite "ForkedChain mainnet replay":
   # A short mainnet replay test to check that the first few hundred blocks can

@@ -211,21 +211,29 @@ proc blobifyTxFrame*(tx: AristoTxRef): seq[byte] =
 # Public: deserialise
 # ------------------------------------------------------------------------------
 
-type TxFrameData* = object
-  vTop*:        VertexID
-  blockNumber*: Opt[uint64]
-  sTab*:        Table[RootedVertexID, VertexRef]
-  kMap*:        Table[RootedVertexID, HashKey]
-  accLeaves*:   Table[Hash32, AccLeafRef]
-  stoLeaves*:   Table[Hash32, StoLeafRef]
+type
+  TxFrameData* = object
+    vTop*:        VertexID
+    blockNumber*: Opt[uint64]
+    sTab*:        Table[RootedVertexID, VertexRef]
+    kMap*:        Table[RootedVertexID, HashKey]
+    accLeaves*:   Table[Hash32, AccLeafRef]
+    stoLeaves*:   Table[Hash32, StoLeafRef]
+
+  TxFrameSnapshot* = object
+    ## Frames folded into one snapshot, each entry at the level of its frame
+    vTop*:        VertexID
+    blockNumber*: Opt[uint64]
+    snapshot*:    Snapshot
 
 proc deblobifyTxFrameInto*(
     data: openArray[byte];
-    res: var TxFrameData;
+    res: var TxFrameSnapshot;
+    level: int;
 ): Result[Opt[uint64], AristoError] =
-  ## Decode a frame older than the frames already in `res`, whose entries
-  ## win and are skipped here without decoding. Returns the frame's block
-  ## number.
+  ## Decode a frame at `level`, older than the frames already in `res` whose
+  ## entries win and are skipped here without decoding. Returns the frame's
+  ## block number.
   var pos = 0
 
   let version = readU8(data, pos)
@@ -242,9 +250,8 @@ proc deblobifyTxFrameInto*(
     res.blockNumber = blockNumber
 
   let sTabCount = readU32BE(data, pos)
-  if res.sTab.len == 0:
-    res.sTab = initTable[RootedVertexID, VertexRef](tableHint(sTabCount))
-    res.kMap = initTable[RootedVertexID, HashKey](tableHint(sTabCount))
+  if res.snapshot.vtx.len == 0:
+    res.snapshot.vtx = initTable[RootedVertexID, VtxSnapshot](tableHint(sTabCount))
   for _ in 0 ..< sTabCount:
     let rvidLen = int(readU8(data, pos))
     if pos + rvidLen - 1 >= data.len:
@@ -253,60 +260,58 @@ proc deblobifyTxFrameInto*(
     pos += rvidLen
 
     if readU8(data, pos) == 0x00:
-      discard res.sTab.hasKeyOrPut(rvid, nil)
+      discard res.snapshot.vtx.hasKeyOrPut(rvid, (VertexRef(nil), VOID_HASH_KEY, level))
     else:
       let blobLen = int(readU16BE(data, pos))
       if pos + blobLen - 1 >= data.len:
         return err(DeblobTxFrameTruncated)
       let blobEnd = pos + blobLen - 1
-      if rvid notin res.sTab:
+      if rvid notin res.snapshot.vtx:
         let vtx = ?deblobify(data.toOpenArray(pos, blobEnd), VertexRef)
         let key = deblobify(data.toOpenArray(pos, blobEnd), HashKey)
-        res.sTab[rvid] = vtx
-        key.isErrOr:
-          res.kMap[rvid] = value
+        res.snapshot.vtx[rvid] = (vtx, key.valueOr(VOID_HASH_KEY), level)
       pos += blobLen
 
   let accCount = readU32BE(data, pos)
-  if res.accLeaves.len == 0:
-    res.accLeaves = initTable[Hash32, AccLeafRef](tableHint(accCount))
+  if res.snapshot.acc.len == 0:
+    res.snapshot.acc = initTable[Hash32, (AccLeafRef, int)](tableHint(accCount))
   for _ in 0 ..< accCount:
     if pos + 31 >= data.len:
       return err(DeblobTxFrameTruncated)
     let h = Hash32.copyFrom(data.toOpenArray(pos, pos + 31))
     pos += 32
     if readU8(data, pos) == 0x00:
-      discard res.accLeaves.hasKeyOrPut(h, nil)
+      discard res.snapshot.acc.hasKeyOrPut(h, (AccLeafRef(nil), level))
     else:
       let blobLen = int(readU16BE(data, pos))
       if pos + blobLen - 1 >= data.len:
         return err(DeblobTxFrameTruncated)
-      if h notin res.accLeaves:
+      if h notin res.snapshot.acc:
         let vtx = ?deblobify(data.toOpenArray(pos, pos + blobLen - 1), VertexRef)
         if vtx.vType != AccLeaf:
           return err(DeblobUnknown)
-        res.accLeaves[h] = AccLeafRef(vtx)
+        res.snapshot.acc[h] = (AccLeafRef(vtx), level)
       pos += blobLen
 
   let stoCount = readU32BE(data, pos)
-  if res.stoLeaves.len == 0:
-    res.stoLeaves = initTable[Hash32, StoLeafRef](tableHint(stoCount))
+  if res.snapshot.sto.len == 0:
+    res.snapshot.sto = initTable[Hash32, (StoLeafRef, int)](tableHint(stoCount))
   for _ in 0 ..< stoCount:
     if pos + 31 >= data.len:
       return err(DeblobTxFrameTruncated)
     let h = Hash32.copyFrom(data.toOpenArray(pos, pos + 31))
     pos += 32
     if readU8(data, pos) == 0x00:
-      discard res.stoLeaves.hasKeyOrPut(h, nil)
+      discard res.snapshot.sto.hasKeyOrPut(h, (StoLeafRef(nil), level))
     else:
       let blobLen = int(readU16BE(data, pos))
       if pos + blobLen - 1 >= data.len:
         return err(DeblobTxFrameTruncated)
-      if h notin res.stoLeaves:
+      if h notin res.snapshot.sto:
         let vtx = ?deblobify(data.toOpenArray(pos, pos + blobLen - 1), VertexRef)
         if vtx.vType != StoLeaf:
           return err(DeblobUnknown)
-        res.stoLeaves[h] = StoLeafRef(vtx)
+        res.snapshot.sto[h] = (StoLeafRef(vtx), level)
       pos += blobLen
 
   ok blockNumber
@@ -314,8 +319,17 @@ proc deblobifyTxFrameInto*(
 proc deblobifyTxFrame*(
     data: openArray[byte]
 ): Result[TxFrameData, AristoError] =
-  var res: TxFrameData
-  discard ?data.deblobifyTxFrameInto(res)
+  var snap: TxFrameSnapshot
+  discard ?data.deblobifyTxFrameInto(snap, level = 0)
+  var res = TxFrameData(vTop: snap.vTop, blockNumber: snap.blockNumber)
+  for rvid, item in snap.snapshot.vtx:
+    res.sTab[rvid] = item[0]
+    if item[1] != VOID_HASH_KEY:
+      res.kMap[rvid] = item[1]
+  for h, item in snap.snapshot.acc:
+    res.accLeaves[h] = item[0]
+  for h, item in snap.snapshot.sto:
+    res.stoLeaves[h] = item[0]
   ok res
 
 # ------------------------------------------------------------------------------

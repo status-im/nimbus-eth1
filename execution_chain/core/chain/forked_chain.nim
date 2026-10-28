@@ -348,7 +348,7 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
 
   let startTime = Moment.now()
 
-  c.restoreFrame(base, snapshot = false).expect("frame blobs of a block above base")
+  c.restoreFrame(base, track = false).expect("frame blobs of a block above base")
 
   # State root sanity check is performed to verify, before writing to disk,
   # that optimistically checked blocks indeed end up being stored with a
@@ -540,11 +540,7 @@ proc validateBlock(
     # greater than a block which is expected to be persisted based on the
     # persistBatchSize
     moveParentHashKeys = c.persistBatchSize > 1 and (blk.header.number mod c.persistBatchSize) != 1
-    parentFrame =
-      if parent.txFrame.isSpilled:
-        c.loadFrame(parent).expect("frame blobs of a block above base")
-      else:
-        parent.txFrame
+    parentFrame = c.stateFrame(parent)
     txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
 
   defer:
@@ -587,6 +583,9 @@ proc validateBlock(
   # is being applied to a block that is currently not a head).
   txFrame.checkpoint(blk.header.number, skipSnapshot = false)
   c.baseTxFrame.storeTxFrame(txFrame, blkHash).expect("store frame blob")
+  # The snapshot holds the block's changes too, and the blob keeps them
+  # for a replay once a child takes the snapshot
+  txFrame.detach()
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, txHashes)
 
@@ -975,9 +974,7 @@ proc txFrame*(c: ForkedChainRef, blockHash: Hash32): CoreDbTxRef =
     return c.baseTxFrame
 
   c.hashToBlock.withValue(blockHash, loc) do:
-    if loc[].txFrame.isSpilled:
-      return c.loadFrame(loc[]).expect("frame blobs of a block above base")
-    return loc[].txFrame
+    return c.stateFrame(loc[])
 
   c.baseTxFrame
 

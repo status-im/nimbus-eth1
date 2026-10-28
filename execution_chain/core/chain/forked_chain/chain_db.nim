@@ -97,39 +97,45 @@ proc writeCanonicalMappings*(c: ForkedChainRef, base: BlockRef) =
         expect("write transaction lookup")
   db.setHead(base.hash).expect("write canonical head")
 
-proc loadFrame*(c: ForkedChainRef, b: BlockRef): Result[CoreDbTxRef, string] =
-  var
-    data: TxFrameData
-    count = 0
+proc replayFrame(c: ForkedChainRef, b: BlockRef): Result[CoreDbTxRef, string] =
+  ## A new frame holding the state of `b` as a snapshot, folded from the frame
+  ## blobs of the blocks above base. Each entry keeps the level of its block.
+  doAssert b != c.base, "base has no frame blob"
+
+  let baseLevel = c.baseTxFrame.aTx.level
+  var data: TxFrameSnapshot
   for it in ancestors(b):
     if it == c.base:
       break
-    let number = c.baseTxFrame.foldTxFrame(data, it.hash).valueOr:
-      return err($error)
+    let
+      level = baseLevel + int(it.number - c.base.number)
+      number = c.baseTxFrame.foldTxFrame(data, it.hash, level).valueOr:
+        return err($error)
     if number != Opt.some(it.number):
       return err("corrupted FC: frame block number mismatch")
-    inc count
 
-  doAssert count > 0, "base has no frame blob"
-
-  let frame = c.baseTxFrame.txFrameFrom(data)
-  frame.aTx.level = c.baseTxFrame.aTx.level + count
+  let frame = c.baseTxFrame.snapshotFrame(data, baseLevel + int(b.number - c.base.number))
   frame.blockHashFn = b.txFrame.blockHashFn
   ok frame
 
-proc restoreFrame*(c: ForkedChainRef, b: BlockRef, snapshot: bool): Result[void, string] =
-  if b.txFrame.isSpilled:
-    let frame = ?c.loadFrame(b)
-    if snapshot:
-      frame.checkpoint(b.number, skipSnapshot = false)
-    b.txFrame.aTx = frame.aTx
+proc stateFrame*(c: ForkedChainRef, b: BlockRef): CoreDbTxRef =
+  ## The frame holding the state of `b`: its own while that has a snapshot,
+  ## otherwise a replayed one that is not queued with the other snapshots
+  if b == c.base or b.txFrame.hasSnapshot:
+    return b.txFrame
+  c.replayFrame(b).expect("frame blobs of a block above base")
+
+proc restoreFrame*(c: ForkedChainRef, b: BlockRef, track: bool): Result[void, string] =
+  ## Give `b` its state back in its own frame, queued with the other
+  ## snapshots when `track`
+  if b != c.base and not b.txFrame.hasSnapshot:
+    b.txFrame.aTx = (?c.replayFrame(b)).aTx
+    if track:
+      b.txFrame.trackSnapshot()
   ok()
 
 proc setLatest*(c: ForkedChainRef, b: BlockRef) =
-  let old = c.latest
-  if old != b and old != c.base and not old.txFrame.isNil:
-    old.txFrame.spill()
-  c.restoreFrame(b, snapshot = true).expect("frame blobs of a block above base")
+  c.restoreFrame(b, track = true).expect("frame blobs of a block above base")
   c.latest = b
 
 proc deleteBlockData*(c: ForkedChainRef, b: BlockRef) =

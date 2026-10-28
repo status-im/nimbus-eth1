@@ -96,8 +96,7 @@ proc stubAllTxFrames(fc: ForkedChainRef): Result[void, string] =
         break
       if not fc.baseTxFrame.hasKey(txFrameKey(it.hash).toOpenArray):
         return err("corrupted FC: frame blob missing")
-      let frame = fc.baseTxFrame.txFrameBegin()
-      frame.spill()
+      let frame = fc.baseTxFrame.statelessFrame()
       frame.blockHashFn = branchBlockHashFn(it.parent, it.number, it.hash)
       it.txFrame = frame
 
@@ -288,7 +287,7 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     for it in loopNotFinalized(val[]):
       it.finalize()
 
-  ?restored.restoreFrame(restored.latest, snapshot = true)
+  ?restored.restoreFrame(restored.latest, track = true)
 
   fc.base = restored.base
   fc.latest = restored.latest
