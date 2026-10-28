@@ -360,15 +360,12 @@ suite "Aristo subtries json tests":
     proc rootsMatch(dbs: Dbs): bool =
       dbs.witness.getStateRoot().get() == dbs.full.getStateRoot().get()
 
-    proc witnessHasUnprovenCollapse(dbs: Dbs): bool =
-      LedgerRef.init(dbs.witness).hasUnprovenCollapse()
-
     block: # Deleting a collapses B onto S, which needs S
       let dbs = setup()
       check:
         dbs.delete(a)
         dbs.rootsMatch()
-        dbs.witnessHasUnprovenCollapse()
+        dbs.witness.hasUnprovenCollapse()
 
     block: # Inserting c restores B
       let dbs = setup()
@@ -376,7 +373,7 @@ suite "Aristo subtries json tests":
         dbs.delete(a)
         dbs.insert(c)
         dbs.rootsMatch()
-        not dbs.witnessHasUnprovenCollapse()
+        not dbs.witness.hasUnprovenCollapse()
 
     block: # Inserting b splits above B, which stays collapsed
       let dbs = setup()
@@ -384,17 +381,17 @@ suite "Aristo subtries json tests":
         dbs.delete(a)
         dbs.insert(b)
         dbs.rootsMatch()
-        dbs.witnessHasUnprovenCollapse()
+        dbs.witness.hasUnprovenCollapse()
 
     block: # R collapses onto the collapsed B, then a re-insert restores B
       let dbs = setup()
       check:
         dbs.delete(a)
         dbs.delete(e)
-        dbs.witnessHasUnprovenCollapse()
+        dbs.witness.hasUnprovenCollapse()
         dbs.insert(a)
         dbs.rootsMatch()
-        not dbs.witnessHasUnprovenCollapse()
+        not dbs.witness.hasUnprovenCollapse()
 
   test "Branch shared by a branch parent and an extension parent":
     let
