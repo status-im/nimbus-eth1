@@ -188,7 +188,8 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
 
   # Configure beacon syncer.
   nimbus.beaconSyncRef = BeaconSyncRef.init()
-  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
+  nimbus.beaconSyncRef.config(
+    nimbus.ethNode, nimbus.fc, config.maxPeers, standBy=config.snapSyncEnabled)
 
   # Optional for pre-setting the sync target (e.g. for debugging)
   if config.beaconSyncTarget.isSome():
@@ -320,43 +321,15 @@ proc internalRestart(
     if nimbus.snapWire.isNil.not and not config.snapSyncEnabled:
       waitFor nimbus.snapWire.stop()
 
-    # Reaching here, all of the peers will have gone due to the long time
-    # it takes to import the state DB from snap sync (unless trivial.) So
-    # the easiest action is to simply restart the beacon syncer.
     waitFor nimbus.beaconSyncRef.stop()
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
-
-    # FIXME. Needs to be updated or removed when DB inmort is fully integrated
-    when false:
-      # Pruning needs to be stopped and restarted on the new upcoming fork.
-      if nimbus.backgroundPruner.isNil.not:
-        waitFor nimbus.backgroundPruner.stop()
-        nimbus.backgroundPruner = BackgroundPrunerRef(nil)
-      if nimbus.balPruner.isNil.not:
-        waitFor nimbus.balPruner.stop()
-        nimbus.balPruner = BalPrunerRef(nil)
 
   # Force `com` and other modules to ajust. History and forks have lept
   # forward. So modules must update accordingly.
   com.refresh()
 
-  if true:
-    warn "Snap sync was successful and a new DB is available." &
-      " The modules update code has to be re-worked. So the EL" &
-      " stops here and needs to be manually restarted."
-    quit(QuitSuccess)
-
   # Ditto for FC module
   nimbus.fc.refresh()
-
-  # FIXME. Needs to be updated or removed when DB inmort is fully integrated
-  when false:
-    QuitFailure.onException("Cannot initialise RPC client history"):
-      nimbus.fc.portal = HistoryExpiryRef.init(config, com)
-    nimbus.txPool.refresh()
-
-    # Reinitialise pruning as it depends og the current fork.
-    nimbus.setupPruning(config, com)
 
   # Restart beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init()
@@ -382,19 +355,17 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, para
 
   # Not starting any syncer if there is definitely no way to run it. This
   # avoids polling (i.e. waiting for instructions) and some logging.
-  block startSyncer:
-    if not nimbus.beaconSyncRef.isNil:
-      if nimbus.snapSyncRef.isNil:
-        # Run full sync by starting beacon sync now.
-        if nimbus.beaconSyncRef.start():
-          break startSyncer
-      else:
-        # Start snap sync which will use beacon sync in stand-by mode.
-        # When done, the system will resume full beacon sync.
-        if nimbus.snapSyncRef.start(nimbus.beaconSyncRef):
-          break startSyncer
+  if nimbus.beaconSyncRef.isNil:
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
+  else:
+    if not nimbus.beaconSyncRef.start():
+      fatal "Cannot start beacon syncer"
+      quit(QuitFailure)
+    if not nimbus.snapSyncRef.isNil and
+       not nimbus.snapSyncRef.start(nimbus.beaconSyncRef):
+      fatal "Cannot start snap syncer"
+      quit(QuitFailure)
 
   nimbus.setupPruning(config, com)
 

@@ -417,17 +417,18 @@ proc convertSubtrie(
   let node =
     case rlpNode.listLen()
     of 2:
-      let
-        (isLeaf, segm) = NibblesBuf.fromHexPrefix(rlpNode.listElem(0).toBytes())
-        link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
+      rlpNode.tryEnterList()
+      let (isLeaf, segm) = NibblesBuf.fromHexPrefix(rlpNode.blobView)
+      rlpNode.skipElem() # now at the link or payload
+
       if isLeaf:
-        let n = ?convertLeaf(link, segm, isStorage)
+        let n = ?convertLeaf(rlpNode.blobView, segm, isStorage)
         if not isStorage and AccLeafRef(n.vtx).stoID.isValid:
           # Convert the storage subtrie
           ?convertSubtrie(n.key[0], src, dst, isStorage = true)
         n
       else: # Extension node
-        let k = HashKey.fromBytes(link).valueOr:
+        let k = HashKey.fromRlpItem(rlpNode).valueOr:
           return err(PartTrkLinkExpected)
 
         # Convert the child branch node which will be merged with this extension node
@@ -451,17 +452,20 @@ proc convertSubtrie(
             vtx: BoundaryNodeRef.init(segm, k))
 
     of 17: # Branch node
-      var key: array[16, HashKey]
+      var
+        key: array[16, HashKey]
+        i = 0
       let branch = BranchRef.init(default(VertexID), 0)
-      for i in 0 ..< 16:
-        let
-          link = rlpNode.listElem(i).rlpNodeToBytes()
-          k = HashKey.fromBytes(link).valueOr:
-            return err(PartTrkLinkExpected)
+      for elem in rlpNode:
+        if i == 16:
+          break # the 17th item is the branch value, unused in state tries
+        let k = HashKey.fromRlpItem(elem).valueOr:
+          return err(PartTrkLinkExpected)
         if k.len() > 0:
           discard branch.setUsed(i.uint8, true)
           ?convertSubtrie(k, src, dst, isStorage)
         key[i] = k
+        inc i
       NodeRef(key: key, vtx: branch)
 
     else:
