@@ -335,7 +335,7 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
       except CancelledError:
         # Stop on error (must not end up in busy-loop). If the activation flag
         # `dsc.ctx.daemon` remains `true`, the deamon will be re-started from
-        # the worker loop in due time.
+        # the worker or the ticker loop in due time.
         trace "Deamon loop sleep was cancelled",
           nCachedWorkers=dsc.nSyncPeers()
         break
