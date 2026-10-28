@@ -22,6 +22,13 @@ logScope:
 # Private helpers
 # ------------------------------------------------------------------------------
 
+func isFullRange(itrs: ItemKeyRangeSet): bool =
+  # Defensive encoding of a full range check. Solely testing `total; == 0`
+  # leaves room for the case that the range is empty which is an illegal
+  # situation but it can handled with savely.
+  itrs.total == 0 and                               # => 0 or 2^256
+  itrs.chunks == 1                                  # => one intv => full MPT
+
 template applySlotChanges(
     adb: CacheDbRef;
     accPath: Hash32;
@@ -36,26 +43,31 @@ template applySlotChanges(
   ##
   var bodyRc = Opt[void].err()
   block body:
-    let
-      stoState = adb.getStoMissingIntv(accPath, info).valueOr:
-        break body                                  # err()
-      missing = if stoState.isSome(): stoState.unsafeGet().ranges
-                else: ItemKeyRangeSet(nil)
+    let stoState = adb.getStoMissingIntv(accPath, info).valueOr:
+      break body                                    # err()
+    stoState.isErrOr:
+      if stoState.unsafeGet().ranges.isFullRange():
+        bodyRc = typeof(bodyRc).ok()
+        break body
+
     for w in slots:
-      if w.changes.len != 0:
-        let slotKey = w.slot.computeSlotKey()
-        if not missing.isNil and
-           missing.covered slotKey.to(ItemKey):
-          # Will be downloaded at a later stage
+      if w.changes.len == 0:
+        continue
+
+      # Check whether the slot key is in the unprocessed ranges.
+      let slotKey = w.slot.computeSlotKey()
+      stoState.isErrOr:
+        if value.ranges.covered slotKey.to(ItemKey):
+          # Well, it is. Not updating, will be downloaded at a later stage
           continue
 
-        let slotValue = w.changes[^1].newValue
-        if slotValue == 0:
-          adb.delFlatSlot(accPath, slotKey, info).isOkOr:
-            break body                              # err()
-        else:
-          adb.putFlatSlot(accPath, slotKey, slotValue, info).isOkOr:
-            break body                              # err()
+      let slotValue = w.changes[^1].newValue
+      if slotValue == 0:
+        adb.delFlatSlot(accPath, slotKey, info).isOkOr:
+          break body                                # err()
+      else:
+        adb.putFlatSlot(accPath, slotKey, slotValue, info).isOkOr:
+          break body                                # err()
       timer.yieldThread()
 
     bodyRc = typeof(bodyRc).ok()
@@ -124,11 +136,20 @@ template applyAccountChanges(
       accPath = chng.address.computeAccPath
       accState = adb.getAccMissingIntv(info).valueOr:
         break body                                  # failed
-    if accState.ranges.covered(accPath.to(ItemKey)):
-      bodyRc = typeof(bodyRc).ok()
-      break body                                    # ignore for now
 
-    var acc = adb.getFlatAcc(accPath, info).valueOr:
+      # Fetch account data record (might not exisit.)
+      maybeAcc = adb.getFlatAcc(accPath).valueOr:
+        error info & ": Failed to fetch account", accPath=accPath.toStr,
+          `error`=error
+        break body                                  # failed
+
+    # Get or create account data record.
+    var acc = maybeAcc.valueOr:
+      # A new account will be created if it is not in the range of accounts
+      # to be fetched, anyway
+      if accState.ranges.covered(accPath.to(ItemKey)):
+        bodyRc = typeof(bodyRc).ok()
+        break body                                  # ignore for now
       emptyFlatAccData                              # new account
 
     timer.yieldThread()
