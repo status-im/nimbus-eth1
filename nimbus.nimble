@@ -16,7 +16,7 @@ skipDirs      = @["tests", "examples"]
 # we can't have the result of a custom task in the "bin" var - https://github.com/nim-lang/nimble/issues/542
 # bin           = @["build/nimbus"]
 
-requires "nim >= 2.2.12",
+requires "nim >= 2.2.14",
   "beacon_chain",
   "blscurve",
   "bncurve",
