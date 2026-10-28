@@ -12,7 +12,6 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
   pkg/[results, rocksdb],
   pkg/stew/byteutils,
   ./[db_const, db_desc]
@@ -63,42 +62,6 @@ proc rDel*(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
       trace info & "failed", key=key.toHex, `error`=error
     return err(info & error)
   ok()
-
-proc rClear*(
-    adb: RocksDbReadWriteRef;
-    col: MptAsmCol;
-    force = false;
-      ): DelResult =
-  const info = "mpt/clear: "
-  let rit = adb.openIterator().valueOr:
-    return err(info & "Iterator open error, col=" & $col & ", error=" & $error)
-  defer: rit.close()
-
-  var
-    nErrors = 0
-    key: seq[byte]
-
-  rit.seekToKey(@[col.ord.byte])
-  while rit.isValid():
-    key.setLen(0)
-    rit.key(proc(w: openArray[byte]) {.gcsafe, raises: [].} = key = @w)
-    rit.next()
-
-    if 0 < key.len:
-      if col.ord.byte != key[0]:
-        break
-
-      adb.delete(key).isOkOr:
-        if not force:
-          return err(info & "Deletion failed" &
-            ", col=" & $col & ", error=" & $error)
-        nErrors.inc
-
-  if 0 < nErrors:
-    err(info & "Some deletions failed" &
-      ", col=" & $col & ", nFailed=" & $nErrors)
-  else:
-    ok()
 
 # ------------------------------------------------------------------------------
 # End

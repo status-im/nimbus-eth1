@@ -162,22 +162,6 @@ proc putStoMissingIntv*(
       ): PutResult =
   db.put33(cMissingIntv, accPath, encodeStoMissingIntvData ranges)
 
-proc addStoMissingIntv*(
-    db: CacheDbRef;
-    accPath: Hash32;
-    iv: ItemKeyRange;
-      ): PutResult =
-  let data = db.get33(cMissingIntv, accPath).valueOr:
-    return err(error)
-  var res: CacheStoMissingIntvData
-  if data.len == 0:
-    res.ranges = ItemKeyRangeSet.init()
-  else:
-    res = data.decodeStoMissingIntvData().valueOr:
-      return err(error)
-  discard res.ranges.merge iv
-  db.put33(cMissingIntv, accPath, encodeStoMissingIntvData res.ranges)
-
 proc delStoMissingIntv*(
     db: CacheDbRef,
     accPath: Hash32;
@@ -196,11 +180,6 @@ iterator walkStoMissingIntv*(db: CacheDbRef): WalkStoMissingIntvData =
 
 # -------------
 
-proc clearMissingIntv*(db: CacheDbRef): DelResult =
-  db.clr1 cMissingIntv
-
-# -------------
-
 proc hasMissingBlob*(db: CacheDbRef): BoolResult =
   for (_,_) in db.adb.colWalk33 [byte cMissingBlob]:
     return ok(true)
@@ -216,9 +195,6 @@ proc putMissingBlob*(db: CacheDbRef, accPath: Hash32): PutResult =
 
 proc delMissingBlob*(db: CacheDbRef, accPath: Hash32): DelResult =
   db.del33(cMissingBlob, accPath)
-
-proc clearMissingBlob*(db: CacheDbRef): DelResult =
-  db.clr1 cMissingBlob
 
 iterator walkMissingBlob*(db: CacheDbRef): Hash32 =
   for (key, _) in db.adb.colWalk33 [byte cMissingBlob]:
@@ -242,9 +218,6 @@ proc putStoLock*(db: CacheDbRef, accPath: Hash32): PutResult =
 proc delStoLock*(db: CacheDbRef, accPath: Hash32): DelResult =
   db.del33(cLockStoMpt, accPath)
 
-proc clearStoLock*(db: CacheDbRef): DelResult =
-  db.clr1 cLockStoMpt
-
 iterator walkStoLock*(db: CacheDbRef): Hash32 =
   for (key, _) in db.adb.colWalk33 [byte cLockStoMpt]:
     yield key
@@ -266,9 +239,6 @@ proc putCodeLock*(db: CacheDbRef, accPath: Hash32): PutResult =
 
 proc delCodeLock*(db: CacheDbRef, accPath: Hash32): DelResult =
   db.del33(cLockCode, accPath)
-
-proc clearCodeLock*(db: CacheDbRef): DelResult =
-  db.clr1 cLockCode
 
 iterator walkCodeLock*(db: CacheDbRef): Hash32 =
   for (key, _) in db.adb.colWalk33 [byte cLockCode]:
@@ -326,9 +296,6 @@ proc putFlatAcc*(
 
 proc delFlatAcc*(db: CacheDbRef, accPath: Hash32): DelResult =
   db.del33(cFlatAccount, accPath)
-
-proc clearFlatAcc*(db: CacheDbRef): DelResult =
-  db.clr1 cFlatAccount
 
 iterator walkFlatAcc*(db: CacheDbRef): WalkFlatAccData =
   for (key,value) in db.adb.colWalk33 key33(cFlatAccount):
@@ -392,9 +359,6 @@ proc delFlatSlot*(db: CacheDbRef, accPath: Hash32): DelResult =
       return err(error)
   ok()
 
-proc clearFlatSlot*(db: CacheDbRef): DelResult =
-  db.clr1 cFlatSlot
-
 iterator walkFlatSlotKey*(db: CacheDbRef, accPath: Hash32): Hash32 =
   ## Walk over keys discarding data
   for (key1,key2,_) in db.adb.colWalk65 key65(cFlatSlot, accPath):
@@ -406,17 +370,6 @@ iterator walkFlatSlot*(db: CacheDbRef, accPath: Hash32): WalkFlatSlotData =
   for (key1,key2,value) in db.adb.colWalk65 key65(cFlatSlot, accPath):
     if key1 != accPath:
       break
-    let w = value.decodeFlatSlotData().valueOr:
-      var oops: WalkFlatSlotData
-      oops.accPath = key1
-      oops.slotKey = key2
-      oops.error = error
-      yield oops
-      continue
-    yield (key1, key2, w, "")
-
-iterator walkFlatSlot*(db: CacheDbRef): WalkFlatSlotData =
-  for (key1,key2,value) in db.adb.colWalk65 key65(cFlatSlot):
     let w = value.decodeFlatSlotData().valueOr:
       var oops: WalkFlatSlotData
       oops.accPath = key1
@@ -447,9 +400,6 @@ proc putFlatCode*(
 
 proc delFlatCode*(db: CacheDbRef, accPath: Hash32): DelResult =
   db.del33(cFlatCode, accPath)
-
-proc clearFlatCode*(db: CacheDbRef): DelResult =
-  db.clr1 cFlatCode
 
 iterator walkFlatCode*(db: CacheDbRef): tuple[key: Hash32, data: seq[byte]] =
   for (key,value) in db.adb.colWalkAtLeast1 @[byte cFlatCode]:
