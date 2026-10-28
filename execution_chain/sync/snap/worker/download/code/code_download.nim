@@ -90,6 +90,12 @@ proc fetchAndLockCodeList(
     let accData = adb.getFlatAcc(accPath, info).valueOr:
       return err(ECacheError)                       # cannot do much, here
 
+    # Check whether the code request for this account was cached at a
+    # previous session and the corresponding data record for this account
+    # has not been updated, yet.
+    if buddy.ctx.accUnproc.covered accPath.to(ItemKey):
+      continue                                      # come back later
+
     cdeQ.add (accPath, accData.account.codeHash, false)
     if fetchCodeBatchMax <= cdeQ.len:
       break                                         # enough collected

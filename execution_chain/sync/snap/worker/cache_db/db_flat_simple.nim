@@ -134,34 +134,6 @@ proc putFlatAcc*(
     return err()
   ok()
 
-proc putFlatAcc*(
-  db: CacheDbRef;
-  accPath: Hash32;
-  dirtyStorage: bool;
-  dirtyCode: bool;
-  account: Account;
-   info: static[string];
-    ): Opt[void] =
-  db.putFlatAcc(accPath, dirtyStorage, dirtyCode, account).isOkOr:
-    error info.failedUpdating AccountInfo, accPath=accPath.toStr,
-      dirtyStorage, dirtyCode, `error`=error
-    return err()
-  ok()
-
-proc putFlatAcc*(
-    db: CacheDbRef;
-    accPath: Hash32;
-    dirtyStorage: bool;
-    dirtyCode: bool;
-    payload: openArray[byte];
-    info: static[string];
-      ): Opt[void] =
-  db.putFlatAcc(accPath, dirtyStorage, dirtyCode, payload).isOkOr:
-    error info.failedUpdating AccountInfo, accPath=accPath.toStr,
-      dirtyStorage, dirtyCode, `error`=error
-    return err()
-  ok()
-
 proc delFlatAcc*(
     db: CacheDbRef;
     accPath: Hash32;
@@ -199,18 +171,6 @@ proc getStoMissingIntv*(
     # requirement of missing intv record for accounts (which must exisit.)
     return Opt.some(Opt.none(CacheStoMissingIntvData))
   Opt.some(move data)
-
-proc putStoMissingIntv*(
-    db: CacheDbRef;
-    accPath: Hash32;
-    ranges: ItemKeyRangeSet;
-    info: static[string];
-      ): Opt[void] =
-  db.putStoMissingIntv(accPath, ranges).isOkOr:
-    error info.failedRangeUpd StoMissingIntvInfo,
-      accPath=accPath.toStr, `error`=error
-    return err()
-  ok()
 
 proc putStoMissingIntv*(
     db: CacheDbRef;
