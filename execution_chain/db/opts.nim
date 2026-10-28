@@ -59,6 +59,7 @@ const
     ## The max number of snapshots to store in the aristo database.
   defaultBlockCacheType* = hyperClockCache
     ## The default RocksDb block cache.
+  defaultStoStaticLookup* = true
 
 type DbOptions* = object # Options that are transported to the database layer
   maxOpenFiles*: int
@@ -78,6 +79,7 @@ type DbOptions* = object # Options that are transported to the database layer
   parallelStateRootComputation*: bool
   threadSafeCaches*: bool
   blockCacheType*: RocksDbBlockCacheType
+  stoStaticLookup*: bool
 
 func init*(
     T: type DbOptions,
@@ -98,6 +100,7 @@ func init*(
     parallelStateRootComputation = true,
     threadSafeCaches = true,
     blockCacheType = defaultBlockCacheType,
+    stoStaticLookup = defaultStoStaticLookup,
 ): T =
   T(
     maxOpenFiles: maxOpenFiles,
@@ -116,5 +119,6 @@ func init*(
     maxSnapshots: maxSnapshots,
     parallelStateRootComputation: parallelStateRootComputation,
     threadSafeCaches: threadSafeCaches,
-    blockCacheType: blockCacheType
+    blockCacheType: blockCacheType,
+    stoStaticLookup: stoStaticLookup,
   )

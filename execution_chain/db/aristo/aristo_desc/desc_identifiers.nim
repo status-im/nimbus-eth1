@@ -156,6 +156,14 @@ func fromBytes*(T: type HashKey; data: openArray[byte]): Result[T,void] =
     return ok lid
   err()
 
+func fromRlpItem*(T: type HashKey; r: Rlp): Result[T,void] {.raises: [RlpError].} =
+  ## Read the trie node reference at the current item of `r` in place: a
+  ## 32-byte hash, an empty blob or an embedded node list.
+  if r.isList:
+    T.fromBytes(r.rawData)
+  else:
+    T.fromBytes(r.blobView)
+
 func `==`*(a, b: HashKey): bool =
   a.data == b.data
 

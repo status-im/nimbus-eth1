@@ -40,6 +40,9 @@ proc statusLog(ctx: BeaconCtxRef) =
   logScope:
     topics = "ticker"
 
+  if ctx.pool.standByMode != BeaconServerMode.none: # not in stand-by mode
+    return
+
   let now = Moment.now()
   if now < ctx.pool.lastStatusLog + statusLogInterval:
     return
