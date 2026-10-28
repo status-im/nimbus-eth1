@@ -123,60 +123,68 @@ func cacheKey*(rvid: RootedVertexID): (RdbCacheKey, uint32) {.inline.} =
       uint32(root shr 30),
     )
 
-func peek*[V](
+template peek*[V](
     lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID
-): Opt[V] {.inline.} =
-  let (key, check) = rvid.cacheKey()
-  result = lru.peek(key)
-  if result.isSome() and result[].check != check:
-    result = Opt.none(V)
+): Opt[V] =
+  let kc = rvid.cacheKey()
+  var r = lru.peek(kc[0])
+  if r.isSome() and r[].check != kc[1]:
+    r = Opt.none(V)
+  r
 
-proc get*[V](
+template get*[V](
     lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID
-): Opt[V] {.inline.} =
-  let (key, check) = rvid.cacheKey()
-  result = lru.get(key)
-  if result.isSome() and result[].check != check:
-    result = Opt.none(V)
+): Opt[V] =
+  let kc = rvid.cacheKey()
+  var r = lru.get(kc[0])
+  if r.isSome() and r[].check != kc[1]:
+    r = Opt.none(V)
+  r
 
-proc del*[V](
-    lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID
-) {.inline.} =
+template del*[V](lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID) =
   lru.del(rvid.cacheKey()[0])
 
-proc put*(
+template put*(
     lru: var ConcurrentLruCache[RdbCacheKey, RdbKeyVal],
     rvid: RootedVertexID,
     key: HashKey,
-) {.inline.} =
-  let (k, c) = rvid.cacheKey()
-  lru.put(k, (key: key, check: c))
+) =
+  let
+    kc = rvid.cacheKey()
+    v: RdbKeyVal = (key, kc[1])
+  lru.put(kc[0], v)
 
-proc update*(
+template update*(
     lru: var ConcurrentLruCache[RdbCacheKey, RdbKeyVal],
     rvid: RootedVertexID,
     key: HashKey,
-): bool {.inline.} =
-  let (k, c) = rvid.cacheKey()
-  lru.update(k, (key: key, check: c))
+): bool =
+  let
+    kc = rvid.cacheKey()
+    v: RdbKeyVal = (key, kc[1])
+  lru.update(kc[0], v)
 
-proc put*(
+template put*(
     lru: var ConcurrentLruCache[RdbCacheKey, RdbBranchVal],
     rvid: RootedVertexID,
     startVid: VertexID,
     used: uint16,
-) {.inline.} =
-  let (k, c) = rvid.cacheKey()
-  lru.put(k, (startVid: startVid, used: used, check: c))
+) =
+  let
+    kc = rvid.cacheKey()
+    v: RdbBranchVal = (startVid, used, kc[1])
+  lru.put(kc[0], v)
 
-proc update*(
+template update*(
     lru: var ConcurrentLruCache[RdbCacheKey, RdbBranchVal],
     rvid: RootedVertexID,
     startVid: VertexID,
     used: uint16,
-): bool {.inline.} =
-  let (k, c) = rvid.cacheKey()
-  lru.update(k, (startVid: startVid, used: used, check: c))
+): bool =
+  let
+    kc = rvid.cacheKey()
+    v: RdbBranchVal = (startVid, used, kc[1])
+  lru.update(kc[0], v)
 
 template to*(v: RootedVertexID, T: type RdbStateType): RdbStateType =
   if v.root == STATE_ROOT_VID: RdbStateType.World else: RdbStateType.Account
