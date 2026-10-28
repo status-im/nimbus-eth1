@@ -70,9 +70,6 @@ if defined(windows):
     switch("passL", "-Wl,--stack,8388608")
   # https://github.com/nim-lang/Nim/issues/4057
   --tlsEmulation:off
-  if defined(i386):
-    # set the IMAGE_FILE_LARGE_ADDRESS_AWARE flag so we can use PAE, if enabled, and access more than 2 GiB of RAM
-    switch("passL", "-Wl,--large-address-aware")
 
   # Colors are disabled for Windows, see issue:
   # https://github.com/status-im/nim-chronicles/issues/130
@@ -180,10 +177,8 @@ if canEnableDebuggingSymbols:
   --debugger:native
 
 block:
-  const
-    e = (2, 2, 12)
-    v = (NimMajor, NimMinor, NimPatch)
-  doAssert (NimPatch mod 2 == 1 and v >= e) or e == v, "requires Nim " & $e
+  const e = (2, 2, 12)
+  doAssert (NimMajor, NimMinor, NimPatch) >= e, "requires Nim " & $e
 
 switch("warningAsError", "BareExcept:on")
 switch("warningAsError", "CaseTransition:on")
