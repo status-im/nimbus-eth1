@@ -39,9 +39,9 @@ const
     ## A bit of space on top of the filter is left for data block caching
   defaultRdbVtxCacheSize* = 653 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
-  defaultRdbKeyCacheSize* = 1280 * 1024 * 1024
+  defaultRdbKeyCacheSize* = 1262 * 1024 * 1024
     ## Hashes of the above
-  defaultRdbBranchCacheSize* = 1331 * 1024 * 1024
+  defaultRdbBranchCacheSize* = 1259 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
   defaultAccLeafCacheSize* = 1280 * 1024
     ## Number of entries in the account leaf LRU cache, see `.accLeaves` field

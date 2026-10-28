@@ -131,7 +131,7 @@ proc getKey*(
 
     if rc.isOk:
       rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok((rc.value, nil))
+      return ok((rc.value.key, nil))
 
     rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
 
@@ -208,7 +208,7 @@ proc getKeys*(
 
         if rc.isOk:
           rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-          keyvtxs[i] = (rc.value, VertexRef(nil))
+          keyvtxs[i] = (rc.value.key, VertexRef(nil))
           break lookup
 
         rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
@@ -308,7 +308,7 @@ proc getVtx*(
         rdb.rdBranchLru.get(rvid)
     if rc.isOk():
       rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok(BranchRef.init(rc[][0], rc[][1]))
+      return ok(BranchRef.init(rc[].startVid, rc[].used))
 
   block:
     var vtx: VertexRef
@@ -358,7 +358,7 @@ proc getVtx*(
   if GetVtxFlag.PeekCache notin flags:
     if res.value.vType == Branch:
       let vtx = BranchRef(res.value())
-      rdb.rdBranchLru.put(rvid, (vtx.startVid, vtx.used))
+      rdb.rdBranchLru.put(rvid, vtx.startVid, vtx.used)
     else:
       rdb.rdVtxLru.put(rvid, vtxBuf)
 

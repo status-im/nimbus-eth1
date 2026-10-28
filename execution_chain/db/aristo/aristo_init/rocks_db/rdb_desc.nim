@@ -14,7 +14,8 @@
 {.push raises: [].}
 
 import
-  std/concurrency/atomics,
+  std/[concurrency/atomics, hashes],
+  results,
   stew/endians2,
   ../../../../concurrency/lru,
   ../../../core_db/backend/rocksdb_desc,
@@ -24,9 +25,17 @@ import
 
 export lru, rocksdb_desc
 
-const AdmKey* = default(seq[byte])
+const
+  AdmKey* = default(seq[byte])
+  STATIC_CACHE_KIND = 1'u64 shl 63
 
 type
+  RdbCacheKey* = distinct uint64
+    ## 8-byte LRU key for a `RootedVertexID`, see `cacheKey`
+
+  RdbKeyVal* = tuple[key: HashKey, check: uint32]
+  RdbBranchVal* = tuple[startVid: VertexID, used: uint16, check: uint32]
+
   RdbWriteEventCb* =
     proc(session: WriteBatchRef): bool {.gcsafe, raises: [].}
       ## Call back closure function that passes the the write session handle
@@ -42,26 +51,13 @@ type
     baseDb*: RocksDbInstanceRef
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
 
-    # Note that the key type `VertexID` for LRU caches requires that there is
-    # strictly no vertex ID re-use.
-    #
-    # Otherwise, in some fringe cases one might remove a vertex with key
-    # `(root1,vid)` and insert another vertex with key `(root2,vid)` while
-    # re-using the vertex ID `vid`. Without knowledge of `root1` and `root2`,
-    # the LRU cache will return the same vertex for `(root2,vid)` also for
-    # `(root1,vid)`.
-    #
-    # The other alternaive would be to use the key type `RootedVertexID` which
-    # is less memory and time efficient (the latter one due to internal LRU
-    # handling of the longer key.)
-    #
-    rdKeyLru*: ConcurrentLruCache[RootedVertexID,HashKey] ## Read cache
+    rdKeyLru*: ConcurrentLruCache[RdbCacheKey, RdbKeyVal] ## Read cache
     rdKeySize*: int
 
     rdVtxLru*: ConcurrentLruCache[RootedVertexID,VertexBuf] ## Read cache
     rdVtxSize*: int
 
-    rdBranchLru*: ConcurrentLruCache[RootedVertexID, (VertexID, uint16)]
+    rdBranchLru*: ConcurrentLruCache[RdbCacheKey, RdbBranchVal]
     rdBranchSize*: int
 
     rdbPrintStats*: bool               ## Print statistics on closure
@@ -100,6 +96,87 @@ var
 
 template toOpenArray*(xid: AdminTabID): openArray[byte] =
   xid.uint64.toBytesBE.toOpenArray(0,7)
+
+func `==`*(a, b: RdbCacheKey): bool {.borrow.}
+
+func hash*(k: RdbCacheKey): Hash {.inline.} =
+  hash(uint64(k))
+
+func cacheKey*(rvid: RootedVertexID): (RdbCacheKey, uint32) {.inline.} =
+  ## 8-byte key and 32-bit check that together identify `rvid` exactly.
+  ##
+  ## Dynamic vids are globally unique (one `vTop` counter, never re-used), so
+  ## they are their own key and the check only verifies the root. Static vids
+  ## repeat across storage tries: the key holds `root * FIRST_DYNAMIC_VID + vid`
+  ## modulo 2^63, which is injective among roots sharing `root shr 30`, the
+  ## check. Bit 63 separates the two kinds. Exact for every root below 2^62.
+  let vid = uint64(rvid.vid)
+  if vid >= FIRST_DYNAMIC_VID:
+    (RdbCacheKey(vid), uint32(uint64(rvid.root)))
+  else:
+    let root = uint64(rvid.root)
+    (
+      RdbCacheKey(
+        STATIC_CACHE_KIND or
+          ((root * FIRST_DYNAMIC_VID + vid) and (STATIC_CACHE_KIND - 1))
+      ),
+      uint32(root shr 30),
+    )
+
+func peek*[V](
+    lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID
+): Opt[V] {.inline.} =
+  let (key, check) = rvid.cacheKey()
+  result = lru.peek(key)
+  if result.isSome() and result[].check != check:
+    result = Opt.none(V)
+
+proc get*[V](
+    lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID
+): Opt[V] {.inline.} =
+  let (key, check) = rvid.cacheKey()
+  result = lru.get(key)
+  if result.isSome() and result[].check != check:
+    result = Opt.none(V)
+
+proc del*[V](
+    lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID
+) {.inline.} =
+  lru.del(rvid.cacheKey()[0])
+
+proc put*(
+    lru: var ConcurrentLruCache[RdbCacheKey, RdbKeyVal],
+    rvid: RootedVertexID,
+    key: HashKey,
+) {.inline.} =
+  let (k, c) = rvid.cacheKey()
+  lru.put(k, (key: key, check: c))
+
+proc update*(
+    lru: var ConcurrentLruCache[RdbCacheKey, RdbKeyVal],
+    rvid: RootedVertexID,
+    key: HashKey,
+): bool {.inline.} =
+  let (k, c) = rvid.cacheKey()
+  lru.update(k, (key: key, check: c))
+
+proc put*(
+    lru: var ConcurrentLruCache[RdbCacheKey, RdbBranchVal],
+    rvid: RootedVertexID,
+    startVid: VertexID,
+    used: uint16,
+) {.inline.} =
+  let (k, c) = rvid.cacheKey()
+  lru.put(k, (startVid: startVid, used: used, check: c))
+
+proc update*(
+    lru: var ConcurrentLruCache[RdbCacheKey, RdbBranchVal],
+    rvid: RootedVertexID,
+    startVid: VertexID,
+    used: uint16,
+): bool {.inline.} =
+  let (k, c) = rvid.cacheKey()
+  lru.update(k, (startVid: startVid, used: used, check: c))
 
 template to*(v: RootedVertexID, T: type RdbStateType): RdbStateType =
   if v.root == STATE_ROOT_VID: RdbStateType.World else: RdbStateType.Account
