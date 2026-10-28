@@ -358,7 +358,7 @@ proc fetchSlot*(
     path = NibblesBuf.fromBytes(stoPath.data)
     next = VertexID(0)
 
-  if db.db.stoStatic and startLevel.isSome:
+  if db.db.stoStatic and startLevel.isSome and STO_PROBE_MIN_LEVEL <= startLevel[]:
     let (staticVtx, rest, nxt) = retrieveStatic[StoLeafRef](
         db, stoID, stoPath, startLevel[], false).valueOr:
       if error == FetchPathNotFound:
