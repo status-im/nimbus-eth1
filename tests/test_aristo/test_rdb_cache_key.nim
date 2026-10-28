@@ -27,6 +27,9 @@ const
   M = 1'u64 shl 63
   stoA = VertexID(R + 1)
   stoB = VertexID(R + 2)
+  collideDv = M - (((M div R) * R) and (M - 1))
+  collideA = (VertexID(R + 12345), VertexID(1))
+  collideB = (VertexID(R + 12345 + M div R), VertexID(1 + collideDv))
 
 func firstVidAtLevel(level: int): uint64 =
   result = uint64(FIRST_STATIC_VID)
@@ -40,6 +43,22 @@ func makeHashKey(i: uint64): HashKey =
 
 template shardOf(rvid: RootedVertexID): int =
   int(cast[uint64](hash(rvid.cacheKey()[0])) shr 58)
+
+template peek[V](
+    lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID
+): Opt[V] =
+  var r = Opt.none(V)
+  lru.withPeek(rvid, cached):
+    r = Opt.some(cached)
+  r
+
+template get[V](
+    lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID
+): Opt[V] =
+  var r = Opt.none(V)
+  lru.withGet(rvid, cached):
+    r = Opt.some(cached)
+  r
 
 suite "Aristo RocksDB cache keys":
   test "node layout":
@@ -89,15 +108,12 @@ suite "Aristo RocksDB cache keys":
 
   test "colliding keys never return the wrong value":
     let
-      r = VertexID(R + 12345)
-      d = M div R
-      dv = M - ((d * R) and (M - 1))
-      a = (r, VertexID(1))
-      b = (VertexID(uint64(r) + d), VertexID(1 + dv))
+      a = collideA
+      b = collideB
       (ka, ca) = a.cacheKey()
       (kb, cb) = b.cacheKey()
     check:
-      1 + dv < R
+      1 + collideDv < R
       ka == kb
       ca != cb
 
@@ -173,71 +189,82 @@ suite "Aristo RocksDB cache keys":
       lru.dispose()
 
   test "RdbInst serves the right vertex and key per trie":
-    let
-      dir = mkdtemp()
-      opts = DbOptions.init(
-        maxOpenFiles = 64, writeBufferSize = 4 * 1024 * 1024, rowCacheSize = 0,
-        blockCacheSize = 8 * 1024 * 1024, rdbVtxCacheSize = 1024 * 1024,
-        rdbKeyCacheSize = 1024 * 1024, rdbBranchCacheSize = 1024 * 1024,
-        maxSnapshots = 2, threadSafeCaches = false)
-      cache = cacheCreateLRU(opts.blockCacheSize, autoClose = true)
-      baseDb = RocksDbInstanceRef
-        .open(dir, opts.toDbOpts(), @[($VtxCF, opts.toCfOpts(cache, true))], true)
-        .expect("open")
-    defer:
-      removeDir(dir)
-    var rdb: RdbInst
-    rdb.init(opts, baseDb)
+    for threadSafe in [false, true]:
+      let
+        dir = mkdtemp()
+        opts = DbOptions.init(
+          maxOpenFiles = 64, writeBufferSize = 4 * 1024 * 1024, rowCacheSize = 0,
+          blockCacheSize = 8 * 1024 * 1024, rdbVtxCacheSize = 1024 * 1024,
+          rdbKeyCacheSize = 1024 * 1024, rdbBranchCacheSize = 1024 * 1024,
+          maxSnapshots = 2, threadSafeCaches = threadSafe)
+        cache = cacheCreateLRU(opts.blockCacheSize, autoClose = true)
+        baseDb = RocksDbInstanceRef
+          .open(dir, opts.toDbOpts(), @[($VtxCF, opts.toCfOpts(cache, true))], true)
+          .expect("open")
+      defer:
+        removeDir(dir)
+      var rdb: RdbInst
+      rdb.init(opts, baseDb)
 
-    let
-      rvids = [(STATE_ROOT_VID, VertexID(2)), (stoA, VertexID(2)), (stoB, VertexID(2))]
-      vtxs = [
-        VertexRef(BranchRef.init(VertexID(100), 0x0001'u16)),
-        VertexRef(BranchRef.init(VertexID(200), 0x0003'u16)),
-        VertexRef(StoLeafRef.init(NibblesBuf.nibble(3), 7.u256)),
-      ]
-      keys = [makeHashKey(1), makeHashKey(2), VOID_HASH_KEY]
+      let
+        rvids = [
+          (STATE_ROOT_VID, VertexID(2)), (stoA, VertexID(2)), (stoB, VertexID(2)),
+          collideA, collideB,
+        ]
+        vtxs = [
+          VertexRef(BranchRef.init(VertexID(100), 0x0001'u16)),
+          VertexRef(BranchRef.init(VertexID(200), 0x0003'u16)),
+          VertexRef(StoLeafRef.init(NibblesBuf.nibble(3), 7.u256)),
+          VertexRef(BranchRef.init(VertexID(300), 0x0005'u16)),
+          VertexRef(BranchRef.init(VertexID(400), 0x0007'u16)),
+        ]
+        keys = [makeHashKey(1), makeHashKey(2), VOID_HASH_KEY, makeHashKey(3), makeHashKey(4)]
 
-    template checkAll(flags: set[GetVtxFlag]) =
-      for i in 0 .. 2:
-        let vtx = rdb.getVtx(rvids[i], flags).expect("vtx")
-        check vtx.vType == vtxs[i].vType
-        if vtx.vType == Branch:
+      template checkAll(flags: set[GetVtxFlag]) =
+        for i in 0 ..< rvids.len:
+          let vtx = rdb.getVtx(rvids[i], flags).expect("vtx")
+          check vtx.vType == vtxs[i].vType
+          if vtx.vType == Branch:
+            check:
+              BranchRef(vtx).startVid == BranchRef(vtxs[i]).startVid
+              BranchRef(vtx).used == BranchRef(vtxs[i]).used
+          let (key, leaf) = rdb.getKey(rvids[i], flags).expect("key")
           check:
-            BranchRef(vtx).startVid == BranchRef(vtxs[i]).startVid
-            BranchRef(vtx).used == BranchRef(vtxs[i]).used
-        let (key, leaf) = rdb.getKey(rvids[i], flags).expect("key")
-        check:
-          key == keys[i]
-          leaf.isValid == (vtx.vType in Leaves)
-      var keyvtxs: array[3, (HashKey, VertexRef)]
-      check rdb.getKeys(rvids, keyvtxs, flags).isOk()
-      for i in 0 .. 2:
-        check keyvtxs[i][0] == keys[i]
+            key == keys[i]
+            leaf.isValid == (vtx.vType in Leaves)
+        var keyvtxs: array[rvids.len, (HashKey, VertexRef)]
+        check rdb.getKeys(rvids, keyvtxs, flags).isOk()
+        for i in 0 ..< rvids.len:
+          check keyvtxs[i][0] == keys[i]
 
-    block:
-      let session = rdb.begin()
-      for i in 0 .. 2:
-        check rdb.putVtx(session, rvids[i], vtxs[i], keys[i]).isOk()
-      check rdb.commit(session).isOk()
+      block:
+        let session = rdb.begin()
+        for i in 0 ..< rvids.len:
+          check rdb.putVtx(session, rvids[i], vtxs[i], keys[i]).isOk()
+        check rdb.commit(session).isOk()
 
-    checkAll({})
-    rdb.rollback(rdb.begin())
-    check rdb.rdBranchLru.len == 0
-    checkAll({PeekCache})
-    check rdb.rdBranchLru.len == 0
-    checkAll({})
-    check rdb.rdBranchLru.len == 2
+      checkAll({})
+      rdb.rollback(rdb.begin())
+      check rdb.rdBranchLru.len == 0
+      checkAll({PeekCache})
+      check rdb.rdBranchLru.len == 0
+      checkAll({})
+      check rdb.rdBranchLru.len == 3
 
-    block:
-      let session = rdb.begin()
-      check rdb.putVtx(session, rvids[1], VertexRef(nil), VOID_HASH_KEY).isOk()
-      check rdb.commit(session).isOk()
-    check:
-      not rdb.getVtx(rvids[1], {}).expect("vtx").isValid
-      rdb.getKey(rvids[1], {}).expect("key")[0] == VOID_HASH_KEY
-      BranchRef(rdb.getVtx(rvids[0], {}).expect("vtx")).startVid == VertexID(100)
-      rdb.getKey(rvids[0], {}).expect("key")[0] == keys[0]
-      rdb.getVtx(rvids[2], {}).expect("vtx").vType == StoLeaf
+      block:
+        let session = rdb.begin()
+        check rdb.putVtx(session, rvids[1], VertexRef(nil), VOID_HASH_KEY).isOk()
+        check rdb.putVtx(session, collideA, VertexRef(nil), VOID_HASH_KEY).isOk()
+        check rdb.commit(session).isOk()
+      check:
+        not rdb.getVtx(rvids[1], {}).expect("vtx").isValid
+        rdb.getKey(rvids[1], {}).expect("key")[0] == VOID_HASH_KEY
+        BranchRef(rdb.getVtx(rvids[0], {}).expect("vtx")).startVid == VertexID(100)
+        rdb.getKey(rvids[0], {}).expect("key")[0] == keys[0]
+        rdb.getVtx(rvids[2], {}).expect("vtx").vType == StoLeaf
+        not rdb.getVtx(collideA, {}).expect("vtx").isValid
+        rdb.getKey(collideA, {}).expect("key")[0] == VOID_HASH_KEY
+        BranchRef(rdb.getVtx(collideB, {}).expect("vtx")).startVid == VertexID(400)
+        rdb.getKey(collideB, {}).expect("key")[0] == keys[4]
 
-    rdb.close(wipe = false)
+      rdb.close(wipe = false)

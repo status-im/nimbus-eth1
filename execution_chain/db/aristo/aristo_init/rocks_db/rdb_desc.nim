@@ -102,8 +102,10 @@ func `==`*(a, b: RdbCacheKey): bool {.borrow.}
 func hash*(k: RdbCacheKey): Hash {.inline.} =
   hash(uint64(k))
 
+static: doAssert FIRST_DYNAMIC_VID <= 1'u64 shl 33
+
 func cacheKey*(rvid: RootedVertexID): (RdbCacheKey, uint32) {.inline.} =
-  ## 8-byte key and 32-bit check that together identify `rvid` exactly.
+  ## 8-byte key and 4-byte check that together identify `rvid` exactly.
   ##
   ## Dynamic vids are globally unique (one `vTop` counter, never re-used), so
   ## they are their own key and the check only verifies the root. Static vids
@@ -112,34 +114,45 @@ func cacheKey*(rvid: RootedVertexID): (RdbCacheKey, uint32) {.inline.} =
   ## check. Bit 63 separates the two kinds. Exact for every root below 2^62.
   let vid = uint64(rvid.vid)
   if vid >= FIRST_DYNAMIC_VID:
-    (RdbCacheKey(vid), uint32(uint64(rvid.root)))
+    (RdbCacheKey(vid), uint32(rvid.root))
   else:
-    let root = uint64(rvid.root)
-    (
-      RdbCacheKey(
-        STATIC_CACHE_KIND or
-          ((root * FIRST_DYNAMIC_VID + vid) and (STATIC_CACHE_KIND - 1))
-      ),
-      uint32(root shr 30),
-    )
+    # Bit 63 marks a static key; dynamic keys are bare vids below 2^63, so the
+    # two kinds never coincide. The arithmetic wraps modulo 2^64 and the `or`
+    # overwrites bit 63, so the key carries the sum modulo 2^63.
+    #
+    # With root = hi * 2^30 + lo and R = FIRST_DYNAMIC_VID:
+    #   root * R + vid = hi * 2^30 * R + (lo * R + vid)
+    # Modulo 2^63 the first term is a fixed offset shared by every root of the
+    # class hi, and lo * R + vid < 2^30 * 2^33 = 2^63 identifies (lo, vid)
+    # uniquely (vid < R, so division by R recovers both). Adding a fixed offset
+    # modulo 2^63 is a bijection, so within a class different (lo, vid) always
+    # give different keys, and hi itself is the check. Below 2^62 the check does
+    # not truncate, so key and check together recover (hi, lo, vid).
+    let
+      root = uint64(rvid.root)
+      key = STATIC_CACHE_KIND or (root * FIRST_DYNAMIC_VID + vid)
 
-template peek*[V](
-    lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID
-): Opt[V] =
-  let kc = rvid.cacheKey()
-  var r = lru.peek(kc[0])
-  if r.isSome() and r[].check != kc[1]:
-    r = Opt.none(V)
-  r
+    (RdbCacheKey(key), uint32(root shr 30))
 
-template get*[V](
-    lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID
-): Opt[V] =
+template withGet*[V](
+    lru: var ConcurrentLruCache[RdbCacheKey, V],
+    rvid: RootedVertexID,
+    value, body: untyped,
+) =
   let kc = rvid.cacheKey()
-  var r = lru.get(kc[0])
-  if r.isSome() and r[].check != kc[1]:
-    r = Opt.none(V)
-  r
+  lru.withGet(kc[0], value):
+    if value.check == kc[1]:
+      body
+
+template withPeek*[V](
+    lru: var ConcurrentLruCache[RdbCacheKey, V],
+    rvid: RootedVertexID,
+    value, body: untyped,
+) =
+  let kc = rvid.cacheKey()
+  lru.withPeek(kc[0], value):
+    if value.check == kc[1]:
+      body
 
 template del*[V](lru: var ConcurrentLruCache[RdbCacheKey, V], rvid: RootedVertexID) =
   lru.del(rvid.cacheKey()[0])
