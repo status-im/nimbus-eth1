@@ -58,7 +58,6 @@ type
     createAddress: EthAddress
     actionGas:     GasInt
     opIdx:         int
-    idxPrefix:     string
     resultIdx:     int
     skip:          bool
     vmTrace:       VmTrace
@@ -68,7 +67,6 @@ type
     frames:     seq[ParityFrame]
     results*:   seq[TraceObject]
     traceTypes*: set[TraceTypeFlag]
-    idxPrefix*: string
     preState:   Table[EthAddress, AccountSnap]
     preStorage: Table[EthAddress, Table[UInt256, UInt256]]
     stateDiff*: StateDiff
@@ -267,8 +265,7 @@ method captureStart*(ctx: ParityTracer, comp: Computation,
     actionKind:    if create: takCreate else: takCall,
     traceAddr:     @[],
     createAddress: target,
-    actionGas:     frameGas,
-    idxPrefix:     ctx.idxPrefix)
+    actionGas:     frameGas)
   ctx.addSkeleton(frame)
   ctx.frames.add frame
 
@@ -323,19 +320,12 @@ method captureEnter*(ctx: ParityTracer, comp: Computation, op: Op,
     ctx.snapAccount(comp, actFrom)
     ctx.snapAccount(comp, target)
 
-  let parentPrefix =
-    if ctx.frames[^1].opIdx > 0:
-      ctx.frames[^1].idxPrefix & $(ctx.frames[^1].opIdx - 1) & "-"
-    else:
-      ctx.frames[^1].idxPrefix
-
   var frame = ParityFrame(
     action:        action,
     actionKind:    if isCreate: takCreate else: takCall,
     traceAddr:     childAddr,
     createAddress: target,
-    actionGas:     gasLimit,
-    idxPrefix:     parentPrefix)
+    actionGas:     gasLimit)
   ctx.addSkeleton(frame)
   ctx.frames.add frame
 
@@ -387,8 +377,7 @@ method captureOpStart*(ctx: ParityTracer, comp: Computation,
     var pending = PendingOp(
       active: true,
       op:     op,
-      vmOp:   VmTraceOp(pc: pc, op: opName(op),
-                        idx: ctx.frames[^1].idxPrefix & $ctx.frames[^1].opIdx))
+      vmOp:   VmTraceOp(pc: pc, op: opName(op)))
     if op in {Call, CallCode, DelegateCall, StaticCall}:
       pending.emptySubOk = true
     inc ctx.frames[^1].opIdx

@@ -125,7 +125,6 @@ type
     pc*:   int
     cost*: GasInt
     op*:   string
-    idx*:  string
     ex*:   Opt[VmTraceOpEx]
     sub*:  Opt[VmTrace]
 
@@ -136,6 +135,7 @@ type
   TraceFilterRequest* = object
     fromBlock*:   Opt[BlockTag]
     toBlock*:     Opt[BlockTag]
+    blockHash*:   Opt[Hash32]
     fromAddress*: Opt[seq[Address]]
     toAddress*:   Opt[seq[Address]]
     mode*:        Opt[string]
