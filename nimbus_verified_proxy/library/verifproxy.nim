@@ -392,11 +392,11 @@ proc startVerifProxy(
     storageGetProc: StorageGetProc,
     storagePutProc: StoragePutProc,
 ): ptr Context {.exported.} =
-  let ctx = Context.new().toUnmanagedPtr()
-  ctx.stop = false
-
   when defined(setupForeignThreadGc):
     setupForeignThreadGc()
+
+  let ctx = Context.new().toUnmanagedPtr()
+  ctx.stop = false
 
   try:
     waitFor run(
@@ -414,6 +414,4 @@ proc startVerifProxy(
   return ctx
 
 proc stopVerifProxy(ctx: ptr Context) {.exported.} =
-  when defined(setupForeignThreadGc):
-    tearDownForeignThreadGc()
   ctx.stop = true

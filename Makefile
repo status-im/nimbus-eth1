@@ -71,6 +71,7 @@ endif
 	nimbus_verified_proxy_go_test \
 	nimbus_verified_proxy_wasm \
 	nimbus_verified_proxy_wasm_debug \
+	nimbus_verified_proxy_wasm_test \
 	external_sync \
 	test \
 	test-reproducibility \
@@ -407,6 +408,11 @@ nimbus_verified_proxy_wasm_debug: | build deps
 		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
 		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
 	cp nimbus_verified_proxy/library/bindings/wasm/verifproxy.js $(CURDIR)/build/$@/
+
+nimbus_verified_proxy_wasm_test: nimbus_verified_proxy_wasm
+	+ echo -e $(BUILD_MSG) "node --test nimbus_verified_proxy/library/bindings/wasm/tests" && \
+		VERIFPROXY_WASM_DIR="$(CURDIR)/build/nimbus_verified_proxy_wasm" \
+		node --test nimbus_verified_proxy/library/bindings/wasm/tests/verifproxy.test.js
 
 # Stateless related targets
 
