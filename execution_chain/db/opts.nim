@@ -43,7 +43,7 @@ const
     ## Hashes of the above
   defaultRdbBranchCacheSize* = 1331 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
-  defaultAccLeafCacheSize* = 1280 * 1024
+  defaultAccLeafCacheSize* = 1440 * 1024
     ## Number of entries in the account leaf LRU cache, see `.accLeaves` field
     ## of the main Aristo descriptor
   defaultStoLeafCacheSize* = 1408 * 1024
