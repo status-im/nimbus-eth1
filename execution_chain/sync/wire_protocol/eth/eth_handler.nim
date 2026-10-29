@@ -41,7 +41,7 @@ proc new*(_: type EthWireRef,
     txPool: txPool,
     node  : node,
     quota : setupTokenBucket(),
-    actionQueue : newAsyncQueue[ActionHandler](maxsize = MAX_ACTION_HANDLER),
+    actionQueue : newAsyncQueue[WireAction](maxsize = MAX_ACTION_HANDLER),
     pendingTxGossip: newAsyncQueue[Hash32](maxsize = PENDING_TX_GOSSIP_MAX),
   )
   wire.tickerHeartbeat = tickerLoop(wire)

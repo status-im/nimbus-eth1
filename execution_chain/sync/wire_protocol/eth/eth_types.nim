@@ -143,6 +143,10 @@ type
 
   ActionHandler* = proc(): Future[void] {.async: (raises: [CancelledError]).}
 
+  WireAction* = object
+    run*: ActionHandler
+    drop*: proc() {.gcsafe, raises: [].}
+
   EthWireRef* = ref object of RootRef
     chain* : ForkedChainRef
     txPool*: TxPoolRef
@@ -151,7 +155,7 @@ type
     seenTransactions*: Table[Hash32, SeenObject]
     tickerHeartbeat*: Future[void].Raising([CancelledError])
     actionHeartbeat*: seq[Future[void].Raising([CancelledError])]
-    actionQueue*: AsyncQueue[ActionHandler]
+    actionQueue*: AsyncQueue[WireAction]
     gossipEnabled*: bool
     cleanupTimer*: Future[void].Raising([CancelledError])
     brUpdateTimer*: Future[void].Raising([CancelledError])

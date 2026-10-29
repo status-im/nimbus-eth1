@@ -51,13 +51,27 @@ template awaitQuota(bcParam: EthWireRef, costParam: float, protocolIdParam: stri
     debug "Error while waiting broadcast quota",
       cost = cost, protocolId = protocolId, msg = exc.msg
 
+proc enqueueAction*(wire: EthWireRef, action: WireAction) {.raises: [].} =
+  if wire.actionQueue.full:
+    try:
+      let evicted = wire.actionQueue.popLastNoWait()
+      debug "Action queue full, evicting oldest action"
+      if not evicted.drop.isNil:
+        evicted.drop()
+    except AsyncQueueEmptyError:
+      discard
+  try:
+    wire.actionQueue.addFirstNoWait(action)
+  except AsyncQueueFullError:
+    discard
+
 template reqisterAction(wire: EthWireRef, actionDesc: string, body) =
   block:
     proc actionHandler(): Future[void] {.async: (raises: [CancelledError]).} =
       debug "Invoking broadcast action", desc=actionDesc
       body
 
-    await wire.actionQueue.addLast(actionHandler)
+    wire.enqueueAction(WireAction(run: actionHandler))
 
 func allowedOpsPerSecondCost(n: int): float =
   const replenishRate = (maxOperationQuota / fullReplenishTime.nanoseconds.float)
@@ -136,11 +150,6 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
 
   trace "Received new transactions",
     number = packet.transactions.len
-
-  if wire.actionQueue.full:
-    debug "Action queue full, dropping transaction broadcast",
-      number = packet.transactions.len
-    return
 
   wire.reqisterAction("TxPool consume incoming transactions"):
     for tx in packet.transactions:
@@ -453,22 +462,23 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
   if novelHashes.len == 0:
     return
 
-  if wire.actionQueue.full:
-    debug "Action queue full, dropping tx hash announcement",
-      hashes = novelHashes.len
-    # Release dedupe slots so a later retry can proceed.
-    for h in novelHashes:
-      wire.seenTransactions.del(h)
-    return
-
   let novelPacket = NewPooledTransactionHashesPacket(
     txTypes: novelTypes,
     txSizes: novelSizes,
     txHashes: novelHashes,
   )
 
-  wire.reqisterAction("Handle broadcast transactions hashes"):
+  proc fetchAction(): Future[void] {.async: (raises: [CancelledError]).} =
+    debug "Invoking broadcast action", desc = "Handle broadcast transactions hashes"
     await wire.fetchPooledTxs(peer, novelPacket)
+
+  proc releaseAction() {.gcsafe, raises: [].} =
+    debug "Evicted tx hash fetch from full action queue",
+      hashes = novelPacket.txHashes.len
+    for h in novelPacket.txHashes:
+      wire.seenTransactions.del(h)
+
+  wire.enqueueAction(WireAction(run: fetchAction, drop: releaseAction))
 
 proc cleanupSeenTransactions*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   # Collect expired keys in a single synchronous pass. Do NOT await while
@@ -677,7 +687,7 @@ proc setupTokenBucket*(): TokenBucket =
 proc actionLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   while true:
     let action = await wire.actionQueue.popFirst()
-    await action()
+    await action.run()
 
 proc stop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   # Detach the pool callback first so a late addTx cannot touch the
