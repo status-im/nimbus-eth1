@@ -9,8 +9,24 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <emscripten.h>
 #include "../../verifproxy.h"
+
+/* REMOVE WHEN vendor/nim-chronos skips the dispatcher wakeup fd on emscripten:
+ * chronos' newDispatcher() calls socketpair(), which emscripten does not
+ * implement. chronos only writes to sv[0] and reads from sv[1], so a pipe
+ * with its ends swapped is a drop-in replacement. */
+int socketpair(int domain, int type, int protocol, int sv[2]) {
+    (void)domain;
+    (void)type;
+    (void)protocol;
+    int fds[2];
+    if (pipe(fds) < 0) return -1;
+    sv[0] = fds[1];
+    sv[1] = fds[0];
+    return 0;
+}
 
 static Context *g_ctx = NULL;
 
