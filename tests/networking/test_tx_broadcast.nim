@@ -1041,3 +1041,144 @@ suite "Tx propagation":
       await env1.close()
 
     waitFor runTest()
+
+  test "full action queue starves the pool and the block builds empty":
+    ## Reproduces the empty block proposals seen on hoodi. While the
+    ## action queue is full, every incoming transaction - full 0x02
+    ## broadcast or hash announcement - is discarded without being marked
+    ## as seen, so nothing retries it later. The pool stays empty and the
+    ## block built from it has no transactions, even once the backlog that
+    ## blocked the queue is gone.
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+      check not env1.wire.syncerRunning()
+
+      # env2 holds the tx so a fetch can succeed. Freeze its gossip so the
+      # tx reaches env1 only through the two paths exercised below.
+      await env2.wire.txGossipHeartbeat.cancelAndWait()
+      let
+        ptx = env2.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+      check env2.txPool.addTx(ptx).isOk
+
+      # A node whose workers are all held up by slow peers: stop them and
+      # fill the queue with actions that never finish.
+      for fut in env1.wire.actionHeartbeat:
+        await fut.cancelAndWait()
+      for i in 0 ..< MAX_ACTION_HANDLER:
+        proc blockingHandler(): Future[void] {.async: (raises: [CancelledError]).} =
+          await sleepAsync(chronos.hours(1))
+        await env1.wire.actionQueue.addLast(blockingHandler)
+      check env1.wire.actionQueue.full
+
+      let announcement = NewPooledTransactionHashesPacket(
+        txTypes: @[ptx.tx.txType.byte],
+        txSizes: @[uint64(getEncodedLength(ptx))],
+        txHashes: @[txHash])
+
+      # The tx arrives both ways, as it does from a well connected peer set.
+      await env1.wire.handleTransactionsBroadcast(
+        TransactionsPacket(transactions: @[ptx.tx]), peer)
+      await env1.wire.handleTxHashesBroadcast(announcement, peer)
+
+      check env1.wire.actionQueue.full
+      check txHash notin env1.txPool
+      check txHash notin env1.wire.seenTransactions
+
+      var bundle = env1.txPool.assembleBlock(env1.chain.latestHash)
+      check bundle.isOk
+      check bundle.get.blk.transactions.len == 0
+
+      # Clear the backlog. The dropped tx is not part of it, so clearing
+      # does not bring it back: the next block is empty too.
+      while env1.wire.actionQueue.len > 0:
+        let popped {.used.} = await env1.wire.actionQueue.popFirst()
+      env1.wire.actionHeartbeat.add actionLoop(env1.wire)
+      bundle = env1.txPool.assembleBlock(env1.chain.latestHash)
+      check bundle.isOk
+      check bundle.get.blk.transactions.len == 0
+
+      # Control: the same announcement with a free queue is fetched,
+      # pooled and packed.
+      await env1.wire.handleTxHashesBroadcast(announcement, peer)
+      check await env1.waitForPooled(txHash)
+      bundle = env1.txPool.assembleBlock(env1.chain.latestHash)
+      check bundle.isOk
+      check bundle.get.blk.transactions.len == 1
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "full action queue refills from re-announcements before it drains":
+    ## Dropping an announcement releases its dedupe slot, so the same hash
+    ## from the next peer is novel again and is dropped again - once per
+    ## announcing peer, matching the hoodi trace. As soon as one slot
+    ## frees, the next announcement takes it at the back of the queue,
+    ## behind the whole backlog, so the queue is full again before any of
+    ## the old work has drained.
+    proc runTest() {.async.} =
+      let genesisPath = writeRecentGenesis()
+      var env1 = newBroadcastTestEnv(genesisPath)
+      var env2 = newBroadcastTestEnv(genesisPath)
+      var env3 = newBroadcastTestEnv(genesisPath)
+
+      let peerA = await connectPair(env1, env2)
+      check not peerA.isNil
+      discard await connectPair(env1, env3)
+      var peerB: Peer = nil
+      for p in env1.node.peers():
+        if p.id != peerA.id:
+          peerB = p
+      check not peerB.isNil
+      check not env1.wire.syncerRunning()
+
+      for fut in env1.wire.actionHeartbeat:
+        await fut.cancelAndWait()
+      for i in 0 ..< MAX_ACTION_HANDLER:
+        proc blockingHandler(): Future[void] {.async: (raises: [CancelledError]).} =
+          await sleepAsync(chronos.hours(1))
+        await env1.wire.actionQueue.addLast(blockingHandler)
+      check env1.wire.actionQueue.full
+
+      let
+        ptx = env2.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+        announcement = NewPooledTransactionHashesPacket(
+          txTypes: @[ptx.tx.txType.byte],
+          txSizes: @[uint64(getEncodedLength(ptx))],
+          txHashes: @[txHash])
+
+      # Each announcing peer is dropped in turn: the drop forgets the hash,
+      # so nothing dedupes the next peer's copy.
+      for peer in [peerA, peerB, peerA, peerB]:
+        await env1.wire.handleTxHashesBroadcast(announcement, peer)
+        check env1.wire.actionQueue.full
+        check txHash notin env1.wire.seenTransactions
+
+      # A worker finishes one old action.
+      let popped {.used.} = await env1.wire.actionQueue.popFirst()
+      check not env1.wire.actionQueue.full
+
+      # The next announcement refills the queue, behind the remaining
+      # backlog. Only now is the hash deduped for the other peer.
+      await env1.wire.handleTxHashesBroadcast(announcement, peerB)
+      check env1.wire.actionQueue.full
+      check txHash in env1.wire.seenTransactions
+      check env1.wire.seenTransactions[txHash].peers == @[peerB.id]
+
+      await env1.wire.handleTxHashesBroadcast(announcement, peerA)
+      check env1.wire.actionQueue.full
+      check env1.wire.seenTransactions[txHash].peers == @[peerB.id, peerA.id]
+
+      await env3.close()
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
