@@ -350,7 +350,7 @@ template downloadResume*(
 
     # Delete all accounts for partial sub-MPTs and contract codes.
     for accPath in accPaths:
-      ctx.deleteAccount(accPath, timer, info).isOkOr:
+      ctx.deleteAccount(accPath, info).isOkOr:
         break body                                  # failed
 
     bodyRc = typeof(bodyRc).ok()

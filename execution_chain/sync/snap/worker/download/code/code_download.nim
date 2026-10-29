@@ -275,12 +275,15 @@ template codeDownloadCommit*(
     # never happen in the first place.
     let accPaths = adb.walkCodeLock.toSeq()
     for accPath in accPaths:
-      ctx.deleteAccount(accPath, timer, info).isOkOr:
+      ctx.deleteAccount(accPath, info).isOkOr:
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body
 
-    if 0 < accPaths.len or 0 < nMissCode:
-      warn info & ": Cleared locked contract codes",
+    if 0 < accPaths.len:
+      warn info & ": Cleared locked contract code accounts",
+        nMissCode, nCodeLock=accPaths.len
+    elif 0 < nMissCode:
+      debug info & ": Updated contract code accounts for re-fetch",
         nMissCode, nCodeLock=accPaths.len
 
     bodyRc = typeof(bodyRc).ok()
