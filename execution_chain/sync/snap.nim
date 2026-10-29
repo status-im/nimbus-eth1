@@ -17,14 +17,14 @@ import
   ../core/chain,
   ../networking/p2p,
   ./snap/[snap_desc, worker],
-  ./snap/worker/helpers,
+  ./snap/worker/[helpers, import_coredb],
   ./[sync_sched, wire_protocol]
 
 from ./beacon
   import BeaconSyncRef, start
 
 export
-  snap_desc
+  snap_desc, import_coredb
 
 logScope:
   topics = "snap sync"
@@ -132,14 +132,8 @@ proc start*(desc: SnapSyncRef; bcSyncRef: BeaconSyncRef): bool =
   doAssert not desc.ctx.isNil
   doAssert not bcSyncRef.isNil
   desc.ctx.pool.beaconSync = bcSyncRef
-  if not desc.isRunning and
-     # Re-start  beacon sync in server mode.
-     bcSyncRef.start(standBy=true):
-    # The `resetSync()` directive prevents from accidential re-initialising
-    # after shut down. This has no effect on the first `starSynct()` call.
-    discard desc.resetSync()
-    if desc.startSync():
-      return true
+  if not desc.isRunning:
+    return desc.startSync()
   # false
 
 proc stop*(desc: SnapSyncRef) {.async.} =

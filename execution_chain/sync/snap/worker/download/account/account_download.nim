@@ -138,8 +138,9 @@ template accountDownload*(
       else:
         # Set dirty flags according to `storageRoot` and `codeHash`
         if acc.storageRoot != EMPTY_ROOT_HASH:
-          let ikrs = ItemKeyRangeSet.init ItemKeyRangeMax
-          adb.putStoMissingIntv(w.accHash, ikrs, info).isOkOr:
+          var data: CacheStoMissingIntvData
+          data.ranges = ItemKeyRangeSet.init ItemKeyRangeMax
+          adb.putStoMissingIntv(w.accHash, data, info).isOkOr:
             bodyRc = typeof(bodyRc).err(ECacheError)
             ctx.accUnproc.commit(ivReq, ivReq)      # registry roll back
             break body                              # return err()
@@ -152,7 +153,7 @@ template accountDownload*(
             break body                              # return err()
           dirtyCode = true
 
-      adb.putFlatAcc(w.accHash, dirtyStorage, dirtyCode, acc, info).isOkOr:
+      adb.putFlatAcc(w.accHash, (dirtyStorage, dirtyCode, acc), info).isOkOr:
         bodyRc = typeof(bodyRc).err(ECacheError)
         ctx.accUnproc.commit(ivReq, ivReq)          # registry roll back
         break body

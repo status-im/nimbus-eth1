@@ -52,26 +52,6 @@ proc wipeDir(baseDir: string) =
   except CatchableError as exc:
     warn "Could not wipe database directory", baseDir, err = exc.msg
 
-proc ecdbDirSwap*(baseDir, replaceDir: string): Result[void,string] =
-  ## Move the databse on `replaceDir` to the place of the database on `baseDir`.
-  ## The old database is backed up, the sub-folder of the database has a tilde
-  ## appended, potentially deleting an earlier instance of a backup.
-  ##
-  let replacePath = replaceDir.ecdbDir
-  if not replacePath.dirExists:
-    return err("No such folder: " & replacePath)
-  let dbPath = baseDir.ecdbDir
-  try:
-    if dbPath.dirExists:
-      let bakPath = dbPath & "~"
-      bakPath.removeDir()
-      dbPath.moveDir bakPath
-    replacePath.moveDir dbPath
-    replaceDir.wipeDir()
-  except CatchableError as e:
-    return err("Could not swap DB dirs" & ", error=" & e.msg)
-  ok()
-
 proc isClosed*(session: SharedWriteBatchRef): bool =
   session == nil or session.batch.isClosed()
 

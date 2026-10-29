@@ -43,9 +43,8 @@ type
     blkStagedBottom: BlockNumber
 
     state: BeaconState
-    standByMode: bool
+    standByMode: BeaconServerMode
     nSyncPeers: int
-    eta: chronos.Duration
 
   TickerRef = ref object
     ## Ticker descriptor object
@@ -89,8 +88,7 @@ proc updater(ctx: BeaconCtxRef): TickerStats =
 
     state:           ctx.pool.syncState,
     standByMode:     ctx.pool.standByMode,
-    nSyncPeers:      ctx.nSyncPeers(),
-    eta:             ctx.pool.syncEta.avg)
+    nSyncPeers:      ctx.nSyncPeers())
 
 proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
   let
@@ -101,8 +99,8 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
   if elapsed <= tickerLogInterval:
     return
 
-  if data.standByMode:
-    if t.lastStats.standByMode and
+  if data.standByMode == BeaconServerMode.standBy:
+    if t.lastStats.standByMode == BeaconServerMode.standBy and
        elapsed <= tickerLogStandByMax:
       return
   elif data == t.lastStats and
@@ -151,45 +149,62 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
          elif bU == "n/a": bS
          else: bS & "<-" & bU
 
-    st = case data.state
-      of idle: "0"
-      of headers: "h"
-      of headersCancel: "x"
-      of headersFinish: "f"
-      of linger: "l"
-      of blocks: "b"
-      of blocksCancel: "x"
-      of blocksFinish: "f"
-
     nP = data.nSyncPeers
 
     # With `int64`, there are more than 29*10^10 years range for seconds
     up = (now - t.started).toStr
-    eta = data.eta.toStr
+    eta = ctx.pool.syncEta.avg.toStr
 
   t.lastStats = data
   t.visited = now
 
-  if data.standByMode:
-    debug "Sync stand-by mode", up, eta, nP, B, L,
+  if data.standByMode == BeaconServerMode.standBy:
+    debug "Sync stand-by mode", up, eta="n/a", nP, B, L,
       D, H, T, F
-  else:
+
+  elif data.standByMode != BeaconServerMode.none:
     case data.state
     of idle:
-      debug "Sync state idle", up, eta, nP, B, L,
+      debug "Sync state idle", up, eta="n/a", nP, B, L,
         D, H, T, F
 
-    of headers, headersCancel, headersFinish:
-      debug "Sync state headers", up, eta, nP, st, B, L,
+    of headers:
+      debug "Sync state headers", up, eta, nP, B, L,
+        C, D, H, T, F, hQ
+
+    of headersCancel, headersFinish:
+      debug "Sync state headers", up, eta="n/a", nP, B, L,
         C, D, H, T, F, hQ
 
     of linger:
-      debug "Linger", up, eta, nP, st, B, L,
+      debug "Sync state linger", up, eta="n/a", nP, B, L,
+        C, D, H, T, F, hQ
+    else:
+      debug "Sync state blocks is wrong here"
+
+  else:
+    case data.state
+    of idle:
+      debug "Sync state idle", up, eta="n/a", nP, B, L,
+        D, H, T, F
+
+    of headers:
+      debug "Sync state headers", up, eta, nP, B, L,
         C, D, H, T, F, hQ
 
-    of blocks, blocksCancel, blocksFinish:
-      debug "Sync state blocks", up, eta, nP, st, B, L,
+    of headersCancel, headersFinish:
+      debug "Sync state headers", up, eta="n/a", nP, B, L,
+        C, D, H, T, F, hQ
+
+    of blocks:
+      debug "Sync state blocks", up, eta, nP, B, L,
         D, I, H, T, F, bQ
+
+    of blocksCancel, blocksFinish:
+      debug "Sync state blocks", up, eta="n/a", nP, B, L,
+        D, I, H, T, F, bQ
+    else:
+      debug "Sync state linger is wrong here"
 
 # ------------------------------------------------------------------------------
 # Public function

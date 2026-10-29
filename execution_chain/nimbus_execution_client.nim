@@ -188,7 +188,8 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, p
 
   # Configure beacon syncer.
   nimbus.beaconSyncRef = BeaconSyncRef.init()
-  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
+  nimbus.beaconSyncRef.config(
+    nimbus.ethNode, nimbus.fc, config.maxPeers, standBy=config.snapSyncEnabled)
 
   # Optional for pre-setting the sync target (e.g. for debugging)
   if config.beaconSyncTarget.isSome():
@@ -270,6 +271,26 @@ proc setupPruning(
     nimbus.balPruner = BalPrunerRef.init(com)
     nimbus.balPruner.start()
 
+proc verifyEmptyStateDb(db: CoreDbRef, complain: static[string]) =
+    # Note that Genesis might have been stored on the kvt, already. This
+    # happens if snap sync was interrupted and restarted.
+    let
+      txFrame = db.baseTxFrame()
+      baseNum = txFrame.getSavedStateBlockNumber()
+    # A zero state block number is a necessary condition for an empty
+    # state DB. Checking this number before the state root avoids
+    # potentially costly calculation of the state root hash if the state
+    # DB has also other than Genesis accounts.
+    if baseNum != 0:
+      fatal complain, baseNum
+      quit(QuitFailure)
+    let stateRoot = txFrame.getStateRoot().valueOr:
+      fatal "Cannot retrieve state root", error=($$error)
+      quit(QuitFailure)
+    if stateRoot != EMPTY_ROOT_HASH:
+      fatal complain, baseNum, stateRoot
+      quit(QuitFailure)
+
 proc internalRestart(
     config: ExecutionClientConf;
     com: CommonRef;
@@ -277,7 +298,19 @@ proc internalRestart(
     nimbus: NimbusNode;
       ) =
   ## Update database and restart some services after snap sync.
-  let newDbPath = nimbus.snapSyncRef.sharedState().newDbPath
+
+  # Verify that the state DB is still empty
+  com.db.verifyEmptyStateDb(
+    "State DB has changed to non-empty. Cannot proceed. STOP")
+
+  # Import snap data.
+  let
+    txFrame = com.db.baseTxFrame()
+    cacheDb = nimbus.snapSyncRef.ctx.pool.cacheDB
+    stats = com.db.importCoreDb(txFrame, cacheDb, "Snap Sync Import").valueOr:
+      fatal "CoreDb import failed. STOP"
+      quit(QuitFailure)
+  info "CoreDb import OK", stats
 
   # Shut down currently unwanted modules. No async poller must be running.
   QuitFailure.onException("Exception while reconfiguring"):
@@ -288,70 +321,15 @@ proc internalRestart(
     if nimbus.snapWire.isNil.not and not config.snapSyncEnabled:
       waitFor nimbus.snapWire.stop()
 
-    # Reaching here, all of the peers will have gone due to the long time
-    # it takes to import the database.
-    #
-    # Also, the beacon syncer depends on the header cache module which in
-    # turn uses sort of a hard KVT reference not managed by the `CoreDb`.
-    # So it must be released and re-assignd.
     waitFor nimbus.beaconSyncRef.stop()
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-    # Pruning needs to be stopped and restarted on the new upcoming fork.
-    if nimbus.backgroundPruner.isNil.not:
-      waitFor nimbus.backgroundPruner.stop()
-      nimbus.backgroundPruner = BackgroundPrunerRef(nil)
-    if nimbus.balPruner.isNil.not:
-      waitFor nimbus.balPruner.stop()
-      nimbus.balPruner = BalPrunerRef(nil)
-
-  # Update database
-  block updateDb:
-    # FIXME.
-    # This section will be reworked. Rather than accepting a new initialised
-    # DB, the current one will be loaded by snap data assuming it is empty.
-    # There is no recourse if that fails (e.g. state root mismatch.)
-    com.db.close()
-    let
-      params = config.computeNetworkParams()
-      dataDir = config.dataDir(params)
-    dataDir.ecdbDirSwap(newDbPath).isOkOr:
-      fatal "Cannot update database", dataDir, newDbPath, error
-      QuitFailure.onException("Exception while shutting down"):
-        waitFor nimbus.closeWait()
-      quit(QuitFailure)
-
-    # Reassign updated DB. This is managed transparently by the `CoreDb`
-    # wrapper, the sole exception being an unmanaged KVT table for the
-    # header cache. This is handled below (see `beaconSyncRef.refresh()`.)
-    when compileOption("threads"):
-      let
-        taskpool = setupTaskpool(config.numThreads)
-        dbOpts = config.getCoreDbOpts(params, taskpool.numThreads)
-      AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
-      com.taskpool = taskpool
-      com.db.mpt.taskpool = taskpool
-    else:
-      dbOpts = config.getCoreDbOpts(params, 0)
-      AristoDbRocks.initCoreDbRef(com.db, config.dataDir(params), dbOpts)
-
-  # Force `com` and other modules to ajust. History and forks have leapt
+  # Force `com` and other modules to ajust. History and forks have lept
   # forward. So modules must update accordingly.
   com.refresh()
 
-  if true:
-    warn "Snap sync was successful and a new DB is available." &
-      " The modules update code has to be re-worked. So the EL" &
-      " stops here and needs to be manually restarted."
-    quit(QuitSuccess)
-
+  # Ditto for FC module
   nimbus.fc.refresh()
-  QuitFailure.onException("Cannot initialise RPC client history"):
-    nimbus.fc.portal = HistoryExpiryRef.init(config, com)
-  nimbus.txPool.refresh()
-
-  # Reinitialise pruning as it depends og the current fork.
-  nimbus.setupPruning(config, com)
 
   # Restart beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init()
@@ -377,19 +355,17 @@ proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef, para
 
   # Not starting any syncer if there is definitely no way to run it. This
   # avoids polling (i.e. waiting for instructions) and some logging.
-  block startSyncer:
-    if not nimbus.beaconSyncRef.isNil:
-      if nimbus.snapSyncRef.isNil:
-        # Run full sync by starting beacon sync now.
-        if nimbus.beaconSyncRef.start():
-          break startSyncer
-      else:
-        # Start snap sync which will use beacon sync in stand-by mode.
-        # When done, the system will resume full beacon sync.
-        if nimbus.snapSyncRef.start(nimbus.beaconSyncRef):
-          break startSyncer
+  if nimbus.beaconSyncRef.isNil:
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
     nimbus.snapSyncRef = SnapSyncRef(nil)
+  else:
+    if not nimbus.beaconSyncRef.start():
+      fatal "Cannot start beacon syncer"
+      quit(QuitFailure)
+    if not nimbus.snapSyncRef.isNil and
+       not nimbus.snapSyncRef.start(nimbus.beaconSyncRef):
+      fatal "Cannot start snap syncer"
+      quit(QuitFailure)
 
   nimbus.setupPruning(config, com)
 
@@ -399,7 +375,10 @@ proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef, para
   nimbus
 
 proc setupCommonRef*(
-    config: ExecutionClientConf, params: NetworkParams, numThreads: int): (CommonRef, bool) =
+    config: ExecutionClientConf;
+    params: NetworkParams;
+    numThreads: int;
+      ): tuple[com: CommonRef, keyCacheEnabled, emptyStateDb: bool] =
 
   if config.statelessProvider and config.balParallelExecution:
     warn "Stateless provider enabled. Running without BAL parallel execution"
@@ -415,10 +394,13 @@ proc setupCommonRef*(
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config, params)
 
-  # FIXME.
-  # When running snap sync, the ledger (aka Aristo) database needs to be kept
-  # empty while Genesis (with the proper state root) will be stored in kvt.
-  # To set that up is a task for the common module.
+  # Must not snap sync on a non-empty state DB.
+  var emptyStateDb = false
+  if config.cmd != NimbusCmd.`import`:
+    if config.snapSyncEnabled:
+      coreDB.verifyEmptyStateDb "Cannot snap sync on a pre-initialised state DB"
+      emptyStateDb = true
+
   let com = CommonRef.new(
     db = coreDB,
     params = params,
@@ -430,7 +412,8 @@ proc setupCommonRef*(
     balStatePrefetchWorkers = config.balStatePrefetchWorkers,
     balParallelExecution = config.balParallelExecution and
         not config.statelessProvider and not disableParallelFeatures,
-    parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures)
+    parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures,
+    emptyStateDb = emptyStateDb)
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
@@ -453,7 +436,7 @@ proc setupCommonRef*(
   com.extraData = config.extraData
   com.maxBlobs = config.maxBlobs
 
-  (com, dbOpts.rdbKeyCacheSize > 0)
+  (com, dbOpts.rdbKeyCacheSize > 0, emptyStateDb)
 
 # ------------------------------------------------------------------------------
 # Public functions, `main()` API
@@ -584,11 +567,15 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   when compileOption("threads"):
     let
       taskpool = setupTaskpool(config.numThreads)
-      (com, keyCacheEnabled) = setupCommonRef(config, params, taskpool.numThreads)
+      setupData = setupCommonRef(config, params, taskpool.numThreads)
+      com = setupData.com
+
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
   else:
-    let (com, keyCacheEnabled) = setupCommonRef(config, params, 0)
+    let
+      setupData = setupCommonRef(config, params, 0)
+      com = setupData.com
 
   block checkKeyCache:
     let
@@ -599,12 +586,13 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
           baseNum, err = error
         quit(QuitFailure)
 
-    if base.stateRoot == EMPTY_ROOT_HASH:
+    if base.stateRoot == EMPTY_ROOT_HASH or
+       setupData.emptyStateDb:
       # Prevent calling computeStateRoot if base have no accounts
       # Usually a genesis block
       break checkKeyCache
 
-    if keyCacheEnabled:
+    if setupData.keyCacheEnabled:
       # Make sure key cache isn't empty
       discard com.db.mpt.txRef.computeStateRoot(skipLayers = true).valueOr:
         fatal "Cannot compute root keys", msg = error

@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos, minilru, results],
   pkg/[beacon_chain/process_state, stew/byteutils],
-  ./worker/[download, helpers, cache_db, import_coredb,
+  ./worker/[download, helpers, cache_db,
             state_forward, start_stop, update, worker_desc]
 
 logScope:
@@ -172,40 +172,24 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       debug info & ": Forwarded state", pivotNum=ctx.pool.pivotNum,
         forwardNum=ctx.pool.forwardNum
 
-    of SnapAssembleMpt:
-      let start = Moment.now()
-      ctx.importCoreDb(info).isErrOr:
-        debug info & ": coreDb import ok",
-          stats=value, ela=(Moment.now()-start).toStr
-        break body
-
-      ctx.pool.resetReq = true                      # not much else possible
-      debug info & ": coreDb import failed", ela=(Moment.now()-start).toStr
-
     of SnapStop:
       ctx.accountDownloadMetricsReset()             # cosmetics
       ctx.storageDownloadMetricsReset()
 
       # Done, terminate
-      if 0 < ctx.pool.newCoreDb.newDbPath.len:
-        if not ctx.pool.newCoreDb.waitSync:
-          notice info & ": Snap sync successful, will terminate",
-            dbPath=ctx.pool.newCoreDb.newDbPath
-          ctx.pool.newCoreDb.waitSync = true
-          ctx.headerDownloadCancel()
-        elif ctx.beaconState == BeaconState.idle:
-          ctx.daemon = false                        # all done, stop
-          ctx.pool.newCoreDb.waitSync = false
-          ctx.pool.newCoreDb.snapSyncStop = true
-        else:
-          ctx.pool.lastBcSyncLog.logCtrl(beaconSyncIdleLogWaitInterval):
-            debug info & ": Waiting for beacon sync to terminate",
-              beaconState=ctx.beaconState
-          bodyRc = daemonWaitHeaderStopInterval     # wait for beacon sync
-        break body
-
-      # This should have been handled by the FSA update
-      raiseAssert info & ": Snap sync is not ready yet to terminate"
+      if not ctx.pool.newCoreDb.waitSync:
+        notice info & ": Snap sync will terminate"
+        ctx.pool.newCoreDb.waitSync = true
+        ctx.headerDownloadCancel()
+      elif ctx.beaconState == BeaconState.idle:
+        ctx.daemon = false                          # all done, stop
+        ctx.pool.newCoreDb.waitSync = false
+        ctx.pool.newCoreDb.snapSyncStop = true
+      else:
+        ctx.pool.lastBcSyncLog.logCtrl(beaconSyncIdleLogWaitInterval):
+          debug info & ": Waiting for beacon sync to terminate",
+            beaconState=ctx.beaconState
+        bodyRc = daemonWaitHeaderStopInterval       # wait for beacon sync
 
     # End block: `body`
 

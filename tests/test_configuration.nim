@@ -135,6 +135,14 @@ proc configurationMain*() =
       let ex = ee.getRpcFlags()
       check { RpcFlag.Eth, RpcFlag.Admin } == ex
 
+      let ff = makeConfig(@["--rpc-api:testing"])
+      let fx = ff.getRpcFlags()
+      check { RpcFlag.Testing } == fx
+
+      let gg = makeConfig(@["--rpc-api:eth,testing"])
+      let gx = gg.getRpcFlags()
+      check { RpcFlag.Eth, RpcFlag.Testing } == gx
+
     test "ws-api":
       let config = makeTestConfig()
       let flags = config.getWsFlags()
@@ -151,6 +159,10 @@ proc configurationMain*() =
       let cc = makeConfig(@["--ws-api:eth,debug"])
       let cx = cc.getWsFlags()
       check { RpcFlag.Eth, RpcFlag.Debug } == cx
+
+      let dd = makeConfig(@["--ws-api:eth,testing"])
+      let dx = dd.getWsFlags()
+      check { RpcFlag.Eth, RpcFlag.Testing } == dx
 
     test "--bootstrap-node and --bootstrap-file":
       let config = makeTestConfig()
@@ -311,6 +323,11 @@ proc configurationMain*() =
         config.balParallelExecution == false
         config.threadSafeCaches() == false
         config.parallelFeaturesEnabled() == false
+
+    test "debug-sto-static-lookup":
+      check:
+        makeConfig(@[]).dbOptions().stoStaticLookup == true
+        makeConfig(@["--debug-sto-static-lookup=false"]).dbOptions().stoStaticLookup == false
 
     let rng = newRng()
     test "net-key random":

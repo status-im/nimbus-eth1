@@ -39,9 +39,9 @@ const
     ## A bit of space on top of the filter is left for data block caching
   defaultRdbVtxCacheSize* = 653 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
-  defaultRdbKeyCacheSize* = 1280 * 1024 * 1024
+  defaultRdbKeyCacheSize* = 1262 * 1024 * 1024
     ## Hashes of the above
-  defaultRdbBranchCacheSize* = 1331 * 1024 * 1024
+  defaultRdbBranchCacheSize* = 1259 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
   defaultAccLeafCacheSize* = 1280 * 1024
     ## Number of entries in the account leaf LRU cache, see `.accLeaves` field
@@ -53,6 +53,7 @@ const
     ## The max number of snapshots to store in the aristo database.
   defaultBlockCacheType* = hyperClockCache
     ## The default RocksDb block cache.
+  defaultStoStaticLookup* = true
 
 type DbOptions* = object # Options that are transported to the database layer
   maxOpenFiles*: int
@@ -69,6 +70,7 @@ type DbOptions* = object # Options that are transported to the database layer
   parallelStateRootComputation*: bool
   threadSafeCaches*: bool
   blockCacheType*: RocksDbBlockCacheType
+  stoStaticLookup*: bool
 
 func init*(
     T: type DbOptions,
@@ -86,6 +88,7 @@ func init*(
     parallelStateRootComputation = true,
     threadSafeCaches = true,
     blockCacheType = defaultBlockCacheType,
+    stoStaticLookup = defaultStoStaticLookup,
 ): T =
   T(
     maxOpenFiles: maxOpenFiles,
@@ -101,5 +104,6 @@ func init*(
     maxSnapshots: maxSnapshots,
     parallelStateRootComputation: parallelStateRootComputation,
     threadSafeCaches: threadSafeCaches,
-    blockCacheType: blockCacheType
+    blockCacheType: blockCacheType,
+    stoStaticLookup: stoStaticLookup,
   )
