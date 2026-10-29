@@ -12,6 +12,7 @@
 {.push raises: [].}
 
 import
+  std/sequtils,
   pkg/[results, rocksdb],
   pkg/stew/byteutils,
   ./[db_const, db_desc]
@@ -27,7 +28,7 @@ when extraTraceMessages:
 # ------------------------------------------------------------------------------
 
 proc rGet*(adb: RocksDbRef, key: openArray[byte]): BlobResult =
-  const info = "mpt/get: "
+  const info = "get: "
 
   var res: seq[byte]
   proc onData(data: openArray[byte]) =
@@ -48,7 +49,7 @@ proc rPut*(
     key: openArray[byte];
     data: openArray[byte];
       ): PutResult =
-  const info = "mpt/put: "
+  const info = "put: "
   adb.put(key, data).isOkOr:
     when extraTraceMessages:
       trace info & "failed", key=key.toHex, `error`=error
@@ -56,11 +57,19 @@ proc rPut*(
   ok()
 
 proc rDel*(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
-  const info = "mpt/del: "
+  const info = "del: "
   adb.delete(key).isOkOr:
     when extraTraceMessages:
       trace info & "failed", key=key.toHex, `error`=error
     return err(info & error)
+  ok()
+
+proc rClear*(adb: RocksDbReadWriteRef, col: MptAsmCol, width: int): DelResult =
+  const info = "clear: "
+  adb.deleteRange(@[col.uint8], @[col.uint8] & 0xffu8.repeat(width)).isOkOr:
+    when extraTraceMessages:
+      trace info & "failed", width, `error`=error
+    return err(info & $error)
   ok()
 
 # ------------------------------------------------------------------------------

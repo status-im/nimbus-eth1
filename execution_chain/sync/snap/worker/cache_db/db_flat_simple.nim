@@ -34,6 +34,9 @@ template failedUpdating(info, what: static[string]): auto =
 template failedDeleting(info, what: static[string]): auto =
   info & ": Failed deleting " & what & " on cache"
 
+template failedClearing(info, what: static[string]): auto =
+  info & ": Failed deleting " & what & " on cache"
+
 template failedRangeUpd(info, what: static[string]): auto =
   info & ": Failed updaing " & what & " ranges"
 
@@ -321,6 +324,17 @@ proc delFlatSlot*(
       ): Opt[void] =
   db.delFlatSlot(accPath).isOkOr:
     error info.failedDeleting FlatSlotInfo & " sub-MPT", accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc clearFlatSlot*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.clearFlatSlot(accPath).isOkOr:
+    error info.failedClearing FlatSlotInfo & " sub-MPT", accPath=accPath.toStr,
       `error`=error
     return err()
   ok()

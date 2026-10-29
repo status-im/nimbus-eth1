@@ -87,6 +87,9 @@ template put33*(
 template del33*(db: CacheDbRef; col: MptAsmCol; key1: untyped): untyped =
   db.adb.rDel(col.key33 key1)
 
+template clr33*(db: CacheDbRef, col: MptAsmCol): untyped =
+  db.adb.rClear(col, 33)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
