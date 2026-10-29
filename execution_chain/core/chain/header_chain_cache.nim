@@ -60,6 +60,7 @@
 {.push raises:[].}
 
 import
+  std/sequtils,
   pkg/[chronicles, metrics, stew/endians2],
   pkg/eth/[common, rlp],
   "../.."/[common, db/core_db, db/storage_types],
@@ -138,6 +139,14 @@ const
 
 const
   HccDbInfoKey = 0.beaconHeaderKey
+
+  MinBnKey = beaconHeaderKey(low BlockNumber)
+  MaxBnKey = beaconHeaderKey(high BlockNumber)
+    ## Used for deleteing the full key range
+
+  MinHashKey = genericHashKey(zeroHash32)
+  MaxHashKey = genericHashKey(Hash32.copyFrom 0xffu8.repeat(32))
+    ## Ditto
 
 # ------------------------------------------------------------------------------
 # Private debugging and print functions
@@ -237,11 +246,13 @@ proc persistInfo(hc: HeaderChainRef) =
     last:  hc.session.head.number)
 
 proc persistClear(hc: HeaderChainRef) =
-  ## Clear persistent database
-  let w = hc.kvt.getInfo.valueOr: return
-  for bn in w.least .. w.last:
-    hc.kvt.delHeader(bn)
-  hc.kvt.delInfo()
+  ## Clear persistent cache database
+  hc.kvt.getInfo.isErrOr:
+    # This also clears the info record stored at `MinBnKey`
+    hc.kvt.delRangeBe(MinBnKey.toOpenArray, MaxBnKey.toOpenArray).isOkOr:
+      info "Error cleaning up cached block numbers", `error`=error
+    hc.kvt.delRangeBe(MinHashKey.toOpenArray, MaxHashKey.toOpenArray).isOkOr:
+      info "Error cleaning up cached hashes", `error`=error
 
 # ------------------------------------------------------------------------------
 # Private functions

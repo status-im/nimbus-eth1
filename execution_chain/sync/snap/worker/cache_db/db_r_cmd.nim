@@ -12,7 +12,7 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
+  std/sequtils,
   pkg/[results, rocksdb],
   pkg/stew/byteutils,
   ./[db_const, db_desc]
@@ -28,7 +28,7 @@ when extraTraceMessages:
 # ------------------------------------------------------------------------------
 
 proc rGet*(adb: RocksDbRef, key: openArray[byte]): BlobResult =
-  const info = "mpt/get: "
+  const info = "get: "
 
   var res: seq[byte]
   proc onData(data: openArray[byte]) =
@@ -49,7 +49,7 @@ proc rPut*(
     key: openArray[byte];
     data: openArray[byte];
       ): PutResult =
-  const info = "mpt/put: "
+  const info = "put: "
   adb.put(key, data).isOkOr:
     when extraTraceMessages:
       trace info & "failed", key=key.toHex, `error`=error
@@ -57,48 +57,20 @@ proc rPut*(
   ok()
 
 proc rDel*(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
-  const info = "mpt/del: "
+  const info = "del: "
   adb.delete(key).isOkOr:
     when extraTraceMessages:
       trace info & "failed", key=key.toHex, `error`=error
     return err(info & error)
   ok()
 
-proc rClear*(
-    adb: RocksDbReadWriteRef;
-    col: MptAsmCol;
-    force = false;
-      ): DelResult =
-  const info = "mpt/clear: "
-  let rit = adb.openIterator().valueOr:
-    return err(info & "Iterator open error, col=" & $col & ", error=" & $error)
-  defer: rit.close()
-
-  var
-    nErrors = 0
-    key: seq[byte]
-
-  rit.seekToKey(@[col.ord.byte])
-  while rit.isValid():
-    key.setLen(0)
-    rit.key(proc(w: openArray[byte]) {.gcsafe, raises: [].} = key = @w)
-    rit.next()
-
-    if 0 < key.len:
-      if col.ord.byte != key[0]:
-        break
-
-      adb.delete(key).isOkOr:
-        if not force:
-          return err(info & "Deletion failed" &
-            ", col=" & $col & ", error=" & $error)
-        nErrors.inc
-
-  if 0 < nErrors:
-    err(info & "Some deletions failed" &
-      ", col=" & $col & ", nFailed=" & $nErrors)
-  else:
-    ok()
+proc rClear*(adb: RocksDbReadWriteRef, col: MptAsmCol, width: int): DelResult =
+  const info = "clear: "
+  adb.deleteRange(@[col.uint8], @[col.uint8] & 0xffu8.repeat(width)).isOkOr:
+    when extraTraceMessages:
+      trace info & "failed", width, `error`=error
+    return err(info & $error)
+  ok()
 
 # ------------------------------------------------------------------------------
 # End
