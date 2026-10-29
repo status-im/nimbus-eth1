@@ -41,7 +41,7 @@ func createBloom*(blooms: openArray[Bloom], bloom: var Bloom) =
 
 proc makeReceipt*(
     vmState: BaseVMState; txType: TxType): StoredReceipt =
-  if vmState.com.isByzantiumOrLater(vmState.blockNumber, vmState.blockCtx.timestamp):
+  if vmState.hardFork >= Byzantium:
     result.isHash = false
     result.status = vmState.status
   else:

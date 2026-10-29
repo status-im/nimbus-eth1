@@ -177,7 +177,11 @@ proc processTransaction*(
       ok(move(callResult))
 
   if persist:
-    vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
+    vmState.ledger.persist(
+      clearEmptyAccount = vmState.hardFork >= Spurious,
+      # Before byzantium, we need a state root per transaction
+      collect = vmState.hardFork >= Byzantium,
+    )
 
   # Checked after persist so a BLOCKHASH miss, a missing-code lookup (both set
   # during the EVM run) and a partial witness persist failure are all caught here.

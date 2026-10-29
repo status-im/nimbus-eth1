@@ -425,12 +425,6 @@ func activationTime*(com: CommonRef, fork: HardFork): Opt[EthTime] =
   ## Returns the activation time of the given hard fork
   com.forkTransitionTable.timeThresholds[fork]
 
-func isSpuriousOrLater*(com: CommonRef, number: BlockNumber, time: EthTime): bool =
-  com.toHardFork(forkDeterminationInfo(number, time)) >= Spurious
-
-func isByzantiumOrLater*(com: CommonRef, number: BlockNumber, time: EthTime): bool =
-  com.toHardFork(forkDeterminationInfo(number, time)) >= Byzantium
-
 func isLondonOrLater*(com: CommonRef, number: BlockNumber, time: EthTime): bool =
   com.toHardFork(forkDeterminationInfo(number, time)) >= London
 
