@@ -41,35 +41,35 @@ func isFullRange(itrs: ItemKeyRangeSet): bool =
   itrs.total == 0 and                               # => 0 or 2^256
   itrs.chunks == 1                                  # => one intv => full MPT
 
-proc getQueryList(
+proc getStoAccsAndRoots(
     buddy: SnapPeerRef;
-    stoQueue: openArray[WalkStoMissingIntvData];
+    stoStatQ: openArray[WalkStoMissingIntvData];
     info: static[string];                           # Log message prefix
       ): Result[(seq[ItemKey],seq[StoreRoot]),ErrorType] =
-  ## For the argument `stoQueue[]`, collect
-  ## * storage data paths (for query), and
+  ## For the argument `stoStatQ[]`, collect
+  ## * account path keys (for storage query), and
   ## * sub-MPT storage roots for verification.
   ##
   let
     adb = buddy.ctx.pool.cacheDB
     peer {.inject,used.} = $buddy.peer              # logging only
   var
-    accPaths = newSeqOfCap[ItemKey](stoQueue.len)
-    stoRoots = newSeqOfCap[StoreRoot](stoQueue.len)
-  for w in stoQueue:
+    accKeys = newSeqOfCap[ItemKey](stoStatQ.len)
+    stoRoots = newSeqOfCap[StoreRoot](stoStatQ.len)
+  for w in stoStatQ:
     let acc = adb.getFlatAcc(w.accPath, info).valueOr:
       error info & ": Missing storage account", peer,
         accPath=w.accPath.toStr, syncState=($buddy.syncState)
       return err(ECacheError)                       # cannot do much, here
-    accPaths.add w.accPath.to(ItemKey)              # FIXME use `Hash32` instead
+    accKeys.add w.accPath.to(ItemKey)               # FIXME use `Hash32` instead
     stoRoots.add StoreRoot(acc.account.storageRoot)
 
-  ok((accPaths, stoRoots))
+  ok((accKeys, stoRoots))
 
 proc storeValidatedSlots(
     buddy: SnapPeerRef;                             # Snap peer
     stoRoots: openArray[StoreRoot];                 # storage roots
-    stoQ: var seq[WalkStoMissingIntvData];          # to be modified
+    stoStatQ: var seq[WalkStoMissingIntvData];      # to be modified
     qStart: int;                                    # first root/queue item
     data: StorageRangesData;                        # fetch result
     ivReq: ItemKeyRange;                            # applies to last item
@@ -86,7 +86,7 @@ proc storeValidatedSlots(
     let
       slots = data.slots[n]
       stoRoot = stoRoots[qStart + n]
-      accPath = stoQ[qStart + n].accPath
+      accPath = stoStatQ[qStart + n].accPath
 
     # Validate full sub-MPT.
     stoRoot.validate(ivReq.minPt, slots, emptyProof).isOkOr:
@@ -103,30 +103,42 @@ proc storeValidatedSlots(
         return err(ECacheError)
 
     # Mark the current sub-MPT complete in the local batch/cache.
-    stoQ[qStart + n].data.ranges.clear()            # set MPT complete
+    stoStatQ[qStart + n].data.ranges.clear()        # set MPT complete
 
-  # Validate single last partial sub-MPT data with non-empty proof. This
-  # entry `data.slot` is separate from the list `data.slots[]`.
+  # Validate single last partial sub-MPT data with non-empty proof. The
+  # entry `data.partial[]` is separate from the list `data.slots[[]]`.
   if 0 < data.proof.len:
+    #
+    # If there is a `proof[]` list, it was either because there was a
+    # partial sub-MPT request in which case
+    # * stoRoots.len == stoStatQ.len == 1
+    # * data.slots.len == 0,
+    #
+    # or the last entry of a fetch response was delivered as a partial result
+    # in which case
+    # * data.slots.len + 1 <= stoRoots.len == stoStatQ.len.
+    #
+    # Note that the latter case includes the former.
     let
       topInx = data.slots.len
       stoRoot = stoRoots[qStart + topInx]
+      accPath = stoStatQ[qStart + topInx].accPath
 
     # Validate slots, some partial sub-MPT for this storage sub-MPT
     let mpt = stoRoot.validate(ivReq.minPt, data.partial, data.proof).valueOr:
       buddy.ctrl.zombie = true                      # peer not useful
       debug info & ": Storage partial sub-MPT validation failed", peer,
-        stoRoot=stoRoot.toStr, nPartial=data.partial.len, nProof=data.proof.len,
-        syncState=($buddy.syncState)
+        accPath=accPath.toStr, stoRoot=stoRoot.toStr, nPartial=data.partial.len,
+        nProof=data.proof.len, syncState=($buddy.syncState)
       return err(EValidationError)
 
     # Store probably partial sub-MPT
-    let accPath = stoQ[qStart + topInx].accPath
     for w in data.partial:
       adb.putFlatSlot(accPath, w.slotHash, w.slotData, info).isOkOr:
         return err(ECacheError)
 
-    let rngRef = stoQ[qStart + topInx].data.ranges  # `stoQ[]` is var parameter
+    # Modify `stoStatQ[]` ranges
+    let rngRef = stoStatQ[qStart + topInx].data.ranges
     if mpt.rightMost():                             # no more right leafs
       rngRef.clear()                                # set MPT complete
     else:
@@ -168,6 +180,12 @@ proc fetchAndLockStoList(
       error info & ": Error walking missing storage list", `error`=w.error
       return err(ECacheError)
 
+    # Check whether the storage sub-MPT for this account was cached at a
+    # previous session and the corresponding data record for this account
+    # has not been updated, yet.
+    if buddy.ctx.accUnproc.covered w.accPath.to(ItemKey):
+      continue                                      # come back later
+
     if w.data.ranges.isFullRange():
       stoFullQ.add w
       if fetchStorageBatchMax <= stoFullQ.len:      # add item unless seq-max
@@ -201,7 +219,7 @@ proc fetchAndLockStoList(
 
 proc saveStoUpdates(
     buddy: SnapPeerRef;
-    stoQueue: openArray[WalkStoMissingIntvData];
+    stoStatQ: openArray[WalkStoMissingIntvData];
     info: static[string];                           # Log message prefix
       ): Result[int,ErrorType] =
   ## Post process updated storage sub-MPT. The corresponding accounting data
@@ -209,7 +227,7 @@ proc saveStoUpdates(
   ##
   let adb = buddy.ctx.pool.cacheDB
   var (nPartial, nErrors) = (0,0)
-  for w in stoQueue:
+  for w in stoStatQ:
     if 0 < w.data.ranges.chunks():
       # Save back incomplete sub-MPT. Store updated interval of missing slots.
       # The corresounding accounts record needs not to be updated.
@@ -244,7 +262,7 @@ template downloadImpl(
     buddy: SnapPeerRef;                             # Snap peer
     stateRoot: StateRoot;
     number: BlockNumber;                            # for logging only
-    stoQ: var seq[WalkStoMissingIntvData];          # to be modified
+    stoStatQ: var seq[WalkStoMissingIntvData];      # to be modified
     ivReq: ItemKeyRange;                            # Interval to fetch
     info: static[string];                           # Log message prefix
       ): auto =
@@ -253,19 +271,19 @@ template downloadImpl(
   var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
     let
-      (accPaths, stoRoots) = buddy.getQueryList(stoQ, info).valueOr:
+      (accKeys, stoRoots) = buddy.getStoAccsAndRoots(stoStatQ, info).valueOr:
         bodyRc = typeof(bodyRc).err(error)
         break body
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = stateRoot.toStr        # logging only
 
-    # Fetch storage slots from list `accPaths[]`
+    # Fetch storage slots from list `accKeys[]`
     var start = 0
-    while start < accPaths.len:
-      let accLeft: seq[ItemKey] = accPaths[start .. ^1]
+    while start < accKeys.len:
+      let accKeysLeft = accKeys[start .. ^1]
 
       # Fetch from network
-      let data = buddy.fetchStorage(stateRoot, accLeft, ivReq).valueOr:
+      let data = buddy.fetchStorage(stateRoot, accKeysLeft, ivReq).valueOr:
         if 0 < start:
           break
         bodyRc = typeof(bodyRc).err(error)
@@ -273,7 +291,7 @@ template downloadImpl(
 
       # Store and validate data
       buddy.storeValidatedSlots(
-           stoRoots, stoQ, start, data, ivReq, info).isOkOr:
+           stoRoots, stoStatQ, start, data, ivReq, info).isOkOr:
         bodyRc = typeof(bodyRc).err(error)
         break body                                  # exit => error
 
@@ -305,12 +323,12 @@ template queueAndDownload(
 
     # Collect some missing storage intervals from cache. If the function
     # `fetchAndLockStoList()` succeeds, it will return a non-empty list.
-    var stoQ = buddy.fetchAndLockStoList(info).valueOr:
+    var stoStatQ = buddy.fetchAndLockStoList(info).valueOr:
       bodyRc = typeof(bodyRc).err(error)            # maybe completed, already
       break body
 
     let
-      reqRef = stoQ[0].data.ranges
+      reqRef = stoStatQ[0].data.ranges
       ivReq =
         # If the first entry is a fully missing sub-MPT, then all queue enties
         # are fully missing sub-MPTs (no partial storage sub-MPT.)
@@ -324,23 +342,23 @@ template queueAndDownload(
 
     # Download a list of full sub-MPTs, or a single one with a sub-range.
     # The `downloadImpl()` directive below will store any success in the
-    # `stoQ[]` list.
-    buddy.downloadImpl(stateRoot, number, stoQ, ivReq, info).isOkOr:
-      buddy.saveStoUpdates(stoQ, info).isOkOr:      # restore by `stoQ[]`
+    # `stoStatQ[]` list.
+    buddy.downloadImpl(stateRoot, number, stoStatQ, ivReq, info).isOkOr:
+      buddy.saveStoUpdates(stoStatQ, info).isOkOr:  # restore by `stoStatQ[]`
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # oops, serious error
       bodyRc = typeof(bodyRc).err(error)
       break body
 
     # Save rest if there is any (i.e. partially completes storage tries)
-    let nPartial {.inject,used.} = buddy.saveStoUpdates(stoQ, info).valueOr:
+    let nPartial {.inject,used.} = buddy.saveStoUpdates(stoStatQ, info).valueOr:
       trace info & ": Storage processing failed", peer, root, number,
         syncState=($buddy.syncState), `error`=bodyRc.error
       bodyRc = typeof(bodyRc).err(error)
       break body
 
     chronicles.info info & ": Storage sub-MPTs saved", peer, root,
-      number, nComplete=(stoQ.len - nPartial), nPartial,
+      number, nComplete=(stoStatQ.len - nPartial), nPartial,
       syncState=($buddy.syncState)
 
     ctx.storageDownloadMetricsUpdate(info)          # update metrics

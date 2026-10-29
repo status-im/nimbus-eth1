@@ -29,6 +29,7 @@ type
   CoredbImportStats* = tuple
     nAccounts: uint
     nStorage: uint
+    nStoRoot: uint
     nSlots: uint
     nCodes: uint
     nErrors: uint
@@ -91,27 +92,27 @@ proc mergeAccAndSto(
     account: Account;
     count: var int;
     info: static[string];
-      ): tuple[nSlots: uint, ok: bool] =
+      ): tuple[nSlots: uint, stoRoot: bool, ok: bool] =
   # Save account so that the storage trie can be updated
   tx.mergeAccount(accPath, account, info).isOkOr:
-    return (0,false)
+    return (0,false,false)
 
   # Clear storage trie
   tx.clearStorage(accPath).isOkOr:
     error info & ": Failed clearing storage slots",
       accPath=accPath.toStr, `error`=($$error)
-    return (0,false)
+    return (0,false,false)
 
   var nSlots = 0u
   for w in adb.walkFlatSlot(accPath):
     if 0 < w.error.len:
       error info & ": Error walking storage slot", accPath=accPath.toStr,
         nSlotsSoFar=nSlots, slotKey=w.slotKey.toStr, `error`=w.error
-      return (nSlots,false)
+      return (nSlots,false,false)
     tx.mergeSlot(accPath, w.slotKey, w.data).isOkOr:
       error info & ": Failed merging slot", accPath=accPath.toStr,
         nSlotsSoFar=nSlots, slotKey=w.slotKey.toStr, `error`=($$error)
-      return (nSlots,false)
+      return (nSlots,false,false)
 
     nSlots.inc
     count.inc
@@ -129,14 +130,14 @@ proc mergeAccAndSto(
     var stoRoot = tx.fetchStorageRoot(accPath).valueOr:
       error info & ": Failed computing storage root", nSlots,
         accPath=accPath.toStr, `error`=($$error)
-      return (nSlots,false)
+      return (nSlots,true,false)
     if account.storageRoot != stoRoot:
       error info & ": Mismatch with pre-set storage root", nSlots,
         accPath=accPath.toStr, stoRoot=stoRoot.toStr,
         expected=account.storageRoot.toStr
-      return (nSlots,false)
+      return (nSlots,true,false)
 
-  (nSlots,true)
+  (nSlots,true,true)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -206,6 +207,8 @@ proc importFlat*(
         tx, adb, w.accPath, w.data.account, count, info)
       u.nSlots += w.nSlots
       u.nStorage.inc
+      if w.stoRoot:
+        u.nStoRoot.inc
       if not w.ok:
         u.nErrors.inc
         if stopOnError:
