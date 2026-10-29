@@ -26,7 +26,7 @@ import
   ./kvt/[kvt_desc],
   ./storage_types
 
-export base, base_desc, results, TxFrameData
+export base, base_desc, results
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -67,33 +67,6 @@ proc getTxFrameBlob(
     return err(DataInvalid.toError("invalid aristo region length"))
 
   ok blob
-
-proc txFrameFrom*(parent: CoreDbTxRef; data: var TxFrameData): CoreDbTxRef =
-  ## A child of `parent` holding the decoded delta, moved out of `data`
-  let frame = parent.txFrameBegin()
-  frame.aTx.sTab        = move(data.sTab)
-  frame.aTx.kMap        = move(data.kMap)
-  frame.aTx.accLeaves   = move(data.accLeaves)
-  frame.aTx.stoLeaves   = move(data.stoLeaves)
-  frame.aTx.vTop        = data.vTop
-  frame.aTx.blockNumber = data.blockNumber
-  frame
-
-proc loadTxFrameAsChild*(
-    srcBase: CoreDbTxRef;
-    parent: CoreDbTxRef;
-    blockHash: Hash32;
-      ): CoreDbRc[CoreDbTxRef] =
-  ## Read the stored delta for `blockHash` from `srcBase`'s KVT and return
-  ## a new `CoreDbTxRef` rooted as a child of `parent`, with the stored
-  ## delta applied.  Used by the chain persistence layer to materialise
-  ## per-block frames in the chain hierarchy without re-executing blocks.
-  let blob = ?srcBase.getTxFrameBlob(blockHash)
-
-  var aData = deblobifyTxFrame(blob.toOpenArray(4, blob.high)).valueOr:
-    return err(error.toError("aristo deblobify"))
-
-  ok parent.txFrameFrom(aData)
 
 proc foldTxFrame*(
     srcBase: CoreDbTxRef;

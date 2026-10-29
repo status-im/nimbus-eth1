@@ -62,6 +62,14 @@ proc setupEnv(): TestEnv =
     xp:     TxPoolRef.new(chain),
     sender: sender)
 
+proc foldStored(coreDb: CoreDbRef, h: Hash32): CoreDbRc[Opt[uint64]] =
+  ## Fold the stored entry for `h` into a fresh frame on top of base
+  let
+    base = coreDb.baseTxFrame
+    frame = base.txFrameBegin()
+  defer: frame.dispose()
+  base.foldTxFrame(frame, h, frame.aTx.level)
+
 suite "TxFrame blobify round-trip":
 
   test "storage_types: txFrameKey has correct discriminator":
@@ -75,14 +83,13 @@ suite "TxFrame blobify round-trip":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let frame = coreDb.txFrameBegin()
     let blob = blobifyTxFrame(frame.aTx)
-    let rc = deblobifyTxFrame(blob)
-    check rc.isOk
-    let d = rc.value
+    let d = AristoTxRef()
+    check blob.deblobifyTxFrameInto(d, 1).isOk
     check d.vTop == frame.aTx.vTop
     check d.blockNumber == frame.aTx.blockNumber
-    check d.sTab.len == 0
-    check d.accLeaves.len == 0
-    check d.stoLeaves.len == 0
+    check d.snapshot.vtx.len == 0
+    check d.snapshot.acc.len == 0
+    check d.snapshot.sto.len == 0
     frame.dispose()
 
   test "aristo_tx_blobify: wrong version returns error":
@@ -90,7 +97,7 @@ suite "TxFrame blobify round-trip":
     let frame = coreDb.txFrameBegin()
     var blob = blobifyTxFrame(frame.aTx)
     blob[0] = 0xFF'u8
-    let rc = deblobifyTxFrame(blob)
+    let rc = blob.deblobifyTxFrameInto(AristoTxRef(), 1)
     check rc.isErr
     check rc.error == DeblobTxFrameVersion
     frame.dispose()
@@ -100,9 +107,9 @@ suite "TxFrame blobify round-trip":
     let frame = coreDb.txFrameBegin()
     frame.aTx.blockNumber = Opt.some(42'u64)
     let blob = blobifyTxFrame(frame.aTx)
-    let rc = deblobifyTxFrame(blob)
-    check rc.isOk
-    check rc.value.blockNumber == Opt.some(42'u64)
+    let d = AristoTxRef()
+    check blob.deblobifyTxFrameInto(d, 1).get == Opt.some(42'u64)
+    check d.blockNumber == Opt.some(42'u64)
     frame.dispose()
 
   test "forked-chain importBlock txFrame round-trip with transactions":
@@ -164,23 +171,21 @@ suite "TxFrame blobify round-trip":
     let aBlob = stored.get[4 .. ^1]
     check aBlob.len > 1
 
-    let restored = com.db.baseTxFrame().txFrameBegin()
-
-    let aRc = deblobifyTxFrame(aBlob)
-    check aRc.isOk
-    let aData = aRc.value
-    restored.aTx.sTab        = aData.sTab
-    restored.aTx.kMap        = aData.kMap
-    restored.aTx.accLeaves   = aData.accLeaves
-    restored.aTx.stoLeaves   = aData.stoLeaves
-    restored.aTx.vTop        = aData.vTop
-    restored.aTx.blockNumber = aData.blockNumber
+    let
+      base = com.db.baseTxFrame()
+      restored = base.txFrameBegin()
+    check base.foldTxFrame(restored, blk1Hash, restored.aTx.level).isOk
+    restored.loadSnapshot(base)
 
     # --- Round-trip equality assertions ---
-    check restored.aTx.sTab.len == preSTabLen
-    check restored.aTx.kMap.len == preKMapLen
-    check restored.aTx.accLeaves.len == preAccLeavesLen
-    check restored.aTx.stoLeaves.len == preStoLeavesLen
+    var restoredKMapLen = 0
+    for item in restored.aTx.snapshot.vtx.values:
+      if item[1] != VOID_HASH_KEY:
+        inc restoredKMapLen
+    check restored.aTx.snapshot.vtx.len == preSTabLen
+    check restoredKMapLen == preKMapLen
+    check restored.aTx.snapshot.acc.len == preAccLeavesLen
+    check restored.aTx.snapshot.sto.len == preStoLeavesLen
     check restored.aTx.vTop == preVTop
     check restored.aTx.blockNumber == preBlockNumber
 
@@ -430,36 +435,34 @@ suite "TxFrame blobify round-trip":
       get.transactions == survivor.transactions
     check chain.baseTxFrame.getBlockHeader(dead.header.computeBlockHash).isErr
 
-  test "loadTxFrameAsChild: missing key returns Err":
+  test "foldTxFrame: missing key returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let h = Hash32.fromHex("0x" & "21".repeat(32))
-    let base = coreDb.baseTxFrame
-    let rc = loadTxFrameAsChild(base, base, h)
+    let rc = coreDb.foldStored(h)
     check rc.isErr
+    check rc.error.error == KvtNotFound
 
-  test "loadTxFrameAsChild: blob shorter than 4 bytes returns DataInvalid":
+  test "foldTxFrame: blob shorter than 4 bytes returns DataInvalid":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let h = Hash32.fromHex("0x" & "22".repeat(32))
     check coreDb.baseTxFrame.put(
       txFrameKey(h).toOpenArray, @[1'u8, 2, 3]).isOk
-    let base = coreDb.baseTxFrame
-    let rc = loadTxFrameAsChild(base, base, h)
+    let rc = coreDb.foldStored(h)
     check rc.isErr
     check "blob too short" in rc.error.ctx
 
-  test "loadTxFrameAsChild: aristo region truncated returns Err":
+  test "foldTxFrame: aristo region truncated returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let h = Hash32.fromHex("0x" & "23".repeat(32))
     var blob = newSeq[byte]()
     blob.add uint32(1000).toBytesBE
     blob.add uint32(0).toBytesBE
     check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, blob).isOk
-    let base = coreDb.baseTxFrame
-    let rc = loadTxFrameAsChild(base, base, h)
+    let rc = coreDb.foldStored(h)
     check rc.isErr
     check "invalid aristo region length" in rc.error.ctx
 
-  test "loadTxFrameAsChild: trailing bytes return Err":
+  test "foldTxFrame: trailing bytes return Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let frame = coreDb.txFrameBegin()
     let aBlob = blobifyTxFrame(frame.aTx)
@@ -471,12 +474,11 @@ suite "TxFrame blobify round-trip":
     for b in aBlob: blob.add b
     blob.add uint32(1000).toBytesBE
     check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, blob).isOk
-    let base = coreDb.baseTxFrame
-    let rc = loadTxFrameAsChild(base, base, h)
+    let rc = coreDb.foldStored(h)
     check rc.isErr
     check "invalid aristo region length" in rc.error.ctx
 
-  test "loadTxFrameAsChild: corrupted aristo blob returns Err":
+  test "foldTxFrame: corrupted aristo blob returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let frame = coreDb.txFrameBegin()
     var aBlob = blobifyTxFrame(frame.aTx)
@@ -486,42 +488,36 @@ suite "TxFrame blobify round-trip":
     let h = Hash32.fromHex("0x" & "25".repeat(32))
     let blob = buildTxFrameBlob(aBlob)
     check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, blob).isOk
-    let base = coreDb.baseTxFrame
-    let rc = loadTxFrameAsChild(base, base, h)
+    let rc = coreDb.foldStored(h)
     check rc.isErr
     check "aristo deblobify" in rc.error.ctx
 
-  test "loadTxFrameAsChild: empty aristo region returns Err":
+  test "foldTxFrame: empty aristo region returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let h = Hash32.fromHex("0x" & "26".repeat(32))
     check coreDb.baseTxFrame.put(txFrameKey(h).toOpenArray, 0'u32.toBytesBE).isOk
-    let base = coreDb.baseTxFrame
-    let rc = loadTxFrameAsChild(base, base, h)
+    let rc = coreDb.foldStored(h)
     check rc.isErr
     check "invalid aristo region length" in rc.error.ctx
 
-  test "loadTxFrameAsChild: deleted hash returns not found":
+  test "foldTxFrame: deleted hash returns not found":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let src    = coreDb.txFrameBegin()
     let h      = Hash32.fromHex("0x" & "32".repeat(32))
     check coreDb.baseTxFrame.storeTxFrame(src, h).isOk
     src.dispose()
 
-    let base = coreDb.baseTxFrame
-    let pre  = loadTxFrameAsChild(base, base, h)
-    check pre.isOk
-    pre.value.dispose()
+    check coreDb.foldStored(h).isOk
 
     check coreDb.baseTxFrame.deleteTxFrame(h).isOk
     let probe = coreDb.baseTxFrame.get(txFrameKey(h).toOpenArray)
     check probe.isErr and probe.error.error == KvtNotFound
 
-    let base2 = coreDb.baseTxFrame
-    let rc = loadTxFrameAsChild(base2, base2, h)
+    let rc = coreDb.foldStored(h)
     check rc.isErr
     check rc.error.error == KvtNotFound
 
-  test "loadTxFrameAsChild: stored frame round-trips":
+  test "foldTxFrame: stored frame round-trips":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let src = coreDb.txFrameBegin()
     src.aTx.blockNumber = Opt.some(99'u64)
@@ -529,13 +525,8 @@ suite "TxFrame blobify round-trip":
     let h = Hash32.fromHex("0x" & "27".repeat(32))
     check coreDb.baseTxFrame.storeTxFrame(src, h).isOk
 
-    let base = coreDb.baseTxFrame
-    let rc = loadTxFrameAsChild(base, base, h)
-    check rc.isOk
-    let loaded = rc.value
-    check loaded.aTx.blockNumber == Opt.some(99'u64)
+    check coreDb.foldStored(h).get == Opt.some(99'u64)
 
-    loaded.dispose()
     src.dispose()
 
   test "foldTxFrame: newer frame wins, folded newest first":
@@ -638,14 +629,6 @@ suite "TxFrame blobify round-trip":
     check p1 in frame.aTx.snapshot.sto
     check p2 in frame.aTx.snapshot.sto
 
-    frame.dispose()
-
-  test "foldTxFrame: missing blob returns Err":
-    let coreDb = newCoreDbRef(AristoDbMemory)
-    let frame = coreDb.baseTxFrame.txFrameBegin()
-    let rc = coreDb.baseTxFrame.foldTxFrame(frame, Hash32.fromHex("0x" & "43".repeat(32)), 1)
-    check rc.isErr
-    check rc.error.error == KvtNotFound
     frame.dispose()
 
 when isMainModule:

@@ -97,46 +97,31 @@ proc writeCanonicalMappings*(c: ForkedChainRef, base: BlockRef) =
         expect("write transaction lookup")
   db.setHead(base.hash).expect("write canonical head")
 
-proc replayFrame(c: ForkedChainRef, b: BlockRef): Result[CoreDbTxRef, string] =
-  ## A new frame holding the state of `b` as a snapshot, folded from the frame
-  ## blobs of the blocks above base. Each entry keeps the level of its block.
-  doAssert b != c.base, "base has no frame blob"
+proc restoreFrame*(c: ForkedChainRef, b: BlockRef): Result[void, string] =
+  ## Give `b` its state back in its own frame when it has none, folded from the
+  ## frame blobs of the blocks above base with each entry at the level of its
+  ## block, and queued with the other snapshots
+  if b == c.base or b.txFrame.hasSnapshot:
+    return ok()
 
-  let
-    baseLevel = c.baseTxFrame.aTx.level
-    frame = c.baseTxFrame.txFrameBegin()
+  let baseLevel = c.baseTxFrame.aTx.level
   for it in ancestors(b):
     if it == c.base:
       break
     let
       level = baseLevel + int(it.number - c.base.number)
-      number = c.baseTxFrame.foldTxFrame(frame, it.hash, level).valueOr:
-        frame.dispose()
+      number = c.baseTxFrame.foldTxFrame(b.txFrame, it.hash, level).valueOr:
         return err($error)
     if number != Opt.some(it.number):
-      frame.dispose()
       return err("corrupted FC: frame block number mismatch")
 
-  frame.loadSnapshot(c.baseTxFrame)
-  frame.blockHashFn = b.txFrame.blockHashFn
-  ok frame
-
-proc stateFrame*(c: ForkedChainRef, b: BlockRef): CoreDbTxRef =
-  ## The frame holding the state of `b`: its own while that has a snapshot,
-  ## otherwise a replayed one
-  if b == c.base or b.txFrame.hasSnapshot:
-    return b.txFrame
-  c.replayFrame(b).expect("frame blobs of a block above base")
-
-proc restoreFrame*(c: ForkedChainRef, b: BlockRef): Result[void, string] =
-  ## Give `b` its state back in its own frame
-  if b != c.base and not b.txFrame.hasSnapshot:
-    b.txFrame.aTx = (?c.replayFrame(b)).aTx
+  b.txFrame.loadSnapshot(c.baseTxFrame)
   ok()
 
-proc setLatest*(c: ForkedChainRef, b: BlockRef) =
+proc stateFrame*(c: ForkedChainRef, b: BlockRef): CoreDbTxRef =
+  ## The frame of `b`, holding its state
   c.restoreFrame(b).expect("frame blobs of a block above base")
-  c.latest = b
+  b.txFrame
 
 proc deleteBlockData*(c: ForkedChainRef, b: BlockRef) =
   # Blocks above base have no number or tx lookups on disk to delete

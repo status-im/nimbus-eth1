@@ -346,6 +346,10 @@ proc followLatest(xp: TxPoolRef) =
   if xp.chain.latestHash != xp.vmState.blockCtx.parentHash:
     xp.pos.timestamp = max(xp.pos.timestamp, xp.chain.latestHeader.timestamp)
     xp.updateVmState()
+  else:
+    # An evicted snapshot is loaded back into the same frame, which the pool's
+    # frame still sits on
+    discard xp.chain.txFrame(xp.chain.latestHash)
 
 # ------------------------------------------------------------------------------
 # Public functions

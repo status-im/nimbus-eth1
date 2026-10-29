@@ -99,7 +99,7 @@ proc appendBlock(c: ForkedChainRef,
   )
 
   c.hashToBlock[blkHash] = newBlock
-  c.setLatest(newBlock)
+  c.latest = newBlock
 
   for i, head in c.heads:
     if head.hash == parent.hash:
@@ -322,7 +322,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
           break
 
     doAssert(candidate.isNil.not)
-    c.setLatest(candidate)
+    c.latest = candidate
 
   nec_dag_pruning_duration_seconds.inc((Moment.now() - pruneStart).fseconds())
   nec_dag_heads.set(c.heads.len.int64)
@@ -542,10 +542,6 @@ proc validateBlock(
     moveParentHashKeys = c.persistBatchSize > 1 and (blk.header.number mod c.persistBatchSize) != 1
     parentFrame = c.stateFrame(parent)
     txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
-
-  defer:
-    if parentFrame != parent.txFrame:
-      parentFrame.dispose()
 
   # BLOCKHASH resolves along the block's own branch
   txFrame.blockHashFn = branchBlockHashFn(parent, blk.header.number, blkHash)
@@ -932,7 +928,7 @@ proc setHead*(c: ForkedChainRef, headHash: Hash32): Result[void, string] =
       c.removeBlockFromCache(it)
 
   c.heads = @[head]
-  c.setLatest(head)
+  c.latest = head
   c.updateHead(head)
 
   if c.fcuSafe.number > head.number:

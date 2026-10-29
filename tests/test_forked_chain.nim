@@ -1901,6 +1901,35 @@ suite "ForkedChainRef tests":
       checkImportBlock(chain, blk)
       check chain.stateRootOf(blk) == blk.header.stateRoot
 
+  test "a state read loads the snapshot into the block's own frame":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7]:
+      checkImportBlock(chain, blk)
+    check not chain.frameInMemory(blk6)
+    let frame = chain.txFrame(blk6.blockHash)
+    check frame.getStateRoot().expect("state root") == blk6.header.stateRoot
+    check chain.frameInMemory(blk6)
+    # The next read finds it there, nothing is replayed
+    check chain.txFrame(blk6.blockHash) == frame
+    checkImportBlock(chain, Fk7)
+    check chain.stateRootOf(Fk7) == Fk7.header.stateRoot
+
+  test "a new latest without a snapshot gets its state on first use":
+    let
+      com = env.newCom()
+      chain = ForkedChainRef.init(com)
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7]:
+      checkImportBlock(chain, blk)
+    check chain.setHead(blk4.blockHash).isOk
+    check chain.latestHash == blk4.blockHash
+    check not chain.frameInMemory(blk4)
+    check chain.stateRootOf(blk4) == blk4.header.stateRoot
+    check chain.frameInMemory(blk4)
+    checkImportBlock(chain, blk5)
+    check chain.stateRootOf(blk5) == blk5.header.stateRoot
+
   test "pruned fork heads free their snapshots":
     let
       com = env.newCom()

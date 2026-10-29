@@ -211,15 +211,6 @@ proc blobifyTxFrame*(tx: AristoTxRef): seq[byte] =
 # Public: deserialise
 # ------------------------------------------------------------------------------
 
-type
-  TxFrameData* = object
-    vTop*:        VertexID
-    blockNumber*: Opt[uint64]
-    sTab*:        Table[RootedVertexID, VertexRef]
-    kMap*:        Table[RootedVertexID, HashKey]
-    accLeaves*:   Table[Hash32, AccLeafRef]
-    stoLeaves*:   Table[Hash32, StoLeafRef]
-
 proc deblobifyTxFrameInto*(
     data: openArray[byte];
     txFrame: AristoTxRef;
@@ -311,22 +302,6 @@ proc deblobifyTxFrameInto*(
       pos += blobLen
 
   ok blockNumber
-
-proc deblobifyTxFrame*(
-    data: openArray[byte]
-): Result[TxFrameData, AristoError] =
-  let tx = AristoTxRef()
-  discard ?data.deblobifyTxFrameInto(tx, level = 0)
-  var res = TxFrameData(vTop: tx.vTop, blockNumber: tx.blockNumber)
-  for rvid, item in tx.snapshot.vtx:
-    res.sTab[rvid] = item[0]
-    if item[1] != VOID_HASH_KEY:
-      res.kMap[rvid] = item[1]
-  for h, item in tx.snapshot.acc:
-    res.accLeaves[h] = item[0]
-  for h, item in tx.snapshot.sto:
-    res.stoLeaves[h] = item[0]
-  ok res
 
 # ------------------------------------------------------------------------------
 # End
