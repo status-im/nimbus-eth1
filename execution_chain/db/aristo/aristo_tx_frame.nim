@@ -182,9 +182,18 @@ proc detach*(txFrame: AristoTxRef) =
   txFrame.stoLeaves.reset()
   txFrame.detached = true
 
-proc trackSnapshot*(txFrame: AristoTxRef) =
-  ## Queue the snapshot with the others, evicting the lowest one when full
-  txFrame.db.addSnapshotFrame(txFrame)
+proc loadSnapshot*(txFrame: AristoTxRef, base: AristoTxRef) =
+  ## Make `txFrame` a detached child of `base` whose state is the snapshot
+  ## folded in by `deblobifyTxFrameInto`. The in-memory state of `base` goes
+  ## under it, and the snapshot is queued with the others.
+  doAssert base.isKeyframe() and txFrame.blockNumber.isSome()
+
+  txFrame.db = base.db
+  txFrame.parent = base
+  txFrame.snapshot.copyUnder(base)
+  txFrame.snapshot.level = Opt.some(base.level)
+  txFrame.detach()
+  base.db.addSnapshotFrame(txFrame)
 
 proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   doAssert not txFrame.isDisposed()

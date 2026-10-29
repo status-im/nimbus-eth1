@@ -348,7 +348,7 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
 
   let startTime = Moment.now()
 
-  c.restoreFrame(base, track = false).expect("frame blobs of a block above base")
+  c.restoreFrame(base).expect("frame blobs of a block above base")
 
   # State root sanity check is performed to verify, before writing to disk,
   # that optimistically checked blocks indeed end up being stored with a

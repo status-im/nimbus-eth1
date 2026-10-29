@@ -1883,19 +1883,23 @@ suite "ForkedChainRef tests":
     for blk in [blk7, Fk7, B5, C5]:
       check chain.stateRootOf(blk) == blk.header.stateRoot
 
-  test "a state read on a block without a snapshot evicts no fork head":
+  test "a state read on a block without a snapshot counts against the limit":
     let
       com = env.newCom()
       chain = ForkedChainRef.init(com)
-    com.db.mpt.maxSnapshots = 2
+    com.db.mpt.maxSnapshots = 3
     for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7, B4]:
       checkImportBlock(chain, blk)
-    for blk in [blk3, blk5]:
-      check chain.stateRootOf(blk) == blk.header.stateRoot
     check com.db.mpt.snapshots.len == 2
-    check chain.frameInMemory(blk7)
-    check chain.frameInMemory(B4)
-    check not chain.frameInMemory(blk5)
+    check chain.stateRootOf(blk5) == blk5.header.stateRoot
+    check com.db.mpt.snapshots.len == 3
+    for blk in [blk3, blk2]:
+      check chain.stateRootOf(blk) == blk.header.stateRoot
+      check com.db.mpt.snapshots.len == 3
+    # A head whose snapshot was evicted replays when it is extended
+    for blk in [B5, blk8]:
+      checkImportBlock(chain, blk)
+      check chain.stateRootOf(blk) == blk.header.stateRoot
 
   test "pruned fork heads free their snapshots":
     let

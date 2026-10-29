@@ -102,40 +102,40 @@ proc replayFrame(c: ForkedChainRef, b: BlockRef): Result[CoreDbTxRef, string] =
   ## blobs of the blocks above base. Each entry keeps the level of its block.
   doAssert b != c.base, "base has no frame blob"
 
-  let baseLevel = c.baseTxFrame.aTx.level
-  var data: TxFrameSnapshot
+  let
+    baseLevel = c.baseTxFrame.aTx.level
+    frame = c.baseTxFrame.txFrameBegin()
   for it in ancestors(b):
     if it == c.base:
       break
     let
       level = baseLevel + int(it.number - c.base.number)
-      number = c.baseTxFrame.foldTxFrame(data, it.hash, level).valueOr:
+      number = c.baseTxFrame.foldTxFrame(frame, it.hash, level).valueOr:
+        frame.dispose()
         return err($error)
     if number != Opt.some(it.number):
+      frame.dispose()
       return err("corrupted FC: frame block number mismatch")
 
-  let frame = c.baseTxFrame.snapshotFrame(data, baseLevel + int(b.number - c.base.number))
+  frame.loadSnapshot(c.baseTxFrame)
   frame.blockHashFn = b.txFrame.blockHashFn
   ok frame
 
 proc stateFrame*(c: ForkedChainRef, b: BlockRef): CoreDbTxRef =
   ## The frame holding the state of `b`: its own while that has a snapshot,
-  ## otherwise a replayed one that is not queued with the other snapshots
+  ## otherwise a replayed one
   if b == c.base or b.txFrame.hasSnapshot:
     return b.txFrame
   c.replayFrame(b).expect("frame blobs of a block above base")
 
-proc restoreFrame*(c: ForkedChainRef, b: BlockRef, track: bool): Result[void, string] =
-  ## Give `b` its state back in its own frame, queued with the other
-  ## snapshots when `track`
+proc restoreFrame*(c: ForkedChainRef, b: BlockRef): Result[void, string] =
+  ## Give `b` its state back in its own frame
   if b != c.base and not b.txFrame.hasSnapshot:
     b.txFrame.aTx = (?c.replayFrame(b)).aTx
-    if track:
-      b.txFrame.trackSnapshot()
   ok()
 
 proc setLatest*(c: ForkedChainRef, b: BlockRef) =
-  c.restoreFrame(b, track = true).expect("frame blobs of a block above base")
+  c.restoreFrame(b).expect("frame blobs of a block above base")
   c.latest = b
 
 proc deleteBlockData*(c: ForkedChainRef, b: BlockRef) =

@@ -77,9 +77,11 @@ proc getVmState(
   c.vmStateBlockHash.reset()
 
   # The ledger caches are valid only if the new block builds directly on the
-  # block this vmState just executed.
+  # block this vmState just executed, in the same frame: an evicted snapshot
+  # comes back in a new one.
   if not cached.isNil():
     if parentBlk.hash == cachedBlockHash and
+        txFrame.aTx.parent == cached.ledger.txFrame.aTx and
         cached.reinit(parentBlk.header, header, txFrame, enableBalTracker):
       return cached
 

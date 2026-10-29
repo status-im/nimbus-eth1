@@ -287,7 +287,7 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     for it in loopNotFinalized(val[]):
       it.finalize()
 
-  ?restored.restoreFrame(restored.latest, track = true)
+  ?restored.restoreFrame(restored.latest)
 
   fc.base = restored.base
   fc.latest = restored.latest

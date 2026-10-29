@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[strutils, tables],
+  std/[heapqueue, strutils, tables],
   pkg/chronos,
   stew/endians2,
   eth/common/hashes,
@@ -575,14 +575,16 @@ suite "TxFrame blobify round-trip":
     older.dispose()
     newer.dispose()
 
-    var data: TxFrameSnapshot
-    check base.foldTxFrame(data, hNew, 2).get == Opt.some(2'u64)
-    check base.foldTxFrame(data, hOld, 1).get == Opt.some(1'u64)
+    let frame = base.txFrameBegin()
+    check base.foldTxFrame(frame, hNew, 2).get == Opt.some(2'u64)
+    check base.foldTxFrame(frame, hOld, 1).get == Opt.some(1'u64)
 
-    # Each entry is stamped with the level of the frame that wrote it
-    template vtx(n: int): VtxSnapshot = data.snapshot.vtx[rv(n)]
-    check data.vTop == VertexID(11)
-    check data.blockNumber == Opt.some(2'u64)
+    # Each entry is stamped with the level of the frame that wrote it, and
+    # the newest frame gives the header
+    template vtx(n: int): VtxSnapshot = frame.aTx.snapshot.vtx[rv(n)]
+    check frame.aTx.vTop == VertexID(11)
+    check frame.aTx.blockNumber == Opt.some(2'u64)
+    check frame.aTx.level == 2
     check BranchRef(vtx(2)[0]).startVid == VertexID(21)
     check vtx(2)[1] == VOID_HASH_KEY
     check vtx(2)[2] == 2
@@ -591,12 +593,14 @@ suite "TxFrame blobify round-trip":
     check BranchRef(vtx(4)[0]).startVid == VertexID(40)
     check vtx(4)[1] == k4
     check vtx(4)[2] == 1
-    check data.snapshot.sto[p1][0].isNil
-    check data.snapshot.sto[p1][1] == 2
-    check data.snapshot.sto[p2][0].stoData == 2.u256
-    check data.snapshot.sto[p2][1] == 1
+    check frame.aTx.snapshot.sto[p1][0].isNil
+    check frame.aTx.snapshot.sto[p1][1] == 2
+    check frame.aTx.snapshot.sto[p2][0].stoData == 2.u256
+    check frame.aTx.snapshot.sto[p2][1] == 1
 
-  test "snapshotFrame: state the base frame holds in memory stays readable":
+    frame.dispose()
+
+  test "loadSnapshot: state the base frame holds in memory stays readable":
     let coreDb = newCoreDbRef(AristoDbMemory)
     let base = coreDb.baseTxFrame
     template rv(n: int): RootedVertexID = (VertexID(1), VertexID(n))
@@ -619,9 +623,10 @@ suite "TxFrame blobify round-trip":
     check base.storeTxFrame(blk, h).isOk
     blk.detach()
 
-    var data: TxFrameSnapshot
-    check base.foldTxFrame(data, h, blk.aTx.level).get == Opt.some(1'u64)
-    let frame = base.snapshotFrame(data, blk.aTx.level)
+    let frame = base.txFrameBegin()
+    check base.foldTxFrame(frame, h, blk.aTx.level).get == Opt.some(1'u64)
+    frame.loadSnapshot(base)
+    check frame.aTx in coreDb.mpt.snapshots
 
     # The block's own entries win over the base frame's
     template startVid(n: int): VertexID =
@@ -637,10 +642,11 @@ suite "TxFrame blobify round-trip":
 
   test "foldTxFrame: missing blob returns Err":
     let coreDb = newCoreDbRef(AristoDbMemory)
-    var data: TxFrameSnapshot
-    let rc = coreDb.baseTxFrame.foldTxFrame(data, Hash32.fromHex("0x" & "43".repeat(32)), 1)
+    let frame = coreDb.baseTxFrame.txFrameBegin()
+    let rc = coreDb.baseTxFrame.foldTxFrame(frame, Hash32.fromHex("0x" & "43".repeat(32)), 1)
     check rc.isErr
     check rc.error.error == KvtNotFound
+    frame.dispose()
 
 when isMainModule:
   discard
