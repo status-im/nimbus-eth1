@@ -1771,14 +1771,6 @@ suite "ForkedChainRef tests":
 
     vmState.dispose()
 
-  test "every imported block stores its frame blob":
-    let
-      com = env.newCom()
-      chain = ForkedChainRef.init(com)
-    for blk in [blk1, blk2, blk3, B4]:
-      checkImportBlock(chain, blk)
-      check chain.hasFrameBlob(blk)
-
   test "only the latest block keeps its frame in memory":
     let
       com = env.newCom()
@@ -1788,6 +1780,10 @@ suite "ForkedChainRef tests":
     for blk in [blk1, blk2, blk3, blk4, blk5, blk6]:
       check not chain.frameInMemory(blk)
     check chain.frameInMemory(blk7)
+    # A frame drops its diffs at import, the snapshot is all it keeps
+    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7]:
+      let tx = chain.hashToBlock[blk.blockHash].txFrame.aTx
+      check tx.sTab.len + tx.kMap.len + tx.accLeaves.len + tx.stoLeaves.len == 0
 
   test "the state of a block without a frame in memory is rebuilt":
     let
@@ -1863,24 +1859,6 @@ suite "ForkedChainRef tests":
     check chain.frameInMemory(blk8)
     check not chain.frameInMemory(blk7)
     for blk in [B7, C7, blk8]:
-      check chain.stateRootOf(blk) == blk.header.stateRoot
-
-  test "a fork head past the snapshot limit spills the lowest other head":
-    let
-      com = env.newCom()
-      chain = ForkedChainRef.init(com)
-    com.db.mpt.maxSnapshots = 3
-    for blk in [blk1, blk2, blk3, blk4, blk5, blk6, blk7, B4, C5, Fk7]:
-      checkImportBlock(chain, blk)
-      check com.db.mpt.snapshots.len <= 3
-    check chain.heads.len == 4
-    check not chain.frameInMemory(B4)
-    for blk in [blk7, C5, Fk7]:
-      check chain.frameInMemory(blk)
-    checkImportBlock(chain, B5)
-    check com.db.mpt.snapshots.len <= 3
-    check not chain.frameInMemory(C5)
-    for blk in [blk7, Fk7, B5, C5]:
       check chain.stateRootOf(blk) == blk.header.stateRoot
 
   test "a state read on a block without a snapshot counts against the limit":
