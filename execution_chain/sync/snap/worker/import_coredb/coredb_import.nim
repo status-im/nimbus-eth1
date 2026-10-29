@@ -136,8 +136,9 @@ proc mergeAccAndSto(
         accPath=accPath.toStr, stoRoot=stoRoot.toStr,
         expected=account.storageRoot.toStr
       return (nSlots,true,false)
+    return (nSlots,true,true)
 
-  (nSlots,true,true)
+  (nSlots,false,true)
 
 # ------------------------------------------------------------------------------
 # Public functions
