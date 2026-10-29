@@ -19,7 +19,8 @@
 import
   std/sequtils,
   pkg/[chronicles, chronos, metrics, stew/interval_set],
-  ../../[helpers, cache_db, delete_account, mpt_build, worker_desc],
+  ../../[helpers, cache_db, mpt_build, worker_desc],
+  ../delete_account,
   ./storage_fetch
 
 const

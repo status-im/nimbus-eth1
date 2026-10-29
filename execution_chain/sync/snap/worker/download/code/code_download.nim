@@ -13,7 +13,8 @@
 import
   std/[sequtils, typetraits],
   pkg/[chronicles, chronos],
-  ../../[helpers, cache_db, delete_account, worker_desc],
+  ../../[helpers, cache_db, worker_desc],
+  ../delete_account,
   ./code_fetch
 
 logScope:
@@ -40,9 +41,8 @@ proc storeValidatedCodes(
   ##
   let adb = buddy.ctx.pool.cacheDB
 
-  # Verify and save contract codes. The request was for `cdeQ[qStart .. ^1]`,
-  # surplus reply entries are ignored (`fetchCodes()` rejects such replies.)
-  for n in 0 ..< min(cdeQ.len - qStart, data.codes.len):
+  doAssert data.codes.len <= cdeQ.len - qStart
+  for n in 0 ..< data.codes.len:
     let
       code = data.codes[n].distinctBase
       hash = code.keccak256
