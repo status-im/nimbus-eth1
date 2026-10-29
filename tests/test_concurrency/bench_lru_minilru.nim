@@ -28,6 +28,7 @@ import
   std/[strformat, strutils, times],
   unittest2,
   minilru,
+  eth/trie/nibbles,
   ../../execution_chain/db/aristo/aristo_desc/[desc_identifiers, desc_structural],
   ../../execution_chain/concurrency/lru
 
@@ -54,13 +55,10 @@ proc slotValue(i: int): CachedStoLeaf =
   CachedStoLeaf(stoData: u256(i + 1), pfxLen: 1)
 
 proc accountValue(i: int): CachedAccLeaf =
-  CachedAccLeaf(
-    empty: false,
-    account: AristoAccount(
-      nonce: uint64(i + 1), balance: u256(i + 1), codeHash: default(Hash32)
-    ),
-    stoID: (isValid: true, vid: VertexID(uint64(i + 1))),
-    pfxLen: 1,
+  CachedAccLeaf.init(
+    NibblesBuf.nibble(1),
+    AristoAccount(nonce: uint64(i + 1), balance: u256(i + 1), codeHash: default(Hash32)),
+    (isValid: true, vid: VertexID(uint64(i + 1))),
   )
 
 template checksumOf(v: CachedStoLeaf): uint64 =
