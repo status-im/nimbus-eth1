@@ -94,7 +94,7 @@ proc startDownloading(
   ctx.accUnproc.init ItemKeyRangeMax
   ctx.pool.pivotNum = number                        # set pivot
   if 0 < ctx.pool.pivotNum:
-    debug info & ": Start downloading accounts",
+    info info & ": Start downloading state data",
       pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
   ok()
 
@@ -144,8 +144,9 @@ proc downloadInit*(
       ctx.accUnproc.unprocessed = accState.ranges   # copy reference (!)
       ctx.pool.pivotNum = accState.number           # set pivot
       if 0 < ctx.pool.pivotNum:                     # ready ok?
-        debug info & ": Continue downloading accounts",
-          pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
+        info info & ": Continue downloading state data",
+          pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum,
+          nAccRefetch=marked.len
     else:
       ?ctx.startDownloading(firstPivot, info)
 
@@ -154,7 +155,9 @@ proc downloadInit*(
   elif ctx.pool.pivotNum == 0:                      # delayed intialisation?
     ?ctx.startDownloading(firstPivot, info)
 
-  # Add marked account addresses
+  # Add marked account addresses. In case `startDownloading()` was called
+  # there is nothing to do as the missing range is the full interval. But
+  # in that case there would be no marked list either.
   for w in marked:
     let accKey = w.computeAccPath.to(ItemKey)
     if not ctx.accUnproc.covered(accKey):

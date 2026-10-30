@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, eth/common, stew/interval_set],
+  pkg/[chronicles, chronos, eth/common, stew/interval_set],
   ../../../db/core_db,
   ./[helpers, cache_db, worker_desc]
 
@@ -25,12 +25,32 @@ type
     nSlots: uint
     nCodes: uint
     nErrors: uint
-    nStoNoRoot: uint
-    nCodeNoHash: uint
+
+  ImportDesc = tuple
+    stats: CoredbImportStats
+    count: int
+    timer: Moment
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+template persistRegularly(
+    db: CoreDbRef;
+    tx: CoreDbTxRef;
+    ctrl: var ImportDesc;                           # var parameter
+      ): untyped =
+  ## Flush cached to disk
+  block:
+    ctrl.count.inc
+    if nCoreDbImportPersistBatch <= ctrl.count:
+      tx.checkpoint(0)
+      db.persist tx
+      ctrl.count = 0
+    let now = Moment.now()
+    if ctrl.timer + coreDbImportMsgInterval < now:
+      debug info & ": Importing into core DB", stats=ctrl.stats
+      ctrl.timer = now
 
 proc mergeCanonicalHead(
     tx: CoreDbTxRef;
@@ -68,46 +88,43 @@ proc mergeStoTrie(
     adb: CacheDbRef;
     accPath: Hash32;
     stoRoot: Hash32;
-    count: var int;
+    ctrl: var ImportDesc;
     info: static[string];
-      ): tuple[nSlots: uint, ok: bool] =
+      ): Opt[void] =
   # Clear storage trie
   tx.clearStorage(accPath).isOkOr:
     error info & ": Failed clearing storage slots",
       accPath=accPath.toStr, `error`=($$error)
-    return (0,false)
+    return err()
 
-  var nSlots = 0u
+  var nSlots {.used.} = 0u
   for w in adb.walkFlatSlot(accPath):
     if 0 < w.error.len:
       error info & ": Error walking storage slot", accPath=accPath.toStr,
         nSlotsSoFar=nSlots, slotKey=w.slotKey.toStr, `error`=w.error
-      return (nSlots,false)
+      return err()
     tx.mergeSlot(accPath, w.slotKey, w.data).isOkOr:
       error info & ": Failed merging slot", accPath=accPath.toStr,
         nSlotsSoFar=nSlots, slotKey=w.slotKey.toStr, `error`=($$error)
-      return (nSlots,false)
+      return err()
 
     nSlots.inc
-    count.inc
+    ctrl.count.inc
 
-    # Save regurlarly
-    if nCoreDbImportPersistBatch <= count:
-      tx.checkpoint(0)
-      db.persist tx
-      count = 0
+    ctrl.stats.nSlots.inc
+    db.persistRegularly(tx, ctrl)
 
   # Verify storage sub-MPT.
   let hash = tx.fetchStorageRoot(accPath).valueOr:
     error info & ": Failed computing storage root", nSlots,
       accPath=accPath.toStr, `error`=($$error)
-    return (nSlots,false)
+    return err()
   if stoRoot != hash:
     error info & ": Mismatch with pre-set storage root", nSlots,
       accPath=accPath.toStr, stoRoot=hash.toStr, expected=stoRoot.toStr
-    return (nSlots,false)
+    return err()
 
-  (nSlots,true)
+  ok()
 
 proc mergeCtrCode(
     db: CoreDbRef;
@@ -158,12 +175,12 @@ proc importFlat(
     stopOnError: bool;
     info: static[string];
       ): CoredbImportStats =
-  var u: CoredbImportStats
+  var ctrl: ImportDesc
 
   # Import canonical head
   let cNum = tx.mergeCanonicalHead(adb, info).valueOr:
-    u.nErrors.inc
-    return u
+    ctrl.stats.nErrors.inc
+    return ctrl.stats
 
   # Merge flat tables into CoreDb/Aristo.
   var count = 0
@@ -171,34 +188,25 @@ proc importFlat(
     if 0 < w.error.len:
       error info & ": Error walking accounts",
         accPath=w.accPath.toStr, `error`=w.error
-      u.nErrors.inc
-      return u
+      ctrl.stats.nErrors.inc
+      return ctrl.stats
 
     # Verify that the code and storage are properly updated. No need to
     # test the `storageRoot` as it will be reset to `zeroHash32` when BAL
     # forwarding.
-    block noErrorsOk:
-      block checkErrors:
-        if w.data.dirtyCode:
-          break checkErrors
-        if w.data.dirtyStorage:
-          break checkErrors
-        if w.data.account.storageRoot == zeroHash32:
-          u.nStoNoRoot.inc
-          break checkErrors
-        if w.data.account.codeHash == zeroHash32:
-          u.nCodeNoHash.inc
-          break checkErrors
-        break noErrorsOk
+    if w.data.dirtyCode or
+       w.data.dirtyStorage or
+       w.data.account.storageRoot == zeroHash32 or
+       w.data.account.codeHash == zeroHash32:
       error info & ": Account record is incomplete",
         accPath=w.accPath.toStr,
         dirtyStorage=w.data.dirtyStorage,
         dirtyCode=w.data.dirtyCode,
         storageRoot=w.data.account.storageRoot.toStr,
         codeHash=w.data.account.codeHash.toStr
-      u.nErrors.inc
+      ctrl.stats.nErrors.inc
       if stopOnError:
-        return u
+        return ctrl.stats
 
     # Save account
     let accRec = CoreDbAccount(
@@ -206,42 +214,32 @@ proc importFlat(
       balance:  w.data.account.balance,
       codeHash: w.data.account.codeHash)
     tx.mergeAccount(w.accPath, accRec).isOkOr:
-      error info & ": Failed merging account",
+      error info & ": Failed merging account record",
         accPath=w.accPath.toStr, `error`=($$error)
-      u.nErrors.inc
-      return u
+      ctrl.stats.nErrors.inc
+      return ctrl.stats
+    ctrl.stats.nAccounts.inc
 
     if w.data.account.storageRoot != EMPTY_ROOT_HASH:
-      u.nStorage.inc
-      let q = db.mergeStoTrie(
-        tx, adb, w.accPath, w.data.account.storageRoot, count, info)
-      u.nSlots += q.nSlots
-      if not q.ok:
-        u.nErrors.inc
+      ctrl.stats.nStorage.inc
+      db.mergeStoTrie(
+           tx, adb, w.accPath, w.data.account.storageRoot, ctrl, info).isOkOr:
+        ctrl.stats.nErrors.inc
         if stopOnError:
-          return u
+          return ctrl.stats
 
     if w.data.account.codeHash != EMPTY_CODE_HASH:
-      u.nCodes.inc
+      ctrl.stats.nCodes.inc
       db.mergeCtrCode(tx, adb, w.accPath, w.data.account.codeHash, info).isOkOr:
-        u.nErrors.inc
+        ctrl.stats.nErrors.inc
         if stopOnError:
-          return u
+          return ctrl.stats
 
-      count.inc
-
-    u.nAccounts.inc
-    count.inc
-
-    # Save regurlarly
-    if nCoreDbImportPersistBatch <= count:
-      tx.checkpoint(0)
-      db.persist tx
-      count = 0
+    db.persistRegularly(tx, ctrl)
 
   tx.checkpoint(cNum)
   db.persist tx
-  u
+  ctrl.stats
 
 # ------------------------------------------------------------------------------
 # Public function(s)
@@ -257,6 +255,7 @@ proc importCoreDb*(
   ## Import the flat tables into a version of CoreDb.
   ##
   let
+    start = Moment.now()
     status = ?adb.getAccMissingIntv(info)
     header = ?adb.getHeader(status.number, info)
     txStats = db.importFlat(tx, adb, stopOnError, info) # import data
@@ -267,10 +266,16 @@ proc importCoreDb*(
 
   let txStateRoot = ?tx.fetchStateRoot(info)
   if header.stateRoot != txStateRoot:
-    error info & ": Dtate roots differ when importing snap data",
+    error info & ": State roots differ when importing snap data",
       number=status.number, stateRoot=header.stateRoot.toStr,
       expected=txStateRoot.toStr, txStats
     return err()
+
+  notice info & ": Imported snap state to Core DB",
+    number=status.number, stateRoot=header.stateRoot.toStr,
+      nAccounts=txStats.nAccounts, nStorage=txStats.nStorage,
+      nSlots=txStats.nSlots, nCodes=txStats.nCodes,
+      ela=(Moment.now()-start).toStr
 
   ok(txStats)
 

@@ -171,9 +171,6 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         # FIXME: some smart error handling here?
         break body
 
-      debug info & ": Forwarded state", pivotNum=ctx.pool.pivotNum,
-        forwardNum=ctx.pool.forwardNum, nAccRefetch=refetch.len
-
     of SnapStop:
       ctx.accountDownloadMetricsReset()             # cosmetics
       ctx.storageDownloadMetricsReset()
