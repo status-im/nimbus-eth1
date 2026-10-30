@@ -446,6 +446,11 @@ proc setupAlloc(ledger: LedgerRef, alloc: GenesisAlloc) =
     for slot, value in acc.storage:
       ledger.setStorage(accAddr, slot, value)
 
+    # The pre-state must contain every alloc account, even empty ones that no
+    # transaction touches (their values never change, so the setters above do
+    # not mark them dirty).
+    ledger.forcePersist(accAddr)
+
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
   # we can't raise exception here, it'll mess with EVM exception handler.
   # so, store the exception for later using `hashError`

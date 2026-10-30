@@ -741,6 +741,18 @@ proc originalAccountEmpty*(ledger: LedgerRef, address: Address): bool =
     return true
   acc.original.statement == EMPTY_STATEMENT
 
+proc forcePersist*(ledger: LedgerRef, address: Address) =
+  ## Force an account to be written to the database on the next `persist` even
+  ## if it was not modified. Loading a pre-state (genesis alloc) must put every
+  ## account in the state trie, including empty accounts that no transaction
+  ## touches - `getAccount` alone no longer marks such accounts dirty.
+  let acc = ledger.getAccount(address)
+  if acc.isNil:
+    return
+  if Dirty notin acc.flags:
+    ledger.savePoint.dirty[address] = acc
+    acc.flags.incl Dirty
+
 proc setBalance*(ledger: LedgerRef, address: Address, balance: UInt256) =
   let acc = ledger.getAccount(address)
   acc.flags.incl {LeafExists}
