@@ -148,7 +148,7 @@ template runDaemon*(ctx: BeaconCtxRef; info: static[string]): Duration =
 
     # Extra waiting time unless immediate change expected.
     if ctx.pool.syncState in {headers,blocks,linger}:
-      bodyRc = daemonWaitInterval
+      bodyRc = ctx.pool.loopInterval.get(daemonWaitInterval)
 
   bodyRc
 
@@ -204,7 +204,7 @@ template runPeer*(
         # The reasoning is that in case of a low rank labelling, all slots
         # for peers downloading can be filled with higher ranking peers. And
         # this situation would not change immediately.
-        bodyRc = workerIdleLongWaitInterval
+        bodyRc = buddy.ctx.pool.loopInterval.get(workerIdleLongWaitInterval)
         break body                                # done, exit
 
       # Download and process headers and blocks
@@ -221,7 +221,7 @@ template runPeer*(
           if not buddy.headersUnstage info:       # async/template
             # Need to proceed with another peer (e.g. gap between queue and
             # header chain cache.)
-            bodyRc = workerIdleWaitInterval
+            bodyRc = buddy.ctx.pool.loopInterval.get(workerIdleWaitInterval)
             break downloadAndProcess
 
           # End `while()`
@@ -238,7 +238,7 @@ template runPeer*(
           if not buddy.blocksUnstage info:        # async/template
             # Need to proceed with another peer (e.g. gap between top imported
             # block and blocks queue.)
-            bodyRc = workerIdleWaitInterval
+            bodyRc = buddy.ctx.pool.loopInterval.get(workerIdleWaitInterval)
             break downloadAndProcess
 
           # End `while()`
@@ -248,12 +248,12 @@ template runPeer*(
     elif buddy.ctx.pool.syncState == BeaconState.idle:
       # Potentially a manual sync target set up
       if not buddy.headersTargetActivate info:
-        bodyRc = workerIdleLongWaitInterval
+        bodyRc = buddy.ctx.pool.loopInterval.get(workerIdleLongWaitInterval)
       break body
 
     # Idle sleep unless there is something to do
     if not buddy.somethingToCollectOrUnstage():
-      bodyRc = workerIdleWaitInterval
+      bodyRc = buddy.ctx.pool.loopInterval.get(workerIdleWaitInterval)
 
     # End block: `body`
 
