@@ -49,6 +49,10 @@ type
     ## Ask the syncer to fetch an unknown head from the `eth` network and
     ## then activate the normal header-chain sync toward it.
 
+  BalExecutionCB* = proc(header: Header, parallel: bool, reason: string) {.gcsafe, raises: [].}
+    ## Report which executor runs a block's transactions; `reason` names the
+    ## first gate that ruled out parallel execution, empty when it runs.
+
   CommonRef* = ref object
     # all purpose storage
     db: CoreDbRef
@@ -139,6 +143,9 @@ type
 
     balPostExecValidation*: bool
       ## Validate generated BAL after block execution
+
+    balExecutionCB*: BalExecutionCB
+      ## Called once per executed block with the executor chosen, when set
 
 # ------------------------------------------------------------------------------
 # Private helper functions

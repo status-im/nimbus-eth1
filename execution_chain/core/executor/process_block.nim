@@ -161,6 +161,17 @@ proc procBlkPreamble(
   if vmState.balTrackerEnabled:
     vmState.balTracker.commitCallFrame()
 
+  if not vmState.com.balExecutionCB.isNil:
+    let reason =
+      when not compileOption("threads"):
+        "no-threads"
+      else:
+        if not vmState.com.balParallelExecution: "disabled"
+        elif blockAccessList.isNone(): "no-access-list"
+        elif not vmState.com.isAmsterdamOrLater(header.timestamp): "pre-amsterdam"
+        else: ""
+    vmState.com.balExecutionCB(header, reason.len == 0, reason)
+
   if header.txRoot != EMPTY_ROOT_HASH:
     if blk.transactions.len == 0:
       return err("Transactions missing from body")
