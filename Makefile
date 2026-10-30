@@ -110,18 +110,13 @@ ifeq ($(NIM_PARAMS),)
 # selectively download nimbus-eth2 submodules because we don't need all of it's modules
 # also hoodi already exceeds github LFS quota
 
-GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,parsedConsensusGenesis.json
+GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,parsedConsensusGenesis.json -c submodule.fetchJobs=16
+GIT_ETH2_SUBMODULES := sepolia hoodi gnosis-chain-configs nim-kzg4844 mainnet glamsterdam-devnets
 
-GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
+# TODO this careful setup is destroyed by the update-common target which inits nimbus-eth2 recursively anyway
+GIT_SUBMODULE_UPDATE := git $(GIT_SUBMODULE_CONFIG) -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
   git $(GIT_SUBMODULE_CONFIG) submodule update vendor/nimbus-eth2; \
-  cd vendor/nimbus-eth2; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/sepolia; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/hoodi; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/gnosis-chain-configs; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init --recursive vendor/nim-kzg4844; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/mainnet; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/glamsterdam-devnets; \
-  cd ../..
+  git $(GIT_SUBMODULE_CONFIG) -C vendor/nimbus-eth2/vendor submodule update --init --recursive $(GIT_ETH2_SUBMODULES)
 
 .DEFAULT:
 	+@ echo -e "Git submodules not found. Running '$(GIT_SUBMODULE_UPDATE)'.\n"; \
