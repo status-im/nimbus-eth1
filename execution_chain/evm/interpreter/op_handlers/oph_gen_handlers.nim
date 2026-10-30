@@ -62,7 +62,7 @@ macro genOphHandlers*(runHandler: static[OphNumToTextFn];
 
     # => push##Op: VmOpFn = proc(cpt: VmCpt) = ...
     result.add quote do:
-      proc `fnName`(cpt: VmCpt): EvmResultVoid =
+      proc `fnName`(cpt: VmCpt): EvmResultVoid {.hotOp.} =
         `comment`
         `body`(cpt,`n`)
 

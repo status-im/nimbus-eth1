@@ -15,6 +15,7 @@
 {.push raises: [].}
 
 import
+  std/macros,
   ../../types,
   ../../../common/evmforks,
   ../../evm_errors,
@@ -33,6 +34,11 @@ type
     name: string              ## handler name
     info: string              ## handter info, explainer
     exec: VmOpFn
+
+macro hotOp*(fn: untyped): untyped =
+  fn.addPragma(newColonExpr(
+    ident"codegenDecl", newLit"__attribute__((always_inline)) $# $#$#"))
+  fn
 
 # ------------------------------------------------------------------------------
 # Public

@@ -38,11 +38,25 @@ proc runVM(
   when tracingEnabled:
     c.prepareTracer()
 
+  let
+    codeLen = c.code.len
+    code =
+      if codeLen > 0: cast[ptr UncheckedArray[byte]](c.code.bytes[0].addr)
+      else: nil
+
   while true:
     {.computedGoto.}
-    c.instr = c.code.next()
+    let pc = c.code.pc
+    var op = Op.Stop
+    if pc < codeLen:
+      {.push checks: off.}
+      op = Op(code[pc])
+      {.pop.}
+      c.code.pc = pc + 1
+    when tracingEnabled:
+      c.instr = op
 
-    dispatchInstr(fork, tracingEnabled, c.instr, c)
+    dispatchInstr(fork, tracingEnabled, op, c)
 
   ok()
 

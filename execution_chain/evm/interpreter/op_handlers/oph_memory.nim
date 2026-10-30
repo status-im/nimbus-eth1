@@ -83,7 +83,7 @@ func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-func popOp(cpt: VmCpt): EvmResultVoid =
+func popOp(cpt: VmCpt): EvmResultVoid {.hotOp.} =
   ## 0x50, Remove item from stack.
   cpt.stack.pop()
 
@@ -274,13 +274,13 @@ proc sstoreEIP8038Op(cpt: VmCpt): EvmResultVoid =
 
 # -------
 
-func jumpOp(cpt: VmCpt): EvmResultVoid =
+func jumpOp(cpt: VmCpt): EvmResultVoid {.hotOp.} =
   ## 0x56, Alter the program counter
   let jumpTarget = ? cpt.stack.popInt()
   cpt.jumpImpl(jumpTarget)
 
 
-func jumpIOp(cpt: VmCpt): EvmResultVoid =
+func jumpIOp(cpt: VmCpt): EvmResultVoid {.hotOp.} =
   ## 0x57, Conditionally alter the program counter.
   ? cpt.stack.lsCheck(2)
   let
@@ -292,7 +292,7 @@ func jumpIOp(cpt: VmCpt): EvmResultVoid =
     return ok()
   cpt.jumpImpl(jumpTarget)
 
-func pcOp(cpt: VmCpt): EvmResultVoid =
+func pcOp(cpt: VmCpt): EvmResultVoid {.hotOp.} =
   ## 0x58, Get the value of the program counter prior to the increment
   ##       corresponding to this instruction.
   cpt.stack.push max(cpt.code.pc - 1, 0)
@@ -301,12 +301,12 @@ func msizeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x59, Get the size of active memory in bytes.
   cpt.stack.push cpt.memory.len
 
-func gasOp(cpt: VmCpt): EvmResultVoid =
+func gasOp(cpt: VmCpt): EvmResultVoid {.hotOp.} =
   ## 0x5a, Get the amount of available gas, including the corresponding
   ##       reduction for the cost of this instruction.
   cpt.stack.push cpt.gasMeter.executionGasLeft
 
-func jumpDestOp(cpt: VmCpt): EvmResultVoid =
+func jumpDestOp(cpt: VmCpt): EvmResultVoid {.hotOp.} =
   ## 0x5b, Mark a valid destination for jumps. This operation has no effect
   ##       on machine state during execution.
   ok()

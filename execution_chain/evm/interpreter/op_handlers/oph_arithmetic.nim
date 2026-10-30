@@ -37,7 +37,7 @@ func slt(x, y: UInt256): bool =
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc addOp(cpt: VmCpt): EvmResultVoid =
+proc addOp(cpt: VmCpt): EvmResultVoid {.hotOp.} =
   ## 0x01, Addition
   cpt.stack.binaryOp(`+`)
 
@@ -171,7 +171,7 @@ proc signExtendOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.binaryWithTop(se256)
 
-proc ltOp(cpt: VmCpt): EvmResultVoid =
+proc ltOp(cpt: VmCpt): EvmResultVoid {.hotOp.} =
   ## 0x10, Less-than comparison
   template lt256(lhs, rhs): auto =
     (lhs < rhs).uint.u256
