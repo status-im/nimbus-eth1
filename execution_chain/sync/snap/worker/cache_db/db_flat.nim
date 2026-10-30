@@ -360,7 +360,7 @@ proc delFlatSlot*(db: CacheDbRef, accPath: Hash32): DelResult =
   ok()
 
 proc clearFlatSlot*(db: CacheDbRef, accPath: Hash32): DelResult =
-  db.clr33 cFlatSlot
+  db.clr65(cFlatSlot, accPath.data)
 
 iterator walkFlatSlot*(db: CacheDbRef, accPath: Hash32): WalkFlatSlotData =
   for (key1,key2,value) in db.adb.colWalk65 key65(cFlatSlot, accPath):
