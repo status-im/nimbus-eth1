@@ -75,7 +75,7 @@ template applyCodeChange(
       ): auto =
   ## Apply BAL to contract code
   ##
-  var bodyRc = Opt[Hash32].err()
+  var bodyRc = Opt[void].err()
   block body:
     doAssert 0 < code.len
     let newCode = code[^1].newCode
@@ -85,7 +85,7 @@ template applyCodeChange(
         break body                                  # err()
       adb.delMissingBlob(accPath, info).isOkOr:     # no more missing (if any)
         break body
-      bodyRc = typeof(bodyRc).ok(EMPTY_CODE_HASH)
+      bodyRc = typeof(bodyRc).ok()
       break body
 
     adb.putFlatCode(accPath, newCode, info).isOkOr:
@@ -93,7 +93,7 @@ template applyCodeChange(
     adb.delMissingBlob(accPath, info).isOkOr:       # no more missing (if any)
       break body
 
-    bodyRc = typeof(bodyRc).ok(newCode.keccak256)
+    bodyRc = typeof(bodyRc).ok()
     # End `block body`
   bodyRc
 
@@ -154,9 +154,9 @@ template applyAccountChanges(
         break body                                  # failed
 
     if 0 < chng.codeChanges.len:
-      acc.account.codeHash =
-        adb.applyCodeChange(accPath, chng.codeChanges, info).valueOr:
-          break body                                # failed
+      acc.account.codeHash = zeroHash32             # no code hash known anymore
+      adb.applyCodeChange(accPath, chng.codeChanges, info).isOkOr:
+        break body                                  # failed
 
     if 0 < chng.nonceChanges.len:
       acc.account.nonce = chng.nonceChanges[^1].newNonce

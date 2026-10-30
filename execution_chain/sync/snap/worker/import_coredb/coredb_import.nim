@@ -29,9 +29,10 @@ type
   CoredbImportStats* = tuple
     nAccounts: uint
     nStorage: uint
-    nStoRoot: uint
+    nStoNoRoot: uint
     nSlots: uint
     nCodes: uint
+    nCodeNoHash: uint
     nErrors: uint
 
 # ------------------------------------------------------------------------------
@@ -127,7 +128,7 @@ proc mergeAccAndSto(
   # the BAL forwarder when there were changes to the sub-MPT. If the sub-MPT
   # was complete, no `storeageRoot` update will have taken place.
   if account.storageRoot != zeroHash32:
-    var stoRoot = tx.fetchStorageRoot(accPath).valueOr:
+    let stoRoot = tx.fetchStorageRoot(accPath).valueOr:
       error info & ": Failed computing storage root", nSlots,
         accPath=accPath.toStr, `error`=($$error)
       return (nSlots,true,false)
@@ -139,6 +140,44 @@ proc mergeAccAndSto(
     return (nSlots,true,true)
 
   (nSlots,false,true)
+
+proc mergeCtrCode(
+    db: CoreDbRef;
+    tx: CoreDbTxRef;
+    adb: CacheDbRef;
+    accPath: Hash32;
+    account: Account;
+    info: static[string];
+      ): tuple[hashUpdate: Opt[Hash32], ok: bool] =
+  # Save contract code so that the storage trie can be updated
+  let data = adb.getFlatCode(accPath, info).valueOr:
+    # Handle special case when the contract code was cleared by the
+    # last BAL update.
+    if account.codeHash == zeroHash32:
+      return (Opt.some(EMPTY_CODE_HASH), true)
+    # Otherwise error.
+    error info & ": No such contract code", accPath=accPath.toStr,
+      codeHash=account.codeHash.toStr
+    return (Opt.none(Hash32), false)
+
+  # Save contract code to core DB
+  tx.persistCodeByHash(account.codeHash, data).isOkOr:
+    error info & ": Failed storing contract code",
+      accPath=accPath.toStr, codeHash=account.codeHash.toStr,
+      nCode=data.len, `error`=error
+    return (Opt.none(Hash32), false)
+
+  let codeHash = data.keccak256
+  if account.codeHash != zeroHash32:
+    if account.codeHash != codeHash:
+      error info & ": Mismatch with pre-set code hash",
+        accPath=accPath.toStr, codeHash=codeHash.toStr,
+        expected=account.codeHash.toStr
+      return (Opt.none(Hash32), false)
+    return (Opt.none(Hash32), true)
+
+  # Return correct code hash
+  (Opt.some(codeHash), true)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -179,15 +218,8 @@ proc importFlat*(
     # Verify that the code and storage are properly updated. No need to
     # test the `storageRoot` as it will be reset to `zeroHash32` when BAL
     # forwarding.
-    block noErrorsOk:
-      block checkErrors:
-        if w.data.dirtyCode:
-          break checkErrors
-        if w.data.dirtyStorage:
-          break checkErrors
-        if w.data.account.codeHash == zeroHash32:
-          break checkErrors
-        break noErrorsOk
+    if w.data.dirtyCode or
+       w.data.dirtyStorage:
       error info & ": Account record is incomplete",
         accPath=w.accPath.toStr,
         dirtyStorage=w.data.dirtyStorage,
@@ -204,34 +236,44 @@ proc importFlat*(
         u.nErrors.inc
         return u
     else:
-      let w = db.mergeAccAndSto(
-        tx, adb, w.accPath, w.data.account, count, info)
-      u.nSlots += w.nSlots
+      let q = db.mergeAccAndSto(tx, adb, w.accPath, w.data.account, count, info)
       u.nStorage.inc
-      if w.stoRoot:
-        u.nStoRoot.inc
-      if not w.ok:
+      u.nSlots += q.nSlots
+      if not q.stoRoot:
+        u.nStoNoRoot.inc
+      if not q.ok:
         u.nErrors.inc
         if stopOnError:
           return u
 
     if w.data.account.codeHash != EMPTY_CODE_HASH:
-      let rc = adb.getFlatCode(w.accPath, info)
-      if rc.isErr:
-        error info & ": No suc contract code", accPath=w.accPath.toStr,
-          codeHash=w.data.account.codeHash.toStr
+      let q = db.mergeCtrCode(tx, adb, w.accPath, w.data.account, info)
+      u.nCodes.inc
+      let hashUpdate =
+        if q.hashUpdate.isSome():
+          u.nCodeNoHash.inc
+          q.hashUpdate.unsafeGet()
+        else:
+          EMPTY_CODE_HASH
+      if not q.ok:
         u.nErrors.inc
         if stopOnError:
           return u
-      else:
-        tx.persistCodeByHash(w.data.account.codeHash, rc.value).isOkOr:
-          error info & ": Failed storing contract code",
-            accPath=w.accPath.toStr, codeHash=w.data.account.codeHash.toStr,
-            nCode=rc.value.len, `error`=error
+
+      # Update account when necessary. This is different for contract codes
+      # from storage sub-MPT handling (which is taken care of by the core DB.)
+      if q.hashUpdate.isSome():
+        let accRec = CoreDbAccount(
+          nonce:    w.data.account.nonce,
+          balance:  w.data.account.balance,
+          codeHash: hashUpdate)
+        tx.mergeAccount(w.accPath, accRec).isOkOr:
+          error info & ": Failed updating account",
+            accPath=w.accPath.toStr, `error`=($$error)
           u.nErrors.inc
           return u
-        u.nCodes.inc
-        count.inc
+
+      count.inc
 
     u.nAccounts.inc
     count.inc
