@@ -12,13 +12,16 @@ import
   chronicles,
   chronos,
   confutils,
+  stew/io2,
+  eth/db/kvstore_sqlite3,
   eth/common/[keys, eth_types_rlp],
   web3/eth_api_types,
   json_rpc/rpcproxy,
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/[forks, beaconstate],
-  beacon_chain/[conf, beacon_clock, buildinfo, nimbus_binary_common, process_state],
+  beacon_chain/
+    [conf, beacon_clock, buildinfo, filepath, nimbus_binary_common, process_state],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
@@ -28,6 +31,7 @@ import
   ./engine/utils,
   ./engine/types,
   ./lc_backend,
+  ./lc_sqlite_storage,
   ./p2p_lc_backend,
   ./json_rpc_backend,
   ./json_rpc_frontend,
@@ -229,6 +233,32 @@ proc run(
     engine = RpcVerificationEngine.init(engineConf).valueOr:
       raise newException(ProxyError, "Couldn't initialize verification engine")
 
+  var
+    lcDbBackend: SqStoreRef
+    lcDb: LightClientDB
+
+  if config.dataDir.isSome():
+    let dataDir = config.dataDir.get()
+    secureCreatePath(dataDir).isOkOr:
+      raise newException(
+        ProxyError,
+        "Couldn't create data directory " & dataDir & ": " & ioErrorMsg(error),
+      )
+    lcDbBackend = SqStoreRef.init(dataDir, "nvp_" & l1NetworkName).valueOr:
+      raise newException(ProxyError, "Couldn't open light client database: " & error)
+    lcDb = lcDbBackend.initLightClientDB(
+      LightClientDBNames(
+        legacyAltairHeaders: "altair_lc_headers",
+        headers: "lc_headers",
+        altairSyncCommittees: "altair_sync_committees",
+      )
+    ).valueOr:
+      lcDbBackend.close()
+      raise
+        newException(ProxyError, "Couldn't initialize light client database: " & error)
+    engine.storage = Opt.some(getLightClientStorage(lcDb))
+    info "Persisting light client checkpoint", dataDir
+
   # sanity check
   if config.executionApiUrls.len <= 0:
     raise newException(ProxyError, "Need atleast one execution api url to be specified")
@@ -348,6 +378,10 @@ proc run(
       await c.stop()
     if p2pBackend.isSome():
       await p2pBackend.get().stop()
+    if lcDb != nil:
+      lcDb.close()
+    if lcDbBackend != nil:
+      lcDbBackend.close()
     raise e
 
 when isMainModule:

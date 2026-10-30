@@ -120,11 +120,15 @@ type VerifiedProxyConf* = object
   .}: uint64
 
   # Consensus light sync
-  # No default - Needs to be provided by the user
   trustedBlockRoot* {.
-    desc: "Recent trusted finalized block root to initialize light client from",
+    desc: "Recent trusted finalized block root to initialize light client from. Optional when --data-dir holds a non-stale checkpoint",
     name: "trusted-block-root"
-  .}: Eth2Digest
+  .}: Option[Eth2Digest]
+
+  dataDir* {.
+    desc: "Directory to persist the light client checkpoint in. Nothing is persisted when unset",
+    name: "data-dir"
+  .}: Option[string]
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user

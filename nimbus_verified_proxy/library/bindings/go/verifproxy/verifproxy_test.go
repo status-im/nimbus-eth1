@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -75,8 +77,39 @@ func beaconTransport(_ string, endpoint, _ string) (json.RawMessage, error) {
 	return nil, fmt.Errorf("beacon: no mock for %s", endpoint)
 }
 
+type memStorage struct {
+	mu     sync.Mutex
+	values map[string][]byte
+	gets   []string
+}
+
+func (s *memStorage) Get(key string) ([]byte, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gets = append(s.gets, key)
+	v, ok := s.values[key]
+	return v, ok, nil
+}
+
+func (s *memStorage) Put(key string, value []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.values[key] = value
+	return nil
+}
+
 func TestVerifProxy(t *testing.T) {
-	ctx, err := verifproxy.Start(testConfig, execTransport, beaconTransport)
+	storage := &memStorage{values: map[string][]byte{}}
+
+	var bootstraps atomic.Int32
+	countingBeacon := func(url, endpoint, params string) (json.RawMessage, error) {
+		if endpoint == "getLightClientBootstrap" {
+			bootstraps.Add(1)
+		}
+		return beaconTransport(url, endpoint, params)
+	}
+
+	ctx, err := verifproxy.Start(testConfig, execTransport, countingBeacon, storage)
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
 	defer ctx.Stop()
@@ -92,6 +125,14 @@ func TestVerifProxy(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 12*time.Second, interval)
 	require.NoError(t, ctx.Sync(callTimeout))
+
+	storage.mu.Lock()
+	require.Equal(t, []string{"lc_checkpoint"}, storage.gets)
+	require.Equal(t, int32(1), bootstraps.Load())
+	checkpoint, found := storage.values["lc_checkpoint"]
+	storage.mu.Unlock()
+	require.True(t, found)
+	require.Greater(t, len(checkpoint), 1+24624)
 
 	_, err = ctx.OpSyncInterval(callTimeout)
 	require.Error(t, err)
