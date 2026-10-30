@@ -9,6 +9,7 @@ package verifproxy_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/status-im/nimbus-eth1/nimbus_verified_proxy/library/bindings/go/verifproxy"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,6 +79,16 @@ func beaconTransport(_ string, endpoint, _ string) (json.RawMessage, error) {
 	return nil, fmt.Errorf("beacon: no mock for %s", endpoint)
 }
 
+const testConfigNoRoot = `{
+	"eth2Network":      "mainnet",
+	"executionApiUrls": "http://127.0.0.1:19999",
+	"beaconApiUrls":    "http://127.0.0.1:19998",
+	"logLevel":         "FATAL",
+	"logStdout":        "None",
+	"syncHeaderStore":  true,
+	"freezeAtSlot":     14018020
+}`
+
 type memStorage struct {
 	mu     sync.Mutex
 	values map[string][]byte
@@ -96,6 +108,137 @@ func (s *memStorage) Put(key string, value []byte) error {
 	defer s.mu.Unlock()
 	s.values[key] = value
 	return nil
+}
+
+func TestVerifProxyRestart(t *testing.T) {
+	ctx, err := verifproxy.Start(testConfig, execTransport, beaconTransport, nil)
+	require.NoError(t, err)
+	require.NoError(t, ctx.Sync(callTimeout))
+	require.NoError(t, ctx.Stop())
+
+	ctx, err = verifproxy.Start(testConfig, execTransport, beaconTransport, nil)
+	require.NoError(t, err)
+	defer ctx.Stop()
+	require.NoError(t, ctx.Sync(callTimeout))
+}
+
+func TestVerifProxyConcurrent(t *testing.T) {
+	ctxA, err := verifproxy.Start(testConfig, execTransport, beaconTransport, nil)
+	require.NoError(t, err)
+	defer ctxA.Stop()
+
+	ctxB, err := verifproxy.Start(testConfig, execTransport, beaconTransport, nil)
+	require.NoError(t, err)
+	defer ctxB.Stop()
+
+	var wg sync.WaitGroup
+	for _, ctx := range []*verifproxy.Context{ctxA, ctxB} {
+		wg.Add(1)
+		go func(ctx *verifproxy.Context) {
+			defer wg.Done()
+			assert.NoError(t, ctx.Sync(callTimeout))
+		}(ctx)
+	}
+	wg.Wait()
+}
+
+func TestVerifProxyStorageRestore(t *testing.T) {
+	storage := &memStorage{values: map[string][]byte{}}
+
+	ctx, err := verifproxy.Start(testConfig, execTransport, beaconTransport, storage)
+	require.NoError(t, err)
+	require.NoError(t, ctx.Sync(callTimeout))
+	require.NoError(t, ctx.Stop())
+
+	var bootstraps atomic.Int32
+	countingBeacon := func(url, endpoint, params string) (json.RawMessage, error) {
+		if endpoint == "getLightClientBootstrap" {
+			bootstraps.Add(1)
+		}
+		return beaconTransport(url, endpoint, params)
+	}
+
+	ctx, err = verifproxy.Start(testConfigNoRoot, execTransport, countingBeacon, storage)
+	require.NoError(t, err)
+	defer ctx.Stop()
+	require.NoError(t, ctx.Sync(callTimeout))
+	require.Zero(t, bootstraps.Load())
+
+	_, err = ctx.CallRpc("eth_blockNumber", "[]", callTimeout)
+	require.NoError(t, err)
+}
+
+type failingStorage struct {
+	gets, puts atomic.Int32
+}
+
+func (s *failingStorage) Get(string) ([]byte, bool, error) {
+	s.gets.Add(1)
+	return nil, false, errors.New("get failed")
+}
+
+func (s *failingStorage) Put(string, []byte) error {
+	s.puts.Add(1)
+	return errors.New("put failed")
+}
+
+func TestVerifProxyStorageErrors(t *testing.T) {
+	storage := &failingStorage{}
+
+	ctx, err := verifproxy.Start(testConfig, execTransport, beaconTransport, storage)
+	require.NoError(t, err)
+	defer ctx.Stop()
+
+	require.NoError(t, ctx.Sync(callTimeout))
+	// storage errors are logged, not propagated, so count calls to prove the failing storage was reached
+	require.Equal(t, int32(1), storage.gets.Load())
+	require.Equal(t, int32(1), storage.puts.Load())
+}
+
+func TestVerifProxyTransportErrors(t *testing.T) {
+	failingBeacon := func(string, string, string) (json.RawMessage, error) {
+		return nil, errors.New("beacon transport down")
+	}
+	ctx, err := verifproxy.Start(testConfig, execTransport, failingBeacon, nil)
+	require.NoError(t, err)
+	require.ErrorContains(t, ctx.Sync(callTimeout), "beacon transport down")
+	require.NoError(t, ctx.Stop())
+
+	failingExec := func(string, string, string) (json.RawMessage, error) {
+		return nil, errors.New("exec transport down")
+	}
+	ctx, err = verifproxy.Start(testConfig, failingExec, beaconTransport, nil)
+	require.NoError(t, err)
+	defer ctx.Stop()
+	require.NoError(t, ctx.Sync(callTimeout))
+	_, err = ctx.CallRpc("eth_blockNumber", "[]", callTimeout)
+	require.ErrorContains(t, err, "exec transport down")
+}
+
+func TestVerifProxyCallTimeout(t *testing.T) {
+	slowBeacon := func(url, endpoint, params string) (json.RawMessage, error) {
+		time.Sleep(300 * time.Millisecond)
+		return beaconTransport(url, endpoint, params)
+	}
+	ctx, err := verifproxy.Start(testConfig, execTransport, slowBeacon, nil)
+	require.NoError(t, err)
+	defer ctx.Stop()
+
+	require.ErrorContains(t, ctx.Sync(50*time.Millisecond), "request timed out")
+}
+
+func TestVerifProxyStartInvalidConfig(t *testing.T) {
+	ctx, err := verifproxy.Start("{not json", execTransport, beaconTransport, nil)
+	require.Error(t, err)
+	require.Nil(t, ctx)
+}
+
+func TestVerifProxyNilContext(t *testing.T) {
+	var ctx *verifproxy.Context
+	require.Error(t, ctx.Stop())
+	require.Error(t, ctx.Sync(callTimeout))
+	_, err := ctx.CallRpc("eth_syncing", "[]", callTimeout)
+	require.Error(t, err)
 }
 
 func TestVerifProxy(t *testing.T) {
