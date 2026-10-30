@@ -457,6 +457,12 @@ proc workerLoop[S,W](buddy: RunnerPeerRef[S,W]) {.async: (raises: []).} =
       if not dsc.tickerRunning:
         asyncSpawn dsc.tickerLoop()
 
+      # Start daemon service if needed, rather than waiting for the ticker
+      if not dsc.daemonRunning and
+         dsc.ctx.daemon and
+         dsc.runCtrl == allRunning:
+        asyncSpawn dsc.daemonLoop()
+
       # Check for worker termination
       if worker.ctrl.stopped:
         break taskExecLoop
