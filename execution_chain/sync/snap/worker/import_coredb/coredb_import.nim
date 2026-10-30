@@ -29,11 +29,11 @@ type
   CoredbImportStats* = tuple
     nAccounts: uint
     nStorage: uint
-    nStoNoRoot: uint
     nSlots: uint
     nCodes: uint
-    nCodeNoHash: uint
     nErrors: uint
+    nStoNoRoot: uint
+    nCodeNoHash: uint
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -69,51 +69,31 @@ proc mergeCanonicalHead(
 
   ok(move cNum)
 
-proc mergeAccount(
-    tx: CoreDbTxRef;
-    accPath: Hash32;
-    account: Account;
-    info: static[string];
-      ): Opt[void] =
-  let accRec = CoreDbAccount(
-    nonce:    account.nonce,
-    balance:  account.balance,
-    codeHash: account.codeHash)
-  tx.mergeAccount(accPath, accRec).isOkOr:
-    error info & ": Failed merging account",
-      accPath=accPath.toStr, `error`=($$error)
-    return err()
-  ok()
-
-proc mergeAccAndSto(
+proc mergeStoTrie(
     db: CoreDbRef;
     tx: CoreDbTxRef;
     adb: CacheDbRef;
     accPath: Hash32;
-    account: Account;
+    stoRoot: Hash32;
     count: var int;
     info: static[string];
-      ): tuple[nSlots: uint, stoRoot: bool, ok: bool] =
-  # Save account so that the storage trie can be updated
-  tx.mergeAccount(accPath, account, info).isOkOr:
-    return (0,false,false)
-
+      ): tuple[nSlots: uint, ok: bool] =
   # Clear storage trie
   tx.clearStorage(accPath).isOkOr:
     error info & ": Failed clearing storage slots",
       accPath=accPath.toStr, `error`=($$error)
-    return (0,false,false)
+    return (0,false)
 
   var nSlots = 0u
   for w in adb.walkFlatSlot(accPath):
     if 0 < w.error.len:
       error info & ": Error walking storage slot", accPath=accPath.toStr,
         nSlotsSoFar=nSlots, slotKey=w.slotKey.toStr, `error`=w.error
-      return (nSlots,false,false)
+      return (nSlots,false)
     tx.mergeSlot(accPath, w.slotKey, w.data).isOkOr:
       error info & ": Failed merging slot", accPath=accPath.toStr,
         nSlotsSoFar=nSlots, slotKey=w.slotKey.toStr, `error`=($$error)
-      return (nSlots,false,false)
+      return (nSlots,false)
 
     nSlots.inc
     count.inc
@@ -124,60 +104,46 @@ proc mergeAccAndSto(
       db.persist tx
       count = 0
 
-  # Verify storage sub-MPT if there is a storage root. It is set to zero by
-  # the BAL forwarder when there were changes to the sub-MPT. If the sub-MPT
-  # was complete, no `storeageRoot` update will have taken place.
-  if account.storageRoot != zeroHash32:
-    let stoRoot = tx.fetchStorageRoot(accPath).valueOr:
-      error info & ": Failed computing storage root", nSlots,
-        accPath=accPath.toStr, `error`=($$error)
-      return (nSlots,true,false)
-    if account.storageRoot != stoRoot:
-      error info & ": Mismatch with pre-set storage root", nSlots,
-        accPath=accPath.toStr, stoRoot=stoRoot.toStr,
-        expected=account.storageRoot.toStr
-      return (nSlots,true,false)
-    return (nSlots,true,true)
+  # Verify storage sub-MPT.
+  let hash = tx.fetchStorageRoot(accPath).valueOr:
+    error info & ": Failed computing storage root", nSlots,
+      accPath=accPath.toStr, `error`=($$error)
+    return (nSlots,false)
+  if stoRoot != hash:
+    error info & ": Mismatch with pre-set storage root", nSlots,
+      accPath=accPath.toStr, stoRoot=hash.toStr, expected=stoRoot.toStr
+    return (nSlots,false)
 
-  (nSlots,false,true)
+  (nSlots,true)
 
 proc mergeCtrCode(
     db: CoreDbRef;
     tx: CoreDbTxRef;
     adb: CacheDbRef;
     accPath: Hash32;
-    account: Account;
+    codeHash: Hash32;
     info: static[string];
-      ): tuple[hashUpdate: Opt[Hash32], ok: bool] =
+      ): Opt[void] =
   # Save contract code so that the storage trie can be updated
   let data = adb.getFlatCode(accPath, info).valueOr:
-    # Handle special case when the contract code was cleared by the
-    # last BAL update.
-    if account.codeHash == zeroHash32:
-      return (Opt.some(EMPTY_CODE_HASH), true)
-    # Otherwise error.
     error info & ": No such contract code", accPath=accPath.toStr,
-      codeHash=account.codeHash.toStr
-    return (Opt.none(Hash32), false)
+      codeHash=codeHash.toStr
+    return err()
+
+  let hash = data.keccak256
+  if codeHash != hash:
+    error info & ": Mismatch with pre-set code hash",
+      accPath=accPath.toStr, codeHash=hash.toStr, expected=codeHash.toStr
+    return err()
 
   # Save contract code to core DB
-  tx.persistCodeByHash(account.codeHash, data).isOkOr:
+  tx.persistCodeByHash(codeHash, data).isOkOr:
     error info & ": Failed storing contract code",
-      accPath=accPath.toStr, codeHash=account.codeHash.toStr,
+      accPath=accPath.toStr, codeHash=codeHash.toStr,
       nCode=data.len, `error`=error
-    return (Opt.none(Hash32), false)
+    return err()
 
-  let codeHash = data.keccak256
-  if account.codeHash != zeroHash32:
-    if account.codeHash != codeHash:
-      error info & ": Mismatch with pre-set code hash",
-        accPath=accPath.toStr, codeHash=codeHash.toStr,
-        expected=account.codeHash.toStr
-      return (Opt.none(Hash32), false)
-    return (Opt.none(Hash32), true)
-
-  # Return correct code hash
-  (Opt.some(codeHash), true)
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -218,8 +184,19 @@ proc importFlat*(
     # Verify that the code and storage are properly updated. No need to
     # test the `storageRoot` as it will be reset to `zeroHash32` when BAL
     # forwarding.
-    if w.data.dirtyCode or
-       w.data.dirtyStorage:
+    block noErrorsOk:
+      block checkErrors:
+        if w.data.dirtyCode:
+          break checkErrors
+        if w.data.dirtyStorage:
+          break checkErrors
+        if w.data.account.storageRoot == zeroHash32:
+          u.nStoNoRoot.inc
+          break checkErrors
+        if w.data.account.codeHash == zeroHash32:
+          u.nCodeNoHash.inc
+          break checkErrors
+        break noErrorsOk
       error info & ": Account record is incomplete",
         accPath=w.accPath.toStr,
         dirtyStorage=w.data.dirtyStorage,
@@ -230,47 +207,32 @@ proc importFlat*(
       if stopOnError:
         return u
 
-    if w.data.account.storageRoot == EMPTY_ROOT_HASH:
-      # Save account only
-      tx.mergeAccount(w.accPath, w.data.account, info).isOkOr:
-        u.nErrors.inc
-        return u
-    else:
-      let q = db.mergeAccAndSto(tx, adb, w.accPath, w.data.account, count, info)
+    # Save account
+    let accRec = CoreDbAccount(
+      nonce:    w.data.account.nonce,
+      balance:  w.data.account.balance,
+      codeHash: w.data.account.codeHash)
+    tx.mergeAccount(w.accPath, accRec).isOkOr:
+      error info & ": Failed merging account",
+        accPath=w.accPath.toStr, `error`=($$error)
+      u.nErrors.inc
+      return u
+
+    if w.data.account.storageRoot != EMPTY_ROOT_HASH:
       u.nStorage.inc
+      let q = db.mergeStoTrie(
+        tx, adb, w.accPath, w.data.account.storageRoot, count, info)
       u.nSlots += q.nSlots
-      if not q.stoRoot:
-        u.nStoNoRoot.inc
       if not q.ok:
         u.nErrors.inc
         if stopOnError:
           return u
 
     if w.data.account.codeHash != EMPTY_CODE_HASH:
-      let q = db.mergeCtrCode(tx, adb, w.accPath, w.data.account, info)
       u.nCodes.inc
-      let hashUpdate =
-        if q.hashUpdate.isSome():
-          u.nCodeNoHash.inc
-          q.hashUpdate.unsafeGet()
-        else:
-          EMPTY_CODE_HASH
-      if not q.ok:
+      db.mergeCtrCode(tx, adb, w.accPath, w.data.account.codeHash, info).isOkOr:
         u.nErrors.inc
         if stopOnError:
-          return u
-
-      # Update account when necessary. This is different for contract codes
-      # from storage sub-MPT handling (which is taken care of by the core DB.)
-      if q.hashUpdate.isSome():
-        let accRec = CoreDbAccount(
-          nonce:    w.data.account.nonce,
-          balance:  w.data.account.balance,
-          codeHash: hashUpdate)
-        tx.mergeAccount(w.accPath, accRec).isOkOr:
-          error info & ": Failed updating account",
-            accPath=w.accPath.toStr, `error`=($$error)
-          u.nErrors.inc
           return u
 
       count.inc
