@@ -128,6 +128,7 @@ proc verifyAmsterdamOrLater(
 
 proc downloadInit*(
     ctx: SnapCtxRef;
+    marked: seq[Address];
     info: static[string];
       ): Opt[void] =
   let firstPivot = ctx.setFirstPivotFromFinNumber(info)
@@ -152,6 +153,12 @@ proc downloadInit*(
 
   elif ctx.pool.pivotNum == 0:                      # delayed intialisation?
     ?ctx.startDownloading(firstPivot, info)
+
+  # Add marked account addresses
+  for w in marked:
+    let accKey = w.computeAccPath.to(ItemKey)
+    if not ctx.accUnproc.covered(accKey):
+      ctx.accUnproc.unprocessed.merge accKey
 
   ctx.accountDownloadMetricsUpdate()
   ctx.storageDownloadMetricsUpdate(info)

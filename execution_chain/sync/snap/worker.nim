@@ -117,7 +117,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       ctx.downloadResume(info).isOkOr:
         ctx.pool.resetReq = true                    # not much else possible
         break body
-      discard ctx.downloadInit(info)                # init download if possible
+      discard ctx.downloadInit(@[], info)           # init download if possible
 
     of SnapClear:
       # Clear cache DB if needed.
@@ -135,7 +135,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         bodyRc = daemonWaitReadyDwnldFailInterval   # take a nap
         break body
 
-      ctx.downloadInit(info).isOkOr:                # get ready
+      ctx.downloadInit(@[], info).isOkOr:           # get ready
         bodyRc = daemonWaitReadyInitFailInterval    # take a nap
 
     of SnapDownload:
@@ -162,15 +162,17 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       discard
 
     of SnapStateForward:
-      ctx.stateForward(info).isOkOr:
+      let refetch = ctx.stateForward(info).valueOr:
         # FIXME: some smart error handling here?
         break body
 
       # Prepare for next download cyle
-      discard ctx.downloadInit(info)                # get cache DB ready
+      ctx.downloadInit(refetch, info).isOkOr:       # get cache DB ready
+        # FIXME: some smart error handling here?
+        break body
 
       debug info & ": Forwarded state", pivotNum=ctx.pool.pivotNum,
-        forwardNum=ctx.pool.forwardNum
+        forwardNum=ctx.pool.forwardNum, nAccRefetch=refetch.len
 
     of SnapStop:
       ctx.accountDownloadMetricsReset()             # cosmetics
