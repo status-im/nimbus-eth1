@@ -78,7 +78,7 @@ Runs every fixture in the files and directories given, in one process.
 
 Options:
   --workers N       run fixture files on N threads (default 1)
-  --threads N       background threads per worker for parallel execution
+  --threads N       background threads per worker for parallel execution (2+)
   --bal-sequential  run every block on the sequential executor
   --bal-withhold    (blocktest) execute without the fixture's access list
   --bal-report      print the executor chosen for each block on stderr
@@ -525,7 +525,7 @@ proc parseOptions(): tuple[opts: Options, paths: seq[string]] =
   var
     paths: seq[string]
     i = 2
-  proc count(i: int, flag: string): int =
+  proc count(i: int, flag: string, least = 1): int =
     if i > paramCount():
       stderr.writeLine flag & " needs a number"
       quit(2)
@@ -534,8 +534,8 @@ proc parseOptions(): tuple[opts: Options, paths: seq[string]] =
     except ValueError:
       stderr.writeLine flag & " needs a number, got " & paramStr(i)
       quit(2)
-    if result < 1:
-      stderr.writeLine flag & " must be at least 1"
+    if result < least:
+      stderr.writeLine flag & " must be at least " & $least
       quit(2)
 
   while i <= paramCount():
@@ -546,7 +546,8 @@ proc parseOptions(): tuple[opts: Options, paths: seq[string]] =
       opts.workers = count(i, arg)
     of "--threads":
       inc i
-      opts.threads = count(i, arg)
+      # The parallel executor and prefetch need a taskpool of two or more.
+      opts.threads = count(i, arg, least = 2)
     of "--bal-sequential": opts.balSequential = true
     of "--bal-report": opts.balReport = true
     of "--bal-withhold":

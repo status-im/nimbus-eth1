@@ -17,7 +17,7 @@ build/test_runner enginetest --workers 4 fixtures/blockchain_tests_engine
 | Flag | |
 |---|---|
 | `--workers N` | run fixture files on `N` threads |
-| `--threads N` | background threads per worker for parallel execution (default: cores, between 2 and 16) |
+| `--threads N` | background threads per worker for parallel execution, at least 2 (default: cores, between 2 and 16) |
 | `--bal-sequential` | run every block on the sequential executor |
 | `--bal-withhold` | (`blocktest`) execute without the fixture's access list |
 | `--bal-report` | print `{"event": "balExecution", ...}` per executed block on stderr |
