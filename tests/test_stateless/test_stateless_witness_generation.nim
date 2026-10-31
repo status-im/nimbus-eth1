@@ -220,16 +220,16 @@ suite "Stateless: Witness Generation - collapses undone later in the block":
     let host = LedgerRef.init(memDB.baseTxFrame().txFrameBegin(), false, collectWitness = true)
     host.writeSlots(contract, txs)
     let witness =
-      Witness.build(host.getWitnessKeys(), host.getCollapsedSiblings(), preState)
+      Witness.build(host.getWitnessKeys(), host.txFrame.getCollapsedSiblings(), preState)
 
     # Guest: run the block on the witness only
     let guest = witness.statelessLedger(preState.getStateRoot())
     guest.writeSlots(contract, txs)
 
     check:
-      host.getCollapsedSiblings().len == 0
+      host.txFrame.getCollapsedSiblings().len == 0
       guest.fatalError.isNone()
-      not guest.hasUnprovenCollapse()
+      not guest.txFrame.hasUnprovenCollapse()
       guest.getStateRoot() == host.getStateRoot()
 
   test "Account collapse onto a leaf, restored by a re-create":
@@ -258,7 +258,7 @@ suite "Stateless: Witness Generation - collapses undone later in the block":
     host.setBalance(x, 2.u256)
     host.persist()
     let witness =
-      Witness.build(host.getWitnessKeys(), host.getCollapsedSiblings(), preState)
+      Witness.build(host.getWitnessKeys(), host.txFrame.getCollapsedSiblings(), preState)
 
     # Guest: run the block on the witness only
     let guest = witness.statelessLedger(preState.getStateRoot())
@@ -268,9 +268,9 @@ suite "Stateless: Witness Generation - collapses undone later in the block":
     guest.persist()
 
     check:
-      host.getCollapsedSiblings().len == 0
+      host.txFrame.getCollapsedSiblings().len == 0
       guest.fatalError.isNone()
-      not guest.hasUnprovenCollapse()
+      not guest.txFrame.hasUnprovenCollapse()
       guest.getStateRoot() == host.getStateRoot()
 
   test "Storage collapse onto a leaf, split higher up by an insert":
@@ -301,14 +301,14 @@ suite "Stateless: Witness Generation - collapses undone later in the block":
     let host = LedgerRef.init(memDB.baseTxFrame().txFrameBegin(), false, collectWitness = true)
     host.writeSlots(contract, txs)
     let witness =
-      Witness.build(host.getWitnessKeys(), host.getCollapsedSiblings(), preState)
+      Witness.build(host.getWitnessKeys(), host.txFrame.getCollapsedSiblings(), preState)
 
     # Guest: run the block on the witness only
     let guest = witness.statelessLedger(preState.getStateRoot())
     guest.writeSlots(contract, txs)
 
     check:
-      host.getCollapsedSiblings().len == 1 # s's leaf
+      host.txFrame.getCollapsedSiblings().len == 1 # s's leaf
       guest.fatalError.isNone()
-      not guest.hasUnprovenCollapse()
+      not guest.txFrame.hasUnprovenCollapse()
       guest.getStateRoot() == host.getStateRoot()

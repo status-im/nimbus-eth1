@@ -292,6 +292,29 @@ proc clearStorage*(
 
   ok()
 
+proc getCollapsedSiblings*(db: AristoTxRef): seq[RootedVertexID] =
+  ## Collapsed siblings for witness generation. Persist runs per transaction,
+  ## so a later insert in the block may restore a collapsed branch. The spec
+  ## applies the block's writes at once and only needs the sibling if the
+  ## final trie still lacks that branch.
+  var res: seq[RootedVertexID]
+  for (sibling, brVid, brPfxLen) in db.collapsedSiblings:
+    let vtx = db.getVtx((sibling.root, brVid))
+    if vtx.isValid and vtx.vType in Branches and vtx.pfx.len == int(brPfxLen):
+      continue # restored by a later insert
+    res.add(sibling)
+  res
+
+proc hasUnprovenCollapse*(db: AristoTxRef): bool =
+  ## Stateless only: true if a branch that collapsed onto a child absent from
+  ## the witness is still collapsed. The witness then lacks that child.
+  for rvid in db.unprovenCollapses:
+    let vtx = db.getVtx(rvid)
+    if vtx.isValid and vtx.vType == BoundaryNode and
+        BoundaryNodeRef(vtx).unprovenCollapse:
+      return true
+  false
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
