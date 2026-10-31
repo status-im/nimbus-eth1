@@ -62,14 +62,17 @@ proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonR
     persistBatchSize = config.persistBatchSize,
     dynamicBatchSize = config.dynamicBatchSize,
   )
+  var loaded = false
   if config.deserializeFcState:
+    loaded = true
     fc.deserialize().isOkOr:
       warn "Loading block DAG from database", msg=error
+      loaded = false
   else:
     warn "Skipped loading of block DAG from database", deserializeFcState = config.deserializeFcState
   # The snapshot is stale after the first write, drop it before any. A clean
   # shutdown saves a new one.
-  fc.baseTxFrame.invalidateFcSnapshot().isOkOr:
+  fc.baseTxFrame.invalidateFcSnapshot(keepFrames = loaded).isOkOr:
     fatal "Cannot drop the block DAG snapshot", msg = $error
     quit(QuitFailure)
 

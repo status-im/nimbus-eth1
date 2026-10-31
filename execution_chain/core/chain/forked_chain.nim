@@ -348,6 +348,8 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
 
   let startTime = Moment.now()
 
+  c.restoreFrame(base).expect("frame blobs of a block above base")
+
   # State root sanity check is performed to verify, before writing to disk,
   # that optimistically checked blocks indeed end up being stored with a
   # consistent state root.
@@ -538,7 +540,7 @@ proc validateBlock(
     # greater than a block which is expected to be persisted based on the
     # persistBatchSize
     moveParentHashKeys = c.persistBatchSize > 1 and (blk.header.number mod c.persistBatchSize) != 1
-    parentFrame = parent.txFrame
+    parentFrame = c.stateFrame(parent)
     txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
 
   # BLOCKHASH resolves along the block's own branch
@@ -576,6 +578,10 @@ proc validateBlock(
   # expensive operation, specially when creating a new branch (ie when blk
   # is being applied to a block that is currently not a head).
   txFrame.checkpoint(blk.header.number, skipSnapshot = false)
+  c.baseTxFrame.storeTxFrame(txFrame, blkHash).expect("store frame blob")
+  # The snapshot holds the block's changes too, and the blob keeps them
+  # for a replay once a child takes the snapshot
+  txFrame.detach()
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, txHashes)
 
@@ -918,6 +924,7 @@ proc setHead*(c: ForkedChainRef, headHash: Hash32): Result[void, string] =
         # Reached the new head's lineage, or a segment already removed while
         # walking a previous branch.
         break
+      c.baseTxFrame.deleteTxFrame(it.hash).expect("delete discarded frame blob")
       c.removeBlockFromCache(it)
 
   c.heads = @[head]
@@ -958,19 +965,19 @@ func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame
   c.hashToBlock.hasKey(blockHash)
 
-func txFrame*(c: ForkedChainRef, blockHash: Hash32): CoreDbTxRef =
+proc txFrame*(c: ForkedChainRef, blockHash: Hash32): CoreDbTxRef =
   if blockHash == c.base.hash:
     return c.baseTxFrame
 
   c.hashToBlock.withValue(blockHash, loc) do:
-    return loc[].txFrame
+    return c.stateFrame(loc[])
 
   c.baseTxFrame
 
 func baseTxFrame*(c: ForkedChainRef): CoreDbTxRef =
   c.baseTxFrame
 
-func txFrame*(c: ForkedChainRef, header: Header): CoreDbTxRef =
+proc txFrame*(c: ForkedChainRef, header: Header): CoreDbTxRef =
   c.txFrame(header.computeBlockHash())
 
 func latestTxFrame*(c: ForkedChainRef): CoreDbTxRef =

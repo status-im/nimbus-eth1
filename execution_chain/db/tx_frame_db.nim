@@ -22,7 +22,7 @@ import
   eth/common/hashes,
   results,
   ./core_db/[base, base_desc],
-  ./aristo/aristo_tx_blobify,
+  ./aristo/[aristo_desc, aristo_tx_blobify, aristo_tx_frame],
   ./kvt/[kvt_desc],
   ./storage_types
 
@@ -47,15 +47,11 @@ proc storeTxFrame*(
 
   target.put(txFrameKey(blockHash).toOpenArray, blob)
 
-proc loadTxFrameAsChild*(
+proc getTxFrameBlob(
     srcBase: CoreDbTxRef;
-    parent: CoreDbTxRef;
     blockHash: Hash32;
-      ): CoreDbRc[CoreDbTxRef] =
-  ## Read the stored delta for `blockHash` from `srcBase`'s KVT and return
-  ## a new `CoreDbTxRef` rooted as a child of `parent`, with the stored
-  ## delta applied.  Used by the chain persistence layer to materialise
-  ## per-block frames in the chain hierarchy without re-executing blocks.
+      ): CoreDbRc[seq[byte]] =
+  ## The stored entry for `blockHash`, its aristo region is `blob[4 .. ^1]`
   let blob = srcBase.get(txFrameKey(blockHash).toOpenArray).valueOr:
     return err(error)
 
@@ -70,18 +66,39 @@ proc loadTxFrameAsChild*(
   if aLen == 0 or blobLen != 4'u64 + aLen:
     return err(DataInvalid.toError("invalid aristo region length"))
 
-  let aData = deblobifyTxFrame(blob.toOpenArray(4, int(4'u64 + aLen) - 1)).valueOr:
+  ok blob
+
+proc foldTxFrame*(
+    srcBase: CoreDbTxRef;
+    frame: CoreDbTxRef;
+    blockHash: Hash32;
+    level: int;
+      ): CoreDbRc[Opt[uint64]] =
+  ## Add the stored delta for `blockHash`, at `level`, to the snapshot of
+  ## `frame`, under the newer deltas already folded in. Returns the stored
+  ## block number.
+  let blob = ?srcBase.getTxFrameBlob(blockHash)
+
+  let number = blob.toOpenArray(4, blob.high).deblobifyTxFrameInto(frame.aTx, level).valueOr:
     return err(error.toError("aristo deblobify"))
 
-  let frame = parent.txFrameBegin()
-  frame.aTx.sTab        = aData.sTab
-  frame.aTx.kMap        = aData.kMap
-  frame.aTx.accLeaves   = aData.accLeaves
-  frame.aTx.stoLeaves   = aData.stoLeaves
-  frame.aTx.vTop        = aData.vTop
-  frame.aTx.blockNumber = aData.blockNumber
+  ok number
 
-  ok frame
+proc loadSnapshot*(frame: CoreDbTxRef; base: CoreDbTxRef) =
+  ## Make the folded snapshot the state of `frame`, queued with the others
+  frame.aTx.loadSnapshot(base.aTx)
+
+proc statelessFrame*(base: CoreDbTxRef): CoreDbTxRef =
+  ## A block frame without state, it is replayed when needed
+  let frame = base.txFrameBegin()
+  frame.aTx.dispose()
+  frame
+
+func hasSnapshot*(tx: CoreDbTxRef): bool =
+  tx.aTx.snapshot.level.isSome()
+
+proc detach*(tx: CoreDbTxRef) =
+  tx.aTx.detach()
 
 proc deleteTxFrame*(
     db: CoreDbTxRef;

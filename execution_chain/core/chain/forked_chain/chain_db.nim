@@ -97,6 +97,32 @@ proc writeCanonicalMappings*(c: ForkedChainRef, base: BlockRef) =
         expect("write transaction lookup")
   db.setHead(base.hash).expect("write canonical head")
 
+proc restoreFrame*(c: ForkedChainRef, b: BlockRef): Result[void, string] =
+  ## Give `b` its state back in its own frame when it has none, folded from the
+  ## frame blobs of the blocks above base with each entry at the level of its
+  ## block, and queued with the other snapshots
+  if b == c.base or b.txFrame.hasSnapshot:
+    return ok()
+
+  let baseLevel = c.baseTxFrame.aTx.level
+  for it in ancestors(b):
+    if it == c.base:
+      break
+    let
+      level = baseLevel + int(it.number - c.base.number)
+      number = c.baseTxFrame.foldTxFrame(b.txFrame, it.hash, level).valueOr:
+        return err($error)
+    if number != Opt.some(it.number):
+      return err("corrupted FC: frame block number mismatch")
+
+  b.txFrame.loadSnapshot(c.baseTxFrame)
+  ok()
+
+proc stateFrame*(c: ForkedChainRef, b: BlockRef): CoreDbTxRef =
+  ## The frame of `b`, holding its state
+  c.restoreFrame(b).expect("frame blobs of a block above base")
+  b.txFrame
+
 proc deleteBlockData*(c: ForkedChainRef, b: BlockRef) =
   # Blocks above base have no number or tx lookups on disk to delete
   let db = c.baseTxFrame

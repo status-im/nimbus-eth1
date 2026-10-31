@@ -167,7 +167,7 @@ proc processBlock*(
     processBlock()
 
     let
-      preStateLedger = LedgerRef.init(parentBlk.txFrame)
+      preStateLedger = LedgerRef.init(txFrame.parent())
       witness = Witness.build(preStateLedger, vmState.ledger, parentBlk.header, header)
 
     # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.

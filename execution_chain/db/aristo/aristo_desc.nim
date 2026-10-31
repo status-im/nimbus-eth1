@@ -95,6 +95,9 @@ type
       ## Optional snapshot containing the cumulative changes from ancestors and
       ## the current frame
 
+    detached*: bool
+      ## The snapshot is the frame's only state, ancestors are not read
+
     level*: int
       ## Ancestry level of frame, increases with age but otherwise meaningless -
       ## used to order data by age when working with layers.
@@ -248,6 +251,9 @@ iterator rstack*(tx: AristoTxRef, stopAtSnapshot = false): AristoTxRef =
   var tx = tx
 
   while tx != nil:
+    # A disposed frame has no state left to read through
+    doAssert not stopAtSnapshot or tx.level != disposedLevel,
+      "read through a disposed frame"
     yield tx
 
     if stopAtSnapshot and tx.snapshot.level.isSome():
