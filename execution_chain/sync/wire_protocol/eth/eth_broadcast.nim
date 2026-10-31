@@ -263,6 +263,7 @@ proc fetchPooledTxs(wire: EthWireRef, peer: Peer,
   var
     i = 0
     map: Table[Hash32, SizeType]
+    delivered: HashSet[Hash32]
 
   while i < numTx:
     var
@@ -371,6 +372,8 @@ proc fetchPooledTxs(wire: EthWireRef, peer: Peer,
         await wire.refetchFromAlternate(peer.id, packet)
         return
 
+      delivered.incl hash
+
       # addTx performs the expensive KZG verification itself; on
       # InvalidBlob we treat it as a protocol breach. Yield to the
       # event loop afterwards so RPC and peer dispatch aren't starved
@@ -382,11 +385,13 @@ proc fetchPooledTxs(wire: EthWireRef, peer: Peer,
           await peer.disconnect(BreachOfProtocol, notifyRemote = true)
           await wire.refetchFromAlternate(peer.id, packet)
           return
-        # Transient rejection (stale baseFee, pool full, sender max txs,
-        # etc.) -- release the dedupe slot so a later re-announcement can
-        # retrigger a fetch instead of being silently dropped as
-        # "already seen" until cleanupSeenTransactions ages it out.
-        wire.seenTransactions.del(hash)
+        # A full pool may have room later -- release the dedupe slot so a
+        # later re-announcement can retrigger a fetch. Any other rejection
+        # (fee below the base fee, nonce too small, ...) would repeat on a
+        # refetch: keep the slot until cleanupSeenTransactions ages it out,
+        # or every announcement of the tx from any peer fetches it again.
+        if error in {txErrorPoolIsFull, txErrorSenderMaxTxs}:
+          wire.seenTransactions.del(hash)
         await sleepAsync(ZeroDuration)
         continue
 
@@ -400,7 +405,7 @@ proc fetchPooledTxs(wire: EthWireRef, peer: Peer,
     # until cleanupSeenTransactions ages it out twenty minutes later, and the
     # transaction never reaches the pool.
     for h in msg.txHashes:
-      if h notin wire.txPool:
+      if h notin wire.txPool and h notin delivered:
         wire.seenTransactions.del(h)
       awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
 

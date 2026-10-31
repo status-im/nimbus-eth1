@@ -25,6 +25,7 @@ import
   ../../execution_chain/networking/p2p,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,
+  ../../execution_chain/core/tx_pool/tx_desc,
   ../../execution_chain/core/pooled_txs,
   ../../execution_chain/sync/wire_protocol,
   ../../execution_chain/conf,
@@ -867,6 +868,52 @@ suite "Tx propagation":
 
       check await env1.waitForPooled(txHash)
       check peerB.connectionState == ConnectionState.Connected
+
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
+
+  test "a fetched tx the pool rejects keeps its dedupe slot":
+    ## Hoodi base fee spike: peers gossip txs priced below the pool's base
+    ## fee. Releasing the dedupe slot on that rejection made every later
+    ## announcement fetch the tx again, until the action queue stayed full
+    ## and no tx reached the pool.
+    proc runTest() {.async.} =
+      setupEnvPair(env1, env2)
+      let peer = await connectPair(env1, env2)
+      check not peer.isNil
+
+      check not env1.wire.syncerRunning()
+
+      # Run the fetch action by hand, and keep the tx off the gossip path
+      for fut in env1.wire.actionHeartbeat:
+        await fut.cancelAndWait()
+      await env2.wire.txGossipHeartbeat.cancelAndWait()
+
+      let
+        ptx = env2.makeSignedTx(0)
+        txHash = ptx.tx.computeRlpHash
+        packet = NewPooledTransactionHashesPacket(
+          txTypes: @[ptx.tx.txType.byte],
+          txSizes: @[uint64(getEncodedLength(ptx))],
+          txHashes: @[txHash])
+      check env2.txPool.addTx(ptx).isOk
+
+      # The base fee rose above the tx's fee cap
+      env1.txPool.vmState.blockCtx.baseFeePerGas = ptx.tx.maxFeePerGas + 1
+
+      await env1.wire.handleTxHashesBroadcast(packet, peer)
+      check env1.wire.actionQueue.len == 1
+      let action = await env1.wire.actionQueue.popFirst()
+      check await withTimeout(action(), chronos.seconds(5))
+
+      check not env1.txPool.contains(txHash)
+      check txHash in env1.wire.seenTransactions
+
+      # Announcing it again schedules no new fetch
+      await env1.wire.handleTxHashesBroadcast(packet, peer)
+      check env1.wire.actionQueue.len == 0
 
       await env2.close()
       await env1.close()
