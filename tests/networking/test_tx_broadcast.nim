@@ -1041,3 +1041,87 @@ suite "Tx propagation":
       await env1.close()
 
     waitFor runTest()
+
+type
+  StallProxy = ref object
+    server: StreamServer
+    forward: AsyncEvent
+
+proc pump(src, dst: StreamTransport, gate: AsyncEvent) {.async: (raises: []).} =
+  var buf = newSeq[byte](16384)
+  try:
+    while true:
+      if not gate.isNil:
+        await gate.wait()
+      let n = await src.readOnce(addr buf[0], buf.len)
+      if n == 0:
+        break
+      discard await dst.write(addr buf[0], n)
+  except CatchableError:
+    discard
+  await noCancel src.closeWait()
+  await noCancel dst.closeWait()
+
+proc acceptLoop(proxy: StallProxy, target: TransportAddress) {.async: (raises: []).} =
+  try:
+    while true:
+      let
+        client = await proxy.server.accept()
+        upstream = await connect(target)
+      asyncSpawn pump(client, upstream, proxy.forward)
+      asyncSpawn pump(upstream, client, nil)
+  except CatchableError:
+    discard
+
+proc newStallProxy(target: TransportAddress): StallProxy =
+  let proxy = StallProxy(
+    server: createStreamServer(initTAddress("127.0.0.1:0"), {ReuseAddr}),
+    forward: newAsyncEvent(),
+  )
+  proxy.forward.fire()
+  asyncSpawn proxy.acceptLoop(target)
+  proxy
+
+suite "Stalled peer":
+
+  test "send to a peer that stopped reading times out and drops the peer":
+    proc runTest() {.async.} =
+      setupEnvPair(env1, env2)
+      env2.node.startListening()
+
+      var enode = env2.node.toENode()
+      let proxy = newStallProxy(initTAddress(enode.address.ip, enode.address.tcpPort))
+      enode.address.tcpPort = proxy.server.localAddress().port
+      await env1.node.connectToNode(newNode(enode))
+
+      var peer: Peer
+      for p in env1.node.peers():
+        peer = p
+      check not peer.isNil
+
+      var
+        types = newSeq[byte](4096)
+        sizes = newSeq[uint64](4096)
+        hashes = newSeq[Hash32](4096)
+      for i in 0 ..< hashes.len:
+        sizes[i] = 100
+        hashes[i] = keccak256([byte(i and 0xff), byte(i shr 8)])
+
+      proxy.forward.clear()
+      let start = Moment.now()
+      var failed = false
+      try:
+        for _ in 0 ..< 1000:
+          await peer.newPooledTransactionHashes(types, sizes, hashes)
+      except EthP2PError:
+        failed = true
+
+      check failed
+      check Moment.now() - start < chronos.seconds(45)
+      check peer.connectionState in {Disconnecting, Disconnected}
+
+      await proxy.server.closeWait()
+      await env2.close()
+      await env1.close()
+
+    waitFor runTest()
