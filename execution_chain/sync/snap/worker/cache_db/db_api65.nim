@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
+  std/[sequtils, typetraits],
   pkg/eth/common,
   ./[db_const, db_desc, db_r_cmd]
 
@@ -144,6 +144,21 @@ template del65*(
     key: Hash32;
       ): untyped =
   db.adb.rDel col.key65(path, key)
+
+template clr65*(db: CacheDbRef, col: MptAsmCol, key1: untyped): untyped =
+  doAssert key1.len == 32
+
+  var minKey: array[65,byte]
+  minKey[0] = col.ord
+  (addr minKey[1]).copyMem(addr (key1.distinctBase)[0], 32)
+
+  const ffff = 0xffu8.repeat(32)
+  var maxKey: array[65,byte]
+  maxKey[0] = col.ord
+  (addr maxKey[1]).copyMem(addr (key1.distinctBase)[0], 32)
+  (addr maxKey[32]).copyMem(addr (ffff.distinctBase)[0], 32)
+
+  db.adb.rClear(minKey, maxKey)
 
 # ------------------------------------------------------------------------------
 # End

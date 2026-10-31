@@ -19,7 +19,8 @@
 import
   std/sequtils,
   pkg/[chronicles, chronos, metrics, stew/interval_set],
-  ../../[helpers, cache_db, delete_account, mpt_build, worker_desc],
+  ../../[helpers, cache_db, mpt_build, worker_desc],
+  ../delete_account,
   ./storage_fetch
 
 const
@@ -33,13 +34,6 @@ proc storageDownloadMetricsUpdate*(ctx: SnapCtxRef, info: static[string])
 # ------------------------------------------------------------------------------
 # Private helpers for `downloadImpl()`
 # ------------------------------------------------------------------------------
-
-func isFullRange(itrs: ItemKeyRangeSet): bool =
-  # Defensive encoding of a full range check. Solely testing `total; == 0`
-  # leaves room for the case that the range is empty which is an illegal
-  # situation but it can handled with savely.
-  itrs.total == 0 and                               # => 0 or 2^256
-  itrs.chunks == 1                                  # => one intv => full MPT
 
 proc getStoAccsAndRoots(
     buddy: SnapPeerRef;
@@ -432,12 +426,15 @@ template storageDownloadCommit*(
     # never happen in the first place.
     let lckPaths = adb.walkStoLock.toSeq()
     for accPath in lckPaths:
-      ctx.deleteAccount(accPath, timer, info).isOkOr:
+      ctx.deleteAccount(accPath, info).isOkOr:
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body
 
-    if 0 < lckPaths.len or 0 < nPartMpt:
-      warn info & ": Cleared locked storage sub-MPTs",
+    if 0 < lckPaths.len:
+      warn info & ": Cleared locked storage accounts",
+        nPartMpt, nStoLock=lckPaths.len
+    elif 0 < nPartMpt:
+      debug info & ": Updated storage accounts for re-fetch",
         nPartMpt, nStoLock=lckPaths.len
 
     bodyRc = typeof(bodyRc).ok()
