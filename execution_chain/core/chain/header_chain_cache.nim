@@ -60,11 +60,10 @@
 {.push raises:[].}
 
 import
-  std/sequtils,
-  pkg/[chronicles, metrics, stew/endians2],
+  pkg/[chronicles, metrics],
   pkg/eth/[common, rlp],
   "../.."/[common, db/core_db, db/storage_types],
-  ../../db/[kvt, kvt_cf],
+  ../../db/kvt,
   ../../db/kvt/[kvt_utils],
   ./forked_chain,
   ./forked_chain/[chain_branch, chain_desc, block_quarantine]
@@ -130,23 +129,21 @@ type
     consHead: Header            # for logging, metrics etc.
     finHash: Hash32             # for logging, metrics etc.
     notify: HeaderChainNotifyCB # client app notification
-    kvt: KvtDbRef               # metadata and temporary headers storage with
-                                # it's own column family
-                                # isolated from ordinary headers storage.
+    kvt: KvtDbRef               # KVT proper: session headers are stored at
+                                # their final location `genericHashKey(hash)`
+                                # along with a number->hash session index and
+                                # the session info record.
 const
   MsgPfx = "Header Cache: "
     ## Message prefix used when logging or raising an exception
 
 const
-  HccDbInfoKey = 0.beaconHeaderKey
+  HccDbInfoKey = syncHeaderInfoKey()
+    ## Session info record, bounds the session index `[least,last]`
 
   MinBnKey = beaconHeaderKey(low BlockNumber)
   MaxBnKey = beaconHeaderKey(high BlockNumber)
-    ## Used for deleteing the full key range
-
-  MinHashKey = genericHashKey(zeroHash32)
-  MaxHashKey = genericHashKey(Hash32.copyFrom 0xffu8.repeat(32))
-    ## Ditto
+    ## Used for deleting the full session index key range
 
 # ------------------------------------------------------------------------------
 # Private debugging and print functions
@@ -167,13 +164,6 @@ func toStr(hc: HeaderChainRef): string =
 
 func encodePayload[T](arg: T): seq[byte] =
   rlp.encode(arg)
-
-func decodePayload(data: seq[byte]; T: type): T =
-  try:
-    result = rlp.decode(data, T)
-  except RlpError as e:
-    raiseAssert MsgPfx & "rlp.decode(" & $T & ") failed:" &
-      " name=" & $e.name & " error=" & e.msg
 
 # ------------------------------------------------------------------------------
 # Private cache helpers: database related
@@ -199,60 +189,83 @@ proc delInfo(db: KvtDbRef) =
   discard db.del(HccDbInfoKey.toOpenArray)
 
 
-proc putHeader(db: KvtDbRef; h: Header) =
-  ## Store the argument `header` indexed by block number, and the hash lookup
-  ## of the parent header.
+proc putHeader(db: KvtDbRef; h: Header; hash: Hash32) =
+  ## Store the session index entry `number -> hash` followed by the header
+  ## at its final KVT location `genericHashKey(hash)`. The value is
+  ## byte-identical to what `persistHeader()` writes on block import.
+  ##
+  ## Ordering: the index entry is written first so that an interrupted write
+  ## never leaves a header on disk that the clean up cannot find.
+  db.put(beaconHeaderKey(h.number).toOpenArray, hash.data).isOkOr:
+    raiseAssert MsgPfx & "put(index) failed: " & $error
+
   var data = encodePayload(h)
-  db.put(beaconHeaderKey(h.number).toOpenArray, data).isOkOr:
+  db.put(genericHashKey(hash).toOpenArray, data).isOkOr:
     raiseAssert MsgPfx & "put(header) failed: " & $error
 
-  let parNumData = (h.number-1).toBytesBE
-  db.put(genericHashKey(h.parentHash).toOpenArray, parNumData).isOkOr:
-    raiseAssert MsgPfx & "put(number-1) failed: " & $error
 
-
-proc getNumber(db: KvtDbRef, hash: Hash32): Opt[BlockNumber] =
-  let number = db.get(genericHashKey(hash).toOpenArray).valueOr:
-    return err()
-  ok(uint64.fromBytesBE(number))
-
-proc getHeader(db: KvtDbRef; bn: BlockNumber): Opt[Header] =
-  ## Retrieve some header from cache
+proc getHash(db: KvtDbRef; bn: BlockNumber): Opt[Hash32] =
+  ## Retrieve session header hash by block number
   let data = db.get(beaconHeaderKey(bn).toOpenArray).valueOr:
     return err()
-  ok decodePayload(data, Header)
+  if data.len != 32:
+    return err()                                  # legacy/garbage entry
+  ok(Hash32.copyFrom data)
+
+proc getHeaderByHash(db: KvtDbRef; hash: Hash32): Opt[Header] =
+  ## Retrieve some header from the KVT, not checking the session index
+  let data = db.get(genericHashKey(hash).toOpenArray).valueOr:
+    return err()
+  try:
+    ok rlp.decode(data, Header)
+  except RlpError:
+    err()
+
+proc getHeader(db: KvtDbRef; bn: BlockNumber): Opt[Header] =
+  ## Retrieve some session header
+  db.getHeaderByHash ?db.getHash(bn)
 
 proc getHeader(db: KvtDbRef; hash: Hash32): Opt[Header] =
-  ## Variant of `getHeader()`
-  db.getHeader ?db.getNumber(hash)
-
-
-proc delHeader(db: KvtDbRef; bn: BlockNumber) =
-  ## Remove header from cache, ignore non-existing entries
-  let
-    bnKey = beaconHeaderKey(bn)
-    rc = db.get(bnKey.toOpenArray)
-  discard db.del(bnKey.toOpenArray)
-  if rc.isOk:
-    let h =  decodePayload(rc.value, Header)
-    discard db.del(genericHashKey(h.parentHash).toOpenArray)
+  ## Variant of `getHeader()`. Only headers registered with the session index
+  ## are returned.
+  let h = ?db.getHeaderByHash(hash)
+  if db.getHash(h.number) != Opt.some(hash):
+    return err()
+  ok(h)
 
 # ----------------------
 
-proc persistInfo(hc: HeaderChainRef) =
-  ## Persist info record
+proc persistInfo(hc: HeaderChainRef; least: BlockNumber) =
+  ## Persist info record. This must be called before any session header with
+  ## a block number smaller than the current `least` value is stored.
   hc.kvt.putInfo HccDbInfo(
-    least: hc.session.ante.number,
+    least: least,
     last:  hc.session.head.number)
 
+proc ownedByFC(hc: HeaderChainRef; bn: BlockNumber; hash: Hash32): bool =
+  ## Returns `true` if the header has been taken over by the `FC` module
+  if hc.chain.hashToBlock.hasKey(hash):
+    return true
+  bn <= hc.chain.baseNumber and
+    hc.chain.baseTxFrame.getBlockHash(bn).valueOr(default(Hash32)) == hash
+
 proc persistClear(hc: HeaderChainRef) =
-  ## Clear persistent cache database
+  ## Clear persistent session data. Session headers which were not taken over
+  ## by the `FC` module are deleted from the KVT. The function is idempotent,
+  ## so an interrupted clean up is completed by the next `init()`.
   hc.kvt.getInfo.isErrOr:
-    # This also clears the info record stored at `MinBnKey`
-    hc.kvt.delRangeBe(MinBnKey.toOpenArray, MaxBnKey.toOpenArray).isOkOr:
-      info "Error cleaning up cached block numbers", `error`=error
-    hc.kvt.delRangeBe(MinHashKey.toOpenArray, MaxHashKey.toOpenArray).isOkOr:
-      info "Error cleaning up cached hashes", `error`=error
+    if value.least <= value.last:
+      for bn in value.least .. value.last:
+        let hash = hc.kvt.getHash(bn).valueOr:
+          continue
+        if not hc.ownedByFC(bn, hash):
+          discard hc.kvt.del(genericHashKey(hash).toOpenArray)
+  # Always remove the full index range, there might be entries left over from
+  # a legacy version.
+  hc.kvt.delRangeBe(MinBnKey.toOpenArray, MaxBnKey.toOpenArray).isOkOr:
+    info "Error cleaning up cached block numbers", `error`=error
+  discard hc.kvt.del(MaxBnKey.toOpenArray)        # range end is exclusive
+  hc.kvt.delInfo()
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -301,7 +314,8 @@ proc resolveFinHash(hc: HeaderChainRef, f: Hash32) =
     v.number
 
   let number = (
-    hc.chain.quarantine.getHeader(f).map(toNumber) or hc.kvt.getNumber(f) or
+    hc.chain.quarantine.getHeader(f).map(toNumber) or
+    hc.kvt.getHeader(f).map(toNumber) or
     hc.chain.headerByHash(f).map(toNumber)
   ).valueOr:
     hc.chain.pendingFCU = f
@@ -329,7 +343,8 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
         head:     h,
         headHash: h.computeBlockHash())
 
-      hc.kvt.putHeader(h)
+      hc.persistInfo(h.number)                      # info first, then header
+      hc.kvt.putHeader(h, hc.session.headHash)
       metrics.set(nec_sync_dangling, h.number.int64)
 
       # Update `FC` module
@@ -414,7 +429,7 @@ proc init*(T: type HeaderChainRef; c: ForkedChainRef): T =
   ## using the cache, `start()` needs to be called so that the client app gets
   ## informed when and how the API is fully functional.
   ##
-  let hc = T(chain: c, kvt: c.com.db.kvtBackend().synchronizerKvt())
+  let hc = T(chain: c, kvt: c.com.db.kvt)
   hc.persistClear()                  # clear database
   hc
 
@@ -437,10 +452,7 @@ proc getHash*(hc: HeaderChainRef; bn: BlockNumber): Opt[Hash32] =
       return ok(hc.session.head.parentHash)
     else:
       return err()
-  # Use parent hash of child entry
-  let hdr = hc.kvt.getHeader(bn+1).valueOr:
-    return err()
-  ok(hdr.parentHash)
+  hc.kvt.getHash(bn)
 
 proc get*(hc: HeaderChainRef; bn: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
@@ -549,7 +561,9 @@ proc put*(
     # between indices `offset` and `revTopInx` stored if they turn out
     # consistent.
     #
-    var revTopInx = rev.len - 1
+    var
+      revTopInx = rev.len - 1
+      hashes = newSeqOfCap[Hash32](rev.len - offset)
     for n in offset .. revTopInx:
       let
         hdr = rev[n]
@@ -569,6 +583,7 @@ proc put*(
       if expHash != hash:
         # There is no need to clean up as nothing was store on the DB
         return err("Parent hash mismatch for rev[" & $n & "].number=" & $bn)
+      hashes.add hash
 
       if hash == hc.chain.pendingFCU:
         hc.session.finNum = Opt.some(hdr.number)    # needed by snap sync
@@ -596,16 +611,17 @@ proc put*(
         revTopInx = n
         break
 
+    # Widen the persisted session range before storing headers so that the
+    # clean up always covers every header written.
+    hc.persistInfo(rev[revTopInx].number)
+
     # Store on database
     for n in offset .. revTopInx:
-      hc.kvt.putHeader(rev[n])
+      hc.kvt.putHeader(rev[n], hashes[n - offset])
 
-    # Set new antecedent `ante` and save to disk (if any)
+    # Set new antecedent `ante`
     hc.session.ante = rev[revTopInx]
     metrics.set(nec_sync_dangling, hc.session.ante.number.int64)
-
-    # Save updates. persist to DB
-    hc.persistInfo()
 
   ok()
 

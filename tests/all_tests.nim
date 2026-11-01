@@ -21,6 +21,7 @@ import
     test_filters,
     test_forked_chain,
     test_forked_chain_blockhash,
+    test_header_chain_cache,
     test_forkid,
     test_genesis,
     test_getproof_json,
