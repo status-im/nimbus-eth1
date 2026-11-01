@@ -125,7 +125,7 @@ proc statelessProcessBlock*(
   )
   doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
 
-  if memoryVmState.ledger.hasUnprovenCollapse():
+  if memoryVmState.ledger.txFrame.hasUnprovenCollapse():
     return err("Witness lacks the sibling node of a collapsed branch")
 
   # As in the spec, the payload's BAL is only checked against the one execution
