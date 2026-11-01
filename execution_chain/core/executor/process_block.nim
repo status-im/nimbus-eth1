@@ -104,7 +104,8 @@ proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    skipValidation, skipReceipts, skipUncles: bool
+    skipValidation, skipReceipts, skipUncles: bool,
+    encodedTxs: openArray[seq[byte]],
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -121,7 +122,13 @@ proc procBlkPreamble(
       ledger.applyDAOHardFork()
 
   if not skipValidation: # Expensive!
-    if blk.transactions.calcTxRoot != header.txRoot:
+    doAssert encodedTxs.len == 0 or encodedTxs.len == blk.transactions.len
+    let txRoot =
+      if encodedTxs.len > 0:
+        calcTxRootEncoded(encodedTxs)
+      else:
+        blk.transactions.calcTxRoot
+    if txRoot != header.txRoot:
       return err("Mismatched txRoot")
 
   if com.isOsakaOrLater(header.timestamp):
@@ -378,14 +385,16 @@ proc processBlock*(
     skipUncles = false,
     skipStateRootCheck = false,
     skipPostExecBalCheck = false,
+    encodedTxs: openArray[seq[byte]] = [],
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network. A given
   ## `blockAccessList` must already have been validated against the header's
-  ## `blockAccessListHash`.
+  ## `blockAccessListHash`. When given, `encodedTxs` must hold `rlp.encode` of
+  ## each of `blk.transactions` and is used to check the txRoot.
 
   vmState.withBalPrefetch(blockAccessList):
     ?vmState.procBlkPreamble(
-      blk, blockAccessList, skipValidation, skipReceipts, skipUncles
+      blk, blockAccessList, skipValidation, skipReceipts, skipUncles, encodedTxs
     )
 
     # EIP-3675: no reward for miner in POA/POS

@@ -30,6 +30,22 @@ export
 template calcTxRoot*(transactions: openArray[Transaction]): Root =
   orderedTrieRoot(transactions)
 
+type
+  EncodedTx = distinct seq[byte]
+    ## A transaction already in its `rlp.encode` form
+
+proc append(w: var RlpWriter, tx: EncodedTx) =
+  w.appendRawBytes(seq[byte](tx))
+
+func calcTxRootEncoded*(encodedTxs: openArray[seq[byte]]): Root =
+  ## Same as `calcTxRoot`, but over transactions already encoded with
+  ## `rlp.encode`, so callers that also need the bytes encode only once
+  if encodedTxs.len == 0:
+    return EMPTY_ROOT_HASH
+  orderedTrieRoot(
+    cast[ptr UncheckedArray[EncodedTx]](addr encodedTxs[0])
+      .toOpenArray(0, encodedTxs.high))
+
 template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Root =
   orderedTrieRoot(withdrawals)
 

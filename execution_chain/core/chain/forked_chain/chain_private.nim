@@ -10,6 +10,7 @@
 {.push raises: [].}
 
 import
+  std/sequtils,
   ./chain_desc,
   ../../validate,
   ../../executor/process_block,
@@ -29,12 +30,13 @@ proc writeBaggage*(
     txFrame: CoreDbTxRef,
     receipts: openArray[StoredReceipt],
     generatedBal: Opt[BlockAccessListRef],
+    encodedTxs: openArray[seq[byte]],
 ): seq[Hash32] =
   template header(): Header =
     blk.header
 
-  var txHashes = txFrame.persistTransactions(
-    header.number, header.txRoot, blk.transactions, txHashToBlock = false)
+  var txHashes = txFrame.persistEncodedTransactions(
+    header.number, header.txRoot, encodedTxs, txHashToBlock = false)
   txFrame.persistReceipts(header.receiptsRoot, receipts)
   discard txFrame.persistUncles(blk.uncles)
 
@@ -127,6 +129,9 @@ proc processBlock*(
 
   let vmState = c.getVmState(parentBlk, txFrame, header, blockAccessList, finalized)
 
+  # Encode once - used for the txRoot check and for persisting the transactions
+  let encodedTxs = blk.transactions.mapIt(rlp.encode(it))
+
   var cached = false
   defer:
     if not cached:
@@ -148,7 +153,8 @@ proc processBlock*(
       # simply check that the provide block BAL (when skipPreExecBalCheck = false)
       # matches the header bal hash. In this case the post execution check can be
       # skipped.
-      skipPostExecBalCheck = not vmState.balTrackerEnabled
+      skipPostExecBalCheck = not vmState.balTrackerEnabled,
+      encodedTxs = encodedTxs,
     ).isOkOr:
       c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
       return err(error)
@@ -189,7 +195,8 @@ proc processBlock*(
     numberToHash = false)
 
   var txHashes = c.writeBaggage(
-    blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
+    blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList,
+    encodedTxs)
 
   vmState.receipts.setLen(0)
   vmState.receiptBlooms.setLen(0)

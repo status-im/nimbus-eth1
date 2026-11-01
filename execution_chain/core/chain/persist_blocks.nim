@@ -11,6 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
+  std/sequtils,
   stew/assign2,
   results,
   ../../evm/[state, types],
@@ -162,6 +163,14 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       txFrame
     )
 
+  # Encode once when the transactions are persisted - also used for the txRoot
+  # check
+  let encodedTxs =
+    if PersistTransactions in p.flags:
+      blk.transactions.mapIt(rlp.encode(it))
+    else:
+      @[]
+
   template processBlock(): auto =
     # Generate receipts for storage or validation but skip them otherwise
     ?vmState.processBlock(
@@ -171,6 +180,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       skipUncles = PersistUncles notin p.flags,
       skipStateRootCheck = skipValidation,
       skipPostExecBalCheck = skipValidation,
+      encodedTxs = encodedTxs,
     )
 
   if not vmState.com.statelessProvider:
@@ -214,8 +224,8 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     ?txFrame.persistHeaderAndSetHead(blockHash, header, com.startOfHistory)
 
   if PersistTransactions in p.flags:
-    txFrame.persistTransactions(
-      header.number, header.txRoot, blk.transactions)
+    txFrame.persistEncodedTransactions(
+      header.number, header.txRoot, encodedTxs)
 
   if PersistReceipts in p.flags:
     txFrame.persistReceipts(header.receiptsRoot, vmState.receipts)

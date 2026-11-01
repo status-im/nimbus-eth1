@@ -258,20 +258,21 @@ proc addBlockNumberToHashLookup*(
   when compileOption("threads"):
     db.kvt.blockHashes.put(blockNumber, blockHash)
 
-proc persistTransactions*(
+proc persistEncodedTransactions*(
     db: CoreDbTxRef;
     blockNumber: BlockNumber;
     txRoot: Hash32;
-    transactions: openArray[Transaction];
+    encodedTxs: openArray[seq[byte]];
     txHashToBlock = true;
       ): seq[Hash32] {.discardable.} =
+  ## Like `persistTransactions`, but for transactions already encoded with
+  ## `rlp.encode`
   const
-    info = "persistTransactions()"
+    info = "persistEncodedTransactions()"
 
-  var txHashes = newSeqOfCap[Hash32](transactions.len)
+  var txHashes = newSeqOfCap[Hash32](encodedTxs.len)
 
-  for idx, tx in transactions:
-    var encodedTx = rlp.encode(tx)
+  for idx, encodedTx in encodedTxs:
     let
       txHash = keccak256(encodedTx)
       key = hashIndexKey(txRoot, idx.uint16)
@@ -290,6 +291,16 @@ proc persistTransactions*(
         raiseAssert info & ": " & $$error
 
   move(txHashes)
+
+proc persistTransactions*(
+    db: CoreDbTxRef;
+    blockNumber: BlockNumber;
+    txRoot: Hash32;
+    transactions: openArray[Transaction];
+    txHashToBlock = true;
+      ): seq[Hash32] {.discardable.} =
+  db.persistEncodedTransactions(
+    blockNumber, txRoot, transactions.mapIt(rlp.encode(it)), txHashToBlock)
 
 proc getTransactionByIndex*(
     db: CoreDbTxRef;
