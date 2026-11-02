@@ -28,7 +28,7 @@ export chronicles, p2p_types, protocol_registry
 logScope:
   topics = "p2p rlpx"
 
-const peerSendTimeout = 20.seconds
+const defaultPeerSendTimeout* = 20.seconds
 
 #------------------------------------------------------------------------------
 # Rlpx Private functions
@@ -81,7 +81,7 @@ proc sendMsg(
       data = toHex(msg.toOpenArray(0, min(255, msg.high))),
       payload = toHex(payload.toOpenArray(0, min(255, payload.high)))
 
-    await peer.transport.sendMsg(msg).wait(peerSendTimeout)
+    await peer.transport.sendMsg(msg).wait(peer.network.peerSendTimeout)
   except AsyncTimeoutError:
     peer.transport.close()
     when sendDisconnect:

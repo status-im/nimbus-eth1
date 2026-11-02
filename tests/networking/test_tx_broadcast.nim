@@ -1087,6 +1087,7 @@ suite "Stalled peer":
   test "send to a peer that stopped reading times out and drops the peer":
     proc runTest() {.async.} =
       setupEnvPair(env1, env2)
+      env1.node.peerSendTimeout = chronos.milliseconds(200)
       env2.node.startListening()
 
       var enode = env2.node.toENode()
@@ -1117,7 +1118,7 @@ suite "Stalled peer":
         failed = true
 
       check failed
-      check Moment.now() - start < chronos.seconds(45)
+      check Moment.now() - start < chronos.seconds(2)
       check peer.connectionState in {Disconnecting, Disconnected}
 
       await proxy.server.closeWait()
