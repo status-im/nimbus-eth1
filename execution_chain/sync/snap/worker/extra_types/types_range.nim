@@ -133,7 +133,7 @@ const
 # ------------------------------------------------------------------------------
 
 func isFullRange*(itrs: ItemKeyRangeSet): bool =
-  # Defensive encoding of a full range check. Solely testing `total; == 0`
+  # Defensive encoding of a full range check. Solely testing `total == 0`
   # leaves room for the case that the range is empty which is an illegal
   # situation but it can handled with savely.
   itrs.total == 0 and                               # => 0 or 2^256

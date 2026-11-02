@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/[sequtils, sets],
   pkg/[chronicles, chronos, eth/common],
   pkg/stew/[byteutils, interval_set],
   ./[helpers, cache_db, worker_desc]
@@ -75,7 +76,7 @@ template applyCodeChange(
       ): auto =
   ## Apply BAL to contract code
   ##
-  var bodyRc = Opt[Hash32].err()
+  var bodyRc = Opt[void].err()
   block body:
     doAssert 0 < code.len
     let newCode = code[^1].newCode
@@ -85,7 +86,7 @@ template applyCodeChange(
         break body                                  # err()
       adb.delMissingBlob(accPath, info).isOkOr:     # no more missing (if any)
         break body
-      bodyRc = typeof(bodyRc).ok(EMPTY_CODE_HASH)
+      bodyRc = typeof(bodyRc).ok()
       break body
 
     adb.putFlatCode(accPath, newCode, info).isOkOr:
@@ -93,7 +94,7 @@ template applyCodeChange(
     adb.delMissingBlob(accPath, info).isOkOr:       # no more missing (if any)
       break body
 
-    bodyRc = typeof(bodyRc).ok(newCode.keccak256)
+    bodyRc = typeof(bodyRc).ok()
     # End `block body`
   bodyRc
 
@@ -109,15 +110,16 @@ template applyAccountChanges(
       ): auto =
   ## Async template
   ##
-  ## Apply BAL to account.
+  ## Apply BAL to account, returns `true` if either the storage root or the
+  ## code hash was reset to zero.
   ##
-  var bodyRc = Opt[void].err()
+  var bodyRc = Opt[bool].err()
   block body:
     if chng.storageChanges.len == 0 and
        chng.balanceChanges.len == 0 and
        chng.nonceChanges.len == 0 and
        chng.codeChanges.len == 0:
-      bodyRc = typeof(bodyRc).ok()
+      bodyRc = typeof(bodyRc).ok(false)
       break body                                    # nothing to do
 
     # Check for accounts in the downloaded range, i.e. they are not registered
@@ -137,26 +139,30 @@ template applyAccountChanges(
         break body                                  # failed
 
     # Get or create account data record.
-    var acc = maybeAcc.valueOr:
-      # A new account will be created if it is not in the range of accounts
-      # to be fetched, anyway
-      if accState.ranges.covered(accPath.to(ItemKey)):
-        bodyRc = typeof(bodyRc).ok()
-        break body                                  # ignore for now
-      emptyFlatAccData                              # new account
+    var
+      resetOk = false
+      acc = maybeAcc.valueOr:
+        # A new account will be created if it is not in the range of accounts
+        # to be fetched, anyway
+        if accState.ranges.covered(accPath.to(ItemKey)):
+          bodyRc = typeof(bodyRc).ok(false)
+          break body                                # ignore for now
+        emptyFlatAccData                            # new account
 
     timer.yieldThread()
 
     # Apply change list to account and cache DB
     if 0 < chng.storageChanges.len:
-      acc.account.storageRoot = zeroHash32          # no sto. root known anymore
       adb.applySlotChanges(accPath, chng.storageChanges, timer, info).isOkOr:
         break body                                  # failed
+      acc.account.storageRoot = zeroHash32          # no sto. root known anymore
+      resetOk = true
 
     if 0 < chng.codeChanges.len:
-      acc.account.codeHash =
-        adb.applyCodeChange(accPath, chng.codeChanges, info).valueOr:
-          break body                                # failed
+      adb.applyCodeChange(accPath, chng.codeChanges, info).isOkOr:
+        break body                                  # failed
+      acc.account.codeHash = zeroHash32             # no code hash known anymore
+      resetOk = true
 
     if 0 < chng.nonceChanges.len:
       acc.account.nonce = chng.nonceChanges[^1].newNonce
@@ -167,7 +173,7 @@ template applyAccountChanges(
     adb.putFlatAcc(accPath, acc, info).isOkOr:      # update account
       break body                                    # failed
 
-    bodyRc = typeof(bodyRc).ok()
+    bodyRc = typeof(bodyRc).ok(resetOk)
     # End `block body`
 
   bodyRc
@@ -190,7 +196,7 @@ template stateForward*(
   ## are exhausted. The latter can be detected if the return value stays
   ## the same.
   ##
-  var bodyRc = Opt[void].err()
+  var bodyRc = Opt[seq[Address]].err()
   block body:
     let
       adb = ctx.pool.cacheDB
@@ -199,6 +205,7 @@ template stateForward*(
       pivotNum = accState.number
 
     var
+      changed: HashSet[Address]
       number = pivotNum
       timer = TimerDataRef(time: Moment.now())
     template dist: untyped = (number-pivotNum)
@@ -214,10 +221,12 @@ template stateForward*(
         break
 
       for w in bal[]:
-        ctx.applyAccountChanges(w, timer, info).isOkOr:
+        let changedOk = ctx.applyAccountChanges(w, timer, info).valueOr:
           error info & ": Error applying BAL account changes", pivotNum, number,
             dist, accAddr=($w.address), accPath=w.address.computeAccPath.toStr
           break body                                # failed
+        if changedOk:
+          changed.incl w.address
 
     # Update pivot and forward block numbers if there was some progress
     if pivotNum < number:
@@ -226,7 +235,7 @@ template stateForward*(
       ctx.pool.pivotNum = number
       ctx.pool.forwardNum = number
 
-    bodyRc = typeof(bodyRc).ok()
+    bodyRc = typeof(bodyRc).ok(changed.toSeq)
     # End `block body`
 
   bodyRc
