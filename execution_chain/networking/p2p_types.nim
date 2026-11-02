@@ -47,6 +47,7 @@ type
     discovery*: Eth1Discovery
     bindIp*: IpAddress
     bindPort*: Port
+    peerSendTimeout*: Duration
 
     # Private fields:
     capabilities*: seq[Capability]

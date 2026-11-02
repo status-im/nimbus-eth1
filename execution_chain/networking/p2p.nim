@@ -60,7 +60,8 @@ proc newEthereumNode*(
     bindIp = IPv6_any(),
     rng = newRng(),
     enableDiscV5 = true,
-    forkIdProcs = ForkIdProcs()): EthereumNode =
+    forkIdProcs = ForkIdProcs(),
+    peerSendTimeout = defaultPeerSendTimeout): EthereumNode =
 
   if rng == nil: # newRng could fail
     raiseAssert "Cannot initialize RNG"
@@ -89,6 +90,7 @@ proc newEthereumNode*(
       discovery: discovery,
       forkId: forkIdProcs.forkId,
       rng: rng,
+      peerSendTimeout: peerSendTimeout,
     )
   node.peerPool = PeerPool.new(maxPeers = maxPeers)
   node
