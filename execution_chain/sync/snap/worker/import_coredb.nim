@@ -293,9 +293,9 @@ proc importCoreDb*(
 
   let txStateRoot = ?tx.fetchStateRoot(info)
   if header.stateRoot != txStateRoot:
-    error info & ": State roots differ when importing snap data",
-      number=status.number, stateRoot=header.stateRoot.toStr,
-      expected=txStateRoot.toStr, txStats
+    error info & ": Imported snap state root differs from expected",
+      number=status.number, stateRoot=txStateRoot.toStr,
+      expected=header.stateRoot.toStr, txStats
     return err()
 
   notice info & ": Imported snap state to Core DB",

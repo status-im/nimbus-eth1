@@ -332,7 +332,7 @@ template queueAndDownload(
           reqRef.ge().valueOr:                      # download partial sub-MPT
             raiseAssert "Empty range unexpected, peer=" & peer &
               ", root=" & root &
-              ", number=" & $number
+              ", pivot=" & $number
 
     # Download a list of full sub-MPTs, or a single one with a sub-range.
     # The `downloadImpl()` directive below will store any success in the
@@ -346,13 +346,13 @@ template queueAndDownload(
 
     # Save rest if there is any (i.e. partially completes storage tries)
     let nPartial {.inject,used.} = buddy.saveStoUpdates(stoStatQ, info).valueOr:
-      trace info & ": Storage processing failed", peer, root, number,
+      trace info & ": Storage processing failed", peer, root, pivot=number,
         syncState=($buddy.syncState), `error`=bodyRc.error
       bodyRc = typeof(bodyRc).err(error)
       break body
 
-    chronicles.info info & ": Storage sub-MPTs saved", peer, root,
-      number, nComplete=(stoStatQ.len - nPartial), nPartial,
+    debug info & ": Storage sub-MPTs saved", peer, root,
+      pivot=number, nComplete=(stoStatQ.len - nPartial), nPartial,
       syncState=($buddy.syncState)
 
     ctx.storageDownloadMetricsUpdate(info)          # update metrics

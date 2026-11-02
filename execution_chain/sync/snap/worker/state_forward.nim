@@ -247,7 +247,7 @@ template stateForward*(
       adb = ctx.pool.cacheDB
       accState = adb.getAccMissingIntv(info).valueOr:
         break body                                  # failed
-      pivotNum {.inject.} = accState.number
+      pivotNum = accState.number
 
     var
       changed: HashSet[Address]
@@ -257,18 +257,21 @@ template stateForward*(
 
     while true:
       if nBalsMax <= dist:
-        chronicles.info info & ": some BALs applied", pivotNum, number, dist
+        chronicles.info info & ": Some BALs applied",
+          pivot=pivotNum, newState=number, dist
         break
       number.inc
       let bal = adb.getBal(number, info).valueOr:
         number.dec
-        chronicles.info info & ": all BALs applied", pivotNum, number, dist
+        chronicles.info info & ": New pivot state after BALs applied",
+          pivot=pivotNum, newState=number, dist
         break
 
       for w in bal[]:
         let changedOk = ctx.applyAccChanges(w, timer, info).valueOr:
-          error info & ": Error applying BAL account changes", pivotNum, number,
-            dist, accAddr=($w.address), accPath=w.address.computeAccPath.toStr
+          error info & ": Error applying BAL account changes", pivot=pivotNum,
+            newState=number, dist, accAddr=($w.address),
+            accPath=w.address.computeAccPath.toStr
           break body                                # failed
         if changedOk:
           changed.incl w.address

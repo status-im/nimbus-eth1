@@ -206,7 +206,7 @@ template queueAndDownload(
       bodyRc = typeof(bodyRc).err(error)
       break body
 
-    trace info & ": Requesting contract codes", peer, root, number,
+    trace info & ": Requesting contract codes", peer, root, pivot=number,
       nCode=cdeQ.len
 
     # Fetch data from network, validate and store it. The  `downloadImpl()`
@@ -219,12 +219,12 @@ template queueAndDownload(
       break body
 
     let nLeft = buddy.commitCodeUpdates(cdeQ, info).valueOr:
-      trace info & ": Contract code processing failed", peer, root, number,
-        syncState=($buddy.syncState), `error`=bodyRc.error
+      trace info & ": Contract code processing failed", peer, root,
+        pivot=number, syncState=($buddy.syncState), `error`=bodyRc.error
       bodyRc = typeof(bodyRc).err(error)
       break body
 
-    chronicles.info info & ": Contract codes saved", peer, root, number,
+    debug info & ": Contract codes saved", peer, root, pivot=number,
       nCodes=(cdeQ.len-nLeft), nUnprocessed=nLeft, syncState=($buddy.syncState)
 
     bodyRc = typeof(bodyRc).ok()

@@ -84,11 +84,10 @@ template accountDownload*(
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = stateRoot.toStr        # logging ony
 
-      ivReq = ctx.accUnproc.fetchLeast(unprocAccountsRangeMax).valueOr:
-        trace info & ": Currently no more unpocessed", peer, root, number,
-          syncState=($buddy.syncState)
-        bodyRc = typeof(bodyRc).err(ECompleted)
-        break body                                  # return err()
+      ivReq {.inject.} =
+        ctx.accUnproc.fetchLeast(unprocAccountsRangeMax).valueOr:
+          bodyRc = typeof(bodyRc).err(ECompleted)
+          break body                                # return err()
 
     let
       data = buddy.fetchAccounts(stateRoot, ivReq).valueOr:
@@ -131,8 +130,9 @@ template accountDownload*(
         let prvData = maybe.unsafeGet()
         dirtyStorage = prvData.dirtyStorage
         dirtyCode = prvData.dirtyCode
-        trace info & ": Updated accounts record", peer, root, number,
+        trace info & ": Updating account record", peer, root, number,
           accPath=w.accHash.toStr, dirtyStorage, dirtyCode,
+          storageRoot=acc.storageRoot.toStr, codeHash=acc.codeHash.toStr,
           syncState=($buddy.syncState)
 
       else:
@@ -168,7 +168,7 @@ template accountDownload*(
     # Update metrics
     ctx.accountDownloadMetricsUpdate()
 
-    chronicles.info info & ": Accounts saved", peer, root,
+    debug info & ": Accounts saved", peer, root,
       number, ivResp=(ivReq.minPt,limit).flStr, nAccounts, nProof,
       syncState=($buddy.syncState)
 

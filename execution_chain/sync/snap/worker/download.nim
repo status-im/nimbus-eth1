@@ -94,8 +94,8 @@ proc startDownloading(
   ctx.accUnproc.init ItemKeyRangeMax
   ctx.pool.pivotNum = number                        # set pivot
   if 0 < ctx.pool.pivotNum:
-    info info & ": Start downloading state data",
-      pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
+    info info & ": Start downloading pivot state data",
+      pivot=ctx.pool.pivotNum, forward=ctx.pool.forwardNum
   ok()
 
 proc verifyAmsterdamOrLater(
@@ -144,8 +144,8 @@ proc downloadInit*(
       ctx.accUnproc.unprocessed = accState.ranges   # copy reference (!)
       ctx.pool.pivotNum = accState.number           # set pivot
       if 0 < ctx.pool.pivotNum:                     # ready ok?
-        info info & ": Continue downloading state data",
-          pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum,
+        info info & ": Continue downloading pivot state data",
+          pivot=ctx.pool.pivotNum, forward=ctx.pool.forwardNum,
           nAccRefetch=marked.len
     else:
       ?ctx.startDownloading(firstPivot, info)
@@ -194,7 +194,7 @@ template downloadCommit*(
       bodyRc = typeof(bodyRc).err(error)
       break body
 
-    chronicles.info info & ": Ready for state update"
+    chronicles.info info & ": Ready for forwarding pivot state"
     # End `block body`
 
   bodyRc
@@ -286,7 +286,10 @@ template downloadState*(
       break body
 
     if didSomething:
-      debug info & ": Downloaded data", peer, accountsDone=data.accDone,
+      chronicles.info info & ": Downloaded pivot state data", peer,
+        pivot=ctx.pool.pivotNum,
+        accCoverage=(1.0 - ctx.accUnproc.totalRatio).pcStr,
+        accountsDone=data.accDone,
         storageDone=data.stoDone, codeDone=data.codeDone,
         syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
       discard
@@ -320,8 +323,8 @@ template downloadBals*(
     ctx.pool.forwardNum = ctx.getLastBalNum()
     bodyRc = typeof(bodyRc).ok()
 
-    chronicles.info info & ": Imported BALs", pivotNum=ctx.pool.pivotNum,
-      forwardNum=ctx.pool.forwardNum, nBALs=rc.value
+    chronicles.info info & ": Downloaded BALs", pivot=ctx.pool.pivotNum,
+      forward=ctx.pool.forwardNum, nBALs=rc.value
 
   bodyRc
 
