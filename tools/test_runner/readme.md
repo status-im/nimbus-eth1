@@ -6,6 +6,7 @@ Runs execution-specs (EEST) blockchain fixtures through Nimbus's block import (`
 make test_runner
 build/test_runner blocktest fixtures/blockchain_tests
 build/test_runner enginetest --workers 4 fixtures/blockchain_tests_engine
+make test_runner_test  # the runner's own tests
 ```
 
 - Any number of files and directories, run in one process. stdout carries one JSON array with a result per fixture (`name`, `pass`, `fork`, `error`, `rejections`); everything else goes to stderr.
