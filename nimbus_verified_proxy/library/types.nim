@@ -34,6 +34,26 @@ type
     ctx: ptr Context, cb: TransportDeliveryCallback, userData: pointer
   ) {.cdecl, gcsafe, raises: [].}
 
+  StorageDeliveryCallback* = proc(
+    status: cint, data: ptr UncheckedArray[byte], len: cint, userData: pointer
+  ) {.cdecl, gcsafe, raises: [].}
+
+  StorageGetProc* = proc(
+    ctx: ptr Context, key: cstring, cb: StorageDeliveryCallback, userData: pointer
+  ) {.cdecl, gcsafe, raises: [].}
+
+  StoragePutProc* = proc(
+    ctx: ptr Context,
+    key: cstring,
+    data: ptr UncheckedArray[byte],
+    len: cint,
+    cb: StorageDeliveryCallback,
+    userData: pointer,
+  ) {.cdecl, gcsafe, raises: [].}
+
+  StorageContext* = ref object
+    fut*: Future[(cint, seq[byte])]
+
   TransportExecutionContext* = ref object
     url*: string
     name*: string
@@ -50,3 +70,4 @@ const RET_SUCCESS*: cint = 0
 const RET_ERROR*: cint = -1
 const RET_CANCELLED*: cint = -2
 const RET_DESER_ERROR*: cint = -3
+const RET_NOT_FOUND*: cint = -4

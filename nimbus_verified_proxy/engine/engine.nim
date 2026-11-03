@@ -23,6 +23,7 @@ import
   ./utils,
   ./genesis_params,
   ./header_store,
+  ./lc_storage,
   ./evm
 
 from eth/common/blocks import EMPTY_UNCLE_HASH
@@ -169,7 +170,7 @@ proc init*(
   # layer the beacon / light-client fields on top of the core
   engine.timeParams = metadata.cfg.timeParams
   engine.getBeaconTime = getBeaconTime
-  engine.trustedBlockRoot = some(config.trustedBlockRoot)
+  engine.trustedBlockRoot = config.trustedBlockRoot
   engine.lcStore = (ref ForkedLightClientStore)()
   engine.maxLightClientUpdates = config.maxLightClientUpdates
   engine.cfg = metadata.cfg
@@ -342,6 +343,11 @@ proc syncOnce*(
     return err((UnavailableDataError, "beacon not initialized", UNTAGGED))
 
   if not engine.isLCStoreInitialized():
+    discard await engine.restoreCheckpoint()
+
+  let finalizedBefore = engine.getLCFinalizedSlot()
+
+  if not engine.isLCStoreInitialized():
     if engine.trustedBlockRoot.isNone:
       return err((UnavailableDataError, "trusted block root not set", UNTAGGED))
 
@@ -422,5 +428,8 @@ proc syncOnce*(
       (backend, backendIdx) = ?(engine.beaconBackendFor(BeaconFinality))
       finRes = ?((await backend.getLightClientFinalityUpdate()).tagBackend(backendIdx))
     ?((await engine.processObject(finRes, "finality")).tagBackend(backendIdx))
+
+  if engine.getLCFinalizedSlot() > finalizedBefore:
+    await engine.persistCheckpoint()
 
   return ok()

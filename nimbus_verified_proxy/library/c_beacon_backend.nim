@@ -23,7 +23,7 @@ proc newBeaconTransportCtx*(url, endpoint, params: string): TransportBeaconConte
 
 proc deliverBeaconTransport*(
     status: cint, res: cstring, userData: pointer
-) {.cdecl, exportc, gcsafe, raises: [].} =
+) {.cdecl, gcsafe, raises: [].} =
   let tctx = cast[TransportBeaconContext](userData)
   let response =
     if res != nil:

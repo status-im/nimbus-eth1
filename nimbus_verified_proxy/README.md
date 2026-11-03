@@ -64,7 +64,8 @@ make nimbus_verified_proxy
 
 Three options need to be explicitly configured by the user:
 
-* `--trusted-block-root`: The consensus light client starts syncing from a trusted block. This trusted block should be somewhat recent ([~1-2 weeks](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/weak-subjectivity.md)) and needs to be configured each time when starting the Nimbus Verified Proxy.
+* `--trusted-block-root`: The consensus light client starts syncing from a trusted block. This trusted block should be somewhat recent ([~1-2 weeks](https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/weak-subjectivity.md)) and needs to be configured each time when starting the Nimbus Verified Proxy, unless `--data-dir` is set.
+* `--data-dir`: Persists the latest finalized light client checkpoint in a SQLite database in this directory. On restart the proxy resumes from it and `--trusted-block-root` can be omitted, as long as the checkpoint is not older than the weak subjectivity period (~5 months on mainnet). A configured `--trusted-block-root` is only used when no usable checkpoint is stored.
 
 * `--execution-api-url` - As the proxy does not use any storage, it needs access to an Ethereum JSON RPC endpoint to provide the requested data. This can be a regular full node, or an external web3 data provider like
 [Alchemy](https://www.alchemy.com/).

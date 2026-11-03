@@ -57,6 +57,52 @@ static const char *TEST_CONFIG =
     "\"freezeAtSlot\": 14018020"
     "}";
 
+static const char *TEST_CONFIG_NO_ROOT =
+    "{"
+    "\"eth2Network\": \"mainnet\","
+    "\"executionApiUrls\": \"http://127.0.0.1:19999\","
+    "\"beaconApiUrls\":    \"http://127.0.0.1:19998\","
+    "\"logLevel\":         \"FATAL\","
+    "\"logStdout\":        \"None\","
+    "\"syncHeaderStore\": true,"
+    "\"freezeAtSlot\": 14018020"
+    "}";
+
+static uint8_t *g_store      = NULL;
+static int      g_store_len  = 0;
+static int      g_store_puts = 0;
+static int      g_bootstrap_calls = 0;
+
+static void mem_storage_get(
+    Context *ctx, const char *key, StorageDeliveryCallback cb, void *userData)
+{
+    (void)ctx;
+    if (g_store == NULL || strcmp(key, "lc_checkpoint") != 0) {
+        cb(RET_NOT_FOUND, NULL, 0, userData);
+        return;
+    }
+    cb(RET_SUCCESS, g_store, g_store_len, userData);
+}
+
+static void mem_storage_put(
+    Context *ctx, const char *key, const uint8_t *data, int len,
+    StorageDeliveryCallback cb, void *userData)
+{
+    (void)ctx;
+    (void)key;
+    uint8_t *copy = malloc(len);
+    if (copy == NULL) {
+        cb(RET_ERROR, NULL, 0, userData);
+        return;
+    }
+    memcpy(copy, data, len);
+    free(g_store);
+    g_store     = copy;
+    g_store_len = len;
+    g_store_puts++;
+    cb(RET_SUCCESS, NULL, 0, userData);
+}
+
 // these errors are returned before the actual frontend method is called
 // hence it is not required to poll the event loop
 void check_deser_errors(Context *ctx) {
@@ -314,8 +360,10 @@ static void beacon_transport(
            beaconCtxUrl(userData), endpoint, beaconCtxParams(userData));
 
     const char *file = NULL;
-    if (strcmp(endpoint, "getLightClientBootstrap") == 0)
+    if (strcmp(endpoint, "getLightClientBootstrap") == 0) {
+        g_bootstrap_calls++;
         file = "nimbus_verified_proxy/tests/data/lc_bootstrap.json";
+    }
     else if (strcmp(endpoint, "getLightClientUpdatesByRange") == 0)
         file = "nimbus_verified_proxy/tests/data/lc_updates.json";
     else if (strcmp(endpoint, "getLightClientOptimisticUpdate") == 0)
@@ -453,6 +501,35 @@ static void check_event_loop(Context *ctx) {
          tx_nores_s.called && tx_nores_s.status == RET_ERROR);
 }
 
+static void check_storage_restore(void) {
+    printf("\n Storage\n");
+    TEST("storage: checkpoint persisted after sync",
+         g_store_puts > 0 && g_store_len > 1 + 24624);
+
+    Context *ctx = startVerifProxy(
+        (char *)TEST_CONFIG_NO_ROOT,
+        execution_transport,
+        beacon_transport,
+        mem_storage_get,
+        mem_storage_put
+    );
+    TEST("storage: proxy starts without trustedBlockRoot", ctx != NULL);
+    if (!ctx) return;
+
+    int bootstraps_before = g_bootstrap_calls;
+    CbState sync_s = {0};
+    nvp_eth_sync(ctx, collect_error_cb, &sync_s);
+    drain(ctx, 2000);
+
+    TEST("storage: nvp_eth_sync after restore: RET_SUCCESS",
+         sync_s.called && sync_s.status == RET_SUCCESS);
+    TEST("storage: no bootstrap fetched on restore",
+         g_bootstrap_calls == bootstraps_before);
+
+    stopVerifProxy(ctx);
+    freeContext(ctx);
+}
+
 int main(void) {
     printf("=== nimbus_verified_proxy C API tests ===\n");
 
@@ -461,7 +538,9 @@ int main(void) {
     Context *ctx = startVerifProxy(
         (char *)TEST_CONFIG,
         execution_transport,
-        beacon_transport
+        beacon_transport,
+        mem_storage_get,
+        mem_storage_put
     );
 
     if (!ctx) {
@@ -476,6 +555,9 @@ int main(void) {
 
     stopVerifProxy(ctx);
     freeContext(ctx);
+
+    check_storage_restore();
+    free(g_store);
 
     printf("\n=== %d / %d passed ===\n", g_passed, g_total);
     return (g_passed == g_total) ? 0 : 1;

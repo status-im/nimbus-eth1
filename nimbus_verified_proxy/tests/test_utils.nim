@@ -9,6 +9,7 @@
 {.push raises: [], gcsafe.}
 
 import
+  std/options,
   stint,
   chronicles,
   chronos,
@@ -129,7 +130,7 @@ proc initTestEngine*(
   let
     engineConf = RpcVerificationEngineConf(
       chainId: 1.u256,
-      trustedBlockRoot: TEST_TBR,
+      trustedBlockRoot: some(TEST_TBR),
       maxBlockWalk: maxBlockWalk,
       headerStoreLen: headerCacheLen,
       accountCacheLen: 1,
