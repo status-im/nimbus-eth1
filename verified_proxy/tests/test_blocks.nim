@@ -32,8 +32,7 @@ suite "test verified blocks":
     ]
 
     for blockName in forkBlockNames:
-      let blk =
-        getBlockFromJson("verified_proxy/tests/data/" & blockName & ".json")
+      let blk = getBlockFromJson("verified_proxy/tests/data/" & blockName & ".json")
 
       ts.loadBlock(blk)
       engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
@@ -49,8 +48,7 @@ suite "test verified blocks":
 
   test "check fetching a block with Amsterdam header fields":
     # sepolia block 0xb505b0, carrying blockAccessListHash and slotNumber
-    let blk =
-      getBlockFromJson("verified_proxy/tests/data/sepolia_amsterdam.json")
+    let blk = getBlockFromJson("verified_proxy/tests/data/sepolia_amsterdam.json")
 
     ts.loadBlock(blk)
     engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
