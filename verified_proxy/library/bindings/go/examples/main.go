@@ -13,7 +13,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/status-im/nimbus-eth1/nimbus_verified_proxy/library/bindings/go/verifproxy"
+	"github.com/status-im/nimbus-eth1/verified_proxy/library/bindings/go/verifproxy"
 )
 
 const configJSON = `{

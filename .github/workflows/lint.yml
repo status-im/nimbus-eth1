@@ -16,7 +16,7 @@ on:
     paths-ignore:
       - 'doc/**'
       - 'portal/docs/**'
-      - 'nimbus_verified_proxy/docs/**'
+      - 'verified_proxy/docs/**'
       - '**/*.md'
       - 'vendor/**'
 
@@ -24,7 +24,7 @@ on:
     paths-ignore:
       - 'doc/**'
       - 'portal/docs/**'
-      - 'nimbus_verified_proxy/docs/**'
+      - 'verified_proxy/docs/**'
       - '**/*.md'
       - 'vendor/**'
 
@@ -43,7 +43,7 @@ jobs:
         uses: arnetheduck/nph-action@v1
         with:
           version: 0.7.0
-          options: "nimbus_verified_proxy/ portal/"
+          options: "verified_proxy/ portal/"
 
       - name: Check copyright year
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}

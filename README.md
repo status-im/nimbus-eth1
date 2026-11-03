@@ -15,7 +15,7 @@ This repository is also home to:
 -  [Nimbus Portal client](./portal/README.md), a
 [Portal Network](https://github.com/ethereum/portal-network-specs/tree/master)
 light client.
-- [Nimbus Verified Proxy](./nimbus_verified_proxy/README.md)
+- [Nimbus Verified Proxy](./verified_proxy/README.md)
 
 All consensus-layer client development is happening in parallel in the
 [nimbus-eth2](https://github.com/status-im/nimbus-eth2) repository.

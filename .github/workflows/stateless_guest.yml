@@ -24,7 +24,7 @@ on:
       - 'doc/**'
       - 'portal/**'
       - '**/*.md'
-      - 'nimbus_verified_proxy/**'
+      - 'verified_proxy/**'
       - 'docker/**'
       - 'metrics/**'
 
@@ -33,7 +33,7 @@ on:
       - 'doc/**'
       - 'portal/**'
       - '**/*.md'
-      - 'nimbus_verified_proxy/**'
+      - 'verified_proxy/**'
       - 'docker/**'
       - 'metrics/**'
 

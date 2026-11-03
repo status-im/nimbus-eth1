@@ -24,7 +24,7 @@ import (
 const (
 	githubOwner = "status-im"
 	githubRepo  = "nimbus-eth1"
-	modulePath  = "github.com/status-im/nimbus-eth1/nimbus_verified_proxy/library/bindings/go"
+	modulePath  = "github.com/status-im/nimbus-eth1/verified_proxy/library/bindings/go"
 )
 
 func main() {

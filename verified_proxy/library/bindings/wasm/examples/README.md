@@ -22,8 +22,8 @@ The build outputs `verifproxy_wasm.js` and `verifproxy_wasm.wasm` into `build/ni
 1. Copy `index.html` and `server.py` from this directory into `build/nimbus_verified_proxy_wasm/`:
 
    ```sh
-   cp nimbus_verified_proxy/library/bindings/wasm/examples/index.html \
-      nimbus_verified_proxy/library/bindings/wasm/examples/server.py \
+   cp verified_proxy/library/bindings/wasm/examples/index.html \
+      verified_proxy/library/bindings/wasm/examples/server.py \
       build/nimbus_verified_proxy_wasm/
    ```
 

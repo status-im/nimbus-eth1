@@ -28,11 +28,11 @@ suite "test state verification":
 
   test "test EVM-based methods":
     let
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/proof_block.json")
-      proof = getProofFromJson("nimbus_verified_proxy/tests/data/storage_proof.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/proof_block.json")
+      proof = getProofFromJson("verified_proxy/tests/data/storage_proof.json")
       accessList =
-        getAccessListFromJson("nimbus_verified_proxy/tests/data/access_list.json")
-      contractCode = getCodeFromJson("nimbus_verified_proxy/tests/data/code.json")
+        getAccessListFromJson("verified_proxy/tests/data/access_list.json")
+      contractCode = getCodeFromJson("verified_proxy/tests/data/code.json")
 
       address = address"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
       slot = UInt256.fromHex(
