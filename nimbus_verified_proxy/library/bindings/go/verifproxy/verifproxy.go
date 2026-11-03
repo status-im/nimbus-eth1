@@ -147,6 +147,7 @@ type Context struct {
 
 var (
 	errEmptyContext = errors.New("empty context")
+	errStartFailed  = errors.New("failed to start verified proxy")
 	startOnce       sync.Once
 	ctxMapMu        sync.RWMutex
 	ctxMap          = map[uintptr]*Context{}
@@ -344,6 +345,9 @@ func Start(configJson string, execTransport ExecTransportFunc, beaconTransport B
 	}()
 
 	wg.Wait()
+	if goCtx.ctxPtr == nil {
+		return nil, errStartFailed
+	}
 	return goCtx, nil
 }
 
