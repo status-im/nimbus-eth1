@@ -22,6 +22,11 @@ type
     length: int
     capacity: int
 
+proc `=copy`*(
+    dest: var EvmMemory, src: EvmMemory
+) {.error: "Copying EvmMemory is forbidden".} =
+  discard
+
 func init*(_: type EvmMemory): EvmMemory =
   EvmMemory()
 
