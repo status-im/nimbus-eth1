@@ -204,6 +204,9 @@ proc dispose*(c: Computation) =
     c.stack.dispose()
     c.stack = nil
 
+  if not c.keepStack:
+    c.memory.dispose()
+
 proc rollback*(c: Computation) =
   if c.balTrackerEnabled:
     c.vmState.balTracker.rollbackCallFrame()

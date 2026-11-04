@@ -241,7 +241,8 @@ proc finishRunningComputation(
 
     when T is DebugCallResult:
       result.stack = move(c.finalStack)
-      result.memory = move(c.memory)
+      result.memory = @(c.memory.bytes)
+      c.memory.dispose()
   elif T is TxResult:
     result.gasUsed = gasUsed.txGasUsed
     result.blockExecutionGasUsed = gasUsed.blockExecutionGasUsed

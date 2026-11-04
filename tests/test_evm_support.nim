@@ -138,7 +138,7 @@ proc runMemoryTests() =
       var mem = memory32()
       # Test that write creates 32byte string == value padded with zeros
       check mem.write(startPos = 0, value = @[1.byte, 0.byte, 1.byte, 0.byte]).isOk
-      check(mem.bytes == @[1.byte, 0.byte, 1.byte, 0.byte].concat(repeat(0.byte, 28)))
+      check(@(mem.bytes) == @[1.byte, 0.byte, 1.byte, 0.byte].concat(repeat(0.byte, 28)))
 
     test "write rejects values beyond memory size":
       var mem = memory128()
@@ -149,13 +149,13 @@ proc runMemoryTests() =
       var mem = EvmMemory.init()
       # Test extends to 32 byte array: 0 < (start_position + size) <= 32
       mem.extend(startPos = 0, size = 10)
-      check(mem.bytes == repeat(0.byte, 32))
+      check(@(mem.bytes) == repeat(0.byte, 32))
       # Test will extend past length if params require: 32 < (start_position + size) <= 64
       mem.extend(startPos = 28, size = 32)
-      check(mem.bytes == repeat(0.byte, 64))
+      check(@(mem.bytes) == repeat(0.byte, 64))
       # Test won't extend past length unless params require: 32 < (start_position + size) <= 64
       mem.extend(startPos = 48, size = 10)
-      check(mem.bytes == repeat(0.byte, 64))
+      check(@(mem.bytes) == repeat(0.byte, 64))
 
     test "read returns correct bytes":
       var mem = memory32()
