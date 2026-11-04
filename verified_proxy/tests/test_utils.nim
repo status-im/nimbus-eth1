@@ -96,16 +96,16 @@ proc preLoadTestBeaconState*(t: TestApiState) =
 
   let
     bootstrap = ForkedLightClientBootstrap.readBeaconLCData(
-      "nimbus_verified_proxy/tests/data/lc_bootstrap.json"
+      "verified_proxy/tests/data/lc_bootstrap.json"
     )
     updates = seq[ForkedLightClientUpdate].readBeaconLCData(
-      "nimbus_verified_proxy/tests/data/lc_updates.json"
+      "verified_proxy/tests/data/lc_updates.json"
     )
     optimistic = ForkedLightClientOptimisticUpdate.readBeaconLCData(
-      "nimbus_verified_proxy/tests/data/lc_optimistic.json"
+      "verified_proxy/tests/data/lc_optimistic.json"
     )
     finality = ForkedLightClientFinalityUpdate.readBeaconLCData(
-      "nimbus_verified_proxy/tests/data/lc_finality.json"
+      "verified_proxy/tests/data/lc_finality.json"
     )
 
   t.loadBootstrap(bootstrap, TEST_TBR)
