@@ -48,7 +48,6 @@ import
   ./pooled_txs
 
 from ../evm/state import blockAccessList
-from eth/common/eth_types_rlp import rlpHash
 
 declareCounter nec_txpool_packed_total,   "Transactions packed into assembled blocks"
 declareGauge   nec_txpool_last_block_txs, "Transactions in the last assembled block"

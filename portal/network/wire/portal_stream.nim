@@ -462,7 +462,7 @@ proc new*(T: type StreamManager, d: protocol.Protocol): T =
     socketConfig = SocketConfig.init(
       # Setting to none means that incoming sockets are in Connected state, which
       # means they can send and receive data.
-      incomingSocketReceiveTimeout = none(Duration),
+      incomingSocketReceiveTimeout = Opt.none(Duration),
       payloadSize = uint32(maxUtpPayloadSize),
     )
     manager = StreamManager(streams: @[], rng: d.rng)
