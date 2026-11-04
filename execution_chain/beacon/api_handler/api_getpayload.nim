@@ -7,17 +7,109 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push gcsafe, raises:[].}
+
 import
   std/[typetraits],
   chronos,
   json_rpc/errors,
   ../web3_eth_conv,
   ../beacon_engine,
+  ../payload_conv,
   ./api_utils,
   chronicles
 
-{.push gcsafe, raises:[].}
+from ../engine_ssz_types import EngineFork
 
+# REMOVE WHEN DROPPING JSON-RPC
+func versionToFork(version: Version): EngineFork =
+  if version == Version.V1: EngineFork.Paris else: EngineFork.Shanghai
+
+func payloadShapeFork(header: Header): EngineFork =
+  if header.blockAccessListHash.isSome or header.slotNumber.isSome:
+    EngineFork.Amsterdam
+  elif header.blobGasUsed.isSome or header.excessBlobGas.isSome:
+    EngineFork.Cancun
+  elif header.withdrawalsRoot.isSome:
+    EngineFork.Shanghai
+  else:
+    EngineFork.Paris
+
+proc fetchPayload(ben: BeaconEngineRef, fork: EngineFork, id: Bytes8):
+    Future[ExecutionBundle] {.async: (raises: [CancelledError, RpcResponseError]).} =
+  let bundle = (await ben.getPayloadBundle(id)).valueOr:
+    raise unknownPayload("Unknown bundle")
+
+  let
+    shapeFork = payloadShapeFork(bundle.blk.header)
+    com = ben.com
+    timestamp = bundle.blk.header.timestamp
+
+  case fork
+  of EngineFork.Paris, EngineFork.Shanghai:
+    if shapeFork > fork:
+      raise unsupportedFork($fork & " expects " & $fork &
+        "-shaped ExecutionPayload but built payload has " & $shapeFork & "-shaped payload")
+    if bundle.blobsBundle.isNil.not:
+      raise unsupportedFork($fork & " payload must not contain a blobs bundle")
+    if com.isOsakaOrLater(timestamp):
+      raise unsupportedFork(
+        "bundle timestamp is at or past Osaka activation, requires Osaka fork or later")
+  of EngineFork.Cancun:
+    if shapeFork != EngineFork.Cancun:
+      raise unsupportedFork($fork & " expects Cancun-shaped ExecutionPayload but built payload " &
+        "has " & $shapeFork & "-shaped payload")
+    if bundle.blobsBundle.isNil:
+      raise unsupportedFork($fork & " payload is missing a BlobsBundleV1")
+    if not com.isCancunOrLater(timestamp):
+      raise unsupportedFork("bundle timestamp is less than Cancun activation")
+    if com.isOsakaOrLater(timestamp):
+      raise unsupportedFork(
+        "bundle timestamp is at or past Osaka activation, requires Osaka fork or later")
+  of EngineFork.Prague:
+    if shapeFork != EngineFork.Cancun:
+      raise unsupportedFork($fork & " expects Cancun-shaped ExecutionPayload but built payload " &
+        "has " & $shapeFork & "-shaped payload")
+    if bundle.blobsBundle.isNil:
+      raise unsupportedFork($fork & " payload is missing a BlobsBundleV1")
+    if bundle.executionRequests.isNone:
+      raise unsupportedFork($fork & " payload is missing executionRequests")
+    if not com.isPragueOrLater(timestamp):
+      raise unsupportedFork("bundle timestamp is less than Prague activation")
+    if com.isOsakaOrLater(timestamp):
+      raise unsupportedFork(
+        "bundle timestamp is at or past Osaka activation, requires Osaka fork or later")
+  of EngineFork.Osaka:
+    if shapeFork != EngineFork.Cancun:
+      raise unsupportedFork($fork & " expects Cancun-shaped ExecutionPayload but built payload " &
+        "has " & $shapeFork & "-shaped payload")
+    if bundle.blobsBundle.isNil:
+      raise unsupportedFork($fork & " payload is missing a BlobsBundleV2")
+    if bundle.executionRequests.isNone:
+      raise unsupportedFork($fork & " payload is missing executionRequests")
+    if not com.isOsakaOrLater(timestamp):
+      raise unsupportedFork("bundle timestamp is less than Osaka activation")
+    if com.isAmsterdamOrLater(timestamp):
+      raise unsupportedFork(
+        "bundle timestamp is at or past Amsterdam activation, requires Amsterdam fork or later")
+  of EngineFork.Amsterdam:
+    if shapeFork != EngineFork.Amsterdam:
+      raise unsupportedFork($fork & " expects Amsterdam-shaped ExecutionPayload but built " &
+        "payload has " & $shapeFork & "-shaped payload")
+    if bundle.blobsBundle.isNil:
+      raise unsupportedFork($fork & " payload is missing a BlobsBundleV2")
+    if bundle.executionRequests.isNone:
+      raise unsupportedFork($fork & " payload is missing executionRequests")
+    if not com.isAmsterdamOrLater(timestamp):
+      raise unsupportedFork("bundle timestamp is less than Amsterdam activation")
+
+  bundle
+
+proc getPayload*(ben: BeaconEngineRef, fork: EngineFork, id: Bytes8):
+    Future[ExecutionBundle] {.async: (raises: [CancelledError, RpcResponseError]).} =
+  await ben.fetchPayload(fork, id)
+
+# REMOVE WHEN DROPPING JSON-RPC
 proc getPayload*(ben: BeaconEngineRef,
                  expectedVersion: Version,
                  id: Bytes8): Future[GetPayloadV2Response]
@@ -25,141 +117,71 @@ proc getPayload*(ben: BeaconEngineRef,
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = (await ben.getPayloadBundle(id)).valueOr:
-    raise unknownPayload("Unknown bundle")
-
-  let
-    version = bundle.payload.version
-    com = ben.com
-
-  if version > expectedVersion:
-    raise unsupportedFork("getPayload" & $expectedVersion &
-      " expect payload" & $expectedVersion &
-      " but get payload" & $version)
-  if bundle.blobsBundle.isNil.not:
-    raise unsupportedFork("getPayload" & $expectedVersion &
-      " contains unsupported BlobsBundleV1")
-
-  if com.isOsakaOrLater(ethTime bundle.payload.timestamp):
-    raise unsupportedFork("bundle timestamp greater than Osaka must use getPayloadV5")
-
+  let fork = versionToFork(expectedVersion)
+  let bundle = await ben.fetchPayload(fork, id)
+  let payload = executionPayload(bundle.blk, bundle.blockAccessList)
   GetPayloadV2Response(
-    executionPayload: bundle.payload.V1V2,
+    executionPayload: payload.V1V2,
     blockValue: bundle.blockValue
   )
 
+# REMOVE WHEN DROPPING JSON-RPC
 proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV3Response]
     {.async: (raises: [CancelledError, RpcResponseError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = (await ben.getPayloadBundle(id)).valueOr:
-    raise unknownPayload("Unknown bundle")
-
-  let version = bundle.payload.version
-  if version != Version.V3:
-    raise unsupportedFork("getPayloadV3 expect payloadV3 but get payload" & $version)
-  if bundle.blobsBundle.isNil:
-    raise unsupportedFork("getPayloadV3 is missing BlobsBundleV1")
-
-  let com = ben.com
-  if not com.isCancunOrLater(ethTime bundle.payload.timestamp):
-    raise unsupportedFork("bundle timestamp is less than Cancun activation")
-
-  if com.isOsakaOrLater(ethTime bundle.payload.timestamp):
-    raise unsupportedFork("bundle timestamp greater than Osaka must use getPayloadV5")
-
+  let bundle = await ben.fetchPayload(EngineFork.Cancun, id)
+  let payload = executionPayload(bundle.blk, bundle.blockAccessList)
   GetPayloadV3Response(
-    executionPayload: bundle.payload.V3,
+    executionPayload: payload.V3,
     blockValue: bundle.blockValue,
     blobsBundle: bundle.blobsBundle.V1,
     shouldOverrideBuilder: false
   )
 
+# REMOVE WHEN DROPPING JSON-RPC
 proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV4Response]
     {.async: (raises: [CancelledError, RpcResponseError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = (await ben.getPayloadBundle(id)).valueOr:
-    raise unknownPayload("Unknown bundle")
-
-  let version = bundle.payload.version
-  if version != Version.V3:
-    raise unsupportedFork("getPayloadV4 expect payloadV3 but get payload" & $version)
-  if bundle.blobsBundle.isNil:
-    raise unsupportedFork("getPayloadV4 is missing BlobsBundleV1")
-  if bundle.executionRequests.isNone:
-    raise unsupportedFork("getPayloadV4 is missing executionRequests")
-
-  let com = ben.com
-  if not com.isPragueOrLater(ethTime bundle.payload.timestamp):
-    raise unsupportedFork("bundle timestamp is less than Prague activation")
-
-  if com.isOsakaOrLater(ethTime bundle.payload.timestamp):
-    raise unsupportedFork("bundle timestamp greater than Osaka must use getPayloadV5")
-
+  let bundle = await ben.fetchPayload(EngineFork.Prague, id)
+  let payload = executionPayload(bundle.blk, bundle.blockAccessList)
   GetPayloadV4Response(
-    executionPayload: bundle.payload.V3,
+    executionPayload: payload.V3,
     blockValue: bundle.blockValue,
     blobsBundle: bundle.blobsBundle.V1,
     shouldOverrideBuilder: false,
     executionRequests: bundle.executionRequests.get,
   )
 
+# REMOVE WHEN DROPPING JSON-RPC
 proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV5Response]
     {.async: (raises: [CancelledError, RpcResponseError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = (await ben.getPayloadBundle(id)).valueOr:
-    raise unknownPayload("Unknown bundle")
-
-  let version = bundle.payload.version
-  if version != Version.V3:
-    raise unsupportedFork("getPayloadV5 expect ExecutionPayloadV3 but got ExecutionPayload" & $version)
-  if bundle.blobsBundle.isNil:
-    raise unsupportedFork("getPayloadV5 is missing BlobsBundleV2")
-  if bundle.executionRequests.isNone:
-    raise unsupportedFork("getPayloadV5 is missing executionRequests")
-
-  let com = ben.com
-  if not com.isOsakaOrLater(ethTime bundle.payload.timestamp):
-    raise unsupportedFork("bundle timestamp is less than Osaka activation")
-
-  if com.isAmsterdamOrLater(ethTime bundle.payload.timestamp):
-    raise unsupportedFork("bundle timestamp greater than Amsterdam must use getPayloadV6")
-
+  let bundle = await ben.fetchPayload(EngineFork.Osaka, id)
+  let payload = executionPayload(bundle.blk, bundle.blockAccessList)
   GetPayloadV5Response(
-    executionPayload: bundle.payload.V3,
+    executionPayload: payload.V3,
     blockValue: bundle.blockValue,
     blobsBundle: bundle.blobsBundle.V2,
     shouldOverrideBuilder: false,
     executionRequests: bundle.executionRequests.get,
   )
 
+# REMOVE WHEN DROPPING JSON-RPC
 proc getPayloadV6*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV6Response]
     {.async: (raises: [CancelledError, RpcResponseError]).} =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = (await ben.getPayloadBundle(id)).valueOr:
-    raise unknownPayload("Unknown bundle")
-
-  let version = bundle.payload.version
-  if version != Version.V4:
-    raise unsupportedFork("getPayloadV6 expect ExecutionPayloadV4 but got ExecutionPayload" & $version)
-  if bundle.blobsBundle.isNil:
-    raise unsupportedFork("getPayloadV6 is missing BlobsBundleV2")
-  if bundle.executionRequests.isNone:
-    raise unsupportedFork("getPayloadV6 is missing executionRequests")
-
-  let com = ben.com
-  if not com.isAmsterdamOrLater(ethTime bundle.payload.timestamp):
-    raise unsupportedFork("bundle timestamp is less than Amsterdam activation")
-
+  let bundle = await ben.fetchPayload(EngineFork.Amsterdam, id)
+  let payload = executionPayload(bundle.blk, bundle.blockAccessList)
   GetPayloadV6Response(
-    executionPayload: bundle.payload.V4,
+    executionPayload: payload.V4,
     blockValue: bundle.blockValue,
     blobsBundle: bundle.blobsBundle.V2,
     shouldOverrideBuilder: false,

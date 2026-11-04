@@ -311,7 +311,7 @@ proc runStaleFirstBuildTest(env: TestEnv): Result[void, string] =
   template txsServed(id: Bytes8): int =
     let bundle = (waitFor ben.getPayloadBundle(id)).valueOr:
       return err("getPayloadBundle returned none")
-    bundle.payload.transactions.len
+    bundle.blk.transactions.len
 
   # Early fcU with an empty pool; nothing built yet, so getPayload waits for
   # this first build.
@@ -389,9 +389,9 @@ proc runBackgroundBuildTest(env: TestEnv): Result[void, string] =
   let bundle = (waitFor ben.getPayloadBundle(id)).valueOr:
     return err("getPayloadBundle returned none")
 
-  if bundle.payload.transactions.len != numTxs:
+  if bundle.blk.transactions.len != numTxs:
     return err("Expected " & $numTxs & " txs in payload, got: " &
-      $bundle.payload.transactions.len)
+      $bundle.blk.transactions.len)
 
   ok()
 
