@@ -42,7 +42,7 @@ type
 
   DebugCallResult* = object of CallResult
     stack*:      seq[UInt256]           # EVM stack on return (for test only).
-    memory*:     EvmMemory              # EVM memory on return (for test only).
+    memory*:     seq[byte]              # EVM memory on return (for test only).
 
   TxResult* = object
     gasUsed*: GasInt

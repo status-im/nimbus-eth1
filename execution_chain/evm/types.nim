@@ -88,6 +88,7 @@ type
     continuation*:          proc(c: Computation): EvmResultVoid {.gcsafe, raises: [].}
     keepStack*:             bool
     finalStack*:            seq[UInt256]
+    finalMemory*:           seq[byte]
     balTrackerEnabled*:     bool
 
   StatusCode* {.pure.} = enum
