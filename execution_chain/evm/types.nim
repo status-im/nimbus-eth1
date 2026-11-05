@@ -163,11 +163,16 @@ func borrowCom*(vmState: BaseVMState, com: CommonRef) =
 template data*(msg: Message): openArray[byte] =
   msg.dataPtr.toOpenArray(0, msg.dataLen - 1)
 
-proc borrowData*(msg: Message, bytes: openArray[byte]) =
-  msg.dataPtr =
-    if bytes.len > 0: cast[ptr UncheckedArray[byte]](unsafeAddr bytes[0])
-    else: nil
+template borrowData*(msg: Message, bytes: openArray[byte]) =
+  ## Views `bytes` without copying, so `bytes` must outlive every read of `msg.data`.
   msg.dataLen = bytes.len
+  msg.dataPtr =
+    if msg.dataLen > 0: cast[ptr UncheckedArray[byte]](unsafeAddr bytes[0])
+    else: nil
+
+template clearData*(msg: Message) =
+  msg.dataPtr = nil
+  msg.dataLen = 0
 
 # Transaction level
 # This is called once fo each transaction

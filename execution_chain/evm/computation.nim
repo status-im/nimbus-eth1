@@ -206,7 +206,7 @@ proc dispose*(c: Computation) =
     c.stack = nil
 
   c.memory.dispose()
-  c.msg.borrowData([])
+  c.msg.clearData()
 
 proc rollback*(c: Computation) =
   if c.balTrackerEnabled:
