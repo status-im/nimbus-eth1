@@ -267,9 +267,11 @@ proc exportEreFile(
       # the merge era.
       let mergeTD =
         if isMergeEra:
-          let mergeHeader = ?db.getBlockHeader(mergeBlockNumber)
-          db.getScore(mergeHeader.computeRlpHash()).valueOr:
-            return err("No total difficulty for merge block " & $mergeBlockNumber)
+          let
+            mergeHeader = ?db.getBlockHeader(mergeBlockNumber)
+            parentTD = db.getScore(mergeHeader.parentHash).valueOr:
+              return err("No total difficulty for merge block " & $mergeBlockNumber)
+          parentTD + mergeHeader.difficulty
         else:
           default(UInt256) # pre-merge era, not used
       for blockNumber in startNumber .. endNumber:

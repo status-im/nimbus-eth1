@@ -450,8 +450,8 @@ proc getEthConfigObject*(com: CommonRef,
 
 proc getTotalDifficulty*(chain: ForkedChainRef, blockHash: Hash32, header: Header): Opt[UInt256] =
   # Note:
-  # The database data model stores (the same) total difficulty for each new PoS block. Thus need to
-  # check here if PoS block or not.
+  # Databases written before the terminal score was introduced store (the same) total difficulty
+  # for each PoS block. Thus need to check here if PoS block or not.
   if chain.com.proofOfStake(header, chain.baseTxFrame()):
     Opt.none(UInt256)
   else:

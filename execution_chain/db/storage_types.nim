@@ -36,6 +36,7 @@ type
     balTail = 17
     firstBlockHash = 18
     blockDataRefs = 19
+    terminalScore = 20
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -150,6 +151,10 @@ func blockHashToBlockAccessListKey*(h: Hash32): DbKey {.inline.} =
 
 func firstBlockHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(firstBlockHash)
+  result.dataEndPos = 1
+
+func terminalScoreKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(terminalScore)
   result.dataEndPos = 1
 
 template toOpenArray*(k: DbKey): openArray[byte] =

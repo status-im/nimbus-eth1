@@ -210,14 +210,14 @@ proc getFirstBlockHeader*(db: CoreDbTxRef): Result[Header, string] =
   ## curbed. This first header returned is an ancestor of Genesis.
   db.getBlockHeader(?db.getFirstBlockHash())
 
-proc getScore*(
+proc getScore(
     db: CoreDbTxRef;
-    blockHash: Hash32;
+    key: DbKey;
       ): Opt[UInt256] =
   const info = "getScore()"
-  let data = db.get(blockHashToScoreKey(blockHash).toOpenArray).valueOr:
+  let data = db.get(key.toOpenArray).valueOr:
     if error.error != KvtNotFound:
-      warn info, blockHash, error=($$error)
+      warn info, key, error=($$error)
     return Opt.none(UInt256)
   try:
     Opt.some(rlp.decode(data, UInt256))
@@ -225,13 +225,32 @@ proc getScore*(
     warn info, data = data.toHex(), error=exc.msg
     Opt.none(UInt256)
 
+proc getScore*(
+    db: CoreDbTxRef;
+    blockHash: Hash32;
+      ): Opt[UInt256] =
+  ## Only PoW blocks and genesis have a score, see `getTerminalScore()` for
+  ## the score of PoS blocks.
+  db.getScore(blockHashToScoreKey(blockHash))
+
+proc getTerminalScore*(
+    db: CoreDbTxRef;
+      ): Opt[UInt256] =
+  ## The total difficulty frozen at the merge, shared by all PoS blocks. It
+  ## is unknown when history starts after the merge.
+  db.getScore(terminalScoreKey())
+
 proc headTotalDifficulty*(
     db: CoreDbTxRef;
-      ): UInt256 =
+      ): Opt[UInt256] =
   let blockHash = db.getCanonicalHeaderHash().valueOr:
-    return 0.u256
+    return Opt.none(UInt256)
 
-  db.getScore(blockHash).valueOr(0.u256)
+  let score = db.getScore(blockHash)
+  if score.isSome:
+    score
+  else:
+    db.getTerminalScore()
 
 proc getAncestorsHashes*(
     db: CoreDbTxRef;
@@ -613,13 +632,11 @@ proc getReceiptByIndex*(
 
 proc persistScore(
     db: CoreDbTxRef;
-    blockHash: Hash32;
+    scoreKey: DbKey;
     score: UInt256
       ): Result[void, string] =
   const
     info = "persistScore"
-  let
-    scoreKey = blockHashToScoreKey(blockHash)
   var encodedScore = rlp.encode(score)
   db.put(scoreKey.toOpenArray, encodedScore).isOkOr:
     return err(info & ": " & $$error)
@@ -644,20 +661,23 @@ proc persistHeader*(
   db.put(genericHashKey(blockHash).toOpenArray, encodedHeader).isOkOr:
     return err(info & ": " & $$error)
 
-  let
-    parentScore = if isStartOfHistory:
-      0.u256
-    else:
-      db.getScore(header.parentHash).valueOr:
-        # TODO it's slightly wrong to fail here and leave the block in the db,
-        #      but this code is going away soon enough
-        return err(info & ": cannot get score")
+  if not header.difficulty.isZero or header.number == 0:
+    let parentScore =
+      if isStartOfHistory:
+        0.u256
+      else:
+        db.getScore(header.parentHash).valueOr:
+          # TODO it's slightly wrong to fail here and leave the block in the db,
+          #      but this code is going away soon enough
+          return err(info & ": cannot get score")
+    ?db.persistScore(blockHashToScoreKey(blockHash), parentScore + header.difficulty)
+  elif not isStartOfHistory:
+    # Total difficulty stops growing at the merge (EIP-3675), so PoS blocks
+    # share the score of the last scored ancestor
+    let parentScore = db.getScore(header.parentHash)
+    if parentScore.isSome:
+      ?db.persistScore(terminalScoreKey(), parentScore.value)
 
-    score = parentScore + header.difficulty
-  # After EIP-3675, difficulty is set to 0 but we still save the score for
-  # each block to simplify totalDifficulty reporting
-  # TODO get rid of this and store a single value
-  ?db.persistScore(blockHash, score)
   if numberToHash:
     db.addBlockNumberToHashLookup(header.number, blockHash)
   ok()
@@ -670,7 +690,7 @@ proc persistHeaderAndSetHead*(
       ): Result[void, string] =
   ?db.persistHeader(blockHash, header, startOfHistory)
 
-  if header.parentHash != startOfHistory:
+  if header.parentHash != startOfHistory and not header.difficulty.isZero:
     let
       canonicalHash = ?db.getCanonicalHeaderHash()
       canonScore = db.getScore(canonicalHash).valueOr:

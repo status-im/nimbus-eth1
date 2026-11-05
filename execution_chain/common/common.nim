@@ -281,7 +281,9 @@ proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool
   let
     ttd = com.config.terminalTotalDifficulty.get()
     ptd = txFrame.getScore(header.parentHash).valueOr:
-      return false
+      let parent = txFrame.getBlockHeader(header.parentHash).valueOr:
+        return false
+      return parent.difficulty.isZero
     td  = ptd + header.difficulty
   ptd >= ttd and td >= ttd
 

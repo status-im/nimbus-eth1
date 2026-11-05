@@ -296,14 +296,14 @@ proc newPayload*(ben: BeaconEngineRef,
     return ben.delayPayloadImport(blockHash, blk, blockAccessList)
 
   # We have an existing parent, do some sanity checks to avoid the beacon client
-  # triggering too early
-  let ttd = com.ttd.get(high(UInt256))
-
-  if version == Version.V1:
-    let txFrame = chain.latestTxFrame()
-    let ptd  = txFrame.getScore(header.parentHash).valueOr:
-      0.u256
-    let gptd  = txFrame.getScore(parent.parentHash)
+  # triggering too early. A PoS parent is past TTD and has no score.
+  if version == Version.V1 and (parent.number == 0 or not parent.difficulty.isZero):
+    let
+      ttd = com.ttd.get(high(UInt256))
+      txFrame = chain.latestTxFrame()
+      ptd = txFrame.getScore(header.parentHash).valueOr:
+        0.u256
+      gptd = txFrame.getScore(parent.parentHash)
     if ptd < ttd:
       warn "Ignoring pre-merge payload",
         number = header.number, hash = blockHash.short, ptd, ttd
@@ -326,10 +326,7 @@ proc newPayload*(ben: BeaconEngineRef,
       number = header.number,
       parent = header.parentHash.short,
       head   = chain.latestNumber
-    let
-      txFrame = chain.latestTxFrame()
-      blockHash = latestValidHash(txFrame, parent, ttd)
-    return acceptedStatus(blockHash)
+    return acceptedStatus(latestValidHash(parent))
 
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
@@ -341,10 +338,7 @@ proc newPayload*(ben: BeaconEngineRef,
       parent = header.parentHash.short,
       error = error.msg
     ben.setInvalidAncestor(header, blockHash)
-    let
-      txFrame = chain.latestTxFrame()
-      blockHash = latestValidHash(txFrame, parent, ttd)
-    return invalidStatus(blockHash, error.msg)
+    return invalidStatus(latestValidHash(parent), error.msg)
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 

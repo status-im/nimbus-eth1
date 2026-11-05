@@ -65,7 +65,7 @@ proc getStatus68*(ctx: EthWireRef): Eth68State =
     forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
 
   Eth68State(
-    totalDifficulty: txFrame.headTotalDifficulty,
+    totalDifficulty: txFrame.headTotalDifficulty.valueOr(com.ttd.get(0.u256)),
     genesisHash: com.genesisHash,
     bestBlockHash: ctx.chain.latestHash,
     forkId: forkId,

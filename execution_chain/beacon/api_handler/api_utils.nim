@@ -14,7 +14,6 @@ import
   stew/endians2,
   results,
   ../../constants,
-  ../../db/core_db,
   ../../utils/utils,
   ../../common/common,
   ../../core/chain,
@@ -192,14 +191,8 @@ func parseError*(msg: string): ref RpcResponseError =
     msg: msg
   )
 
-proc latestValidHash*(txFrame: CoreDbTxRef,
-                      parent: Header,
-                      ttd: DifficultyInt): Hash32 =
-  if parent.isGenesis:
-    return default(Hash32)
-  # TODO shouldn't this be in forkedchainref?
-  let ptd = txFrame.getScore(parent.parentHash).valueOr(0.u256)
-  if ptd >= ttd:
+proc latestValidHash*(parent: Header): Hash32 =
+  if parent.difficulty.isZero and not parent.isGenesis:
     parent.computeBlockHash
   else:
     # If the most recent valid ancestor is a PoW block,
@@ -212,7 +205,4 @@ proc invalidFCU*(validationError: string,
   let parent = chain.headerByHash(header.parentHash).valueOr:
     return invalidFCU(validationError)
 
-  let blockHash =
-    latestValidHash(chain.latestTxFrame, parent, chain.com.ttd.get(high(UInt256)))
-
-  invalidFCU(validationError, blockHash)
+  invalidFCU(validationError, latestValidHash(parent))

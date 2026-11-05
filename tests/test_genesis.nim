@@ -11,7 +11,9 @@
 import
   std/[os],
   unittest2,
+  eth/[common, rlp],
   ../execution_chain/db/core_db/memory_only,
+  ../execution_chain/db/storage_types,
   ../execution_chain/utils/utils,
   ../execution_chain/common/chain_config_loader,
   ../execution_chain/common/genesis,
@@ -201,9 +203,94 @@ proc genesisBlockHashTest() =
         let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
         check cg.genesisBlockHash() == com.genesisHeader.computeBlockHash
 
+proc child(parent: Header, difficulty: UInt256): Header =
+  Header(
+    number: parent.number + 1,
+    parentHash: parent.computeBlockHash,
+    timestamp: parent.timestamp + 1,
+    difficulty: difficulty)
+
+proc scoreTest() =
+  suite "Total difficulty score":
+    var cg: NetworkParams
+    doAssert loadNetworkParams("devnet5.json".findFilePath, cg)
+    doAssert cg.config.posBlock.isNone and cg.config.mergeNetsplitBlock.isNone
+    let ttd = cg.config.terminalTotalDifficulty.get
+
+    test "Score frozen at the merge":
+      let
+        com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+        txFrame = com.db.baseTxFrame()
+        genesis = com.genesisHeader
+        pow = genesis.child(1000.u256)
+        terminal = pow.child(ttd)
+        pos1 = terminal.child(0.u256)
+        pos2 = pos1.child(0.u256)
+        powScore = genesis.difficulty + 1000.u256
+        terminalScore = powScore + ttd
+
+      for header in [pow, terminal, pos1, pos2]:
+        check txFrame.persistHeaderAndSetHead(header).isOk
+
+      check:
+        txFrame.getScore(genesis.computeBlockHash) == Opt.some(genesis.difficulty)
+        txFrame.getScore(pow.computeBlockHash) == Opt.some(powScore)
+        txFrame.getScore(terminal.computeBlockHash) == Opt.some(terminalScore)
+        txFrame.getScore(pos1.computeBlockHash).isNone
+        txFrame.getScore(pos2.computeBlockHash).isNone
+        txFrame.getTerminalScore() == Opt.some(terminalScore)
+        txFrame.getCanonicalHeaderHash().get == pos2.computeBlockHash
+        txFrame.headTotalDifficulty() == Opt.some(terminalScore)
+        not com.proofOfStake(pow, txFrame)
+        not com.proofOfStake(terminal, txFrame)
+        com.proofOfStake(pos1, txFrame)
+        com.proofOfStake(pos2, txFrame)
+
+    test "No score when history starts after the merge":
+      let
+        com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+        txFrame = com.db.baseTxFrame()
+        startOfHistory =
+          hash32"1111111111111111111111111111111111111111111111111111111111111111"
+        pivot = Header(number: 100, parentHash: startOfHistory, timestamp: EthTime(100))
+        next = pivot.child(0.u256)
+
+      check txFrame.persistHeaderAndSetHead(pivot, startOfHistory).isOk
+      check txFrame.persistHeaderAndSetHead(next, startOfHistory).isOk
+      check:
+        txFrame.getScore(pivot.computeBlockHash).isNone
+        txFrame.getScore(next.computeBlockHash).isNone
+        txFrame.getTerminalScore().isNone
+        txFrame.getCanonicalHeaderHash().get == next.computeBlockHash
+        txFrame.headTotalDifficulty().isNone
+        com.proofOfStake(next, txFrame)
+
+    test "Terminal score taken from a PoS score of an older database":
+      let
+        com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+        txFrame = com.db.baseTxFrame()
+        terminal = com.genesisHeader.child(ttd)
+        oldPos = terminal.child(0.u256)
+        newPos = oldPos.child(0.u256)
+        terminalScore = com.genesisHeader.difficulty + ttd
+
+      check txFrame.persistHeaderAndSetHead(terminal).isOk
+      check txFrame.put(
+        genericHashKey(oldPos.computeBlockHash).toOpenArray, rlp.encode(oldPos)).isOk
+      check txFrame.put(
+        blockHashToScoreKey(oldPos.computeBlockHash).toOpenArray,
+        rlp.encode(terminalScore)).isOk
+      check txFrame.getTerminalScore().isNone
+
+      check txFrame.persistHeaderAndSetHead(newPos).isOk
+      check:
+        txFrame.getScore(newPos.computeBlockHash).isNone
+        txFrame.getTerminalScore() == Opt.some(terminalScore)
+
 proc genesisMain() =
   genesisTest()
   customGenesisTest()
   genesisBlockHashTest()
+  scoreTest()
 
 genesisMain()
