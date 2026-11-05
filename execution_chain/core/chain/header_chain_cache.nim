@@ -459,7 +459,7 @@ proc get*(hc: HeaderChainRef; hash: Hash32): Opt[Header] =
 iterator incrFrom*(hc: HeaderChainRef, start = BlockNumber(0)): Header =
   ## Read out stored headers with increasing block numbers, opionally
   ## starting at `start`.
-  var bn = if 0 < start: start else: hc.session.ante.number
+  var bn = max(start, hc.session.ante.number)
   while true:
     let header = hc.get(bn).valueOr:
       break

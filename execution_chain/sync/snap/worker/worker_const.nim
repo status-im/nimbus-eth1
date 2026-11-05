@@ -261,6 +261,12 @@ const
 
   # -----------
 
+  nBacklogHeaders* = 256
+    ## Number of headers and block hashes to provide preceeding the final
+    ## pivot state so that the `BLOCKHASH` evm code can succeed.
+
+  # -----------
+
   nCoreDbImportPersistBatch* = 384 * 1024
     ## When importing accounts, storage, and contract codes the caches are
     ## regularly saved to disk after this many items have benn processed.
