@@ -279,6 +279,10 @@ proc importCoreDb*(
 
   ok(txStats)
 
+proc wipeCacheDb*(adb: CacheDbRef) =
+  ## Wipe cache DB on disk
+  adb.close(wipe=true)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
