@@ -1383,6 +1383,33 @@ suite "TxPool validation state follows chain head":
     # The add re-anchored the pool on the live head.
     check xp.baseFee == probe.baseFee
 
+  test "account nonce is read after latest's snapshot is evicted":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      builder = TxPoolRef.new(env.chain)
+      acc = mx.getAccount(22)
+      other = mx.getAccount(21)
+      tc = BaseTx(gasLimit: 75000, recipient: Opt.some(recipient), amount: amount)
+
+    builder.prevRandao = prevRandao
+    builder.feeRecipient = feeRecipient
+    builder.timestamp = EthTime.now()
+
+    builder.checkAddTx(mx.makeTx(tc, acc, 0))
+    builder.checkImportBlock(1, 0)
+    let older = env.chain.latestHash
+    builder.checkAddTx(mx.makeTx(tc, acc, 1))
+    builder.checkImportBlock(1, 0)
+    check xp.getNonce(acc.address) == 2
+    check xp.getPendingNonce(acc.address) == 2
+
+    # A state read on the older block takes the only snapshot slot from latest
+    env.chain.com.db.mpt.maxSnapshots = 1
+    check env.chain.txFrame(older).getStateRoot().isOk
+    check xp.getNonce(other.address) == 0
+
 suite "TxPool blob retention":
   ## A superseded blob tx must leave no reference behind. `blobTab` is not
   ## covered by MAX_POOL_SIZE or the expiry sweep, so a stale entry there
