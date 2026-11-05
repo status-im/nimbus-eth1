@@ -34,8 +34,6 @@ import
   ./tx_tabs,
   ./tx_item
 
-from eth/common/eth_types_rlp import rlpHash
-
 logScope:
   topics = "txpool"
 
