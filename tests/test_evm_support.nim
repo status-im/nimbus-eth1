@@ -462,8 +462,8 @@ proc runFactory(vm: BaseVMState, code, initcode: seq[byte], gas = 1_000_000.GasI
     gas: gas,
     sender: factoryCaller,
     currentTarget: factoryAddress,
-    codeAddress: factoryAddress,
-    data: initcode)
+    codeAddress: factoryAddress)
+  msg.borrowData(initcode)
   result = newComputation(vm, keepStack = true, msg, CodeBytesRef.init(code))
   result.execCallOrCreate()
 

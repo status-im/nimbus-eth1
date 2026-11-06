@@ -135,7 +135,8 @@ type
     codeAddress*:      Address
     delegateTo*:       Address
     value*:            UInt256
-    data*:             seq[byte]
+    dataPtr:           ptr UncheckedArray[byte]
+    dataLen:           int
     flags*:            set[MsgFlags]
 
   TracerFlags* {.pure.} = enum
@@ -158,6 +159,20 @@ func `com=`*(vmState: BaseVMState, com: CommonRef) =
 
 func borrowCom*(vmState: BaseVMState, com: CommonRef) =
   vmState.comRef.borrow(com)
+
+template data*(msg: Message): openArray[byte] =
+  msg.dataPtr.toOpenArray(0, msg.dataLen - 1)
+
+template borrowData*(msg: Message, bytes: openArray[byte]) =
+  ## Views `bytes` without copying, so `bytes` must outlive every read of `msg.data`.
+  msg.dataLen = bytes.len
+  msg.dataPtr =
+    if msg.dataLen > 0: cast[ptr UncheckedArray[byte]](unsafeAddr bytes[0])
+    else: nil
+
+template clearData*(msg: Message) =
+  msg.dataPtr = nil
+  msg.dataLen = 0
 
 # Transaction level
 # This is called once fo each transaction

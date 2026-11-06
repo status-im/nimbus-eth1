@@ -20,6 +20,7 @@ import
   ../../computation,
   ../../memory,
   ../../stack,
+  ../../types,
   ../gas_costs,
   ../op_codes,
   ./oph_defs,
