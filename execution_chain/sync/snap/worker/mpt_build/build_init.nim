@@ -187,6 +187,13 @@ proc init*[T: NodeTrieRef](
   ## Nodes from the argument list `nodes` which are not reachable from the
   ## root node are silently discarded.
   ##
+  ## The argument `start` is a trie path not after the left most path of the
+  ## node list to be merged into the trie.
+  ##
+  ## The argument `maxPath` is the trie path of the right most path of the
+  ## node list to be merged into the trie, or the equivalent of `2^32-1`
+  ## if there are no nodes to be merged.
+  ##
   if nodes.len == 0:
     return NodeTrieRef.init root
 
@@ -232,6 +239,10 @@ proc init*[T: NodeTrieRef](
       # Remove stop node from parent
       BranchNodeRef(stopNode.parent).brLinks[stopNode.inx] = nil
       db.dangling.add (key,stopNode)                # register dangling keys
+
+      # Assuming that `limit` is the right most trie path of the nodes to
+      # be merged, there can be no more node paths to the right of the
+      # of the `limit` if all proof paths are bounded by `limit`.
       if limit < path:
         db.atRightEnd = false
 

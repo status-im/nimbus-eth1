@@ -374,6 +374,21 @@ proc multiProof*(
 
   ok()
 
+proc getCollapsedSiblings*(acc: CoreDbTxRef): seq[RootedVertexID] =
+  ## Top nodes the witness needs because a deletion collapsed their branch
+  acc.aTx.getCollapsedSiblings()
+
+proc clearCollapsedSiblings*(acc: CoreDbTxRef) =
+  acc.aTx.collapsedSiblings.setLen(0)
+
+proc hasUnprovenCollapse*(acc: CoreDbTxRef): bool =
+  ## Stateless only: true if the trie still has a branch that collapsed onto a
+  ## child absent from the witness.
+  acc.aTx.hasUnprovenCollapse()
+
+proc `collectWitness=`*(acc: CoreDbTxRef, collect: bool) =
+  acc.aTx.collectWitness = collect
+
 # ------------ storage ---------------
 
 proc slotProofs*(
@@ -495,6 +510,9 @@ proc parent*(tx: CoreDbTxRef): CoreDbTxRef =
   assert not tx.kvt.isNil()
   assert not tx.aTx.parent.isNil()
   CoreDbTxRef(kvt: tx.kvt, aTx: tx.aTx.parent, blockHashFn: tx.blockHashFn)
+
+proc isChildOf*(tx, parent: CoreDbTxRef): bool =
+  tx.aTx.parent == parent.aTx
 
 proc checkpoint*(tx: CoreDbTxRef, blockNumber: BlockNumber, skipSnapshot = false) =
   tx.aTx.checkpoint(blockNumber, skipSnapshot)

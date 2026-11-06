@@ -15,8 +15,6 @@ import
   ssz_serialization/[proofs, merkleization],
   ../../../portal/common/common_types
 
-from eth/common/eth_types_rlp import rlpHash
-
 export results, ssz_serialization, merkleization, proofs, common_types
 
 # HistoricalHashesAccumulator, as per specification:

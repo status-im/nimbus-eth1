@@ -19,14 +19,14 @@ import
 
 suite "test transaction verification":
   test "check tx hash":
-    let blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Istanbul.json")
+    let blk = getBlockFromJson("verified_proxy/tests/data/Istanbul.json")
     for tx in blk.transactions:
       if tx.kind == TxOrHashKind.tohTx:
         check checkTxHash(tx.tx, tx.tx.hash)
 
   test "check tx trie root":
     let
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Istanbul.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/Istanbul.json")
       res = verifyTransactions(blk.transactionsRoot, blk.transactions)
 
     check res.isOk()
@@ -38,7 +38,7 @@ suite "test transaction verification":
         raise newException(TestProxyError, error.errMsg)
 
         # defining port 8888 is a hack for addr in use errors
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
 
     for tx in blk.transactions:
       if tx.kind == tohTx:

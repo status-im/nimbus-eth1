@@ -39,10 +39,11 @@ proc setupComputation(params: SysCallParams): Computation =
       currentTarget:     params.to,
       codeAddress:       params.to,
       sender:            params.sender,
-      data:              params.input,
     )
     code = vmState.ledger.getCode(msg.codeAddress)
     computation = newComputation(vmState, false, msg, code)
+
+  msg.borrowData(params.input)
 
   vmState.txCtx = TxContext(
     origin: params.sender,

@@ -164,7 +164,7 @@ when isMainModule:
   d.open()
 
   let
-    cfg = SocketConfig.init(incomingSocketReceiveTimeout = none[Duration]())
+    cfg = SocketConfig.init(incomingSocketReceiveTimeout = Opt.none(Duration))
     utp = UtpDiscv5Protocol.new(
       d, protName, buildAcceptConnection(table), socketConfig = cfg
     )

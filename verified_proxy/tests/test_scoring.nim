@@ -37,7 +37,7 @@ let scoringEngineConf = RpcVerificationEngineConf(
 
 suite "backend scoring":
   let
-    blk = getBlockFromJson("nimbus_verified_proxy/tests/data/proof_block.json")
+    blk = getBlockFromJson("verified_proxy/tests/data/proof_block.json")
     address = address"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
     latestTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "latest")
 

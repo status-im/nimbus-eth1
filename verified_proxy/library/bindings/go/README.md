@@ -11,13 +11,13 @@ Go bindings for [Nimbus Verified Proxy](https://nimbus.guide/verified-proxy.html
 ## Installation
 
 ```sh
-go get github.com/status-im/nimbus-eth1/nimbus_verified_proxy/library/bindings/go
+go get github.com/status-im/nimbus-eth1/verified_proxy/library/bindings/go
 ```
 
 The package links against a precompiled static library (`libverifproxy`). After adding the dependency, fetch the library for your platform:
 
 ```sh
-go get -tool github.com/status-im/nimbus-eth1/nimbus_verified_proxy/library/bindings/go/cmd/verifproxy-setup-libs
+go get -tool github.com/status-im/nimbus-eth1/verified_proxy/library/bindings/go/cmd/verifproxy-setup-libs
 go tool verifproxy-setup-libs
 ```
 
@@ -26,7 +26,7 @@ go tool verifproxy-setup-libs
 ## Usage
 
 ```go
-import "github.com/status-im/nimbus-eth1/nimbus_verified_proxy/library/bindings/go/verifproxy"
+import "github.com/status-im/nimbus-eth1/verified_proxy/library/bindings/go/verifproxy"
 
 const config = `{
   "eth2Network":      "mainnet",

@@ -34,7 +34,6 @@ import
   ./oph_helpers,
   chronicles,
   eth/common/addresses,
-  stew/assign2,
   stint
 
 # ------------------------------------------------------------------------------
@@ -354,7 +353,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
     codeAddress:       p.codeAddress,
     value:             p.value,
     flags:             p.flags)
-  assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
+  childMsg.borrowData(cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,
@@ -430,7 +429,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
     codeAddress:       p.codeAddress,
     value:             p.value,
     flags:             p.flags)
-  assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
+  childMsg.borrowData(cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,
@@ -500,7 +499,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
     codeAddress:       p.codeAddress,
     value:             p.value,
     flags:             p.flags)
-  assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
+  childMsg.borrowData(cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,
@@ -569,7 +568,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
     codeAddress:       p.codeAddress,
     value:             p.value,
     flags:             p.flags)
-  assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
+  childMsg.borrowData(cpt.memory.read(p.memInPos, p.memInLen))
   cpt.execSubCall(
     memPos = p.memOutPos,
     memLen = p.memOutLen,

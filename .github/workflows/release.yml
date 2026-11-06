@@ -493,7 +493,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: wasm
-          path: nimbus_verified_proxy/library/bindings/wasm/
+          path: verified_proxy/library/bindings/wasm/
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -504,7 +504,7 @@ jobs:
 
       - name: Set version
         run: |
-          cd nimbus_verified_proxy/library/bindings/wasm
+          cd verified_proxy/library/bindings/wasm
           npm version "${{ needs.setup.outputs.npm_version }}" --no-git-tag-version
 
       - name: Delete existing nightly package version
@@ -523,7 +523,7 @@ jobs:
 
       - name: Publish
         run: npm publish ${{ needs.setup.outputs.is_nightly == 'true' && '--tag nightly' || '' }}
-        working-directory: nimbus_verified_proxy/library/bindings/wasm
+        working-directory: verified_proxy/library/bindings/wasm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

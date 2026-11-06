@@ -25,7 +25,7 @@ suite "test fees verification":
       ts = TestApiState.init(1.u256)
       (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
         raise newException(TestProxyError, error.errMsg)
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
 
     ts.loadBlock(blk)
     engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
@@ -49,7 +49,7 @@ suite "test fees verification":
     ts.clear()
     engine.headerStore.clear()
 
-    let blk2 = getBlockFromJson("nimbus_verified_proxy/tests/data/Prague.json")
+    let blk2 = getBlockFromJson("verified_proxy/tests/data/Prague.json")
 
     ts.loadBlock(blk2)
     engine.setAnchor(convHeader(blk2), blk2.hash, Optimistic)
@@ -70,7 +70,7 @@ suite "test fees verification":
       ts = TestApiState.init(1.u256)
       (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
         raise newException(TestProxyError, error.errMsg)
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
       blockCount = Quantity(4) # arbitrary number
       newestBlock = blockId(blk.number)
       percentiles = @[12.5, 50.0, 99.9]
@@ -100,7 +100,7 @@ suite "test fees verification":
       ts = TestApiState.init(1.u256)
       (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
         raise newException(TestProxyError, error.errMsg)
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
       blockCount = Quantity(1) # arbitrary number
       newestBlock = blockId(blk.number)
       expectedFeeHistory = FeeHistoryResult(

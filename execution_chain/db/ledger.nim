@@ -22,7 +22,7 @@ import
   ../constants,
   ../block_access_list/[bal_overlay, bal_utils],
   ./[access_list as ac_access_list, core_db, storage_types],
-  ./aristo/[aristo_blobify, aristo_desc, aristo_get]
+  ./aristo/[aristo_blobify, aristo_desc]
 
 export
   code_bytes, core_db.computeAccPath, core_Db.computeSlotKey
@@ -588,17 +588,17 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
-  result.txFrame.aTx.collectWitness = collectWitness
+  result.txFrame.collectWitness = collectWitness
   result.stateless = stateless
   result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavePoint
 
 proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   doAssert ledger.isTopLevelClean
-  doAssert txFrame.aTx.parent == ledger.txFrame.aTx,
+  doAssert txFrame.isChildOf(ledger.txFrame),
     "reinit txFrame must be a direct child of the ledger's current frame"
   ledger.txFrame = txFrame
-  ledger.txFrame.aTx.collectWitness = ledger.collectWitness
+  ledger.txFrame.collectWitness = ledger.collectWitness
   ledger.ripemdSpecial = false
   ledger.fatalError = Opt.none(string)
   ledger.balOverlay = Opt.none(BlockAccessListOverlay)
@@ -972,36 +972,11 @@ proc clearEmptyAccounts(ledger: LedgerRef) =
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
-proc getCollapsedSiblings*(ledger: LedgerRef): seq[RootedVertexID] =
-  ## Collapsed siblings for witness generation. Persist runs per transaction,
-  ## so a later insert in the block may restore a collapsed branch. The spec
-  ## applies the block's writes at once and only needs the sibling if the
-  ## final trie still lacks that branch.
-  let db = ledger.txFrame.aTx
-  var res: seq[RootedVertexID]
-  for (sibling, brVid, brPfxLen) in db.collapsedSiblings:
-    let vtx = db.getVtx((sibling.root, brVid))
-    if vtx.isValid and vtx.vType in Branches and vtx.pfx.len == int(brPfxLen):
-      continue # restored by a later insert
-    res.add(sibling)
-  res
-
-proc hasUnprovenCollapse*(ledger: LedgerRef): bool =
-  ## Stateless only: true if a branch that collapsed onto a child absent from
-  ## the witness is still collapsed. The witness then lacks that child.
-  let db = ledger.txFrame.aTx
-  for rvid in db.unprovenCollapses:
-    let vtx = db.getVtx(rvid)
-    if vtx.isValid and vtx.vType == BoundaryNode and
-        BoundaryNodeRef(vtx).unprovenCollapse:
-      return true
-  false
-
 template clearWitnessKeys*(ledger: LedgerRef) =
   ledger.witnessKeys.clear()
 
 template clearCollapsedSiblings*(ledger: LedgerRef) =
-  ledger.txFrame.aTx.collapsedSiblings.setLen(0)
+  ledger.txFrame.clearCollapsedSiblings()
 
 template clearWrittenCode*(ledger: LedgerRef) =
   ledger.savePoint.writtenCode.clear()

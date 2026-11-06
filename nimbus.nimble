@@ -45,7 +45,7 @@ when declared(namedBin):
   namedBin = {
     "execution_chain/nimbus_execution_client": "nimbus_execution_client",
     "portal/client/nimbus_portal_client": "nimbus_portal_client",
-    "nimbus_verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
+    "verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
   }.toTable()
 
 import std/[os, strutils]

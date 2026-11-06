@@ -28,8 +28,8 @@ suite "test receipts verification":
 
   test "get receipts using block tags":
     let
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
-      rxs = getReceiptsFromJson("nimbus_verified_proxy/tests/data/receipts.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
+      rxs = getReceiptsFromJson("verified_proxy/tests/data/receipts.json")
       numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: blk.number)
       finalTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "finalized")
       earliestTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "earliest")
@@ -66,9 +66,9 @@ suite "test receipts verification":
 
   test "get logs using tags":
     let
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
-      rxs = getReceiptsFromJson("nimbus_verified_proxy/tests/data/receipts.json")
-      logs = getLogsFromJson("nimbus_verified_proxy/tests/data/logs.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
+      rxs = getReceiptsFromJson("verified_proxy/tests/data/receipts.json")
+      logs = getLogsFromJson("verified_proxy/tests/data/logs.json")
       numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: blk.number)
       finalTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "finalized")
       latestTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "latest")
@@ -105,9 +105,9 @@ suite "test receipts verification":
 
   test "get logs using address and topic filters":
     let
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
-      rxs = getReceiptsFromJson("nimbus_verified_proxy/tests/data/receipts.json")
-      logs = getLogsFromJson("nimbus_verified_proxy/tests/data/logs.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
+      rxs = getReceiptsFromJson("verified_proxy/tests/data/receipts.json")
+      logs = getLogsFromJson("verified_proxy/tests/data/logs.json")
       numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: blk.number)
       transferTopic = TopicOrList(
         kind: SingleOrListKind.slkSingle,
@@ -183,9 +183,9 @@ suite "test receipts verification":
 
   test "get logs using filter changes":
     let
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
-      rxs = getReceiptsFromJson("nimbus_verified_proxy/tests/data/receipts.json")
-      logs = getLogsFromJson("nimbus_verified_proxy/tests/data/logs.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
+      rxs = getReceiptsFromJson("verified_proxy/tests/data/receipts.json")
+      logs = getLogsFromJson("verified_proxy/tests/data/logs.json")
 
     # update block tags because getLogs (uses)-> getReceipts (uses)-> getHeader
     ts.loadBlockReceipts(blk, rxs)

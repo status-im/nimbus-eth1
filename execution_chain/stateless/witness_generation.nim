@@ -105,7 +105,7 @@ proc build*(
     doAssert preStateLedger.getStateRoot() == parent.stateRoot
 
   var witness = Witness.build(
-    ledger.getWitnessKeys(), ledger.getCollapsedSiblings(), preStateLedger
+    ledger.getWitnessKeys(), ledger.txFrame.getCollapsedSiblings(), preStateLedger
   )
 
   let

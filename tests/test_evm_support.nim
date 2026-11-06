@@ -136,29 +136,33 @@ proc runMemoryTests() =
   suite "Memory tests":
     test "write":
       var mem = memory32()
+      defer: mem.dispose()
       # Test that write creates 32byte string == value padded with zeros
       check mem.write(startPos = 0, value = @[1.byte, 0.byte, 1.byte, 0.byte]).isOk
-      check(mem.bytes == @[1.byte, 0.byte, 1.byte, 0.byte].concat(repeat(0.byte, 28)))
+      check(@(mem.bytes) == @[1.byte, 0.byte, 1.byte, 0.byte].concat(repeat(0.byte, 28)))
 
     test "write rejects values beyond memory size":
       var mem = memory128()
+      defer: mem.dispose()
       check mem.write(startPos = 128, value = @[1.byte, 0.byte, 1.byte, 0.byte]).error.code == EvmErrorCode.MemoryFull
       check mem.write(startPos = 128, value = 1.byte).error.code == EvmErrorCode.MemoryFull
 
     test "extends appropriately extends memory":
       var mem = EvmMemory.init()
+      defer: mem.dispose()
       # Test extends to 32 byte array: 0 < (start_position + size) <= 32
       mem.extend(startPos = 0, size = 10)
-      check(mem.bytes == repeat(0.byte, 32))
+      check(@(mem.bytes) == repeat(0.byte, 32))
       # Test will extend past length if params require: 32 < (start_position + size) <= 64
       mem.extend(startPos = 28, size = 32)
-      check(mem.bytes == repeat(0.byte, 64))
+      check(@(mem.bytes) == repeat(0.byte, 64))
       # Test won't extend past length unless params require: 32 < (start_position + size) <= 64
       mem.extend(startPos = 48, size = 10)
-      check(mem.bytes == repeat(0.byte, 64))
+      check(@(mem.bytes) == repeat(0.byte, 64))
 
     test "read returns correct bytes":
       var mem = memory32()
+      defer: mem.dispose()
       check mem.write(startPos = 5, value = @[1.byte, 0.byte, 1.byte, 0.byte]).isOk
       check(@(mem.read(startPos = 5, size = 4)) == @[1.byte, 0.byte, 1.byte, 0.byte])
       check(@(mem.read(startPos = 6, size = 4)) == @[0.byte, 1.byte, 0.byte, 0.byte])
@@ -458,8 +462,8 @@ proc runFactory(vm: BaseVMState, code, initcode: seq[byte], gas = 1_000_000.GasI
     gas: gas,
     sender: factoryCaller,
     currentTarget: factoryAddress,
-    codeAddress: factoryAddress,
-    data: initcode)
+    codeAddress: factoryAddress)
+  msg.borrowData(initcode)
   result = newComputation(vm, keepStack = true, msg, CodeBytesRef.init(code))
   result.execCallOrCreate()
 

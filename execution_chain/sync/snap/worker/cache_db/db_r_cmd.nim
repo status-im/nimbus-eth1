@@ -12,7 +12,6 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
   pkg/[results, rocksdb],
   pkg/stew/byteutils,
   ./[db_const, db_desc]
@@ -64,11 +63,15 @@ proc rDel*(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
     return err(info & error)
   ok()
 
-proc rClear*(adb: RocksDbReadWriteRef, col: MptAsmCol, width: int): DelResult =
+proc rClear*(
+    adb: RocksDbReadWriteRef;
+    minKey: openArray[byte];
+    maxKey: openArray[byte];
+      ): DelResult =
   const info = "clear: "
-  adb.deleteRange(@[col.uint8], @[col.uint8] & 0xffu8.repeat(width)).isOkOr:
+  adb.deleteRange(minKey, maxKey).isOkOr:
     when extraTraceMessages:
-      trace info & "failed", width, `error`=error
+      trace info & "failed", col=minKey[0], `error`=error
     return err(info & $error)
   ok()
 

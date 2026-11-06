@@ -32,8 +32,7 @@ suite "test verified blocks":
     ]
 
     for blockName in forkBlockNames:
-      let blk =
-        getBlockFromJson("nimbus_verified_proxy/tests/data/" & blockName & ".json")
+      let blk = getBlockFromJson("verified_proxy/tests/data/" & blockName & ".json")
 
       ts.loadBlock(blk)
       engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
@@ -49,8 +48,7 @@ suite "test verified blocks":
 
   test "check fetching a block with Amsterdam header fields":
     # sepolia block 0xb505b0, carrying blockAccessListHash and slotNumber
-    let blk =
-      getBlockFromJson("nimbus_verified_proxy/tests/data/sepolia_amsterdam.json")
+    let blk = getBlockFromJson("verified_proxy/tests/data/sepolia_amsterdam.json")
 
     ts.loadBlock(blk)
     engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
@@ -72,7 +70,7 @@ suite "test verified blocks":
 
   test "check fetching blocks by number and tags":
     let
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
       numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: blk.number)
       finalTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "finalized")
       earliestTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "earliest")
@@ -116,7 +114,7 @@ suite "test verified blocks":
 
     for i in targetBlockNum .. sourceBlockNum:
       let
-        filename = "nimbus_verified_proxy/tests/data/" & $i & ".json"
+        filename = "verified_proxy/tests/data/" & $i & ".json"
         blk = getBlockFromJson(filename)
 
       ts.loadBlock(blk)
@@ -127,7 +125,7 @@ suite "test verified blocks":
     # the walk reaches at most maxBlockWalk blocks below the anchor
     for i in targetBlockNum + 1 ..< sourceBlockNum:
       let
-        blk = getBlockFromJson("nimbus_verified_proxy/tests/data/" & $i & ".json")
+        blk = getBlockFromJson("verified_proxy/tests/data/" & $i & ".json")
         tag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(i))
         verifiedBlk = waitFor frontend.eth_getBlockByNumber(tag, true)
 
@@ -154,7 +152,7 @@ suite "test verified blocks":
 
     for i in targetBlockNum .. sourceBlockNum:
       let
-        filename = "nimbus_verified_proxy/tests/data/" & $i & ".json"
+        filename = "verified_proxy/tests/data/" & $i & ".json"
         blk = getBlockFromJson(filename)
 
       ts.loadBlock(blk)
@@ -182,7 +180,7 @@ suite "test verified blocks":
     engine.headerStore.clear()
 
     let
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
       numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: blk.number)
       hash = blk.hash
 

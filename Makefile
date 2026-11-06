@@ -110,18 +110,13 @@ ifeq ($(NIM_PARAMS),)
 # selectively download nimbus-eth2 submodules because we don't need all of it's modules
 # also hoodi already exceeds github LFS quota
 
-GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,parsedConsensusGenesis.json
+GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,parsedConsensusGenesis.json -c submodule.fetchJobs=16
+GIT_ETH2_SUBMODULES := sepolia hoodi gnosis-chain-configs nim-kzg4844 mainnet glamsterdam-devnets
 
-GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
+# TODO this careful setup is destroyed by the update-common target which inits nimbus-eth2 recursively anyway
+GIT_SUBMODULE_UPDATE := git $(GIT_SUBMODULE_CONFIG) -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
   git $(GIT_SUBMODULE_CONFIG) submodule update vendor/nimbus-eth2; \
-  cd vendor/nimbus-eth2; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/sepolia; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/hoodi; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/gnosis-chain-configs; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init --recursive vendor/nim-kzg4844; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/mainnet; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/glamsterdam-devnets; \
-  cd ../..
+  git $(GIT_SUBMODULE_CONFIG) -C vendor/nimbus-eth2/vendor submodule update --init --recursive $(GIT_ETH2_SUBMODULES)
 
 .DEFAULT:
 	+@ echo -e "Git submodules not found. Running '$(GIT_SUBMODULE_UPDATE)'.\n"; \
@@ -346,21 +341,21 @@ portal_bridge: | build deps
 nimbus_verified_proxy: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "nimbus_verified_proxy/nimbus_verified_proxy.nim" $(NIM_PARAMS) -d:chronicles_log_level=TRACE && \
+		$@ "verified_proxy/nimbus_verified_proxy.nim" $(NIM_PARAMS) -d:chronicles_log_level=TRACE && \
 		echo -e $(BUILD_END_MSG) "build/$@"
 
 nimbus_verified_proxy_test: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) nimbus_verified_proxy/tests/all_proxy_tests.nim
-		rm nimbus_verified_proxy/tests/all_proxy_tests
+		$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) verified_proxy/tests/all_proxy_tests.nim
+		rm verified_proxy/tests/all_proxy_tests
 
 $(VERIF_PROXY_OUT_PATH)/libverifproxy.a:
 	+ echo -e $(BUILD_MSG) "build/libverifproxy" && \
 		$(ENV_SCRIPT) $(NIMC) c \
 		--out:$@ \
 		$(NIM_PARAMS) \
-		nimbus_verified_proxy/library/verifproxy.nim
-	cp nimbus_verified_proxy/library/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
+		verified_proxy/library/verifproxy.nim
+	cp verified_proxy/library/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 
 libverifproxy: | build deps
 libverifproxy: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
@@ -369,11 +364,11 @@ libverifproxy_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 	+ $(CC) -I$(VERIF_PROXY_OUT_PATH) -L$(VERIF_PROXY_OUT_PATH) \
 		-Wno-incompatible-pointer-types \
 		-o build/$@ \
-		nimbus_verified_proxy/tests/test_api.c \
+		verified_proxy/tests/test_api.c \
 		-lverifproxy $(VERIFPROXY_LDFLAGS)
 	./build/$@
 
-GO_BINDINGS_DIR  := nimbus_verified_proxy/library/bindings/go
+GO_BINDINGS_DIR  := verified_proxy/library/bindings/go
 GO_LIB_DIR       := $(GO_BINDINGS_DIR)/verifproxy/lib
 
 nimbus_verified_proxy_go_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
@@ -381,7 +376,7 @@ nimbus_verified_proxy_go_test: $(VERIF_PROXY_OUT_PATH)/libverifproxy.a
 		mkdir -p "$(GO_LIB_DIR)" && \
 		cp "$(VERIF_PROXY_OUT_PATH)/libverifproxy.a" \
 		   "$(GO_LIB_DIR)/libverifproxy.a" && \
-		cp nimbus_verified_proxy/library/verifproxy.h \
+		cp verified_proxy/library/verifproxy.h \
 		   "$(GO_LIB_DIR)/verifproxy.h" && \
 		cd "$(GO_BINDINGS_DIR)" && \
 		go test ./...
@@ -394,8 +389,8 @@ nimbus_verified_proxy_wasm: | build deps
 		-d:release \
 		-d:disable_libbacktrace \
 		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
-		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
-	cp nimbus_verified_proxy/library/bindings/wasm/verifproxy.js $(CURDIR)/build/$@/
+		verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
+	cp verified_proxy/library/bindings/wasm/verifproxy.js $(CURDIR)/build/$@/
 
 nimbus_verified_proxy_wasm_debug: | build deps
 	@mkdir -p $(CURDIR)/build/$@
@@ -405,8 +400,8 @@ nimbus_verified_proxy_wasm_debug: | build deps
 		-d:debug \
 		-d:disable_libbacktrace \
 		-o:"$(CURDIR)/build/$@/verifproxy_wasm.js" \
-		nimbus_verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
-	cp nimbus_verified_proxy/library/bindings/wasm/verifproxy.js $(CURDIR)/build/$@/
+		verified_proxy/library/bindings/wasm/verifproxy_wasm.nim
+	cp verified_proxy/library/bindings/wasm/verifproxy.js $(CURDIR)/build/$@/
 
 # Stateless related targets
 

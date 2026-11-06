@@ -160,6 +160,17 @@ proc hasStoMissingIntv*(
     return err()
   ok(move data)
 
+proc hasStoMissingIntv*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[bool] =
+  var data = db.hasStoMissingIntv(accPath).valueOr:
+    error info.failedToFetch StoMissingIntvInfo,
+      accPath=accPath.toStr, `error`=error
+    return err()
+  ok(move data)
+
 proc getStoMissingIntv*(
     db: CacheDbRef;
     accPath: Hash32;

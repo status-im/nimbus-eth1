@@ -282,9 +282,9 @@ static void execution_transport(
         const char *params = execCtxParams(userData);
         if (strstr(params, "0x17a2d65") != NULL ||
             strstr(params, "0x5b34070154b4331237ca3975de14df77359f7269a65b95d01b0e81c626e3151d") != NULL)
-            file = "nimbus_verified_proxy/tests/data/block_0x17a2d65.json";
+            file = "verified_proxy/tests/data/block_0x17a2d65.json";
         else
-            file = "nimbus_verified_proxy/tests/data/block_0x17a2d23.json";
+            file = "verified_proxy/tests/data/block_0x17a2d23.json";
     }
 
     if (file) {
@@ -315,13 +315,13 @@ static void beacon_transport(
 
     const char *file = NULL;
     if (strcmp(endpoint, "getLightClientBootstrap") == 0)
-        file = "nimbus_verified_proxy/tests/data/lc_bootstrap.json";
+        file = "verified_proxy/tests/data/lc_bootstrap.json";
     else if (strcmp(endpoint, "getLightClientUpdatesByRange") == 0)
-        file = "nimbus_verified_proxy/tests/data/lc_updates.json";
+        file = "verified_proxy/tests/data/lc_updates.json";
     else if (strcmp(endpoint, "getLightClientOptimisticUpdate") == 0)
-        file = "nimbus_verified_proxy/tests/data/lc_optimistic.json";
+        file = "verified_proxy/tests/data/lc_optimistic.json";
     else if (strcmp(endpoint, "getLightClientFinalityUpdate") == 0)
-        file = "nimbus_verified_proxy/tests/data/lc_finality.json";
+        file = "verified_proxy/tests/data/lc_finality.json";
 
     if (file) {
         char *data = read_file(file);

@@ -41,6 +41,8 @@ type
     ENoDataAvailable               ## Out of scope, unsuuported state
     ELockError                     ## Locked by some other peer
     EDirtyData                     ## Some data must be cleaned up. first
+    EMergeError                    ## MPT builder error
+    EFinalisationError             ## MPT builder error
     EValidationError               ## Sub-MPT validation failed
     ECacheError                    ## Database cache error
     ECompleted                     ## Nothing to do, here
@@ -259,11 +261,14 @@ const
 
   # -----------
 
-  nCoreDbImportPersistBatch* = 256 * 1024
+  nCoreDbImportPersistBatch* = 384 * 1024
     ## When importing accounts, storage, and contract codes the caches are
     ## regularly saved to disk after this many items have benn processed.
     ## This constant defines a memory/time trade off. The lower the value,
     ## the less memory is used.
+
+  coreDbImportMsgInterval* = chronos.seconds(40)
+    ## Some status noise messages from time to time
 
 static:
   doAssert 0 < nFinHeadSupportWindowTopMargin

@@ -5,7 +5,7 @@
 # Example: ./download_lc_data.sh https://lodestar-mainnet.chainsafe.io
 #
 # After running, update TRUSTED_BLOCK_ROOT and TEST_LC_SLOT in
-# nimbus_verified_proxy/tests/test_beacon_backend.nim with the printed values.
+# verified_proxy/tests/test_beacon_backend.nim with the printed values.
 
 BEACON_URL="${1:?Usage: $0 <beacon-url> <trusted-block-root>}"
 TRUSTED_BLOCK_ROOT="${2:?Usage: $0 <beacon-url> <trusted-block-root>}"
