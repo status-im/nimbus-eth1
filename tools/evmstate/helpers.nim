@@ -15,7 +15,6 @@ import
   stew/byteutils,
   json_serialization,
   ../../execution_chain/transaction,
-  ../../execution_chain/db/ledger,
   ../../execution_chain/common/chain_config,
   ./parser
 
@@ -136,15 +135,6 @@ func parseReceipt*(rec: TxoReceipt): Receipt =
       logsBloom        : rec.bloom.value.to(Bloom),
       logs             : rec.logs,
     )
-
-proc setupLedger*(wantedState: GenesisAlloc, ledger: LedgerRef) =
-  for address, account in wantedState:
-    for slot, value in account.storage:
-      ledger.setStorage(address, slot, value)
-
-    ledger.setNonce(address, account.nonce)
-    ledger.setCode(address, account.code)
-    ledger.setBalance(address, account.balance)
 
 proc parseFixture*(jsonFile: string): Result[StateFixture, string] =
   try:

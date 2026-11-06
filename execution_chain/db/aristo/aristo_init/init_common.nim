@@ -15,6 +15,9 @@ import
 
 from ../../opts import defaultMaxSnapshots
 
+when compileOption("threads") and not defined(gcOrc):
+  import std/typedthreads
+
 const
   verifyIxId = true # and false
     ## Enforce session tracking
@@ -93,6 +96,7 @@ proc initInstance*(
   db.stoStatic = stoStatic
   db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
   when compileOption("threads"):
+    db.ownerThread = getThreadId()
     if threadSafeCaches:
       db.accLeaves.init(accLeavesLruSize)
       db.stoLeaves.init(stoLeavesLruSize)

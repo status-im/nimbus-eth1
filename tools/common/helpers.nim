@@ -13,6 +13,7 @@
 import
   results,
   ../../execution_chain/common/common,
+  ../../execution_chain/db/ledger,
   ./types
 
 export
@@ -157,3 +158,12 @@ func getChainConfig*(network: string): Result[ChainConfig, string] =
     return err("Unsupported network: " & network)
 
   ok(c)
+
+proc setupLedger*(wantedState: GenesisAlloc, ledger: LedgerRef) =
+  for address, account in wantedState:
+    for slot, value in account.storage:
+      ledger.setStorage(address, slot, value)
+
+    ledger.setNonce(address, account.nonce)
+    ledger.setCode(address, account.code)
+    ledger.setBalance(address, account.balance)

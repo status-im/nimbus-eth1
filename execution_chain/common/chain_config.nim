@@ -24,6 +24,15 @@ export
   tables, hardforks
 
 type
+  GenesisStorage* = Table[UInt256, UInt256]
+  GenesisAccount* = object
+    code*   : seq[byte]
+    storage*: GenesisStorage
+    balance*: UInt256
+    nonce*  : AccountNonce
+
+  GenesisAlloc* = Table[Address, GenesisAccount]
+
   Genesis* = ref object
     nonce*      : Bytes8
     timestamp*  : EthTime
@@ -41,14 +50,6 @@ type
     excessBlobGas*: Opt[uint64]    # EIP-4844
     parentBeaconBlockRoot*: Opt[Hash32]   # EIP-4788
     slotNumber* : Opt[uint64]
-
-  GenesisAlloc* = Table[Address, GenesisAccount]
-  GenesisStorage* = Table[UInt256, UInt256]
-  GenesisAccount* = object
-    code*   : seq[byte]
-    storage*: GenesisStorage
-    balance*: UInt256
-    nonce*  : AccountNonce
 
   NetworkParams* = object
     config*   : ChainConfig

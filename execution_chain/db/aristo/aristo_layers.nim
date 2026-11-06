@@ -17,6 +17,20 @@ import
   ./aristo_desc,
   ../../utils/mergeutils
 
+when compileOption("threads") and not defined(gcOrc):
+  import std/typedthreads
+
+when compileOption("threads"):
+  func onOwnerThread(db: AristoTxRef): bool {.inline.} =
+    {.cast(noSideEffect).}:
+      result = getThreadId() == db.db.ownerThread
+
+  template forThisThread(db: AristoTxRef; v: untyped): untyped =
+    if db.onOwnerThread(): v else: v.dup()
+else:
+  template forThisThread(db: AristoTxRef; v: untyped): untyped =
+    v
+
 # ------------------------------------------------------------------------------
 # Public functions: getter variants
 # ------------------------------------------------------------------------------
@@ -28,11 +42,11 @@ func layersGetVtx*(db: AristoTxRef; rvid: RootedVertexID): Opt[(VertexRef, int)]
   for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
       w.snapshot.vtx.withValue(rvid, item):
-        return Opt.some((item[][0], item[][2]))
+        return Opt.some((db.forThisThread(item[][0]), item[][2]))
       break
 
     w.sTab.withValue(rvid, item):
-      return Opt.some((item[], w.level))
+      return Opt.some((db.forThisThread(item[]), w.level))
 
   Opt.none((VertexRef, int))
 
@@ -62,11 +76,11 @@ func layersGetAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
   for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
       w.snapshot.acc.withValue(accPath, item):
-        return Opt.some(item[][0])
+        return Opt.some(db.forThisThread(item[][0]))
       break
 
     w.accLeaves.withValue(accPath, item):
-      return Opt.some(item[])
+      return Opt.some(db.forThisThread(item[]))
 
   Opt.none(AccLeafRef)
 
@@ -74,11 +88,11 @@ func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
       w.snapshot.sto.withValue(mixPath, item):
-        return Opt.some(item[][0])
+        return Opt.some(db.forThisThread(item[][0]))
       break
 
     w.stoLeaves.withValue(mixPath, item):
-      return Opt.some(item[])
+      return Opt.some(db.forThisThread(item[]))
 
   Opt.none(StoLeafRef)
 

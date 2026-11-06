@@ -26,7 +26,6 @@ import
   ./eest_parser
 
 import ../../tools/common/helpers as chp except HardFork
-from ../../tools/evmstate/helpers import setupLedger
 
 export
   eest_parser

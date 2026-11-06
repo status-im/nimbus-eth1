@@ -171,6 +171,7 @@ type
     when compileOption("threads"):
       taskpool*: Taskpool
         ## Shared task pool for offloading computation to other threads.
+      ownerThread*: int
 
   Leg* = object
     ## For constructing a `VertexPath`
