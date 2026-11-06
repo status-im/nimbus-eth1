@@ -309,9 +309,14 @@ template blocksImport*(
           # Genuine validation failure: the peer served an unusable block.
           isError = true
 
-          # Mark peer that produced that unusable block as a zombie
+          # Mark peer that produced that unusable block as a zombie, unless it
+          # is the last sync peer. Then no other peer can serve the block and
+          # the session would stall in the `blocks` state with no peers, so
+          # cancel it and wait for the next `CL` update instead.
           let srcPeer = buddy.getSyncPeer peerID
-          if not srcPeer.isNil:
+          if ctx.nSyncPeers() <= 1:
+            ctx.subState.cancelRequest = true
+          elif not srcPeer.isNil:
             srcPeer.only.nErrors.apply.blk = nProcBlocksErrThreshold + 1
 
           # Check whether it is enough to skip the current blocks list, only
