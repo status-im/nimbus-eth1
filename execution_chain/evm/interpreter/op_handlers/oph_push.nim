@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -65,7 +65,7 @@ genOphList fnName, fnInfo, inxRange, "VmOpExecPush", opName
 # about which opcodes are for which forks, but that seems uglier than
 # just adding Push0 here as a special case.)
 
-proc push0Op(cpt: VmCpt): EvmResultVoid =
+template push0Op*(cpt: VmCpt): EvmResultVoid =
   ## 0x5f, push 0 onto the stack
   cpt.stack.push(0)
 
@@ -76,7 +76,7 @@ const
      forks: VmOpShanghaiAndLater,
      name: "Push0",
      info: "Push 0 on the stack",
-     exec: push0Op)]
+     exec: toOpFn push0Op)]
 
 # ------------------------------------------------------------------------------
 # End

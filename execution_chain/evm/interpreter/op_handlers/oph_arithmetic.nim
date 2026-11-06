@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -45,7 +45,7 @@ proc mulOp(cpt: VmCpt): EvmResultVoid =
   ## 0x02, Multiplication
   cpt.stack.binaryOp(`*`)
 
-proc subOp(cpt: VmCpt): EvmResultVoid =
+template subOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x03, Substraction
   cpt.stack.binaryOp(`-`)
 
@@ -171,17 +171,17 @@ proc signExtendOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.binaryWithTop(se256)
 
-template lt256(lhs, rhs): auto =
-  (lhs < rhs).uint.u256
-
-template ltOp*(cpt: VmCpt): EvmResultVoid =
+proc ltOp(cpt: VmCpt): EvmResultVoid =
   ## 0x10, Less-than comparison
+  template lt256(lhs, rhs): auto =
+    (lhs < rhs).uint.u256
   cpt.stack.binaryOp(lt256)
 
-proc gtOp(cpt: VmCpt): EvmResultVoid =
+template gt256(lhs, rhs): auto =
+  (lhs > rhs).uint.u256
+
+template gtOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x11, Greater-than comparison
-  template gt256(lhs, rhs): auto =
-    (lhs > rhs).uint.u256
   cpt.stack.binaryOp(gt256)
 
 proc sltOp(cpt: VmCpt): EvmResultVoid =
@@ -209,19 +209,19 @@ proc isZeroOp(cpt: VmCpt): EvmResultVoid =
     value.isZero.uint.u256
   cpt.stack.unaryOp(zero256)
 
-proc andOp(cpt: VmCpt): EvmResultVoid =
+template andOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x16, Bitwise AND
   cpt.stack.binaryOp(`and`)
 
-proc orOp(cpt: VmCpt): EvmResultVoid =
+template orOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x17, Bitwise OR
   cpt.stack.binaryOp(`or`)
 
-proc xorOp(cpt: VmCpt): EvmResultVoid =
+template xorOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x18, Bitwise XOR
   cpt.stack.binaryOp(`xor`)
 
-proc notOp(cpt: VmCpt): EvmResultVoid =
+template notOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x19, Check if zero
   cpt.stack.unaryOp(`not`)
 
@@ -319,7 +319,7 @@ const
      forks: VmOpAllForks,
      name: "sub",
      info: "Subtraction operation",
-     exec: subOp),
+     exec: toOpFn subOp),
 
 
     (opCode: Div,         ## 0x04, Division
@@ -384,14 +384,14 @@ const
      forks: VmOpAllForks,
      name: "lt",
      info: "Less-than comparison",
-     exec: toOpFn ltOp),
+     exec: ltOp),
 
 
     (opCode: Gt,          ## 0x11, Greater-than
      forks: VmOpAllForks,
      name: "gt",
      info: "Greater-than comparison",
-     exec: gtOp),
+     exec: toOpFn gtOp),
 
 
     (opCode: Slt,         ## 0x12, Signed less-than
@@ -426,28 +426,28 @@ const
      forks: VmOpAllForks,
      name: "andOp",
      info: "Bitwise AND operation",
-     exec: andOp),
+     exec: toOpFn andOp),
 
 
     (opCode: Or,          ## 0x17, OR
      forks: VmOpAllForks,
      name: "orOp",
      info: "Bitwise OR operation",
-     exec: orOp),
+     exec: toOpFn orOp),
 
 
     (opCode: Xor,         ## 0x18, XOR
      forks: VmOpAllForks,
      name: "xorOp",
      info: "Bitwise XOR operation",
-     exec: xorOp),
+     exec: toOpFn xorOp),
 
 
     (opCode: Not,         ## 0x19, NOT
      forks: VmOpAllForks,
      name: "notOp",
      info: "Bitwise NOT operation",
-     exec: notOp),
+     exec: toOpFn notOp),
 
 
     (opCode: Byte,        ## 0x1a, Retrieve byte
