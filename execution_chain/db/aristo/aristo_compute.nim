@@ -587,7 +587,7 @@ proc computeKeyImpl(
 
   if vtx.vType in Branches:
     when parallel and not spawnTpTasks:
-      if level >= txRef.db.baseTxFrame().level:
+      if level >= txRef.db.txRef.level:
         keyBuf[].add((rvid, key, level.uint32))
       elif level == dbLevel:
         var vtxBuf: VertexBuf
@@ -596,7 +596,7 @@ proc computeKeyImpl(
       else:
         raiseAssert(
           "Cannot write keys at level < baseTxFrame level. Found level = " & $level &
-            ", baseTxFrame level = " & $txRef.db.baseTxFrame().level
+            ", baseTxFrame level = " & $txRef.db.txRef.level
         )
     else:
       ?txRef.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch, snapshotFrame)

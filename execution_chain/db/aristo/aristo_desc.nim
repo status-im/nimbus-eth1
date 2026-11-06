@@ -246,20 +246,20 @@ func hash*(db: AristoTxRef): Hash {.error.}
 proc baseTxFrame*(db: AristoDbRef): AristoTxRef =
   db.txRef
 
-iterator rstack*(tx: AristoTxRef, stopAtSnapshot = false): AristoTxRef =
+iterator rstack*(tx: AristoTxRef, stopAtSnapshot = false): lent AristoTxRef =
   # Stack in reverse order, ie going from tx to base
-  var tx = tx
+  var tx = addr tx
 
-  while tx != nil:
+  while tx[] != nil:
     # A disposed frame has no state left to read through
-    doAssert not stopAtSnapshot or tx.level != disposedLevel,
+    doAssert not stopAtSnapshot or tx[].level != disposedLevel,
       "read through a disposed frame"
-    yield tx
+    yield tx[]
 
-    if stopAtSnapshot and tx.snapshot.level.isSome():
+    if stopAtSnapshot and tx[].snapshot.level.isSome():
       break
 
-    tx = tx.parent
+    tx = addr tx[].parent
 
 iterator stack*(tx: AristoTxRef, stopAtSnapshot = false): AristoTxRef =
   # Stack going from base to tx

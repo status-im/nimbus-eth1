@@ -46,18 +46,18 @@ type
     isValid: bool                    ## See also `isValid()` for `VertexID`
     vid: VertexID                    ## Storage root vertex ID
 
-  VertexRef* {.inheritable, pure.} = ref object
+  VertexRef* {.inheritable, pure, acyclic.} = ref object
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
     vType*: VertexType
 
-  BranchRef* = ref object of VertexRef
+  BranchRef* {.acyclic.} = ref object of VertexRef
     used*: uint16
     startVid*: VertexID
 
-  ExtBranchRef* = ref object of BranchRef
+  ExtBranchRef* {.acyclic.} = ref object of BranchRef
     pfx*: NibblesBuf
 
-  BoundaryNodeRef* = ref object of VertexRef
+  BoundaryNodeRef* {.acyclic.} = ref object of VertexRef
     ## Stateless-only type. Represents a path prefix leading to an absent
     ## subtrie whose hash is known. Used in two scenarios:
     ##   1. Non-membership proof boundaries: `putSubtrie` puts a BoundaryNode
@@ -73,17 +73,17 @@ type
       ## nibble of `pfx`, is absent from the witness. The witness must include
       ## that child, unless a later insert restores the branch.
 
-  LeafRef* = ref object of VertexRef
+  LeafRef* {.acyclic.} = ref object of VertexRef
     pfx*: NibblesBuf
 
-  AccLeafRef* = ref object of LeafRef
+  AccLeafRef* {.acyclic.} = ref object of LeafRef
     account*: AristoAccount
     stoID*: StorageID              ## Storage vertex ID (if any)
     stoHint*: uint8
       ## One more than the static level to start probing slot leaves at,
       ## 0 when the storage trie was not built with static vids
 
-  StoLeafRef* = ref object of LeafRef
+  StoLeafRef* {.acyclic.} = ref object of LeafRef
     stoData*: UInt256
 
   ## NOTE: Leaf cache values are stored as value types so the cache can be safely 
