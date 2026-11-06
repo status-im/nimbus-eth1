@@ -15,7 +15,6 @@
 {.push raises: [].}
 
 import
-  std/macros,
   ../../types,
   ../../../common/evmforks,
   ../../evm_errors,
@@ -35,10 +34,8 @@ type
     info: string              ## handter info, explainer
     exec: VmOpFn
 
-macro hotOp*(fn: untyped): untyped =
-  fn.addPragma(newColonExpr(
-    ident"codegenDecl", newLit"__attribute__((always_inline)) $# $#$#"))
-  fn
+template toOpFn*(op: untyped): VmOpFn =
+  VmOpFn(proc(cpt: VmCpt): EvmResultVoid = op(cpt))
 
 # ------------------------------------------------------------------------------
 # Public

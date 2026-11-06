@@ -41,7 +41,7 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Exchange first and " & blurb & " stack items"
 
 
-template swapImpl(cpt: VmCpt; n: static int): EvmResultVoid =
+template swapImpl*(cpt: VmCpt; n: static int): EvmResultVoid =
   cpt.stack.swap(n)
 
 const

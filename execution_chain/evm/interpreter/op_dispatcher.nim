@@ -22,7 +22,7 @@ import
   ./gas_meter,
   ./op_codes,
   ./op_handlers,
-  ./op_handlers/oph_defs,
+  ./op_handlers/[oph_defs, oph_arithmetic, oph_memory, oph_push, oph_dup, oph_swap],
   macros
 
 export EVMFork, Op, oph_defs, gas_meter
@@ -40,6 +40,20 @@ template handleStopDirective(cpt: VmCpt, tracingEnabled: bool) =
       ?cpt.opcodeGasCost(Stop, 0, tracingEnabled, reason = $Stop)
       cpt.traceOpCodeEnded(Stop, cpt.opIndex)
 
+template runOp(fork: static EVMFork, op: static Op, cpt: VmCpt): EvmResultVoid =
+  when op == Add: cpt.addOp()
+  elif op == Lt: cpt.ltOp()
+  elif op == Pop: cpt.popOp()
+  elif op == Jump: cpt.jumpOp()
+  elif op == JumpI: cpt.jumpIOp()
+  elif op == Pc: cpt.pcOp()
+  elif op == Gas: cpt.gasOp()
+  elif op == JumpDest: cpt.jumpDestOp()
+  elif op in Push1 .. Push32: cpt.pushImpl(op.int - Push1.int + 1)
+  elif op in Dup1 .. Dup16: cpt.dupImpl(op.int - Dup1.int + 1)
+  elif op in Swap1 .. Swap16: cpt.swapImpl(op.int - Swap1.int + 1)
+  else: vmOpHandlers[fork][op].run(cpt)
+
 template handleFixedGasCostsDirective(
     fork: EVMFork, op: Op, cost: GasInt, cpt: VmCpt, tracingEnabled: bool
 ) =
@@ -47,7 +61,7 @@ template handleFixedGasCostsDirective(
     cpt.opIndex = cpt.traceOpCodeStarted(op)
 
   ?cpt.opcodeGasCost(op, cost, tracingEnabled, reason = $op)
-  ?vmOpHandlers[fork][op].run(cpt)
+  ?runOp(fork, op, cpt)
 
   # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
   when tracingEnabled:
@@ -58,7 +72,7 @@ template handleOtherDirective(fork: EVMFork, op: Op, cpt: VmCpt, tracingEnabled:
   when tracingEnabled:
     cpt.opIndex = cpt.traceOpCodeStarted(op)
 
-  ?vmOpHandlers[fork][op].run(cpt)
+  ?runOp(fork, op, cpt)
 
   # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
   when tracingEnabled:

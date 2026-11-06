@@ -37,7 +37,7 @@ func slt(x, y: UInt256): bool =
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc addOp(cpt: VmCpt): EvmResultVoid {.hotOp.} =
+template addOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x01, Addition
   cpt.stack.binaryOp(`+`)
 
@@ -171,10 +171,11 @@ proc signExtendOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.binaryWithTop(se256)
 
-proc ltOp(cpt: VmCpt): EvmResultVoid {.hotOp.} =
+template lt256(lhs, rhs): auto =
+  (lhs < rhs).uint.u256
+
+template ltOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x10, Less-than comparison
-  template lt256(lhs, rhs): auto =
-    (lhs < rhs).uint.u256
   cpt.stack.binaryOp(lt256)
 
 proc gtOp(cpt: VmCpt): EvmResultVoid =
@@ -304,7 +305,7 @@ const
      forks: VmOpAllForks,
      name: "add",
      info: "Addition operation",
-     exec: VmOpFn addOp),
+     exec: toOpFn addOp),
 
 
     (opCode: Mul,         ##  0x02, Multiplication
@@ -383,7 +384,7 @@ const
      forks: VmOpAllForks,
      name: "lt",
      info: "Less-than comparison",
-     exec: ltOp),
+     exec: toOpFn ltOp),
 
 
     (opCode: Gt,          ## 0x11, Greater-than
