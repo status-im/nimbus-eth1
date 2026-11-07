@@ -122,7 +122,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
     of SnapClear:
       # Clear cache DB if needed.
       let hasDataOrErr = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr: true
-      if hasDataOrErr and not ctx.pool.cacheDB.clear(info):
+      if hasDataOrErr and not ctx.pool.cacheDB.backupAndClear(info):
         bodyRc = daemonWaitClearFailInterval        # take a nap
         break body
 
@@ -247,7 +247,7 @@ template runPeer*(
       buddy.downloadState(info).isOkOr:
         if error == ENoDataAvailable:
           buddy.suspendDownload()
-          debug info & ": State downloading stopped", peer,
+          debug info & ": Stopped pivot state downloading", peer,
             pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
             nSyncPeers=ctx.nSyncPeers(), `error`=error
         bodyRc = peerWaitDownloadInterval

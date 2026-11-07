@@ -46,7 +46,7 @@ proc verifyArgs(
 
   if nProcBalDwnldBatchMax < nBals or               # out of bounds
      high(BlockNumber) - minBn < (nBals - 1).uint:
-    error ": BALs download request too large", peer, minBn, nBals
+    debug info & ": BALs download request too large", peer, minBn, nBals
     return err()
 
   ok()
@@ -120,7 +120,7 @@ proc storeBals(
 
     # Verify and decode BALs
     let bal = rawBals[n].decodeBlockAccessList(hdr(n)).valueOr:
-      error info & ": BAL verification failed", number=hdr(n).number
+      debug info & ": BAL verification failed", number=hdr(n).number
       return err(EValidationError)
 
     # Store BAL on cache DB
@@ -193,7 +193,7 @@ template balsDownload*(
         bodyRc = typeof(bodyRc).ok()
         break body
 
-      chronicles.info info & ": Verified & stored BALS", peer, fromInx=fromInx,
+      debug info & ": Verified & stored BALS", peer, fromInx=fromInx,
         nProcessed=nProcessed, fromNumber=q.hdrs[fromInx].number,
         nResp=resp.bal.len
 

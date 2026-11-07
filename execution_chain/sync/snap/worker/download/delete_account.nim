@@ -29,10 +29,10 @@ proc deleteAccount*(
 
   if not ctx.accUnproc.synced:                      # not on in-memeory cache?
     var accState = ?adb.getAccMissingIntv(info)
-    discard accState.ranges.merge(accPt, accPt)     # update bookkeeping
+    discard accState.ranges.merge(accPt)            # update bookkeeping
     ?adb.putAccMissingIntv(accState, info)          # update on cache DB
   elif ctx.accUnproc.borrowed.chunks == 0:          # clean accounts registry?
-    discard ctx.accUnproc.unprocessed.merge(accPt, accPt)
+    discard ctx.accUnproc.unprocessed.merge(accPt)
   else:
     error info & ": Cannot update dirty unprocessed ranges",
       nBorrowedChunks=ctx.accUnproc.borrowed.chunks

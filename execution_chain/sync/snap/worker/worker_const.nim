@@ -144,11 +144,17 @@ const
 
   # ----------------------
 
-  unprocAccountsRangeMax* = (1.u256 shl 240) # ~65k intervals
-    ## Soft bytes limit to request accounts. This is used for parallelisation
-    ## so that different peers can start with different intervals. Typically,
-    ## these intervals are sparsely filled and there will be returned not
-    ## more than ~1k accounts.
+  unprocAccountsRangeMax* = (1.u256 shl 244) # 2^12: ~4k different ranges
+    ## Maximal range of accounts to request in a single message. This is
+    ## used for parallelisation, so that different peers can request
+    ## different ranges. The implied number of ranges should not be be
+    ## significantly lower than 100 so that it works with 50 or somewhat
+    ## more peers.
+    ##
+    ## Larger ranges have the advantage to download more accounts within a
+    ## single response packet. Many accounts records have not maximal size,
+    ## so it is possible to pack 16k accounts with 32 bytes average size in
+    ## a 500k message if the range is large enough.
 
   nStateDownloadWindowSize* = 128
     ## This value is for metrics/logging only. The effective state download
@@ -182,8 +188,8 @@ const
   nFetchAccountSnapErrThreshold* = 4
     ## Maximum account fetch errors before zombification.
 
-  fetchAccountSnapBytesLimit* = 512 * 1024
-    ## Soft bytes limit to request accounts
+  fetchAccountSnapBytesLimit* = 1024 * 1024
+    ## Soft bytes limit to request accounts.
 
   nProcAccountErrThreshold* = 4
     ## Similar to `nFetchAccountSnapErrThreshold` but for the later part
@@ -191,8 +197,8 @@ const
 
   # -----------
 
-  fetchStorageBatchMax* = 1024
-    ## Maximal batch size for storage slots
+  fetchStorageBatchMax* = 2 * 1024
+    ## Maximal batch size for storage slots.
 
   fetchStorageSnapTimeout* = chronos.seconds(120)
     ## Similar to `fetchAccountSnapTimeout`
@@ -200,7 +206,7 @@ const
   nFetchStorageSnapErrThreshold* = 4
     ## Similar to `nFetchAccountSnapErrThreshold`
 
-  fetchStorageSnapBytesLimit* = 512 * 1024
+  fetchStorageSnapBytesLimit* = 1024 * 1024
     ## Similar to `fetchAccountSnapBytesLimit`
 
   nProcStorageErrThreshold* = 4
@@ -208,8 +214,8 @@ const
 
   # -----------
 
-  fetchCodeBatchMax* = 1024
-    ## Maximal batch size for contract codes
+  fetchCodeBatchMax* = 2 * 1024
+    ## Maximal batch size for contract codes.
 
   fetchCodesSnapTimeout* = chronos.seconds(120)
     ## Similar to `fetchAccountSnapTimeout`
@@ -217,7 +223,7 @@ const
   nFetchCodesSnapErrThreshold* = 4
     ## Similar to `nFetchAccountSnapErrThreshold`
 
-  fetchCodesSnapBytesLimit* = 512 * 1024
+  fetchCodesSnapBytesLimit* = 1024 * 1024
     ## Similar to `fetchAccountSnapBytesLimit`
 
   nProcCodesErrThreshold* = 4
@@ -261,6 +267,12 @@ const
 
   # -----------
 
+  nBacklogHeaders* = 256
+    ## Number of headers and block hashes to provide preceeding the final
+    ## pivot state so that the `BLOCKHASH` evm code can succeed.
+
+  # -----------
+
   nCoreDbImportPersistBatch* = 384 * 1024
     ## When importing accounts, storage, and contract codes the caches are
     ## regularly saved to disk after this many items have benn processed.
@@ -269,8 +281,5 @@ const
 
   coreDbImportMsgInterval* = chronos.seconds(40)
     ## Some status noise messages from time to time
-
-static:
-  doAssert 0 < nFinHeadSupportWindowTopMargin
 
 # End

@@ -180,7 +180,7 @@ proc runPool*(
 
 template runPeer*(
     buddy: BeaconPeerRef;
-    rank: PeerRanking;
+    peerRank: PeerRanking;
     info: static[string];
       ): Duration =
   ## Async/template
@@ -195,11 +195,12 @@ template runPeer*(
     if buddy.somethingToCollectOrUnstage():
 
       trace info & ": Start processing", peer=buddy.peer,
-        thPut=buddy.only.thPutStats.toMeanVar.toStr, rankInfo=($rank.assessed),
-        rank=(if rank.ranking < 0: "n/a" else: $rank.ranking),
+        thPut=buddy.only.thPutStats.toMeanVar.toStr,
+        rankInfo=($peerRank.assessed),
+        rank=(if peerRank.ranking < 0: "n/a" else: $peerRank.ranking),
         nSyncPeers=buddy.ctx.nSyncPeers(), state=($buddy.syncState)
 
-      if rank.assessed == rankingTooLow:
+      if peerRank.assessed == rankingTooLow:
         # Tell the scheduler to wait a bit longer before next invocation.
         # The reasoning is that in case of a low rank labelling, all slots
         # for peers downloading can be filled with higher ranking peers. And

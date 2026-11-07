@@ -52,7 +52,7 @@ template persistRegularly(
       debug info & ": Importing into core DB", stats=ctrl.stats
       ctrl.timer = now
 
-proc mergeCanonicalHead(
+proc mergeCanonicalBacklog(
     tx: CoreDbTxRef;
     adb: CacheDbRef;
     info: static[string];
@@ -71,8 +71,34 @@ proc mergeCanonicalHead(
     cHdr = ?adb.getHeader(cNum, info)
     cHash = ?adb.getBlockHash(cNum, info)
     cBal = ?adb.getBal(cNum, info)
-    startOfHist = cHdr.parentHash
-  tx.persistHeaderAndSetHead(cHash, cHdr, startOfHist).isOkOr:
+    backlogStart = if cNum <= nBacklogHeaders: BlockNumber(1)
+                   else: cNum - nBacklogHeaders
+
+  # Store backlog, oldest header with parent hash as start-of-history.
+  block:
+    let
+      header = adb.getHeader(backlogStart, info).valueOr:
+        error info & ": Failed to fetch from cache oldest backlog header",
+          header=backlogStart, pivot=cNum
+        return err()
+      hash = ?adb.getBlockHash(backlogStart, info)
+    tx.persistHeader(hash, header, startOfHistory=header.parentHash).isOkOr:
+      error info & ": Error persiting backlog oldest header",
+        header=backlogStart, pivot=cNum, `error`=error
+      return err()
+
+  # Store rest of backlog
+  for bn in backlogStart+1 ..< cNum:
+    let
+      header = ?adb.getHeader(bn, info)
+      hash = ?adb.getBlockHash(bn, info)
+    tx.persistHeader(hash, header).isOkOr:
+      error info & ": Error persiting backlog header",
+        header=bn, pivot=cNum, `error`=error
+      return err()
+
+  # Store canonical head
+  tx.persistHeaderAndSetHead(cHash, cHdr).isOkOr:
     error info & ": Error setting canonical head", header=cNum, `error`=error
     return err()
   tx.setFirstBlockHash(cHash).isOkOr:
@@ -178,7 +204,8 @@ proc importFlat(
   var ctrl: ImportDesc
 
   # Import canonical head
-  let cNum = tx.mergeCanonicalHead(adb, info).valueOr:
+  let cNum = tx.mergeCanonicalBacklog(adb, info).valueOr:
+    error info & ": Failed importing header backlog"
     ctrl.stats.nErrors.inc
     return ctrl.stats
 
@@ -266,9 +293,9 @@ proc importCoreDb*(
 
   let txStateRoot = ?tx.fetchStateRoot(info)
   if header.stateRoot != txStateRoot:
-    error info & ": State roots differ when importing snap data",
-      number=status.number, stateRoot=header.stateRoot.toStr,
-      expected=txStateRoot.toStr, txStats
+    error info & ": Imported snap state root differs from expected",
+      number=status.number, stateRoot=txStateRoot.toStr,
+      expected=header.stateRoot.toStr, txStats
     return err()
 
   notice info & ": Imported snap state to Core DB",
@@ -278,6 +305,10 @@ proc importCoreDb*(
       ela=(Moment.now()-start).toStr
 
   ok(txStats)
+
+proc wipeCacheDb*(adb: CacheDbRef) =
+  ## Wipe cache DB on disk
+  adb.close(wipe=true)
 
 # ------------------------------------------------------------------------------
 # End

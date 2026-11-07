@@ -25,32 +25,28 @@ proc storeCachedHeaders(
     finHeader: Header;
     info: static[string];
       ) =
+  let firstBn =
+    if 1 < leastBn: leastBn
+    # Otherwise, if the header chain links to Genesis, only the last few
+    # headers plus the finalised header needs to be stored.
+    elif finHeader.number <= nBacklogHeaders: BlockNumber(1)
+    else: finHeader.number - nBacklogHeaders
+
+  # Store headers from range `firstBn .. finHeader.number`
   var count = 0
-  if leastBn == 1:
-    # If the header chain links to Genesis, only the last finalised header
-    # needs to be stored. BAL download starts not before the first finalised
-    # entry.
-    ctx.pool.cacheDB.putHeader(finHeader, info).isOkOr:
+  for header in ctx.hdrCache.incrFrom(firstBn):
+    if finHeader.number < header.number:
+      break
+    ctx.pool.cacheDB.putHeader(header, info).isOkOr:
       return
     count.inc
-  else:
-    # The whole sub-chain is needed. Each header potentially refers to a
-    # BAL to be fetched.
-    for header in ctx.hdrCache.incrFrom():
-      # Range is leastBn .. topBn
-      if leastBn <= header.number:
-        if finHeader.number < header.number:
-          break
-        ctx.pool.cacheDB.putHeader(header, info).isOkOr:
-          return
-        count.inc
   # Set a flag when Amsterdam was reached
   if not ctx.pool.balSupported:
     ctx.pool.cacheDB.lastHeader(info).isErrOr:
       if ctx.chain.com.isAmsterdamOrLater(value.timestamp):
         ctx.pool.balSupported = true                # so state download ok, now
   ctx.pool.lastConsNum = ctx.hdrCache.head.number
-  chronicles.info info & ": Registered headers", leastBn,
+  chronicles.info info & ": Registered headers", firstBn,
     finHeader=finHeader.number, count,
     lastConsHead=ctx.pool.lastConsNum,
     consHead=ctx.hdrCache.latestConsHeadNumber, syncState=($ctx.syncState),
