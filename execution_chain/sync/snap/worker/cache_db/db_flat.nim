@@ -263,28 +263,9 @@ proc getFlatAcc*(db: CacheDbRef, accPath: Hash32): OptFlatAccResult =
 proc putFlatAcc*(
   db: CacheDbRef;
   accPath: Hash32;
-  account: Account;
-    ): PutResult =
-  var accData: CacheFlatAccData
-  accData.account = account
-  db.put33(cFlatAccount, accPath, encodeFlatAccData(accData))
-
-proc putFlatAcc*(
-  db: CacheDbRef;
-  accPath: Hash32;
   accData: CacheFlatAccData;
     ): PutResult =
   db.put33(cFlatAccount, accPath, encodeFlatAccData(accData))
-
-proc putFlatAcc*(
-  db: CacheDbRef;
-  accPath: Hash32;
-  payload: openArray[byte];                         # rlp encoded Account
-    ): PutResult =
-  var data: CacheFlatAccData
-  data.account = payload.decodeAccPayloadData().valueOr:
-    return err(error)
-  db.put33(cFlatAccount, accPath, encodeFlatAccData(data))
 
 proc delFlatAcc*(db: CacheDbRef, accPath: Hash32): DelResult =
   db.del33(cFlatAccount, accPath)

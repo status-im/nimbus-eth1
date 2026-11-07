@@ -143,7 +143,9 @@ proc putFlatAcc*(
     acc: Account;
     info: static[string];
       ): Opt[void] =
-  db.putFlatAcc(accPath, acc).isOkOr:
+  var accData: CacheFlatAccData
+  accData.account = acc
+  db.putFlatAcc(accPath, accData).isOkOr:
     error info.failedUpdating AccountInfo, accPath=accPath.toStr,
       `error`=error
     return err()
