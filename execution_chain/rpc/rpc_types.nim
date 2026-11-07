@@ -21,6 +21,22 @@ type
   # prevent type clash with eth2 BlockId in portal/verified_proxy
   BlockTag* = eth_api_types.RtBlockIdentifier
 
+  # eth_getProof echoes each requested key in one of two encodings, which
+  # the web3 StorageProof with its UInt256 key cannot keep.
+  RpcStorageProof* = object
+    key*: string
+    value*: UInt256
+    proof*: seq[RlpEncodedBytes]
+
+  RpcProofResponse* = object
+    address*: Address
+    accountProof*: seq[RlpEncodedBytes]
+    balance*: UInt256
+    codeHash*: Hash32
+    nonce*: Quantity
+    storageHash*: Hash32
+    storageProof*: seq[RpcStorageProof]
+
 
 proc writeValue*(
     w: var JsonWriter[EthJson], val: BlockAccessIndex
@@ -39,3 +55,6 @@ StorageChange.useDefaultSerializationIn EthJson
 BalanceChange.useDefaultSerializationIn EthJson
 NonceChange.useDefaultSerializationIn EthJson
 CodeChange.useDefaultSerializationIn EthJson
+
+RpcStorageProof.useDefaultSerializationIn EthJson
+RpcProofResponse.useDefaultSerializationIn EthJson
