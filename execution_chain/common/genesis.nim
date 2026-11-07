@@ -38,6 +38,11 @@ proc writeGenesisAlloc*(alloc: GenesisAlloc, db: CoreDbTxRef): Hash32 =
     for k, v in account.storage:
       ledger.setStorage(address, k, v)
 
+    # The pre-state must contain every alloc account, even empty ones that no
+    # transaction touches (their values never change, so the setters above do
+    # not mark them dirty).
+    ledger.forcePersist(address)
+
   ledger.persist()
   ledger.getStateRoot()
 
