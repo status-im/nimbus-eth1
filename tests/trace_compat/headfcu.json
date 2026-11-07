@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": "fcu60",
+  "method": "engine_forkchoiceUpdatedV4",
+  "params": [
+    {
+      "headBlockHash": "0x52bccfc9c4d4874b1898c0fbd0ae3b598a0edc7b94d9b796857dbbe1093c32e0",
+      "safeBlockHash": "0x52bccfc9c4d4874b1898c0fbd0ae3b598a0edc7b94d9b796857dbbe1093c32e0",
+      "finalizedBlockHash": "0x52bccfc9c4d4874b1898c0fbd0ae3b598a0edc7b94d9b796857dbbe1093c32e0"
+    },
+    null,
+    null
+  ]
+}
