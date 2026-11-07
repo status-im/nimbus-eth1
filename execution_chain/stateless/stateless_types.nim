@@ -12,6 +12,7 @@
 import ssz_serialization, beacon_chain/spec/[eth2_merkleization, ssz_codec]
 
 from beacon_chain/spec/datatypes/gloas import ExecutionPayload, ExecutionRequests
+from beacon_chain/spec/presets import MAX_BLOB_COMMITMENTS_PER_BLOCK
 
 export ssz_serialization, ssz_codec
 
@@ -54,9 +55,12 @@ const
 # Not all types are defined here as we get some of the types from beacon_chain datatypes
 
 type
-  NewPayloadRequest* = object
+  # https://github.com/ethereum/execution-specs/blob/d58206806bbf40fc7a35b9e6e0605533c2709fce/src/ethereum/forks/amsterdam/execution_engine/types.py#L83
+  VersionedHashes* = List[Digest, Limit MAX_BLOB_COMMITMENTS_PER_BLOCK]
+
+  NewPayloadRequest* {.sszActiveFields: [1, 1, 1, 1].} = object
     executionPayload*: ExecutionPayload
-    versionedHashes*: seq[Digest]
+    versionedHashes*: VersionedHashes
     parentBeaconBlockRoot*: Digest
     executionRequests*: ExecutionRequests
 
@@ -70,7 +74,8 @@ type
     witness*: ExecutionWitness
     chain_id*: uint64
 
-  StatelessValidationResult* = object
+  # https://github.com/ethereum/execution-specs/blob/d58206806bbf40fc7a35b9e6e0605533c2709fce/src/ethereum/forks/amsterdam/stateless.py#L172
+  StatelessValidationResult* {.sszActiveFields: [1, 1, 1, 1].} = object
     new_payload_request_root*: Digest
     successful_validation*: bool
     chain_id*: uint64
