@@ -25,7 +25,7 @@ proc getPayload*(ben: BeaconEngineRef,
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = (await ben.getPayloadBundle(id)).valueOr:
+  let bundle = ben.getPayloadBundle(id).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let
@@ -53,7 +53,7 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV3Respons
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = (await ben.getPayloadBundle(id)).valueOr:
+  let bundle = ben.getPayloadBundle(id).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version
@@ -81,7 +81,7 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV4Respons
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = (await ben.getPayloadBundle(id)).valueOr:
+  let bundle = ben.getPayloadBundle(id).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version
@@ -112,7 +112,7 @@ proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV5Respons
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = (await ben.getPayloadBundle(id)).valueOr:
+  let bundle = ben.getPayloadBundle(id).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version
@@ -143,7 +143,7 @@ proc getPayloadV6*(ben: BeaconEngineRef, id: Bytes8): Future[GetPayloadV6Respons
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  let bundle = (await ben.getPayloadBundle(id)).valueOr:
+  let bundle = ben.getPayloadBundle(id).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version

@@ -198,8 +198,8 @@ proc makeSignedTx(env: TestEnv, nonce: AccountNonce = 0): Transaction =
   signTransaction(tx, testSenderKey, eip155 = true)
 
 proc waitForLatestBuild(env: TestEnv, id: Bytes8) =
-  # getPayload serves the newest *finished* build, so let the rebuild that the
-  # last fcU scheduled complete before asking for the payload.
+  # getPayload serves the newest *finished* build (else the empty payload), so
+  # let the build that the last fcU scheduled complete before asking for it.
   while not env.beaconEngine.payloadBuildFinished(id).get(true):
     poll()
 
@@ -239,7 +239,8 @@ proc runPayloadRebuildTest(env: TestEnv): Result[void, string] =
   let
     fcuRes1 = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
     id1     = fcuRes1.payloadId.get
-    payload1 = ? client.getPayload(Version.V1, id1)
+  env.waitForLatestBuild(id1)
+  let payload1 = ? client.getPayload(Version.V1, id1)
 
   if payload1.executionPayload.transactions.len != numTxs:
     return err("Expected " & $numTxs & " txs in first build, got: " &
@@ -309,13 +310,13 @@ proc runStaleFirstBuildTest(env: TestEnv): Result[void, string] =
       return err("Expected payloadId in fcU response")
 
   template txsServed(id: Bytes8): int =
-    let bundle = (waitFor ben.getPayloadBundle(id)).valueOr:
+    let bundle = ben.getPayloadBundle(id).valueOr:
       return err("getPayloadBundle returned none")
     bundle.payload.transactions.len
 
-  # Early fcU with an empty pool; nothing built yet, so getPayload waits for
-  # this first build.
+  # Early fcU with an empty pool.
   let id = fcU()
+  env.waitForLatestBuild(id)
   if txsServed(id) != 0:
     return err("Expected the early build to be empty")
 
@@ -334,7 +335,14 @@ proc runStaleFirstBuildTest(env: TestEnv): Result[void, string] =
   if ben.payloadBuildFinished(id) != Opt.some(false):
     return err("getPayload must not wait for an in-flight rebuild")
 
-  # Rebuild done: it replaces the older build.
+  # getPayload stopped the pending rebuild.
+  env.waitForLatestBuild(id)
+  if txsServed(id) != 0:
+    return err("Expected getPayload to stop the pending rebuild")
+
+  # A later fcU resumes building and the rebuild replaces the older build.
+  if fcU() != id:
+    return err("Identical attributes must map to the same payloadId")
   env.waitForLatestBuild(id)
   let served = txsServed(id)
   if served != numTxs:
@@ -345,7 +353,9 @@ proc runStaleFirstBuildTest(env: TestEnv): Result[void, string] =
 
 proc runBackgroundBuildTest(env: TestEnv): Result[void, string] =
   # forkchoiceUpdated must schedule the payload build in the background and
-  # respond with the payloadId immediately; getPayload awaits the result.
+  # respond with the payloadId immediately; getPayload must respond
+  # immediately with the empty payload while the build is in flight and stop
+  # it.
   const numTxs = 3
   let
     ben = env.beaconEngine
@@ -386,7 +396,31 @@ proc runBackgroundBuildTest(env: TestEnv): Result[void, string] =
   if finished:
     return err("Payload build completed before fcU response was returned")
 
-  let bundle = (waitFor ben.getPayloadBundle(id)).valueOr:
+  let empty = ben.getPayloadBundle(id).valueOr:
+    return err("getPayloadBundle returned none while build in flight")
+
+  if empty.payload.transactions.len != 0:
+    return err("Expected empty payload while build in flight, got: " &
+      $empty.payload.transactions.len & " txs")
+
+  if ben.payloadBuildFinished(id) != Opt.some(false):
+    return err("getPayload must not wait for an in-flight build")
+
+  env.waitForLatestBuild(id)
+  let stopped = ben.getPayloadBundle(id).valueOr:
+    return err("getPayloadBundle returned none after stop")
+  if stopped.payload.transactions.len != 0:
+    return err("Expected getPayload to stop the in-flight build")
+
+  let fcuRes2 = try:
+      waitFor ben.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
+    except CatchableError as exc:
+      return err("forkchoiceUpdated failed: " & exc.msg)
+  if fcuRes2.payloadId != Opt.some(id):
+    return err("Identical attributes must map to the same payloadId")
+
+  env.waitForLatestBuild(id)
+  let bundle = ben.getPayloadBundle(id).valueOr:
     return err("getPayloadBundle returned none")
 
   if bundle.payload.transactions.len != numTxs:
@@ -834,7 +868,7 @@ const testList = [
     testProc: runSiblingHeadPayloadTest
   ),
   TestSpec(
-    name: "Payload built in background, fcU responds first",
+    name: "Payload built in background, fcU and getPayload respond first",
     fork: MergeFork,
     testProc: runBackgroundBuildTest
   ),
