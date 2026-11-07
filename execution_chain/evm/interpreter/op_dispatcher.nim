@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,7 +22,7 @@ import
   ./gas_meter,
   ./op_codes,
   ./op_handlers,
-  ./op_handlers/oph_defs,
+  ./op_handlers/[oph_defs, oph_arithmetic, oph_envinfo, oph_memory, oph_push, oph_dup, oph_swap],
   macros
 
 export EVMFork, Op, oph_defs, gas_meter
@@ -40,6 +40,29 @@ template handleStopDirective(cpt: VmCpt, tracingEnabled: bool) =
       ?cpt.opcodeGasCost(Stop, 0, tracingEnabled, reason = $Stop)
       cpt.traceOpCodeEnded(Stop, cpt.opIndex)
 
+template runOp(fork: static EVMFork, op: static Op, cpt: VmCpt): EvmResultVoid =
+  when op == Add: cpt.addOp()
+  elif op == Sub: cpt.subOp()
+  elif op == Gt: cpt.gtOp()
+  elif op == And: cpt.andOp()
+  elif op == Or: cpt.orOp()
+  elif op == Xor: cpt.xorOp()
+  elif op == Not: cpt.notOp()
+  elif op == Caller: cpt.callerOp()
+  elif op == CallValue: cpt.callValueOp()
+  elif op == CallDataSize: cpt.callDataSizeOp()
+  elif op == Pop: cpt.popOp()
+  elif op == Jump: cpt.jumpOp()
+  elif op == JumpI: cpt.jumpIOp()
+  elif op == Pc: cpt.pcOp()
+  elif op == Gas: cpt.gasOp()
+  elif op == JumpDest: cpt.jumpDestOp()
+  elif op == Push0 and fork in VmOpShanghaiAndLater: cpt.push0Op()
+  elif op in Push1 .. Push32: cpt.pushImpl(op.int - Push1.int + 1)
+  elif op in Dup1 .. Dup16: cpt.dupImpl(op.int - Dup1.int + 1)
+  elif op in Swap1 .. Swap16: cpt.swapImpl(op.int - Swap1.int + 1)
+  else: vmOpHandlers[fork][op].run(cpt)
+
 template handleFixedGasCostsDirective(
     fork: EVMFork, op: Op, cost: GasInt, cpt: VmCpt, tracingEnabled: bool
 ) =
@@ -47,7 +70,7 @@ template handleFixedGasCostsDirective(
     cpt.opIndex = cpt.traceOpCodeStarted(op)
 
   ?cpt.opcodeGasCost(op, cost, tracingEnabled, reason = $op)
-  ?vmOpHandlers[fork][op].run(cpt)
+  ?runOp(fork, op, cpt)
 
   # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
   when tracingEnabled:
@@ -58,7 +81,7 @@ template handleOtherDirective(fork: EVMFork, op: Op, cpt: VmCpt, tracingEnabled:
   when tracingEnabled:
     cpt.opIndex = cpt.traceOpCodeStarted(op)
 
-  ?vmOpHandlers[fork][op].run(cpt)
+  ?runOp(fork, op, cpt)
 
   # If continuation is not nil, traceOpCodeEnded will be called in executeOpcodes.
   when tracingEnabled:
@@ -98,11 +121,13 @@ proc makeCaseDispatcher(forkArg: EVMFork, tracingEnabled: bool, opArg, cpt: NimN
           quote:
             `handler`
             if not `cpt`.continuation.isNil:
+              `cpt`.instr = `asOp`
               break
 
         of Stop, Return, Revert, SelfDestruct:
           quote:
             `handler`
+            `cpt`.instr = `asOp`
             break
         else:
           handler
