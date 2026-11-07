@@ -75,7 +75,10 @@ template accountDownload*(
   ## On success, the template returns a list of accounts for storage and
   ## code processing.
   ##
-  var bodyRc = Result[void,ErrorType].err(EGeneric)
+  ## A successful return code is `true` if a new list of accounts was
+  ## downloaded, and `false` if there were refreshed accounts, only.
+  ##
+  var bodyRc = Result[bool,ErrorType].err(EGeneric)
   block body:
     let
       ctx = buddy.ctx
@@ -89,7 +92,6 @@ template accountDownload*(
           bodyRc = typeof(bodyRc).err(ECompleted)
           break body                                # return err()
 
-    let
       data = buddy.fetchAccounts(stateRoot, ivReq).valueOr:
         ctx.accUnproc.commit(ivReq, ivReq)          # registry roll back
         bodyRc = typeof(bodyRc).err(error)
@@ -113,6 +115,7 @@ template accountDownload*(
               else: min(data.accounts[^1].accHash.to(ItemKey), ivReq.maxPt)
 
     # Save accounts on flat tables
+    var refreshOnly {.inject.} = true               # init for return code
     for w in data.accounts:
       if limit < w.accHash.to(ItemKey):             # ignore excess entries
         break                                       # exit `for()` loop
@@ -136,6 +139,8 @@ template accountDownload*(
           syncState=($buddy.syncState)
 
       else:
+        refreshOnly = false                         # not a refreshed account
+
         # Set dirty flags according to `storageRoot` and `codeHash`
         if acc.storageRoot != EMPTY_ROOT_HASH:
           var data: CacheStoMissingIntvData
@@ -169,10 +174,10 @@ template accountDownload*(
     ctx.accountDownloadMetricsUpdate()
 
     debug info & ": Accounts saved", peer, root,
-      number, ivResp=(ivReq.minPt,limit).flStr, nAccounts, nProof,
+      number, ivResp=(ivReq.minPt,limit).flStr, nAccounts, nProof, refreshOnly,
       syncState=($buddy.syncState)
 
-    bodyRc = typeof(bodyRc).ok()
+    bodyRc = typeof(bodyRc).ok(refreshOnly)
 
   bodyRc
 

@@ -156,6 +156,20 @@ const
     ## so it is possible to pack 16k accounts with 32 bytes average size in
     ## a 500k message if the range is large enough.
 
+  nConsecutiveAccountRefreshMax* = 200
+    ## After BAL update, some accounts are needed to be re-fetched in order
+    ## to fetch the hash keys for fetching missing storage slots or contract
+    ## codes. These accounts are typically isolated and updated as as a single
+    ## entity. If the account downloader proceeded with storage slots after
+    ## each refreshed account, the storage downloader would have a single
+    ## sub-MPT to fetch, only. So the storage downloader will not be called
+    ## until several (i.e. this constant) accounts are refreshed in a row
+    ## first.
+    ##
+    ## This constant must be small enough so that there is a chance that
+    ## all accounts can be refreshed in a short time (i.e. download window)
+    ## to avoid getting stuck with accounts downloading, only.
+
   nStateDownloadWindowSize* = 128
     ## This value is for metrics/logging only. The effective state download
     ## window is stated below.

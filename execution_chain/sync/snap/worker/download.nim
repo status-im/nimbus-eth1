@@ -241,12 +241,22 @@ template downloadState*(
     var
       didSomething = false                          # logging only
       doEntity = toMask[int](0..2)
+      nRefreshSeq = 0
     while buddy.ctrl.running and doEntity != 0:
 
       if doEntity.testBit(0):
         let rc = buddy.accountDownload(stateRoot, number, info)
         if rc.isOk:
           didSomething = true                       # logging only
+
+          if rc.value:                              # refresh only?
+            # The storage downloader will not be called until several
+            # accounts are refreshed consecutively in refresh-only mode.
+            nRefreshSeq.inc                         # consec. refresh requests
+            if nRefreshSeq < nConsecutiveAccountRefreshMax:
+              continue
+          nRefreshSeq = 0                           # reset request seq count
+
           doEntity.setBit(1)                        # re-activate storage & code
           doEntity.setBit(2)
         elif rc.error == ECompleted:
