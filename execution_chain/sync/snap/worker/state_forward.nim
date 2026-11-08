@@ -152,17 +152,24 @@ template applyAccChanges(
       acc.account.storageRoot = zeroHash32          # no sto. root known anymore
       resetHashOk = true                            # req state download resolve
 
-    # Apply other BAL change lists to the account sub-entries.
+    # Apply BAL contract code change list
     if 0 < chng.codeChanges.len:
       let updatesOk =
         adb.applyCodeChange(accPath, chng.codeChanges, info).valueOr:
           break body
       if updatesOk:
+        # No need to force an account update. If the `zeroHash32` survives
+        # until core DB assembly, the `codeHash` will be assembled from
+        # scratch.
         acc.account.codeHash = zeroHash32
-        resetHashOk = true
+
+        # Note, that for debugging purposes, an account update can be forced
+        # by setting `resetHashOk = true`. So all contract codes will come
+        # with corresponding `codeHash` set for  core DB assembly.
       else:
         acc.account.codeHash = EMPTY_CODE_HASH
 
+    # Apply other BAL change lists to the account sub-entries.
     if 0 < chng.nonceChanges.len:
       acc.account.nonce = chng.nonceChanges[^1].newNonce
 
