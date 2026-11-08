@@ -225,7 +225,6 @@ proc saveStoUpdates(
     if 0 < w.data.ranges.chunks():
       # Save back incomplete sub-MPT. Store updated interval of missing slots.
       # The corresounding accounts record needs not to be updated.
-      # The `dirtyStorage` flag just remains `true`.
       nPartial.inc
       adb.putStoMissingIntv(w.accPath, w.data, info).isOkOr:
         nErrors.inc                                 # cannot do much, here
@@ -236,7 +235,6 @@ proc saveStoUpdates(
       var data = adb.getFlatAcc(w.accPath, info).valueOr:
         nErrors.inc                                 # cannot do much, here
         continue
-      data.dirtyStorage = false
       adb.putFlatAcc(w.accPath, data, info).isOkOr: # save update acc record
         nErrors.inc                                 # cannot do much, here
 
