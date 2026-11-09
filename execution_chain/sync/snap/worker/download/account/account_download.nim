@@ -75,7 +75,10 @@ template accountDownload*(
   ## On success, the template returns a list of accounts for storage and
   ## code processing.
   ##
-  var bodyRc = Result[void,ErrorType].err(EGeneric)
+  ## A successful return code is `true` if a new list of accounts was
+  ## downloaded, and `false` if there were refreshed accounts, only.
+  ##
+  var bodyRc = Result[bool,ErrorType].err(EGeneric)
   block body:
     let
       ctx = buddy.ctx
@@ -89,7 +92,6 @@ template accountDownload*(
           bodyRc = typeof(bodyRc).err(ECompleted)
           break body                                # return err()
 
-    let
       data = buddy.fetchAccounts(stateRoot, ivReq).valueOr:
         ctx.accUnproc.commit(ivReq, ivReq)          # registry roll back
         bodyRc = typeof(bodyRc).err(error)
@@ -100,7 +102,7 @@ template accountDownload*(
 
       mpt = stateRoot.validate(ivReq.minPt, data.accounts, data.proof).valueOr:
         buddy.ctrl.zombie = true                    # peer not useful
-        debug info & ": Accounts validation failed", peer, root,number,
+        debug info & ": Accounts validation failed", peer, root, pivot=number,
           ivReq=ivReq.flStr, nAccounts, nProof, syncState=($buddy.syncState)
         ctx.accUnproc.commit(ivReq, ivReq)          # registry roll back
         bodyRc = typeof(bodyRc).err(EValidationError)
@@ -113,30 +115,25 @@ template accountDownload*(
               else: min(data.accounts[^1].accHash.to(ItemKey), ivReq.maxPt)
 
     # Save accounts on flat tables
+    var refreshOnly {.inject.} = true               # init for return code
     for w in data.accounts:
       if limit < w.accHash.to(ItemKey):             # ignore excess entries
         break                                       # exit `for()` loop
 
-      var
-        dirtyStorage {.inject.} = false
-        dirtyCode {.inject.} = false
-      let
-        acc = cast[Account](w.accBody)              # distinct field diffs only
+      let acc = cast[Account](w.accBody)            # distinct field diffs only
 
       # Check whether this account was marked for re-fetch while storage
       # data or contract code records already exist on the cache DB.
       let maybe = adb.getFlatAcc(w.accHash, info)
       if maybe.isSome():
         let prvData = maybe.unsafeGet()
-        dirtyStorage = prvData.dirtyStorage
-        dirtyCode = prvData.dirtyCode
-        trace info & ": Updating account record", peer, root, number,
-          accPath=w.accHash.toStr, dirtyStorage, dirtyCode,
-          storageRoot=acc.storageRoot.toStr, codeHash=acc.codeHash.toStr,
-          syncState=($buddy.syncState)
+        trace info & ": Updating account record", peer, root, pivot=number,
+          accPath=w.accHash.toStr, storageRoot=acc.storageRoot.toStr,
+          codeHash=acc.codeHash.toStr, syncState=($buddy.syncState)
 
       else:
-        # Set dirty flags according to `storageRoot` and `codeHash`
+        refreshOnly = false                         # not a refreshed account
+
         if acc.storageRoot != EMPTY_ROOT_HASH:
           var data: CacheStoMissingIntvData
           data.ranges = ItemKeyRangeSet.init ItemKeyRangeMax
@@ -144,16 +141,14 @@ template accountDownload*(
             bodyRc = typeof(bodyRc).err(ECacheError)
             ctx.accUnproc.commit(ivReq, ivReq)      # registry roll back
             break body                              # return err()
-          dirtyStorage = true
 
         if acc.codeHash != EMPTY_CODE_HASH:
           adb.putMissingBlob(w.accHash, info).isOkOr:
             bodyRc = typeof(bodyRc).err(ECacheError)
             ctx.accUnproc.commit(ivReq, ivReq)      # registry roll back
             break body                              # return err()
-          dirtyCode = true
 
-      adb.putFlatAcc(w.accHash, (dirtyStorage, dirtyCode, acc), info).isOkOr:
+      adb.putFlatAcc(w.accHash, acc, info).isOkOr:
         bodyRc = typeof(bodyRc).err(ECacheError)
         ctx.accUnproc.commit(ivReq, ivReq)          # registry roll back
         break body
@@ -168,11 +163,11 @@ template accountDownload*(
     # Update metrics
     ctx.accountDownloadMetricsUpdate()
 
-    debug info & ": Accounts saved", peer, root,
-      number, ivResp=(ivReq.minPt,limit).flStr, nAccounts, nProof,
+    debug info & ": Accounts saved", peer, root, pivot=number,
+      ivResp=(ivReq.minPt,limit).flStr, nAccounts, nProof, refreshOnly,
       syncState=($buddy.syncState)
 
-    bodyRc = typeof(bodyRc).ok()
+    bodyRc = typeof(bodyRc).ok(refreshOnly)
 
   bodyRc
 

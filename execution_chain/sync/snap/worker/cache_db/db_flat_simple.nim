@@ -137,6 +137,20 @@ proc putFlatAcc*(
     return err()
   ok()
 
+proc putFlatAcc*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    acc: Account;
+    info: static[string];
+      ): Opt[void] =
+  var accData: CacheFlatAccData
+  accData.account = acc
+  db.putFlatAcc(accPath, accData).isOkOr:
+    error info.failedUpdating AccountInfo, accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
 proc delFlatAcc*(
     db: CacheDbRef;
     accPath: Hash32;

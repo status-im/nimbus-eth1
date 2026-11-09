@@ -60,7 +60,6 @@ proc storeValidatedCodes(
       # Need to fetch account now for updating latest record
       var accData = adb.getFlatAcc(cdeItem.accPath, info).valueOr:
         return err(ECacheError)                     # cannot do much, here
-      accData.dirtyCode = false                     # update account flag
       adb.putFlatAcc(cdeItem.accPath, accData, info).isOkOr:
         return err(ECacheError)                     # cannot do much, here
 

@@ -21,9 +21,11 @@ logScope:
 type
   CoredbImportStats* = tuple
     nAccounts: uint
-    nStorage: uint
+    nStorages: uint
+    nLazyStores: uint
     nSlots: uint
     nCodes: uint
+    nLazyCodes: uint
     nErrors: uint
 
   ImportDesc = tuple
@@ -145,7 +147,9 @@ proc mergeStoTrie(
     error info & ": Failed computing storage root", nSlots,
       accPath=accPath.toStr, `error`=($$error)
     return err()
-  if stoRoot != hash:
+  if stoRoot == zeroHash32:
+    ctrl.stats.nLazyStores.inc
+  elif stoRoot != hash:
     error info & ": Mismatch with pre-set storage root", nSlots,
       accPath=accPath.toStr, stoRoot=hash.toStr, expected=stoRoot.toStr
     return err()
@@ -159,7 +163,7 @@ proc mergeCtrCode(
     accPath: Hash32;
     codeHash: Hash32;
     info: static[string];
-      ): Opt[void] =
+      ): Opt[Hash32] =
   # Save contract code so that the storage trie can be updated
   let data = adb.getFlatCode(accPath, info).valueOr:
     error info & ": No such contract code", accPath=accPath.toStr,
@@ -167,19 +171,20 @@ proc mergeCtrCode(
     return err()
 
   let hash = data.keccak256
-  if codeHash != hash:
+  if codeHash != hash and
+     codeHash != zeroHash32:
     error info & ": Mismatch with pre-set code hash",
       accPath=accPath.toStr, codeHash=hash.toStr, expected=codeHash.toStr
     return err()
 
   # Save contract code to core DB
-  tx.persistCodeByHash(codeHash, data).isOkOr:
+  tx.persistCodeByHash(hash, data).isOkOr:
     error info & ": Failed storing contract code",
-      accPath=accPath.toStr, codeHash=codeHash.toStr,
-      nCode=data.len, `error`=error
+      accPath=accPath.toStr, codeHash=hash.toStr,
+      nCodes=data.len, `error`=error
     return err()
 
-  ok()
+  ok(hash)
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -218,28 +223,27 @@ proc importFlat(
       ctrl.stats.nErrors.inc
       return ctrl.stats
 
-    # Verify that the code and storage are properly updated. No need to
-    # test the `storageRoot` as it will be reset to `zeroHash32` when BAL
-    # forwarding.
-    if w.data.dirtyCode or
-       w.data.dirtyStorage or
-       w.data.account.storageRoot == zeroHash32 or
-       w.data.account.codeHash == zeroHash32:
-      error info & ": Account record is incomplete",
-        accPath=w.accPath.toStr,
-        dirtyStorage=w.data.dirtyStorage,
-        dirtyCode=w.data.dirtyCode,
-        storageRoot=w.data.account.storageRoot.toStr,
-        codeHash=w.data.account.codeHash.toStr
-      ctrl.stats.nErrors.inc
-      if stopOnError:
-        return ctrl.stats
+    # Import contract code and get code hash
+    var codeHash = w.data.account.codeHash
+    if codeHash != EMPTY_CODE_HASH:
+      ctrl.stats.nCodes.inc
+      if codeHash == zeroHash32:
+        ctrl.stats.nLazyCodes.inc
+      let rc = db.mergeCtrCode(tx, adb, w.accPath, w.data.account.codeHash,info)
+      if rc.isOk:
+        codeHash = rc.value
+      else:
+        ctrl.stats.nErrors.inc
+        if stopOnError:
+          return ctrl.stats
 
-    # Save account
-    let accRec = CoreDbAccount(
-      nonce:    w.data.account.nonce,
-      balance:  w.data.account.balance,
-      codeHash: w.data.account.codeHash)
+    # Import account record
+    var
+      accUpdateOk = false
+      accRec = CoreDbAccount(
+        nonce:    w.data.account.nonce,
+        balance:  w.data.account.balance,
+        codeHash: codeHash)
     tx.mergeAccount(w.accPath, accRec).isOkOr:
       error info & ": Failed merging account record",
         accPath=w.accPath.toStr, `error`=($$error)
@@ -248,16 +252,9 @@ proc importFlat(
     ctrl.stats.nAccounts.inc
 
     if w.data.account.storageRoot != EMPTY_ROOT_HASH:
-      ctrl.stats.nStorage.inc
+      ctrl.stats.nStorages.inc
       db.mergeStoTrie(
            tx, adb, w.accPath, w.data.account.storageRoot, ctrl, info).isOkOr:
-        ctrl.stats.nErrors.inc
-        if stopOnError:
-          return ctrl.stats
-
-    if w.data.account.codeHash != EMPTY_CODE_HASH:
-      ctrl.stats.nCodes.inc
-      db.mergeCtrCode(tx, adb, w.accPath, w.data.account.codeHash, info).isOkOr:
         ctrl.stats.nErrors.inc
         if stopOnError:
           return ctrl.stats
@@ -300,8 +297,9 @@ proc importCoreDb*(
 
   notice info & ": Imported snap state to Core DB",
     number=status.number, stateRoot=header.stateRoot.toStr,
-      nAccounts=txStats.nAccounts, nStorage=txStats.nStorage,
-      nSlots=txStats.nSlots, nCodes=txStats.nCodes,
+      nAccounts=txStats.nAccounts, nStorages=txStats.nStorages,
+      nSlots=txStats.nSlots, nLazyStores=txStats.nLazyStores,
+      nCodes=txStats.nCodes, nLazyCodes=txStats.nLazyCodes,
       ela=(Moment.now()-start).toStr
 
   ok(txStats)

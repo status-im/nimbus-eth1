@@ -27,6 +27,7 @@ template applySlotChanges(
     adb: CacheDbRef;
     accPath: Hash32;
     slots: seq[SlotChanges];
+    stoMiss: Opt[CacheStoMissingIntvData];
     timer: TimerDataRef;
     info: static[string];
       ): auto =
@@ -37,8 +38,6 @@ template applySlotChanges(
   ##
   var bodyRc = Opt[void].err()
   block body:
-    let stoMiss = adb.getStoMissingIntv(accPath, info).valueOr:
-      break body                                    # err()
     stoMiss.isErrOr:
       if stoMiss.unsafeGet().ranges.isFullRange():
         bodyRc = typeof(bodyRc).ok()
@@ -147,22 +146,46 @@ template applyAccChanges(
 
     # Apply BAL storage change list to storage sub-MPT
     if 0 < chng.storageChanges.len:
-      adb.applySlotChanges(accPath, chng.storageChanges, timer, info).isOkOr:
+      let stoMiss = adb.getStoMissingIntv(accPath, info).valueOr:
+        break body                                  # err()
+      adb.applySlotChanges(
+             accPath, chng.storageChanges, stoMiss, timer, info).isOkOr:
         break body                                  # failed
-      acc.account.storageRoot = zeroHash32          # no sto. root known anymore
-      resetHashOk = true                            # req state download resolve
 
-    # Apply other BAL change lists to the account sub-entries.
+      acc.account.storageRoot = zeroHash32          # no sto. root known anymore
+      if stoMiss.isSome():
+        # For a partial sub-MPT, an account update is needed to complete it,
+        # because the `storageRoot` has become unavailable for the current
+        # pivot state.
+        resetHashOk = true                         # req state download resolve
+      else:
+        # No need to force an account update. If the `zeroHash32` survives
+        # until core DB assembly, the `storageRoot` will be assembled from
+        # scratch.
+        discard
+
+        # Note, that for debugging purposes, an account update can be forced
+        # by setting `resetHashOk = true`, So all storage sub-MPTs will come
+        # with corresponding `storageRoot` set for  core DB assembly.
+
+    # Apply BAL contract code change list
     if 0 < chng.codeChanges.len:
       let updatesOk =
         adb.applyCodeChange(accPath, chng.codeChanges, info).valueOr:
           break body
       if updatesOk:
+        # No need to force an account update. If the `zeroHash32` survives
+        # until core DB assembly, the `codeHash` will be assembled from
+        # scratch.
         acc.account.codeHash = zeroHash32
-        resetHashOk = true
+
+        # Note, that for debugging purposes, an account update can be forced
+        # by setting `resetHashOk = true`. So all contract codes will come
+        # with corresponding `codeHash` set for  core DB assembly.
       else:
         acc.account.codeHash = EMPTY_CODE_HASH
 
+    # Apply other BAL change lists to the account sub-entries.
     if 0 < chng.nonceChanges.len:
       acc.account.nonce = chng.nonceChanges[^1].newNonce
 
