@@ -16,7 +16,7 @@ import
   ../worker_desc
 
 declareGauge nec_sync_eta_secs, "" &
-  "Seconds until current consensus head is reached"
+  "Estimated seconds until current consensus head is reached"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -33,7 +33,7 @@ proc dist(a, b: BlockNumber): uint64 =
   if b < a: 0 else: b - a
 
 # ------------------------------------------------------------------------------
-# Public functions, metrics management (includes ETA guess)
+# Public functions, metrics management (includes ETA)
 # ------------------------------------------------------------------------------
 
 proc updateEtaInit*(ctx: BeaconCtxRef) =

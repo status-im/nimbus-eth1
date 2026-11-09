@@ -299,9 +299,8 @@ template downloadState*(
       chronicles.info info & ": Downloaded pivot state data", peer,
         pivot=ctx.pool.pivotNum,
         accCoverage=(1.0 - ctx.accUnproc.totalRatio).pcStr,
-        accountsDone=data.accDone,
-        storageDone=data.stoDone, codeDone=data.codeDone,
-        syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
+        accountsDone=data.accDone, storageDone=data.stoDone,
+        codeDone=data.codeDone, nSyncPeers=ctx.nSyncPeers()
       discard
 
     # End `block body`

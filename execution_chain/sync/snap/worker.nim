@@ -142,7 +142,8 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       # Download headers. The request will be silently ignored if the
       # distance to the CL head is too small.
       discard ctx.headerDownloadTrigger(info)
-      bodyRc = daemonWaitDownloadInterval           # parallel peer action
+      if not ctx.poolMode:                          # not in sync mode?
+        bodyRc = daemonWaitDownloadInterval         # parallel peer action
 
     of SnapDownloadFinish:                          # wait for sync
       discard

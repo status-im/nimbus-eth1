@@ -323,7 +323,7 @@ proc importCoreDb*(
   notice info & ": Imported snap state to Core DB",
     number=status.number, stateRoot=header.stateRoot.toStr,
       nAccounts=txStats.nAccounts, nStorages=txStats.nStorages,
-      nSlots=txStats.nSlots, nLazyStores=txStats.nLazyStores,
+      nLazyStores=txStats.nLazyStores, nSlots=txStats.nSlots,
       nCodes=txStats.nCodes, nLazyCodes=txStats.nLazyCodes,
       ela=(Moment.now()-start).toStr
 
