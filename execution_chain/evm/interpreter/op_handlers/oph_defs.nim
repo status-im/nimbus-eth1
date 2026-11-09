@@ -34,12 +34,12 @@ type
     info: string              ## handter info, explainer
     exec: VmOpFn
 
-template toOpFn*(op: untyped): VmOpFn =
-  VmOpFn(proc(cpt: VmCpt): EvmResultVoid = op(cpt))
-
 # ------------------------------------------------------------------------------
 # Public
 # ------------------------------------------------------------------------------
+
+template toOpFn*(op: untyped): VmOpFn =
+  VmOpFn(proc(cpt: VmCpt): EvmResultVoid = op(cpt))
 
 const
   VmOpIgnore*: VmOpFn =      ## No operation, placeholder function

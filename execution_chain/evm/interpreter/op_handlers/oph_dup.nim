@@ -41,7 +41,7 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Duplicate " & blurb & " item in the stack"
 
 
-template dupImpl*(cpt: VmCpt; n: int): EvmResultVoid =
+template dupImpl*(cpt: VmCpt; n: static int): EvmResultVoid =
   cpt.stack.dup(n)
 
 const

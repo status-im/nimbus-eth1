@@ -13,7 +13,7 @@
 import
   std/[macros, strformat],
   chronicles,
-  stew/[byteutils],
+  stew/[byteutils, ptrops],
   ../constants,
   ../db/ledger,
   ./interpreter/[op_dispatcher],
@@ -40,9 +40,7 @@ proc runVM(
 
   let
     codeLen = c.code.len
-    code =
-      if codeLen > 0: cast[ptr UncheckedArray[byte]](c.code.bytes[0].addr)
-      else: nil
+    code = cast[ptr UncheckedArray[byte]](c.code.bytes.baseAddr)
 
   while true:
     {.computedGoto.}

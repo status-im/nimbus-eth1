@@ -40,8 +40,17 @@ template handleStopDirective(cpt: VmCpt, tracingEnabled: bool) =
       ?cpt.opcodeGasCost(Stop, 0, tracingEnabled, reason = $Stop)
       cpt.traceOpCodeEnded(Stop, cpt.opIndex)
 
+const
+  inlinedOps = {Add, Sub, Mod, Smod, Addmod, Mulmod, Gt, And, Or, Xor, Not,
+    Caller, CallValue, CallDataSize, Pop, Jump, JumpI, Pc, Gas, JumpDest,
+    Push0} + {Push1 .. Push32} + {Dup1 .. Dup16} + {Swap1 .. Swap16}
+
+static:
+  doAssert inlinedOps <= inlinableOps[EVMFork.high],
+    $(inlinedOps - inlinableOps[EVMFork.high])
+
 template runOp(fork: static EVMFork, op: static Op, cpt: VmCpt): EvmResultVoid =
-  when op notin inlinableOps[fork]: vmOpHandlers[fork][op].run(cpt)
+  when op notin inlinedOps * inlinableOps[fork]: vmOpHandlers[fork][op].run(cpt)
   elif op == Add: cpt.addOp()
   elif op == Sub: cpt.subOp()
   elif op == Mod: cpt.moduloOp()
@@ -66,7 +75,7 @@ template runOp(fork: static EVMFork, op: static Op, cpt: VmCpt): EvmResultVoid =
   elif op in Push1 .. Push32: cpt.pushImpl(op.int - Push1.int + 1)
   elif op in Dup1 .. Dup16: cpt.dupImpl(op.int - Dup1.int + 1)
   elif op in Swap1 .. Swap16: cpt.swapImpl(op.int - Swap1.int + 1)
-  else: vmOpHandlers[fork][op].run(cpt)
+  else: {.error: "inlined op without a runOp branch".}
 
 template handleFixedGasCostsDirective(
     fork: EVMFork, op: Op, cost: GasInt, cpt: VmCpt, tracingEnabled: bool
