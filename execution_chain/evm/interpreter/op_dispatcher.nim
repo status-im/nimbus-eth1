@@ -41,7 +41,8 @@ template handleStopDirective(cpt: VmCpt, tracingEnabled: bool) =
       cpt.traceOpCodeEnded(Stop, cpt.opIndex)
 
 template runOp(fork: static EVMFork, op: static Op, cpt: VmCpt): EvmResultVoid =
-  when op == Add: cpt.addOp()
+  when op notin inlinableOps[fork]: vmOpHandlers[fork][op].run(cpt)
+  elif op == Add: cpt.addOp()
   elif op == Sub: cpt.subOp()
   elif op == Mod: cpt.moduloOp()
   elif op == Smod: cpt.smodOp()
@@ -61,7 +62,7 @@ template runOp(fork: static EVMFork, op: static Op, cpt: VmCpt): EvmResultVoid =
   elif op == Pc: cpt.pcOp()
   elif op == Gas: cpt.gasOp()
   elif op == JumpDest: cpt.jumpDestOp()
-  elif op == Push0 and fork in VmOpShanghaiAndLater: cpt.push0Op()
+  elif op == Push0: cpt.push0Op()
   elif op in Push1 .. Push32: cpt.pushImpl(op.int - Push1.int + 1)
   elif op in Dup1 .. Dup16: cpt.dupImpl(op.int - Dup1.int + 1)
   elif op in Swap1 .. Swap16: cpt.swapImpl(op.int - Swap1.int + 1)

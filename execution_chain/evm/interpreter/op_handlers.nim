@@ -118,6 +118,22 @@ const
           rc[fork][op].run  = tab[op].exec
       rc
 
+  inlinableOps* = ## Ops per `fork` that have exactly one handler entry and
+                  ## whose entry covers that fork, i.e. safe to inline
+    block:
+      var
+        entries: array[Op, int]
+        rc: array[EVMFork, set[Op]]
+      for (subList, _) in allHandlersList:
+        for w in subList:
+          inc entries[w.opCode]
+      for (subList, _) in allHandlersList:
+        for w in subList:
+          if entries[w.opCode] == 1:
+            for fork in w.forks:
+              rc[fork].incl w.opCode
+      rc
+
 # ------------------------------------------------------------------------------
 # Debugging ...
 # ------------------------------------------------------------------------------
