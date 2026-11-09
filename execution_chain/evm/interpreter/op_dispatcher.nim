@@ -43,6 +43,10 @@ template handleStopDirective(cpt: VmCpt, tracingEnabled: bool) =
 template runOp(fork: static EVMFork, op: static Op, cpt: VmCpt): EvmResultVoid =
   when op == Add: cpt.addOp()
   elif op == Sub: cpt.subOp()
+  elif op == Mod: cpt.moduloOp()
+  elif op == Smod: cpt.smodOp()
+  elif op == Addmod: cpt.addmodOp()
+  elif op == Mulmod: cpt.mulmodOp()
   elif op == Gt: cpt.gtOp()
   elif op == And: cpt.andOp()
   elif op == Or: cpt.orOp()

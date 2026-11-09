@@ -77,29 +77,29 @@ proc sdivOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.binaryWithTop(sdiv256)
 
-proc moduloOp(cpt: VmCpt): EvmResultVoid =
-  ## 0x06, Modulo
-  template mod256(top, lhs, rhs) =
-    if rhs.isZero:
-      top = zero(UInt256)
-    else:
-      top = lhs mod rhs
+template mod256(top, lhs, rhs) =
+  if rhs.isZero:
+    top = zero(UInt256)
+  else:
+    top = lhs mod rhs
 
+template moduloOp*(cpt: VmCpt): EvmResultVoid =
+  ## 0x06, Modulo
   cpt.stack.binaryWithTop(mod256)
 
-proc smodOp(cpt: VmCpt): EvmResultVoid =
-  ## 0x07, Signed modulo
-  template smod256(top, lhs, rhs) =
-    if rhs.isZero.not:
-      var sign: bool
-      extractSign(rhs, sign)
-      extractSign(lhs, sign)
-      top = lhs mod rhs
-      setSign(top, sign)
+template smod256(top, lhs, rhs) =
+  if rhs.isZero.not:
+    var sign: bool
+    extractSign(rhs, sign)
+    extractSign(lhs, sign)
+    top = lhs mod rhs
+    setSign(top, sign)
 
+template smodOp*(cpt: VmCpt): EvmResultVoid =
+  ## 0x07, Signed modulo
   cpt.stack.binaryWithTop(smod256)
 
-proc addmodOp(cpt: VmCpt): EvmResultVoid =
+template addmodOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x08, Modulo addition
   ## Intermediate computations do not roll over at 2^256
   ? cpt.stack.lsCheck(3)
@@ -114,9 +114,9 @@ proc addmodOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop value
-  ok()
+  EvmResultVoid.ok()
 
-proc mulmodOp(cpt: VmCpt): EvmResultVoid =
+template mulmodOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x09, Modulo multiplication
   ## Intermediate computations do not roll over at 2^256
   ? cpt.stack.lsCheck(3)
@@ -131,7 +131,7 @@ proc mulmodOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop value
-  ok()
+  EvmResultVoid.ok()
 
 proc expOp(cpt: VmCpt): EvmResultVoid =
   ## 0x0A, Exponentiation
@@ -340,14 +340,14 @@ const
      forks: VmOpAllForks,
      name: "modulo",
      info: "Modulo remainder operation",
-     exec: moduloOp),
+     exec: toOpFn moduloOp),
 
 
     (opCode: Smod,        ## 0x07, Signed modulo
      forks: VmOpAllForks,
      name: "smod",
      info: "Signed modulo remainder operation",
-     exec: smodOp),
+     exec: toOpFn smodOp),
 
 
     (opCode: Addmod,      ## 0x08, Modulo addition, Intermediate
@@ -355,7 +355,7 @@ const
      forks: VmOpAllForks,
      name: "addmod",
      info: "Modulo addition operation",
-     exec: addmodOp),
+     exec: toOpFn addmodOp),
 
 
     (opCode: Mulmod,      ## 0x09, Modulo multiplication, Intermediate
@@ -363,7 +363,7 @@ const
      forks: VmOpAllForks,
      name: "mulmod",
      info: "Modulo multiplication operation",
-     exec: mulmodOp),
+     exec: toOpFn mulmodOp),
 
 
     (opCode: Exp,         ## 0x0a, Exponentiation
