@@ -41,6 +41,7 @@ proc resetServices*(ctx: SnapCtxRef; info: static[string]): Opt[void] =
   ##
   # Initialise account range accounting
   ctx.accUnproc.init ItemKeyRangeMax
+  ctx.accRefresh.clear()
 
   # Set up metrics
   ctx.accountDownloadMetricsReset()

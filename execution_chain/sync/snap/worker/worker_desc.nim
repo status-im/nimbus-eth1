@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  std/paths,
+  std/[paths, sets],
   pkg/[chronos, eth/common, minilru, results],
   ../../../core/chain,
   ../../sync_desc,
@@ -102,6 +102,11 @@ type
     stateRoot*: StateRoot            ## Accounts fetch (per state root)
     balHash*: Hash32                 ## Last failed BAL
 
+  AccountBatch* = object
+    ## Unresolved accounts register, download batch.
+    accUnproc*: UnprocItemKeys       ## Account download sync
+    accRefresh*: HashSet[Address]    ## Refresh addresses (after BAL forward)
+
   SnapPeerData* = object
     ## Local descriptor data extension
     snapVersion*: int                ## For logging
@@ -121,8 +126,8 @@ type
     balSupported*: bool              ## Becomes `true` on `Amsterdam` or later
     contPrevSession*: bool           ## Request resuming previous session
     beaconSync*: BeaconSyncRef       ## Beacon syncer to resume after snap sync
-    beaconTarget*: bool              ## inital beacon target if `true`
-    accUnproc*: UnprocItemKeys       ## Account download sync
+    beaconTarget*: bool              ## Inital beacon target if `true`
+    accBatch*: AccountBatch          ## Download & update processing data
     baseDir*: string                 ## Path for assembly database
     cacheDB*: CacheDbRef             ## Downloas and assembly cache database
     headersSynced*: bool             ## beacon sync headers
@@ -156,9 +161,13 @@ func hdrCache*(ctx: SnapCtxRef): HeaderChainRef =
   ## Getter
   ctx.pool.beaconSync.ctx.pool.hdrCache
 
-func accUnproc*(ctx: SnapCtxRef): var UnprocItemKeys =
+template accUnproc*(ctx: SnapCtxRef): untyped =
   ## Getter
-  ctx.pool.accUnproc
+  ctx.pool.accBatch.accUnproc
+
+template accRefresh*(ctx: SnapCtxRef): untyped =
+  ## Getter
+  ctx.pool.accBatch.accRefresh
 
 func beaconInitTarget*(ctx: SnapCtxRef): bool =
   ## Getter

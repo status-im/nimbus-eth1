@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets],
+  std/sets,
   pkg/[chronicles, chronos, eth/common],
   pkg/stew/[byteutils, interval_set],
   ./[helpers, cache_db, worker_desc]
@@ -264,7 +264,7 @@ template stateForward*(
   ## are exhausted. The latter can be detected if the return value stays
   ## the same.
   ##
-  var bodyRc = Opt[seq[Address]].err()
+  var bodyRc = Opt[void].err()
   block body:
     let
       adb = ctx.pool.cacheDB
@@ -273,7 +273,6 @@ template stateForward*(
       pivotNum = accState.number
 
     var
-      changed: HashSet[Address]
       number = pivotNum
       timer = TimerDataRef(time: Moment.now())
     template dist: untyped = (number-pivotNum)
@@ -297,7 +296,7 @@ template stateForward*(
             accPath=w.address.computeAccPath.toStr
           break body                                # failed
         if changedOk:
-          changed.incl w.address
+          ctx.accRefresh.incl w.address
 
     # Update pivot and forward block numbers if there was some progress
     if pivotNum < number:
@@ -306,7 +305,7 @@ template stateForward*(
       ctx.pool.pivotNum = number
       ctx.pool.forwardNum = number
 
-    bodyRc = typeof(bodyRc).ok(changed.toSeq)
+    bodyRc = typeof(bodyRc).ok()
     # End `block body`
 
   bodyRc

@@ -128,7 +128,6 @@ proc verifyAmsterdamOrLater(
 
 proc downloadInit*(
     ctx: SnapCtxRef;
-    marked: seq[Address];
     info: static[string];
       ): Opt[void] =
   let firstPivot = ctx.setFirstPivotFromFinNumber(info)
@@ -146,7 +145,7 @@ proc downloadInit*(
       if 0 < ctx.pool.pivotNum:                     # ready ok?
         info info & ": Continue downloading pivot state data",
           pivot=ctx.pool.pivotNum, forward=ctx.pool.forwardNum,
-          nAccRefetch=marked.len
+          nAccRefetch=ctx.accRefresh.len
     else:
       ?ctx.startDownloading(firstPivot, info)
 
@@ -158,10 +157,11 @@ proc downloadInit*(
   # Add marked account addresses. In case `startDownloading()` was called
   # there is nothing to do as the missing range is the full interval. But
   # in that case there would be no marked list either.
-  for w in marked:
+  for w in ctx.accRefresh.items:
     let accKey = w.computeAccPath.to(ItemKey)
     if not ctx.accUnproc.covered(accKey):
       ctx.accUnproc.unprocessed.merge accKey
+  ctx.accRefresh.clear()
 
   ctx.accountDownloadMetricsUpdate()
   ctx.storageDownloadMetricsUpdate(info)
