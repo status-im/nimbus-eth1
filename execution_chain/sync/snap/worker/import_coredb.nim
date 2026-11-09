@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos, eth/common, stew/interval_set],
+  pkg/[chronicles, chronos, eth/common, metrics, stew/interval_set],
   ../../../db/core_db,
   ./[helpers, cache_db, worker_desc]
 
@@ -30,8 +30,12 @@ type
 
   ImportDesc = tuple
     stats: CoredbImportStats
+    accPath: Hash32
     count: int
     timer: Moment
+
+declareGauge nec_snap_dbimport_progress, "" &
+  "Factor of how much has been imported into Core DB"
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -49,6 +53,7 @@ template persistRegularly(
       tx.checkpoint(0)
       db.persist tx
       ctrl.count = 0
+      metrics.set(nec_snap_dbimport_progress, ctrl.accPath.to(UInt256).per256)
     let now = Moment.now()
     if ctrl.timer + coreDbImportMsgInterval < now:
       debug info & ": Importing into core DB", stats=ctrl.stats
@@ -207,6 +212,7 @@ proc importFlat(
     info: static[string];
       ): CoredbImportStats =
   var ctrl: ImportDesc
+  metrics.set(nec_snap_dbimport_progress, 0)
 
   # Import canonical head
   let cNum = tx.mergeCanonicalBacklog(adb, info).valueOr:
@@ -250,6 +256,7 @@ proc importFlat(
       ctrl.stats.nErrors.inc
       return ctrl.stats
     ctrl.stats.nAccounts.inc
+    ctrl.accPath = w.accPath
 
     if w.data.account.storageRoot != EMPTY_ROOT_HASH:
       ctrl.stats.nStorages.inc
@@ -263,11 +270,15 @@ proc importFlat(
 
   tx.checkpoint(cNum)
   db.persist tx
+  metrics.set(nec_snap_dbimport_progress, ctrl.accPath.to(UInt256).per256)
   ctrl.stats
 
 # ------------------------------------------------------------------------------
 # Public function(s)
 # ------------------------------------------------------------------------------
+
+proc importCoreDbMetricsReset*(ctx: SnapCtxRef) =
+  metrics.set(nec_snap_dbimport_progress, 0)
 
 proc importCoreDb*(
     db: CoreDbRef;
@@ -294,6 +305,8 @@ proc importCoreDb*(
       number=status.number, stateRoot=txStateRoot.toStr,
       expected=header.stateRoot.toStr, txStats
     return err()
+
+  metrics.set(nec_snap_dbimport_progress, 1.0)
 
   notice info & ": Imported snap state to Core DB",
     number=status.number, stateRoot=header.stateRoot.toStr,

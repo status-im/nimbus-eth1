@@ -1,12 +1,10 @@
 Snap Sync
 =========
 
-TODO
-----
+See downloader docs for
 
-### Update BAL pruner to begin from start-of-history
-
-See [bal_pruner](../../bal_pruner.nim)
+* [storage sub-MPT](./worker/download/storage/README.md)
+* [contract code](./worker/download/code/README.md)
 
 Metrics
 -------
@@ -17,6 +15,7 @@ Metrics
 | nec_snap_accounts_coverage | factor 0.0 .. 1.0 | account ranges covered |
 | nec_snap_storage_coverage  | factor 0.0 .. 1.0 | storage ranges covered |
 | nec_snap_download_window   | factor 0.0 .. 1.0 | window availability    |
+| nec_snap_dbimport_progress | factor 0.0 .. 1.0 | progress of DB import  |
 | nec_snap_snap_peers        | number            | active snap peers      |
 
 ###  Graphana example
