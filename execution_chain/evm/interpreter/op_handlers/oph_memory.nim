@@ -361,7 +361,7 @@ const
      forks: VmOpAllForks,
      name: "pop",
      info: "Remove item from stack",
-     exec: toOpFn popOp),
+     exec: VmOpInlined),
 
 
     (opCode: Mload,     ## 0x51, Load word from memory
@@ -445,14 +445,14 @@ const
      forks: VmOpAllForks,
      name: "jump",
      info: "Alter the program counter",
-     exec: toOpFn jumpOp),
+     exec: VmOpInlined),
 
 
     (opCode: JumpI,     ## 0x57, Conditional jump
      forks: VmOpAllForks,
      name: "jumpI",
      info: "Conditionally alter the program counter",
-     exec: toOpFn jumpIOp),
+     exec: VmOpInlined),
 
 
     (opCode: Pc,        ## 0x58, Program counter prior to instruction
@@ -460,7 +460,7 @@ const
      name: "pc",
      info: "Get the value of the program counter prior to the increment "&
            "corresponding to this instruction",
-     exec: toOpFn pcOp),
+     exec: VmOpInlined),
 
 
     (opCode: Msize,     ## 0x59, Memory size
@@ -475,7 +475,7 @@ const
      name: "gas",
      info: "Get the amount of available gas, including the corresponding "&
            "reduction for the cost of this instruction",
-     exec: toOpFn gasOp),
+     exec: VmOpInlined),
 
 
     (opCode: JumpDest,  ## 0x5b, Mark jump target. This operation has no effect
@@ -483,7 +483,7 @@ const
      forks: VmOpAllForks,
      name: "jumpDest",
      info: "Mark a valid destination for jumps",
-     exec: toOpFn jumpDestOp),
+     exec: VmOpInlined),
 
 
     (opCode: Tload,     ## 0x5c, Load word from transient storage.

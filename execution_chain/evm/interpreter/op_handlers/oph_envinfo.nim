@@ -298,7 +298,7 @@ const
      forks: VmOpAllForks,
      name: "caller",
      info: "Get caller address",
-     exec: toOpFn callerOp),
+     exec: VmOpInlined),
 
 
     (opCode: CallValue,       ## 0x34, Execution deposited value
@@ -306,7 +306,7 @@ const
      name: "callValue",
      info: "Get deposited value by the instruction/transaction " &
            "responsible for this execution",
-     exec: toOpFn callValueOp),
+     exec: VmOpInlined),
 
 
     (opCode: CallDataLoad,    ## 0x35, Input data
@@ -320,7 +320,7 @@ const
      forks: VmOpAllForks,
      name: "callDataSize",
      info: "Get size of input data in current environment",
-     exec: toOpFn callDataSizeOp),
+     exec: VmOpInlined),
 
 
     (opCode: CallDataCopy,    ## 0x37, Copy input data to memory.

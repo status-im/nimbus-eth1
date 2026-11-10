@@ -38,12 +38,12 @@ type
 # Public
 # ------------------------------------------------------------------------------
 
-template toOpFn*(op: untyped): VmOpFn =
-  VmOpFn(proc(cpt: VmCpt): EvmResultVoid = op(cpt))
-
 const
   VmOpIgnore*: VmOpFn =      ## No operation, placeholder function
     proc(cpt: VmCpt): EvmResultVoid = ok()
+
+  VmOpInlined*: VmOpFn =     ## Marks an op expanded by the dispatcher
+    proc(cpt: VmCpt): EvmResultVoid = raiseAssert "inlined op"
 
   # similar to: toSeq(Fork).mapIt({it}).foldl(a+b)
   VmOpAllForks* =

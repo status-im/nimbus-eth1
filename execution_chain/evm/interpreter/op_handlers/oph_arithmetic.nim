@@ -305,7 +305,7 @@ const
      forks: VmOpAllForks,
      name: "add",
      info: "Addition operation",
-     exec: toOpFn addOp),
+     exec: VmOpInlined),
 
 
     (opCode: Mul,         ##  0x02, Multiplication
@@ -319,7 +319,7 @@ const
      forks: VmOpAllForks,
      name: "sub",
      info: "Subtraction operation",
-     exec: toOpFn subOp),
+     exec: VmOpInlined),
 
 
     (opCode: Div,         ## 0x04, Division
@@ -340,14 +340,14 @@ const
      forks: VmOpAllForks,
      name: "modulo",
      info: "Modulo remainder operation",
-     exec: toOpFn moduloOp),
+     exec: VmOpInlined),
 
 
     (opCode: Smod,        ## 0x07, Signed modulo
      forks: VmOpAllForks,
      name: "smod",
      info: "Signed modulo remainder operation",
-     exec: toOpFn smodOp),
+     exec: VmOpInlined),
 
 
     (opCode: Addmod,      ## 0x08, Modulo addition, Intermediate
@@ -355,7 +355,7 @@ const
      forks: VmOpAllForks,
      name: "addmod",
      info: "Modulo addition operation",
-     exec: toOpFn addmodOp),
+     exec: VmOpInlined),
 
 
     (opCode: Mulmod,      ## 0x09, Modulo multiplication, Intermediate
@@ -363,7 +363,7 @@ const
      forks: VmOpAllForks,
      name: "mulmod",
      info: "Modulo multiplication operation",
-     exec: toOpFn mulmodOp),
+     exec: VmOpInlined),
 
 
     (opCode: Exp,         ## 0x0a, Exponentiation
@@ -391,7 +391,7 @@ const
      forks: VmOpAllForks,
      name: "gt",
      info: "Greater-than comparison",
-     exec: toOpFn gtOp),
+     exec: VmOpInlined),
 
 
     (opCode: Slt,         ## 0x12, Signed less-than
@@ -426,28 +426,28 @@ const
      forks: VmOpAllForks,
      name: "andOp",
      info: "Bitwise AND operation",
-     exec: toOpFn andOp),
+     exec: VmOpInlined),
 
 
     (opCode: Or,          ## 0x17, OR
      forks: VmOpAllForks,
      name: "orOp",
      info: "Bitwise OR operation",
-     exec: toOpFn orOp),
+     exec: VmOpInlined),
 
 
     (opCode: Xor,         ## 0x18, XOR
      forks: VmOpAllForks,
      name: "xorOp",
      info: "Bitwise XOR operation",
-     exec: toOpFn xorOp),
+     exec: VmOpInlined),
 
 
     (opCode: Not,         ## 0x19, NOT
      forks: VmOpAllForks,
      name: "notOp",
      info: "Bitwise NOT operation",
-     exec: toOpFn notOp),
+     exec: VmOpInlined),
 
 
     (opCode: Byte,        ## 0x1a, Retrieve byte

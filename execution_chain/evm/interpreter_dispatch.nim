@@ -225,9 +225,6 @@ proc executeOpcodes*(c: Computation) =
       if c.tracingEnabled:
         c.traceOpCodeEnded(c.instr, c.opIndex)
 
-    if c.instr == Return or c.instr == Revert or c.instr == SelfDestruct:
-      break blockOne
-
     c.selectVM(fork, c.tracingEnabled).isOkOr:
       handleEvmError(error)
       break blockOne # this break is not needed but make the flow clear

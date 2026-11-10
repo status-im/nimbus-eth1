@@ -48,16 +48,10 @@ const
   inxRange = toSeq(1 .. 16)
 
 # ------------------------------------------------------------------------------
-# Private, op handlers implementation
-# ------------------------------------------------------------------------------
-
-genOphHandlers fnName, fnInfo, inxRange, dupImpl
-
-# ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-genOphList fnName, fnInfo, inxRange, "VmOpExecDup", opName
+genOphList fnName, fnInfo, inxRange, "VmOpExecDup", opName, inlined = true
 
 # ------------------------------------------------------------------------------
 # End

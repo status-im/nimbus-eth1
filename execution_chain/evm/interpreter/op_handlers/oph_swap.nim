@@ -48,16 +48,10 @@ const
   inxRange = toSeq(1 .. 16)
 
 # ------------------------------------------------------------------------------
-# Private, op handlers implementation
-# ------------------------------------------------------------------------------
-
-genOphHandlers fnName, fnInfo, inxRange, swapImpl
-
-# ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-genOphList fnName, fnInfo, inxRange, "VmOpExecSwap", opName
+genOphList fnName, fnInfo, inxRange, "VmOpExecSwap", opName, inlined = true
 
 # ------------------------------------------------------------------------------
 # End

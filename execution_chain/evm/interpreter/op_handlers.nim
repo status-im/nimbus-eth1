@@ -118,20 +118,14 @@ const
           rc[fork][op].run  = tab[op].exec
       rc
 
-  inlinableOps* = ## Ops per `fork` that have exactly one handler entry and
-                  ## whose entry covers that fork, i.e. safe to inline
+  inlinedOps* = ## Ops per `fork` whose handler entry is `VmOpInlined`, i.e.
+                ## expanded by the dispatcher instead of called
     block:
-      var
-        entries: array[Op, int]
-        rc: array[EVMFork, set[Op]]
-      for (subList, _) in allHandlersList:
-        for w in subList:
-          inc entries[w.opCode]
-      for (subList, _) in allHandlersList:
-        for w in subList:
-          if entries[w.opCode] == 1:
-            for fork in w.forks:
-              rc[fork].incl w.opCode
+      var rc: array[EVMFork, set[Op]]
+      for fork in EVMFork:
+        for op in Op:
+          if vmOpHandlers[fork][op].run == VmOpInlined:
+            rc[fork].incl op
       rc
 
 # ------------------------------------------------------------------------------

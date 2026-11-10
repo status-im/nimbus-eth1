@@ -47,16 +47,10 @@ const
   inxRange = toSeq(1 .. 32)
 
 # ------------------------------------------------------------------------------
-# Private, op handlers implementation
-# ------------------------------------------------------------------------------
-
-genOphHandlers fnName, fnInfo, inxRange, pushImpl
-
-# ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-genOphList fnName, fnInfo, inxRange, "VmOpExecPush", opName
+genOphList fnName, fnInfo, inxRange, "VmOpExecPush", opName, inlined = true
 
 
 # Push0 needs to be slightly different because it's only available after
@@ -76,7 +70,7 @@ const
      forks: VmOpShanghaiAndLater,
      name: "Push0",
      info: "Push 0 on the stack",
-     exec: toOpFn push0Op)]
+     exec: VmOpInlined)]
 
 # ------------------------------------------------------------------------------
 # End
