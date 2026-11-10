@@ -27,6 +27,7 @@ type TriggerRunError* = enum
   Notused = 0
   NotInStandByMode
   NotInIdleMode
+  NotInSingleMode
 
 logScope:
   topics = "beacon sync"
@@ -104,6 +105,7 @@ proc config*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
+    standBy = false;
       ) =
   ## Complete `BeaconSyncRef` descriptor initialisation.
   ##
@@ -129,6 +131,8 @@ proc config*(
   desc.addBeaconSyncProtocol(eth68)
 
   desc.ctx.pool.chain = chain
+  desc.ctx.pool.standByMode = if standBy: BeaconServerMode.standBy
+                              else: BeaconServerMode.none
 
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
@@ -150,15 +154,10 @@ proc configTicker*(desc: BeaconSyncRef, enable: bool) =
 
 # -----------------
 
-proc start*(desc: BeaconSyncRef; standBy = false): bool =
-  ## This function returns `true` if the current stand-by mode is available.
-  ## Once started, this mode cannot be changed.
-  ##
+proc start*(desc: BeaconSyncRef): bool =
   doAssert not desc.ctx.isNil
-  if desc.ctx.pool.hdrCache.isNil:
-    if desc.startSync(standBy):
-      desc.ctx.pool.standByMode = standBy
-      return true
+  if not desc.isRunning():
+    return desc.startSync(desc.ctx.pool.standByMode == BeaconServerMode.standBy)
   # false
 
 proc singleRun*(
@@ -173,7 +172,8 @@ proc singleRun*(
   ## This function realises some slave mode for the beacon syncer.
   ##
   doAssert not desc.ctx.isNil
-  if desc.startSync(standBy = false):               # run state was changed
+  if desc.ctx.pool.standByMode == BeaconServerMode.standBy and
+     desc.startSync(standBy = false):               # change scheduler run state
     desc.ctx.singleRunStart(baseHeader, notify).isOkOr:
       discard desc.startSync(standBy = true)
       return err(NotInIdleMode)                     # oops, something went wrong
@@ -186,12 +186,11 @@ proc singleReset*(desc: BeaconSyncRef):  Result[void,ResetLingerError] =
   ## This function should be called again after some delay.
   ##
   doAssert not desc.ctx.isNil
+  if desc.ctx.pool.standByMode != BeaconServerMode.singleRun:
+    return err(NotApplicable)
   desc.ctx.resetSingleRun().isOkOr:
-    return  err(error)
+    return err(error)
   discard desc.startSync(standBy = true)            # enter stand-by mode again
-  desc.ctx.pool.standByMode = true                  # ditto
-  desc.ctx.pool.stopBase = Opt.none(Header)
-  desc.ctx.pool.stopNotifier = BeaconNotifier(nil)
   ok()
 
 proc stop*(desc: BeaconSyncRef) {.async.} =

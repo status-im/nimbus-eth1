@@ -136,29 +136,33 @@ proc runMemoryTests() =
   suite "Memory tests":
     test "write":
       var mem = memory32()
+      defer: mem.dispose()
       # Test that write creates 32byte string == value padded with zeros
       check mem.write(startPos = 0, value = @[1.byte, 0.byte, 1.byte, 0.byte]).isOk
-      check(mem.bytes == @[1.byte, 0.byte, 1.byte, 0.byte].concat(repeat(0.byte, 28)))
+      check(@(mem.bytes) == @[1.byte, 0.byte, 1.byte, 0.byte].concat(repeat(0.byte, 28)))
 
     test "write rejects values beyond memory size":
       var mem = memory128()
+      defer: mem.dispose()
       check mem.write(startPos = 128, value = @[1.byte, 0.byte, 1.byte, 0.byte]).error.code == EvmErrorCode.MemoryFull
       check mem.write(startPos = 128, value = 1.byte).error.code == EvmErrorCode.MemoryFull
 
     test "extends appropriately extends memory":
       var mem = EvmMemory.init()
+      defer: mem.dispose()
       # Test extends to 32 byte array: 0 < (start_position + size) <= 32
       mem.extend(startPos = 0, size = 10)
-      check(mem.bytes == repeat(0.byte, 32))
+      check(@(mem.bytes) == repeat(0.byte, 32))
       # Test will extend past length if params require: 32 < (start_position + size) <= 64
       mem.extend(startPos = 28, size = 32)
-      check(mem.bytes == repeat(0.byte, 64))
+      check(@(mem.bytes) == repeat(0.byte, 64))
       # Test won't extend past length unless params require: 32 < (start_position + size) <= 64
       mem.extend(startPos = 48, size = 10)
-      check(mem.bytes == repeat(0.byte, 64))
+      check(@(mem.bytes) == repeat(0.byte, 64))
 
     test "read returns correct bytes":
       var mem = memory32()
+      defer: mem.dispose()
       check mem.write(startPos = 5, value = @[1.byte, 0.byte, 1.byte, 0.byte]).isOk
       check(@(mem.read(startPos = 5, size = 4)) == @[1.byte, 0.byte, 1.byte, 0.byte])
       check(@(mem.read(startPos = 6, size = 4)) == @[0.byte, 1.byte, 0.byte, 0.byte])
@@ -458,8 +462,8 @@ proc runFactory(vm: BaseVMState, code, initcode: seq[byte], gas = 1_000_000.GasI
     gas: gas,
     sender: factoryCaller,
     currentTarget: factoryAddress,
-    codeAddress: factoryAddress,
-    data: initcode)
+    codeAddress: factoryAddress)
+  msg.borrowData(initcode)
   result = newComputation(vm, keepStack = true, msg, CodeBytesRef.init(code))
   result.execCallOrCreate()
 
@@ -472,7 +476,7 @@ proc runCreateCacheTests() =
   let initcode = hexToSeqByte("600656605b005b60016000f3")
   let codeHash = keccak256(initcode)
 
-  for creationOp in [Create, Create2]:
+  for creationOp in [Create2]:
     let op = creationOp
     suite $op & " initcode cache":
       setup:
@@ -498,10 +502,7 @@ proc runCreateCacheTests() =
           not executed.persisted
 
         let expectedAddress =
-          if op == Create2:
-            generateSafeAddress(factoryAddress, ZERO_CONTRACTSALT, initcode)
-          else:
-            generateAddress(factoryAddress, 1)
+          generateSafeAddress(factoryAddress, ZERO_CONTRACTSALT, initcode)
         check cold.finalStack[0] == UInt256.fromBytesBE(expectedAddress.data)
         check ledger.getCode(expectedAddress) == [0x00.byte]
 
@@ -600,6 +601,25 @@ proc runCreateCacheTests() =
         require c.isSuccess
         check c.finalStack == @[0.u256]
         check ledger.peekCode(codeHash).isNone
+
+  test "CREATE neither looks up nor caches its initcode":
+    let vm = initVMEnv("Cancun")
+    defer: vm.dispose()
+    let ledger = vm.ledger
+    ledger.setNonce(factoryAddress, 1)
+    let cached = CodeBytesRef.init(initcode)
+    ledger.code.put(codeHash, cached)
+    let outer = ledger.beginSavePoint()
+    let c = vm.runFactory(factoryCode(Create), initcode)
+    require c.isSuccess
+    require c.finalStack.len == 1
+    check:
+      c.finalStack[0] == UInt256.fromBytesBE(generateAddress(factoryAddress, 1).data)
+      ledger.getCode(generateAddress(factoryAddress, 1)) == [0x00.byte]
+      cached.jumpdests.len == 0
+      outer.pendingCode.len == 0
+    ledger.commit(outer)
+    check ledger.peekCode(codeHash).get == cached
 
   test "top-level deployment initcode is not admitted":
     let vm = initVMEnv("Cancun")

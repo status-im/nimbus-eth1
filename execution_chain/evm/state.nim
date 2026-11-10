@@ -295,6 +295,9 @@ proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
 func collectWitness*(vmState: BaseVMState): bool =
   vmState.ledger.collectWitness
 
+func stateless*(vmState: BaseVMState): bool =
+  vmState.ledger.stateless
+
 template mutateLedger*(vmState: BaseVMState, body: untyped): untyped =
   block:
     let ledger {.inject.} = vmState.ledger

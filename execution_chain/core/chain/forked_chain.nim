@@ -15,6 +15,7 @@ import
   chronicles,
   results,
   chronos,
+  metrics,
   ../../common,
   ../../db/[core_db, fcu_db, payload_body_db, tx_frame_db],
   ../../evm/types,
@@ -46,6 +47,26 @@ export
   common,
   core_db
 
+declareCounter nec_dag_block_processing_duration_seconds,
+  "Cumulative time spent processing (validating) blocks"
+
+declareCounter nec_dag_base_updates,
+  "Number of base updates (base block moves) performed"
+
+declareCounter nec_dag_base_update_duration_seconds,
+  "Cumulative time spent updating the base"
+
+declareCounter nec_dag_prunings, "Number of blocks pruned from the forked chain"
+
+declareCounter nec_dag_pruning_duration_seconds,
+  "Cumulative time spent pruning (finalization) branches"
+
+declareGauge nec_dag_heads,
+  "Number of candidate chain heads in the forked chain"
+
+declareGauge nec_dag_fcu_head, "" &
+  "Block number of the canonical fork-choice head"
+
 const
   BaseDistance = 128'u64
   PersistBatchSize = 4'u64
@@ -62,7 +83,7 @@ const
     ## network load the loop may never go idle, and we don't want to stop
     ## processing entirely.
 
-func appendBlock(c: ForkedChainRef,
+proc appendBlock(c: ForkedChainRef,
          parent: BlockRef,
          blk: Block,
          blkHash: Hash32,
@@ -89,6 +110,8 @@ func appendBlock(c: ForkedChainRef,
 
   # It's a branch
   c.heads.add newBlock
+  nec_dag_heads.set(c.heads.len.int64)
+
   newBlock
 
 func findHeadPos(c: ForkedChainRef, hash: Hash32): Result[BlockRef, string] =
@@ -218,10 +241,11 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   b.header.reset()   # frees extraData seq immediately
   b.txHashes.reset()
 
-func updateHead(c: ForkedChainRef, head: BlockRef) =
+proc updateHead(c: ForkedChainRef, head: BlockRef) =
   ## Update head if the new head is different from current head. The head is
   ## FC state, saved with the snapshot. The canonical head on disk is the base.
   c.fcuHead = FcuHashAndNumber(hash: head.hash, number: head.number)
+  nec_dag_fcu_head.set(head.number.int64)
 
 proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
   # Pruning
@@ -248,6 +272,8 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
   if c.heads.len == 1:
     return
 
+  let pruneStart = Moment.now()
+
   func reachable(head, fin: BlockRef): bool =
     var it = head
     while it.isOk and it.notFinalized:
@@ -270,6 +296,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
           break
         c.deleteBlockData(it)
         c.removeBlockFromCache(it)
+        nec_dag_prunings.inc(1)
 
       if head == c.latest:
         updateLatest = true
@@ -298,6 +325,9 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     doAssert(candidate.isNil.not)
     c.latest = candidate
 
+  nec_dag_pruning_duration_seconds.inc((Moment.now() - pruneStart).fseconds())
+  nec_dag_heads.set(c.heads.len.int64)
+
 proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
   ##
   ##     A1 - A2 - A3          D5 - D6
@@ -318,6 +348,8 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
     return
 
   let startTime = Moment.now()
+
+  c.restoreFrame(base).expect("frame blobs of a block above base")
 
   # State root sanity check is performed to verify, before writing to disk,
   # that optimistically checked blocks indeed end up being stored with a
@@ -403,14 +435,20 @@ proc processUpdateBase(c: ForkedChainRef) =
     startTime = Moment.now()
     base = c.baseQueue.popFirst()
     count = c.updateBase(base)
-    endTime = Moment.now()
-
-  c.persistedCount += count
-  c.lastBaseDur += endTime - startTime
 
   const minLogInterval = 11.seconds # ~once per slot
 
   if count > 0:
+    let
+      endTime = Moment.now()
+      updateBaseDur = endTime - startTime
+
+    c.persistedCount += count
+    c.lastBaseDur += updateBaseDur
+
+    nec_dag_base_update_duration_seconds.inc(updateBaseDur.fseconds)
+    nec_dag_base_updates.inc(1)
+
     # Log something every time base changes but avoid spamming the INF log
     # during bursts of finalized blocks (ie when light client gives a head)
     logScope:
@@ -424,7 +462,7 @@ proc processUpdateBase(c: ForkedChainRef) =
       dbSnapshots = c.baseTxFrame.aTx.db.snapshots.len()
       updateBaseDur = c.lastBaseDur
 
-    if (endTime - c.lastBaseLogTime >= minLogInterval):
+    if (endTime >= c.lastBaseLogTime + minLogInterval):
       info "Finalized blocks persisted"
       c.lastBaseLogTime = endTime
       c.persistedCount = 0
@@ -504,7 +542,7 @@ proc validateBlock(
     # greater than a block which is expected to be persisted based on the
     # persistBatchSize
     moveParentHashKeys = c.persistBatchSize > 1 and (blk.header.number mod c.persistBatchSize) != 1
-    parentFrame = parent.txFrame
+    parentFrame = c.stateFrame(parent)
     txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
 
   # BLOCKHASH resolves along the block's own branch
@@ -542,6 +580,10 @@ proc validateBlock(
   # expensive operation, specially when creating a new branch (ie when blk
   # is being applied to a block that is currently not a head).
   txFrame.checkpoint(blk.header.number, skipSnapshot = false)
+  c.baseTxFrame.storeTxFrame(txFrame, blkHash).expect("store frame blob")
+  # The snapshot holds the block's changes too, and the blob keeps them
+  # for a replay once a child takes the snapshot
+  txFrame.detach()
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, txHashes)
 
@@ -641,42 +683,33 @@ proc init*(
 
   fc
 
-proc refresh*(fc: ForkedChainRef, eagerStateRoot = false) =
-  ## Flush internal caches and reassign database.
-  # TODO rewrite this function - it should not need to reset everything since
-  #      the FC necessarily must be empty as long as there's no base
-  doAssert false, "TODO fix this to only update the relevant parts and assert that the others haven't changed"
-  let newFc = ForkedChainRef.init(
-    com = fc.com,
-    baseDistance = fc.baseDistance,
-    persistBatchSize = fc.persistBatchSize,
-    dynamicBatchSize = fc.dynamicBatchSize,
-    eagerStateRoot)                                 # seems to be unused, though
+proc refresh*(fc: ForkedChainRef) =
+  ## Reinitialise FC module assuming the database was empty originially and
+  ## no atcvibe `base` header was available.
+  ##
+  if BlockNumber(0) < fc.base.header.number:
+    warn "Not refreshing a non-empty FC module",
+      baseNumber=fc.base.header.number
+    return
 
-  fc[].reset                                        # clear desctiptor
+  let
+    baseNum = fc.baseTxFrame.getSavedStateBlockNumber()
+    baseHash = fc.baseTxFrame.getBlockHash(baseNum).expect("baseHash exists")
+    baseBlock = BlockRef(
+      header  : fc.baseTxFrame.getBlockHeader(
+                      baseHash).expect("base header exists"),
+      txFrame : fc.baseTxFrame,
+      hash    : baseHash,
+      parent  : BlockRef(nil))
 
-  # Copy base settings
-  fc.com = newFc.com
-  fc.base = newFc.base
-  fc.latest = newFc.latest
-  fc.heads = newFc.heads
-  fc.hashToBlock = newFc.hashToBlock
-  fc.baseTxFrame = newFc.baseTxFrame
-  fc.baseDistance = newFc.baseDistance
-  fc.persistBatchSize = newFc.persistBatchSize
-  fc.dynamicBatchSize = newFc.dynamicBatchSize
-  fc.quarantine = newFc.quarantine
-  fc.fcuHead = newFc.fcuHead
-  fc.fcuSafe = newFc.fcuSafe
-  fc.baseQueue = newFc.baseQueue
-  fc.lastBaseLogTime = newFc.lastBaseLogTime
-  fc.lastImportYield = newFc.lastImportYield
-  fc.badBlocks = newFc.badBlocks
-  fc.importLock = newFc.importLock
+  fc.base = baseBlock
+  fc.latest = baseBlock
+  fc.heads = @[baseBlock]
+  fc.hashToBlock = {baseHash: baseBlock}.toTable
+  fc.fcuHead = FcuHashAndNumber(hash: baseHash, number: baseNum)
+  fc.fcuSafe = fc.fcuHead
 
-
-  # Force GC to clean up
-  newFc[].reset
+  baseBlock.finalize()
 
 proc importBlock*(
     c: ForkedChainRef,
@@ -791,7 +824,9 @@ proc importBlock*(
 
     orphan = c.quarantine.popOrphan(newParent.hash)
 
-  debug "Block validated", validationDur = Moment.now() - startTime
+  let validationDur = Moment.now() - startTime
+  nec_dag_block_processing_duration_seconds.inc(validationDur.fseconds())
+  debug "Block validated", validationDur
 
   if orphan.isSome():
     # Enqueue the orphan for import after its parent, but before any other blocks. We're
@@ -892,6 +927,7 @@ proc setHead*(c: ForkedChainRef, headHash: Hash32): Result[void, string] =
         # Reached the new head's lineage, or a segment already removed while
         # walking a previous branch.
         break
+      c.baseTxFrame.deleteTxFrame(it.hash).expect("delete discarded frame blob")
       c.removeBlockFromCache(it)
 
   c.heads = @[head]
@@ -901,6 +937,8 @@ proc setHead*(c: ForkedChainRef, headHash: Hash32): Result[void, string] =
   if c.fcuSafe.number > head.number:
     # The old safe block was discarded, clamp it to the new head.
     c.fcuSafe = FcuHashAndNumber(hash: head.hash, number: head.number)
+
+  nec_dag_heads.set(c.heads.len.int64)
 
   ok()
 
@@ -930,19 +968,19 @@ func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame
   c.hashToBlock.hasKey(blockHash)
 
-func txFrame*(c: ForkedChainRef, blockHash: Hash32): CoreDbTxRef =
+proc txFrame*(c: ForkedChainRef, blockHash: Hash32): CoreDbTxRef =
   if blockHash == c.base.hash:
     return c.baseTxFrame
 
   c.hashToBlock.withValue(blockHash, loc) do:
-    return loc[].txFrame
+    return c.stateFrame(loc[])
 
   c.baseTxFrame
 
 func baseTxFrame*(c: ForkedChainRef): CoreDbTxRef =
   c.baseTxFrame
 
-func txFrame*(c: ForkedChainRef, header: Header): CoreDbTxRef =
+proc txFrame*(c: ForkedChainRef, header: Header): CoreDbTxRef =
   c.txFrame(header.computeBlockHash())
 
 func latestTxFrame*(c: ForkedChainRef): CoreDbTxRef =

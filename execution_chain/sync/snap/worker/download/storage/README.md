@@ -1,77 +1,71 @@
-Storage Sub-MPT
-===============
+Storage Sub-MPTs
+================
 
 Representation rules for storage sub-MPTs
 -----------------------------------------
 
-* A storage sub-MPT is addressed by an account path which also addresses
-  the corresponding account.
+1. A storage sub-MPT data is stored as a flat list of *Hash32* slot values
+   in the 'FlatSlot' table indexed by its account address and slot key.
 
-* A storage sub-MPT data is stored as a flat list of slots (i.e.
-  sub-MPT leafs.)
+2. The corresponding account record has a valid *storageRoot* field which can
+   have values
+   + *EMPTY_ROOT_HASH* if there is no storage sub-MPT
+   + *zeroHash32* if there is a non-empty storage sub-MPT but the hash has not
+     been calculated, yet (note that sub-MPT data is addressed by its account
+	 path)
+   + Otherwise, the *storageRoot* field must match the root hash of storage
+     sub-MPT (which can be calculated only if it is fully downloaded)
 
-* The corresponding account record has a valid *storageRoot* field.
+3. A completed storage sub-MPT is represented as
+   + a valid account record as described in 2
+   + a non-empty list of *FlatSlot* table entries for this storage sub-MPT
+     holding slot data (see 1)
+   + there is no *StoMissingIntv* table record
 
-* A complete storage sub-MPT just downloaded consists of
-
-  + a valid *storageRoot* field of the corresponding account record
-  + a *dirtyStorage* field reset to *false* of the corresponding account record
-  + *no StoMissingIntv* table record (which lists missing storage slot ranges)
-  + a non-empty *FlatSlot* table of storage slots (i.e. sub-MPT leafs)
-  + *no* lock record for this sub-MPT
-
-* A post-complete storage sub-MPT (after applying BALs) consists of
-
-  + a *storageRoot* field of the corresponding account record set
-    to `zeroHash32`
-  + a *dirtyStorage* field set to *false* of the corresponding account record
-  + *no StoMissingIntv* table record (which lists missing storage slot ranges)
-  + a non-empty *FlatSlot* table of storage slots (i.e. sub-MPT leafs)
-  + *no* lock record for this sub-MPT
-
-* A partial, non-complete storage sub-MPT just downloaded consists of
-
-  + a valid *storageRoot* field of the corresponding account record
-  + a *dirtyStorage* field set to *true* of the corresponding account record
-  + a *StoMissingIntv* table record with a non-empty list of missing storage
-    slot ranges)
-  + a possibly empty *FlatSlot* table of storage slots (i.e. sub-MPT leafs)
-  + *no* lock record for this sub-MPT
+4. A partially completed existing storage sub-MPT is represented as
+   + a valid account record as described in 2
+   + a non-empty list of *FlatSlot* table entries for this storage sub-MPT
+     holding slot data (see 1)
+   + a *StoMissingIntv* table record which lists missing storage slot ranges
 
 Download and updating rules for storage sub-MPTs
 ------------------------------------------------
 
-While updating a partial storage sub-MPT in a quasi multi-threaded environment
-by downloading *snap* data, the following actions take place.
-  
-* A lock record for the sub-MPT is created (identified by account path.)
-* From the *StoMissingIntv* table, the corresopnding record is removed.
-* Download and save/update the list of storage slots.
-* Depending of whether the storage sub-MPT is complete now, do
-  + if complete, reset the *dirtyStorage* field of the corresponding
-	account record
-  + otherwise update and save the sub-MPT record on the *StoMissingIntv* table
-* Remove the lock record
+A storage sub-MPT code is registered to be downloaded when the corresponding
+account record was downloaded for the first time (i.e. not a refresh download.)
+Formally, this will be a partially completed sub-MPT where the whole key
+range is missing.
 
-Consequences
-------------
+The storage sub-MPT later downloaded, indexed by the *storageRoot* field of
+the account record and saved in the *FlatSlot* table (indexed by its account
+path.) The downloaded slots might not make up for the whole sub-MPT. So a
+partial sub-MPT remains and needs to be completed later.
 
-For a partial storage sub-MPT, a change of storage slots due to BAL forwarding
-cannot happen (is not allowed) because it would need a change the *storageRoot*
-field of the corresponding account record.
+After applying a BAL update to a storage sub-MPT, the *storageRoot* field of
+the account record will be set to *zeroHash32*.
 
-In particular, after a state root change due to BAL forwarding, updating a
-a partial storage sub-MPT code would also require an update of the
-corresponding account record in order to fetch the current data via the
-*storageRoot*, which is stored in the account record.
+When applying BALs to a partially complete storage sub-MPT, the account record
+is marked to be re-fetched /refreshed in the next state download cycle (in
+addition to setting the *storageRoot* field to *zeroHash32*.)
 
-Instead, before BAL forwarding the whole account and storage sub-MPT (and
-contract code) will be deleted, and the account declared missing so that it
-can be re-fetched, along with the new *storageRoot*.
+Core DB import rules
+--------------------
 
-So, all partial storage sub-MPTs and the corresponding account records will be
-deleted before BAL forwarding takes place.
+If a storage sub-MPT code is to be imported into *Core DB*, the hash of the
+sub-MPT must be compiled.
 
-By prioritising non-empty partial storage sub-MPTs, it is expected that there
-is some reduction of downloaded storage slots that go to waste when preparing
-for BAL forwarding.
+If the *storageRoot* field of the corresponding account record is not
+*zeroHash32*, it must be made certain that the *storageRoot* matches hash
+compiled earlier.
+
+Otherwise, compiling the *storageRoot* field will be managed by the Core DB
+importer (no explicit *storageRoot* field.)
+
+Miscellaneous
+-------------
+
+While processing storage sub-MPTs, administrative table entries may temporarily
+be removed from the cache DB and replaced by a lock record. This lock record
+must be removed after processing has finished.
+
+Lock records are intended to support error/disaster recovery.

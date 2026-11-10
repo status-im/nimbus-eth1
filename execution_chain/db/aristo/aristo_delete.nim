@@ -19,7 +19,7 @@ import
   eth/common/hashes,
   results,
   ./aristo_delete/delete_subtree,
-  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers, aristo_serialise]
+  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private heplers
@@ -100,10 +100,9 @@ proc deleteImpl(
           NibblesBuf.nibble(nbl.byte)
         else:
           ExtBranchRef(brVtx).pfx & NibblesBuf.nibble(nbl.byte)
-      let newExt = BoundaryNodeRef.init(pfx, childKey)
-      db.layersPutKey(
-        (hike.root, br.vid), newExt,
-        rlpEncodeExt(pfx, childKey).digestTo(HashKey))
+      let newExt = BoundaryNodeRef.init(pfx, childKey, unprovenCollapsep = true)
+      db.layersPutVtx((hike.root, br.vid), newExt)
+      db.unprovenCollapses.add((hike.root, br.vid))
       db.layersResVtx((hike.root, vid))
       return ok(VertexRef(newExt))
 
@@ -130,10 +129,18 @@ proc deleteImpl(
           ExtBranchRef.init(pfx & nxt.pfx, nxt.startVid, nxt.used)
         of BoundaryNode:
           let nxt = BoundaryNodeRef(nxt)
-          BoundaryNodeRef.init(pfx & nxt.pfx, nxt.childKey)
+          if nxt.unprovenCollapse:
+            db.unprovenCollapses.add((hike.root, br.vid))
+          BoundaryNodeRef.init(pfx & nxt.pfx, nxt.childKey, nxt.unprovenCollapse)
 
     # Put the new vertex at the id of the obsolete branch
     db.layersPutVtx((hike.root, br.vid), vtx)
+
+    if db.collectWitness:
+      # The witness needs the pre-state node of the vertex the branch collapsed
+      # onto, unless a later insert in the block restores the branch. Record
+      # where the branch was, and its prefix length, to check that at the end.
+      db.collapsedSiblings.add(((hike.root, vid), br.vid, uint8(brVtx.pfx.len)))
 
     ok(vtx)
   else:
@@ -174,24 +181,6 @@ proc deleteAccount*(
       let sibAccPath =
         Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(AccLeafRef(otherVtx).pfx)))
       db.layersPutAccLeaf(sibAccPath, AccLeafRef(otherVtx))
-      if db.collectWitness:
-        db.collapsedSiblings.add((sibAccPath, Opt.none(Hash32), VertexID(0), VertexID(0)))
-    elif db.collectWitness and otherVtx.vType in Branches:
-      # Branch collapse with non-leaf sibling: the witness must include the
-      # sibling branch node so stateless execution can read it. This builds a
-      # proof path for it: root prefix + extBranch.pfx (rest is arbitrary).
-      let
-        accNibbles = NibblesBuf.fromBytes(accPath.data)
-        # position of branch vid in the nibble path
-        branchDepth =
-          64 - (
-            BranchRef(accHike.legs[^2].wp.vtx).pfx.len + 1 +
-            AccLeafRef(accHike.legs[^1].wp.vtx).pfx.len
-          )
-        sibAccPath = Hash32(
-          getBytes(accNibbles.slice(0, branchDepth) & ExtBranchRef(otherVtx).pfx)
-        )
-      db.collapsedSiblings.add((sibAccPath, Opt.none(Hash32), VertexID(0), VertexID(0)))
 
   ok()
 
@@ -254,27 +243,6 @@ proc deleteSlot*(
       # collapsed trie keeps probing the levels the deleted leaves occupied
       if 0 < hint:
         hint = min(hint, uint8(min(sibLevel, STATIC_VID_LEVELS) + 1))
-      if db.collectWitness:
-        # Record the collapsed branch vid so we can check after all transactions
-        # whether the collapse was re-expanded by a later insertion.
-        db.collapsedSiblings.add((
-            accPath, Opt.some(sibStoPath),
-            stoID.vid,
-            stoHike.legs[^2].wp.vid))
-    elif db.collectWitness and otherVtx.vType in Branches:
-      # Branch collapse with non-leaf sibling: the witness must include the
-      # sibling branch node so stateless execution can read it. This builds a
-      # proof path for it: root prefix + extBranch.pfx (rest is arbitrary).
-      let
-        branchDepth =
-          64 - (
-            BranchRef(stoHike.legs[^2].wp.vtx).pfx.len + 1 +
-            StoLeafRef(stoHike.legs[^1].wp.vtx).pfx.len
-          )
-        sibStoPath = Hash32(
-          getBytes(stoNibbles.slice(0, branchDepth) & ExtBranchRef(otherVtx).pfx)
-        )
-      db.collapsedSiblings.add((accPath, Opt.some(sibStoPath), VertexID(0), VertexID(0)))
 
   # If there was only one item (that got deleted), update the account as well
   if stoHike.legs.len == 1:
@@ -323,6 +291,29 @@ proc clearStorage*(
   db.layersPutAccLeaf(accPath, leaf)
 
   ok()
+
+proc getCollapsedSiblings*(db: AristoTxRef): seq[RootedVertexID] =
+  ## Collapsed siblings for witness generation. Persist runs per transaction,
+  ## so a later insert in the block may restore a collapsed branch. The spec
+  ## applies the block's writes at once and only needs the sibling if the
+  ## final trie still lacks that branch.
+  var res: seq[RootedVertexID]
+  for (sibling, brVid, brPfxLen) in db.collapsedSiblings:
+    let vtx = db.getVtx((sibling.root, brVid))
+    if vtx.isValid and vtx.vType in Branches and vtx.pfx.len == int(brPfxLen):
+      continue # restored by a later insert
+    res.add(sibling)
+  res
+
+proc hasUnprovenCollapse*(db: AristoTxRef): bool =
+  ## Stateless only: true if a branch that collapsed onto a child absent from
+  ## the witness is still collapsed. The witness then lacks that child.
+  for rvid in db.unprovenCollapses:
+    let vtx = db.getVtx(rvid)
+    if vtx.isValid and vtx.vType == BoundaryNode and
+        BoundaryNodeRef(vtx).unprovenCollapse:
+      return true
+  false
 
 # ------------------------------------------------------------------------------
 # End

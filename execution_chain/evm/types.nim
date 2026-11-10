@@ -16,7 +16,8 @@ import
   ./transient_storage,
   ../db/ledger,
   ../common/[common, evmforks],
-  ../block_access_list/bal_tracker
+  ../block_access_list/bal_tracker,
+  ../concurrency/maybe_owned
 
 from ../common/hardforks import HardFork
 
@@ -44,7 +45,7 @@ type
     tx*               : ptr Transaction
 
   BaseVMState* = ref object of RootObj
-    com*              : CommonRef
+    comRef            : MaybeOwned[CommonRef]
     ledger*           : LedgerRef
     parent*           : Header
     blockCtx*         : BlockContext
@@ -88,6 +89,7 @@ type
     continuation*:          proc(c: Computation): EvmResultVoid {.gcsafe, raises: [].}
     keepStack*:             bool
     finalStack*:            seq[UInt256]
+    finalMemory*:           seq[byte]
     balTrackerEnabled*:     bool
 
   StatusCode* {.pure.} = enum
@@ -134,7 +136,8 @@ type
     codeAddress*:      Address
     delegateTo*:       Address
     value*:            UInt256
-    data*:             seq[byte]
+    dataPtr:           ptr UncheckedArray[byte]
+    dataLen:           int
     flags*:            set[MsgFlags]
 
   TracerFlags* {.pure.} = enum
@@ -148,6 +151,29 @@ type
 
   TracerRef* = ref object of RootObj
     flags*: set[TracerFlags]
+
+template com*(vmState: BaseVMState): CommonRef =
+  vmState.comRef.get()
+
+func `com=`*(vmState: BaseVMState, com: CommonRef) =
+  vmState.comRef.own(com)
+
+func borrowCom*(vmState: BaseVMState, com: CommonRef) =
+  vmState.comRef.borrow(com)
+
+template data*(msg: Message): openArray[byte] =
+  msg.dataPtr.toOpenArray(0, msg.dataLen - 1)
+
+template borrowData*(msg: Message, bytes: openArray[byte]) =
+  ## Views `bytes` without copying, so `bytes` must outlive every read of `msg.data`.
+  msg.dataLen = bytes.len
+  msg.dataPtr =
+    if msg.dataLen > 0: cast[ptr UncheckedArray[byte]](unsafeAddr bytes[0])
+    else: nil
+
+template clearData*(msg: Message) =
+  msg.dataPtr = nil
+  msg.dataLen = 0
 
 # Transaction level
 # This is called once fo each transaction

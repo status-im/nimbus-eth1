@@ -152,6 +152,14 @@ template fetchCodes*(
       bodyRc = typeof(bodyRc).err(ENoDataAvailable)
       break body                                  # return err()
 
+    if nReqCodes < nRespCodes:
+      # Bogus peer returning additional rubbish
+      buddy.cdeFetchRegisterError(forceZombie=true)
+      trace recvInfo & " more codes than requested", peer, first, nReqCodes,
+        nRespCodes, ela, syncState, nErrors=buddy.nErrors.fetch.cde
+      bodyRc = typeof(bodyRc).err(EValidationError)
+      break body                                  # return err()
+
     # Ban an overly slow peer for a while when observed consecutively.
     if fetchCodesSnapTimeout < elapsed:
       buddy.cdeFetchRegisterError(slowPeer=true)

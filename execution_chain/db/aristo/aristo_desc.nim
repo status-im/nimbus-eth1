@@ -80,21 +80,23 @@ type
       ## generation.
 
     collapsedSiblings*: seq[
-      tuple[
-        sibAccPath: Hash32, sibStoPath: Opt[Hash32], stoRoot: VertexID, brVid: VertexID
-      ]
-    ]
-      ## Records collapsed siblings for witness generation. For each entry:
-      ## `sibAccPath` is the account path; `sibStoPath` is the sibling storage
-      ## path (none for account-trie collapses). When `brVid` is valid, the
-      ## entry is a deferred StoLeaf collapse. On witness building the
-      ## `getCollapsedSiblings` checks the vertex type at (stoRoot, brVid)
-      ## in the final trie before including it.
+      tuple[sibling: RootedVertexID, brVid: VertexID, brPfxLen: uint8]]
+      ## Vertices that branches collapsed onto during deletion, whose pre-state
+      ## nodes the witness needs. `getCollapsedSiblings` drops an entry if
+      ## (sibling.root, brVid) holds a branch with prefix length `brPfxLen`
+      ## again in the final trie, i.e. a later insert restored it.
       ## Only populated when collectWitness is true.
+
+    unprovenCollapses*: seq[RootedVertexID]
+      ## Stateless only. Where a `BoundaryNodeRef` with `unprovenCollapse` set
+      ## was put. Entries may be stale; `getVtx` tells if one is still there.
 
     snapshot*: Snapshot
       ## Optional snapshot containing the cumulative changes from ancestors and
       ## the current frame
+
+    detached*: bool
+      ## The snapshot is the frame's only state, ancestors are not read
 
     level*: int
       ## Ancestry level of frame, increases with age but otherwise meaningless -
@@ -249,6 +251,9 @@ iterator rstack*(tx: AristoTxRef, stopAtSnapshot = false): AristoTxRef =
   var tx = tx
 
   while tx != nil:
+    # A disposed frame has no state left to read through
+    doAssert not stopAtSnapshot or tx.level != disposedLevel,
+      "read through a disposed frame"
     yield tx
 
     if stopAtSnapshot and tx.snapshot.level.isSome():

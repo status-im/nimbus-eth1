@@ -20,8 +20,8 @@ import
   ../../evm/types,
   ../../evm/precompiles,
   ../../evm/interpreter/gas_costs,
-  ../../block_access_list/[bal_builder, bal_overlay, bal_tracker, bal_utils],
-  ../../concurrency/[shared_types, utils],
+  ../../block_access_list/[bal_builder, bal_overlay, bal_tracker],
+  ../../concurrency/shared_types,
   ../eip6110,
   ../eip7691,
   ./process_transaction,
@@ -102,18 +102,15 @@ proc recoverAndPrefetchTask*(
   # Create the ledger without triggering a ref count increment on the txFrame
   # which is owned by the main/parent thread.
   let ledger = LedgerRef()
-  ledger.txFrame.borrowRef(ctx[].txFrame)
-  defer:
-    ledger.txFrame.unborrowRef()
+  ledger.borrowTxFrame(ctx[].txFrame)
   discard ledger.beginSavePoint()
 
   # Create the vmState without triggering a ref count increment on the common object
   # which is owned by the main/parent thread.
   let vmState = BaseVMState()
-  vmState.com.borrowRef(ctx[].com)
+  vmState.borrowCom(ctx[].com)
   defer:
     vmState.dispose()
-    vmState.com.unborrowRef()
   vmState.ledger = ledger
   assign(vmState.parent, ctx[].parent)
   assign(vmState.blockCtx, ctx[].blockCtx)
@@ -285,37 +282,6 @@ template withBalPrefetchParallel*(
     for f in futs.mitems():
       discard sync(f)
 
-proc applyBlockAccessListState(ledger: LedgerRef, bal: BlockAccessList, txCount: int) =
-  let boundary = txCount + 1
-
-  for accChanges in bal:
-    let address = accChanges.address
-
-    var balanceZeroed = false
-    let balancePos = accChanges.balanceChanges.findLastWriteBefore(boundary)
-    if balancePos >= 0:
-      let postBalance = accChanges.balanceChanges[balancePos].postBalance
-      ledger.setBalance(address, postBalance)
-      balanceZeroed = postBalance.isZero
-
-    let noncePos = accChanges.nonceChanges.findLastWriteBefore(boundary)
-    if noncePos >= 0:
-      ledger.setNonce(address, accChanges.nonceChanges[noncePos].newNonce)
-
-    let codePos = accChanges.codeChanges.findLastWriteBefore(boundary)
-    if codePos >= 0:
-      ledger.setCode(address, accChanges.codeChanges[codePos].newCode)
-
-    for slotChanges in accChanges.storageChanges:
-      let changePos = slotChanges.changes.findLastWriteBefore(boundary)
-      if changePos >= 0:
-        ledger.setStorage(
-          address, slotChanges.slot, slotChanges.changes[changePos].newValue
-        )
-
-    if balanceZeroed:
-      ledger.addBalance(address, 0.u256, checkEmptyAccount = true)
-
 proc packLogs(logs: openArray[Log]): SharedBytes =
   var size = sizeof(uint32)
   for log in logs:
@@ -389,9 +355,7 @@ proc processTxTask(
   # Create the ledger without triggering a ref count increment on the txFrame
   # which is owned by the main/parent thread.
   let ledger = LedgerRef()
-  ledger.txFrame.borrowRef(ctx[].txFrame)
-  defer:
-    ledger.txFrame.unborrowRef()
+  ledger.borrowTxFrame(ctx[].txFrame)
   ledger.balOverlay =
     Opt.some(BlockAccessListOverlay.init(ctx[].balPtr, e[].txIndex + 1))
   discard ledger.beginSavePoint()
@@ -399,10 +363,9 @@ proc processTxTask(
   # Create the vmState without triggering a ref count increment on the common object
   # which is owned by the main/parent thread.
   let vmState = BaseVMState()
-  vmState.com.borrowRef(ctx[].com)
+  vmState.borrowCom(ctx[].com)
   defer:
     vmState.dispose()
-    vmState.com.unborrowRef()
   vmState.ledger = ledger
   assign(vmState.parent, ctx[].parent)
   assign(vmState.blockCtx, ctx[].blockCtx)
@@ -489,6 +452,8 @@ proc processTransactionsParallel*(
       entries[i].logs.dispose()
       entries[i].error.dispose()
 
+  vmState.ledger.applyBlockAccessList(balRef[], n)
+
   let depositContractAddress = vmState.com.depositContractAddress
 
   # Process each result as soon as its task completes so the main thread makes
@@ -544,5 +509,4 @@ proc processTransactionsParallel*(
       vmState.receipts[i] =
         vmState.makeReceipt(transactions[i].txType)
 
-  applyBlockAccessListState(vmState.ledger, balRef[], n)
   ok()

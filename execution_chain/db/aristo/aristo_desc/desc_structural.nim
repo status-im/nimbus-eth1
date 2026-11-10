@@ -64,10 +64,14 @@ type
     ##      where the witness ends at a known hash but the subtrie is absent.
     ##   2. Branch collapse during delete: when a branch collapses to a single
     ##      nil vtx boundary child, the branch is replaced by a BoundaryNode
-    ##      (prefix + boundary hash).
+    ##      (prefix + boundary hash) with `unprovenCollapse` set.
     ## Should never be created or used during full-node execution.
     pfx*: NibblesBuf
     childKey*: HashKey
+    unprovenCollapse*: bool
+      ## Replaces a collapsed branch whose only remaining child, at the last
+      ## nibble of `pfx`, is absent from the witness. The witness must include
+      ## that child, unless a later insert restores the branch.
 
   LeafRef* = ref object of VertexRef
     pfx*: NibblesBuf
@@ -86,14 +90,12 @@ type
   ## written from background pre-fetch threads under refc (which uses thread-local heaps).
   
   CachedAccLeaf* = object
-    case empty*: bool
-    of true:
-      discard
-    of false:
-      account*: AristoAccount
-      stoID*: StorageID
-      stoHint*: uint8
-      pfxLen*: uint8
+    account*: AristoAccount
+    stoVid: VertexID
+    stoValid: bool
+    stoHint*: uint8
+    pfxLen*: uint8
+    empty*: bool
 
   CachedStoLeaf* = object
     stoData*: UInt256
@@ -122,6 +124,9 @@ type
       ## Peek into, but don't update cache - useful on work loads that are
       ## unfriendly to caches
 
+static:
+  doAssert sizeof(CachedAccLeaf) == 88
+
 const
   Leaves* = {VertexType.AccLeaf, VertexType.StoLeaf}
   Branches* = {VertexType.Branch, VertexType.ExtBranch}
@@ -148,14 +153,22 @@ template init*(
 ): ExtBranchRef =
   ExtBranchRef(vType: ExtBranch, pfx: pfxp, startVid: startVidp, used: usedp)
 
-template init*(_: type BoundaryNodeRef, pfxp: NibblesBuf, childKeyp: HashKey): BoundaryNodeRef =
-  BoundaryNodeRef(vType: BoundaryNode, pfx: pfxp, childKey: childKeyp)
+template init*(
+    _: type BoundaryNodeRef, pfxp: NibblesBuf, childKeyp: HashKey,
+    unprovenCollapsep = false,
+): BoundaryNodeRef =
+  BoundaryNodeRef(
+    vType: BoundaryNode, pfx: pfxp, childKey: childKeyp, unprovenCollapse: unprovenCollapsep)
 
 template init*(
     T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID,
     stoHintp: uint8 = 0): T =
-  T(empty: false, account: accountp, stoID: stoIDp, stoHint: stoHintp,
-    pfxLen: uint8(pfxp.len))
+  let stoID = stoIDp
+  T(account: accountp, stoVid: stoID.vid, stoValid: stoID.isValid, stoHint: stoHintp,
+    pfxLen: uint8(pfxp.len), empty: false)
+
+template stoID*(c: CachedAccLeaf): StorageID =
+  (isValid: c.stoValid, vid: c.stoVid)
 
 template init*(
     T: type CachedStoLeaf, pfxp: NibblesBuf, stoDatap: UInt256): T =
@@ -326,7 +339,7 @@ func dup*(vtx: VertexRef): VertexRef =
       ExtBranchRef.init(vtx.pfx, vtx.startVid, vtx.used)
     of BoundaryNode:
       let vtx = BoundaryNodeRef(vtx)
-      BoundaryNodeRef.init(vtx.pfx, vtx.childKey)
+      BoundaryNodeRef.init(vtx.pfx, vtx.childKey, vtx.unprovenCollapse)
 
 template dup*(vtx: StoLeafRef): StoLeafRef =
   StoLeafRef(VertexRef(vtx).dup())

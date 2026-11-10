@@ -1,0 +1,119 @@
+// nimbus_verified_proxy
+// Copyright (c) 2026 Status Research & Development GmbH
+// Licensed and distributed under either of
+//   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+//   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+// at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+package verifproxy_test
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/status-im/nimbus-eth1/verified_proxy/library/bindings/go/verifproxy"
+	"github.com/stretchr/testify/require"
+)
+
+const testConfig = `{
+	"eth2Network":      "mainnet",
+	"trustedBlockRoot": "0x9bcb90ec3a294591b77dd2a58e973578715cdc0e6eeeb286bc06dd120057f18b",
+	"executionApiUrls": "http://127.0.0.1:19999",
+	"beaconApiUrls":    "http://127.0.0.1:19998",
+	"logLevel":         "FATAL",
+	"logStdout":        "None",
+	"syncHeaderStore":  true,
+	"freezeAtSlot":     14018020
+}`
+
+const (
+	dataDir     = "../../../../tests/data"
+	callTimeout = 30 * time.Second
+)
+
+func readData(name string) (json.RawMessage, error) {
+	data, err := os.ReadFile(filepath.Join(dataDir, name))
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(data), nil
+}
+
+const optimisticBlockHash = "0x5b34070154b4331237ca3975de14df77359f7269a65b95d01b0e81c626e3151d"
+
+func execTransport(_ string, method, params string) (json.RawMessage, error) {
+	switch method {
+	case "eth_getBlockByNumber", "eth_getBlockByHash":
+		file := "block_0x17a2d23.json"
+		if strings.Contains(params, "0x17a2d65") || strings.Contains(params, optimisticBlockHash) {
+			file = "block_0x17a2d65.json"
+		}
+		data, err := readData(file)
+		if err != nil {
+			return nil, err
+		}
+		return json.RawMessage(`{"jsonrpc":"2.0","id":1,"result":` + string(data) + `}`), nil
+	}
+	return nil, fmt.Errorf("exec: no mock for %s", method)
+}
+
+func beaconTransport(_ string, endpoint, _ string) (json.RawMessage, error) {
+	files := map[string]string{
+		"getLightClientBootstrap":        "lc_bootstrap.json",
+		"getLightClientUpdatesByRange":   "lc_updates.json",
+		"getLightClientOptimisticUpdate": "lc_optimistic.json",
+		"getLightClientFinalityUpdate":   "lc_finality.json",
+	}
+	if f, ok := files[endpoint]; ok {
+		return readData(f)
+	}
+	return nil, fmt.Errorf("beacon: no mock for %s", endpoint)
+}
+
+func TestVerifProxy(t *testing.T) {
+	ctx, err := verifproxy.Start(testConfig, execTransport, beaconTransport)
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+	defer ctx.Stop()
+
+	_, err = ctx.CallRpc("eth_blockNumber", "[]", callTimeout)
+	require.Error(t, err)
+
+	syncing, err := ctx.CallRpc("eth_syncing", "[]", callTimeout)
+	require.NoError(t, err)
+	require.NotEmpty(t, syncing)
+
+	interval, err := ctx.SyncInterval(callTimeout)
+	require.NoError(t, err)
+	require.Equal(t, 12*time.Second, interval)
+	require.NoError(t, ctx.Sync(callTimeout))
+
+	_, err = ctx.OpSyncInterval(callTimeout)
+	require.Error(t, err)
+	require.Error(t, ctx.OpSync(callTimeout))
+
+	blockNumber, err := ctx.CallRpc("eth_blockNumber", "[]", callTimeout)
+	require.NoError(t, err)
+	require.NotEmpty(t, blockNumber)
+
+	syncing, err = ctx.CallRpc("eth_syncing", "[]", callTimeout)
+	require.NoError(t, err)
+	require.NotEmpty(t, syncing)
+
+	for _, method := range []string{"eth_gasPrice", "eth_maxPriorityFeePerGas"} {
+		result, err := ctx.CallRpc(method, "[]", callTimeout)
+		require.NoError(t, err, method)
+		require.NotEmpty(t, result, method)
+	}
+
+	for _, tag := range []string{"latest", "finalized"} {
+		result, err := ctx.CallRpc("eth_getBlockByNumber", `["`+tag+`", false]`, callTimeout)
+		require.NoError(t, err, tag)
+		require.NotEmpty(t, result, tag)
+	}
+}

@@ -17,53 +17,53 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos, stew/interval_set],
-  ../../[helpers, cache_db, delete_account, mpt_build, worker_desc],
+  std/sequtils,
+  pkg/[chronicles, chronos, metrics, stew/interval_set],
+  ../../[helpers, cache_db, mpt_build, worker_desc],
+  ../delete_account,
   ./storage_fetch
 
 const
   emptyProof = seq[ProofNode].default
 
+declareGauge nec_snap_storage_coverage, "" &
+  "Factor of accumulated storage slots ranges"
+
+proc storageDownloadMetricsUpdate*(ctx: SnapCtxRef, info: static[string])
+
 # ------------------------------------------------------------------------------
 # Private helpers for `downloadImpl()`
 # ------------------------------------------------------------------------------
 
-func isFullRange(itrs: ItemKeyRangeSet): bool =
-  # Defensive encoding of a full range check. Solely testing `total; == 0`
-  # leaves room for the case that the range is empty which is an illegal
-  # situation but it can handled with savely.
-  itrs.total == 0 and                               # => 0 or 2^256
-  itrs.chunks == 1                                  # => one intv => full MPT
-
-proc getQueryList(
+proc getStoAccsAndRoots(
     buddy: SnapPeerRef;
-    stoQueue: openArray[WalkStoMissingIntvData];
+    stoStatQ: openArray[WalkStoMissingIntvData];
     info: static[string];                           # Log message prefix
       ): Result[(seq[ItemKey],seq[StoreRoot]),ErrorType] =
-  ## For the argument `stoQueue[]`, collect
-  ## * storage data paths (for query), and
+  ## For the argument `stoStatQ[]`, collect
+  ## * account path keys (for storage query), and
   ## * sub-MPT storage roots for verification.
   ##
   let
     adb = buddy.ctx.pool.cacheDB
     peer {.inject,used.} = $buddy.peer              # logging only
   var
-    accPaths = newSeqOfCap[ItemKey](stoQueue.len)
-    stoRoots = newSeqOfCap[StoreRoot](stoQueue.len)
-  for w in stoQueue:
+    accKeys = newSeqOfCap[ItemKey](stoStatQ.len)
+    stoRoots = newSeqOfCap[StoreRoot](stoStatQ.len)
+  for w in stoStatQ:
     let acc = adb.getFlatAcc(w.accPath, info).valueOr:
       error info & ": Missing storage account", peer,
         accPath=w.accPath.toStr, syncState=($buddy.syncState)
       return err(ECacheError)                       # cannot do much, here
-    accPaths.add w.accPath.to(ItemKey)              # FIXME use `Hash32` instead
+    accKeys.add w.accPath.to(ItemKey)               # FIXME use `Hash32` instead
     stoRoots.add StoreRoot(acc.account.storageRoot)
 
-  ok((accPaths, stoRoots))
+  ok((accKeys, stoRoots))
 
 proc storeValidatedSlots(
     buddy: SnapPeerRef;                             # Snap peer
     stoRoots: openArray[StoreRoot];                 # storage roots
-    stoQ: var seq[WalkStoMissingIntvData];          # to be modified
+    stoStatQ: var seq[WalkStoMissingIntvData];      # to be modified
     qStart: int;                                    # first root/queue item
     data: StorageRangesData;                        # fetch result
     ivReq: ItemKeyRange;                            # applies to last item
@@ -80,7 +80,7 @@ proc storeValidatedSlots(
     let
       slots = data.slots[n]
       stoRoot = stoRoots[qStart + n]
-      accPath = stoQ[qStart + n].accPath
+      accPath = stoStatQ[qStart + n].accPath
 
     # Validate full sub-MPT.
     stoRoot.validate(ivReq.minPt, slots, emptyProof).isOkOr:
@@ -97,30 +97,42 @@ proc storeValidatedSlots(
         return err(ECacheError)
 
     # Mark the current sub-MPT complete in the local batch/cache.
-    stoQ[qStart + n].data.ranges.clear()            # set MPT complete
+    stoStatQ[qStart + n].data.ranges.clear()        # set MPT complete
 
-  # Validate single last partial sub-MPT data with non-empty proof. This
-  # entry `data.slot` is separate from the list `data.slots[]`.
+  # Validate single last partial sub-MPT data with non-empty proof. The
+  # entry `data.partial[]` is separate from the list `data.slots[[]]`.
   if 0 < data.proof.len:
+    #
+    # If there is a `proof[]` list, it was either because there was a
+    # partial sub-MPT request in which case
+    # * stoRoots.len == stoStatQ.len == 1
+    # * data.slots.len == 0,
+    #
+    # or the last entry of a fetch response was delivered as a partial result
+    # in which case
+    # * data.slots.len + 1 <= stoRoots.len == stoStatQ.len.
+    #
+    # Note that the latter case includes the former.
     let
       topInx = data.slots.len
       stoRoot = stoRoots[qStart + topInx]
+      accPath = stoStatQ[qStart + topInx].accPath
 
     # Validate slots, some partial sub-MPT for this storage sub-MPT
     let mpt = stoRoot.validate(ivReq.minPt, data.partial, data.proof).valueOr:
       buddy.ctrl.zombie = true                      # peer not useful
       debug info & ": Storage partial sub-MPT validation failed", peer,
-        stoRoot=stoRoot.toStr, nPartial=data.partial.len, nProof=data.proof.len,
-        syncState=($buddy.syncState)
+        accPath=accPath.toStr, stoRoot=stoRoot.toStr, nPartial=data.partial.len,
+        nProof=data.proof.len, syncState=($buddy.syncState)
       return err(EValidationError)
 
     # Store probably partial sub-MPT
-    let accPath = stoQ[qStart + topInx].accPath
     for w in data.partial:
       adb.putFlatSlot(accPath, w.slotHash, w.slotData, info).isOkOr:
         return err(ECacheError)
 
-    let rngRef = stoQ[qStart + topInx].data.ranges  # `stoQ[]` is var parameter
+    # Modify `stoStatQ[]` ranges
+    let rngRef = stoStatQ[qStart + topInx].data.ranges
     if mpt.rightMost():                             # no more right leafs
       rngRef.clear()                                # set MPT complete
     else:
@@ -162,6 +174,12 @@ proc fetchAndLockStoList(
       error info & ": Error walking missing storage list", `error`=w.error
       return err(ECacheError)
 
+    # Check whether the storage sub-MPT for this account was cached at a
+    # previous session and the corresponding data record for this account
+    # has not been updated, yet.
+    if buddy.ctx.accUnproc.covered w.accPath.to(ItemKey):
+      continue                                      # come back later
+
     if w.data.ranges.isFullRange():
       stoFullQ.add w
       if fetchStorageBatchMax <= stoFullQ.len:      # add item unless seq-max
@@ -195,7 +213,7 @@ proc fetchAndLockStoList(
 
 proc saveStoUpdates(
     buddy: SnapPeerRef;
-    stoQueue: openArray[WalkStoMissingIntvData];
+    stoStatQ: openArray[WalkStoMissingIntvData];
     info: static[string];                           # Log message prefix
       ): Result[int,ErrorType] =
   ## Post process updated storage sub-MPT. The corresponding accounting data
@@ -203,11 +221,10 @@ proc saveStoUpdates(
   ##
   let adb = buddy.ctx.pool.cacheDB
   var (nPartial, nErrors) = (0,0)
-  for w in stoQueue:
+  for w in stoStatQ:
     if 0 < w.data.ranges.chunks():
       # Save back incomplete sub-MPT. Store updated interval of missing slots.
       # The corresounding accounts record needs not to be updated.
-      # The `dirtyStorage` flag just remains `true`.
       nPartial.inc
       adb.putStoMissingIntv(w.accPath, w.data, info).isOkOr:
         nErrors.inc                                 # cannot do much, here
@@ -218,7 +235,6 @@ proc saveStoUpdates(
       var data = adb.getFlatAcc(w.accPath, info).valueOr:
         nErrors.inc                                 # cannot do much, here
         continue
-      data.dirtyStorage = false
       adb.putFlatAcc(w.accPath, data, info).isOkOr: # save update acc record
         nErrors.inc                                 # cannot do much, here
 
@@ -238,7 +254,7 @@ template downloadImpl(
     buddy: SnapPeerRef;                             # Snap peer
     stateRoot: StateRoot;
     number: BlockNumber;                            # for logging only
-    stoQ: var seq[WalkStoMissingIntvData];          # to be modified
+    stoStatQ: var seq[WalkStoMissingIntvData];      # to be modified
     ivReq: ItemKeyRange;                            # Interval to fetch
     info: static[string];                           # Log message prefix
       ): auto =
@@ -247,19 +263,19 @@ template downloadImpl(
   var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
     let
-      (accPaths, stoRoots) = buddy.getQueryList(stoQ, info).valueOr:
+      (accKeys, stoRoots) = buddy.getStoAccsAndRoots(stoStatQ, info).valueOr:
         bodyRc = typeof(bodyRc).err(error)
         break body
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = stateRoot.toStr        # logging only
 
-    # Fetch storage slots from list `accPaths[]`
+    # Fetch storage slots from list `accKeys[]`
     var start = 0
-    while start < accPaths.len:
-      let accLeft: seq[ItemKey] = accPaths[start .. ^1]
+    while start < accKeys.len:
+      let accKeysLeft = accKeys[start .. ^1]
 
       # Fetch from network
-      let data = buddy.fetchStorage(stateRoot, accLeft, ivReq).valueOr:
+      let data = buddy.fetchStorage(stateRoot, accKeysLeft, ivReq).valueOr:
         if 0 < start:
           break
         bodyRc = typeof(bodyRc).err(error)
@@ -267,7 +283,7 @@ template downloadImpl(
 
       # Store and validate data
       buddy.storeValidatedSlots(
-           stoRoots, stoQ, start, data, ivReq, info).isOkOr:
+           stoRoots, stoStatQ, start, data, ivReq, info).isOkOr:
         bodyRc = typeof(bodyRc).err(error)
         break body                                  # exit => error
 
@@ -299,12 +315,12 @@ template queueAndDownload(
 
     # Collect some missing storage intervals from cache. If the function
     # `fetchAndLockStoList()` succeeds, it will return a non-empty list.
-    var stoQ = buddy.fetchAndLockStoList(info).valueOr:
+    var stoStatQ = buddy.fetchAndLockStoList(info).valueOr:
       bodyRc = typeof(bodyRc).err(error)            # maybe completed, already
       break body
 
     let
-      reqRef = stoQ[0].data.ranges
+      reqRef = stoStatQ[0].data.ranges
       ivReq =
         # If the first entry is a fully missing sub-MPT, then all queue enties
         # are fully missing sub-MPTs (no partial storage sub-MPT.)
@@ -314,28 +330,30 @@ template queueAndDownload(
           reqRef.ge().valueOr:                      # download partial sub-MPT
             raiseAssert "Empty range unexpected, peer=" & peer &
               ", root=" & root &
-              ", number=" & $number
+              ", pivot=" & $number
 
     # Download a list of full sub-MPTs, or a single one with a sub-range.
     # The `downloadImpl()` directive below will store any success in the
-    # `stoQ[]` list.
-    buddy.downloadImpl(stateRoot, number, stoQ, ivReq, info).isOkOr:
-      buddy.saveStoUpdates(stoQ, info).isOkOr:      # restore by `stoQ[]`
+    # `stoStatQ[]` list.
+    buddy.downloadImpl(stateRoot, number, stoStatQ, ivReq, info).isOkOr:
+      buddy.saveStoUpdates(stoStatQ, info).isOkOr:  # restore by `stoStatQ[]`
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body                                  # oops, serious error
       bodyRc = typeof(bodyRc).err(error)
       break body
 
     # Save rest if there is any (i.e. partially completes storage tries)
-    let nPartial {.inject,used.} = buddy.saveStoUpdates(stoQ, info).valueOr:
-      trace info & ": Storage processing failed", peer, root, number,
+    let nPartial {.inject,used.} = buddy.saveStoUpdates(stoStatQ, info).valueOr:
+      trace info & ": Storage processing failed", peer, root, pivot=number,
         syncState=($buddy.syncState), `error`=bodyRc.error
       bodyRc = typeof(bodyRc).err(error)
       break body
 
-    chronicles.info info & ": Storage sub-MPTs saved", peer, root,
-      number, nComplete=(stoQ.len - nPartial), nPartial,
+    debug info & ": Storage sub-MPTs saved", peer, root,
+      pivot=number, nComplete=(stoStatQ.len - nPartial), nPartial,
       syncState=($buddy.syncState)
+
+    ctx.storageDownloadMetricsUpdate(info)          # update metrics
 
     bodyRc = typeof(bodyRc).ok()
     # End `block body`
@@ -346,6 +364,23 @@ template queueAndDownload(
 # Public function
 # ------------------------------------------------------------------------------
 
+proc storageDownloadMetricsReset*(ctx: SnapCtxRef) =
+  metrics.set(nec_snap_storage_coverage, 0)
+
+proc storageDownloadMetricsUpdate*(ctx: SnapCtxRef, info: static[string]) =
+  var
+    q: seq[float]
+    n: int
+  for w in ctx.pool.cacheDB.walkStoMissingIntv():
+    if w.data.ranges.isFullRange:
+      n.inc
+    else:
+      q.add w.data.ranges.totalRatio
+  let
+    d = n + q.len
+    r = if 0 < d: (n.float + q.foldl(a+b, 0.0)) / d.float else: 0.0
+  metrics.set(nec_snap_storage_coverage, 1.0 - r)
+
 template storageDownloadCommit*(
     ctx: SnapCtxRef;
     timer: TimerDataRef;
@@ -355,8 +390,9 @@ template storageDownloadCommit*(
   ##
   ## Get ready for state forward procedure using BAL.
   ##
-  ## In particular, for partial storage sub-MPTs and lock records, its
-  ## correspnding accounts and contract code are deleted.
+  ## In particular, for partial storage sub-MPTs the account must be re-fetched
+  ## so that the storage root can be updated. This is needed for completing the
+  ## storage tree from the updated state.
   ##
   var bodyRc = Result[void,ErrorType].err(EGeneric)
   block body:
@@ -364,32 +400,40 @@ template storageDownloadCommit*(
       error info & ": Cannot commit unsynced accounts ranges"
       bodyRc = typeof(bodyRc).err(ENoDataAvailable)
       break body
+    if ctx.accUnproc.borrowed.chunks != 0:          # clean accounts registry?
+      error info & ": Cannot update dirty unprocessed ranges",
+        nBorrowedChunks=ctx.accUnproc.borrowed.chunks
+      bodyRc = typeof(bodyRc).err(ENoDataAvailable)
+      break body                                    # failed
 
     let adb = ctx.pool.cacheDB
 
-    # Collect paths for partial sub-MPTs.
-    var accPaths: seq[Hash32]
-    for w in adb.walkStoMissingIntv:
+    # Process paths for partial sub-MPTs.
+    var nPartMpt {.inject,used.} = 0
+    for w in adb.walkStoMissingIntv():
       if 0 < w.error.len:
         error info & ": Error walking missing storage list", `error`=w.error
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body
-      accPaths.add w.accPath
+      # Mark account deleted while leaving the record in the database.
+      discard ctx.accUnproc.unprocessed.merge(w.accPath.to(ItemKey))
+      nPartMpt.inc
       timer.yieldThread()
 
-    let nPartMpt {.inject.} = accPaths.len
-    for key in adb.walkStoLock:
-      accPaths.add key
-
-    # Delete all accounts for partial sub-MPTs and obsolete storage locks.
-    for accPath in accPaths:
-      ctx.deleteAccount(accPath, timer, info).isOkOr:
+    # Delete all accounts for obsolete storage locks which should
+    # never happen in the first place.
+    let lckPaths = adb.walkStoLock.toSeq()
+    for accPath in lckPaths:
+      ctx.deleteAccount(accPath, info).isOkOr:
         bodyRc = typeof(bodyRc).err(ECacheError)
         break body
 
-    if 0 < accPaths.len:
-      chronicles.info info & ": Cleared partial storage sub-MPTs",
-        nPartMpt, nStoLock=(accPaths.len-nPartMpt)
+    if 0 < lckPaths.len:
+      warn info & ": Cleared locked storage accounts",
+        nPartMpt, nStoLock=lckPaths.len
+    elif 0 < nPartMpt:
+      debug info & ": Updated storage accounts for re-fetch",
+        nPartMpt, nStoLock=lckPaths.len
 
     bodyRc = typeof(bodyRc).ok()
     # End `block body`

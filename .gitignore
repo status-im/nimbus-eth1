@@ -1,5 +1,7 @@
 *~
 
+nimcache/
+
 # Executables shall be put in an ignored build/ directory
 /build
 
@@ -28,7 +30,6 @@
 *.dll
 
 # Ignore generated C and doc files
-nimcache/
 /execution_chain/docs
 
 /debug*.json

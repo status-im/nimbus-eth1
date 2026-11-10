@@ -557,6 +557,40 @@ proc runLedgerBasicOperationsTests() =
         val = memDB.baseTxFrame().get(key.toOpenArray).valueOr: EmptyBlob
       check val == code
 
+    test "Stateless: code written earlier in the block serves reads by hash":
+      let
+        bob = initAddr(2)
+        alice = initAddr(3)
+      block:
+        # Pre-state: bob holds code that is not in the database, as when a
+        # witness omits it
+        let pre = LedgerRef.init(memDB.baseTxFrame())
+        pre.holdCode = true
+        pre.setCode(bob, code)
+        pre.persist()
+
+      # A rolled back write must not serve the code
+      let reverted = LedgerRef.init(memDB.baseTxFrame(), false, stateless = true)
+      let sp = reverted.beginSavePoint()
+      reverted.setCode(alice, code)
+      reverted.rollback(sp)
+      check:
+        reverted.getCodeSize(bob) == 0
+        reverted.fatalError.isSome
+
+      # A committed write serves it, even when cleared again (never persisted)
+      let ledger = LedgerRef.init(memDB.baseTxFrame(), false, stateless = true)
+      let sp2 = ledger.beginSavePoint()
+      ledger.setCode(alice, code)
+      ledger.setCode(alice, @[])
+      ledger.commit(sp2)
+      ledger.persist()
+      check:
+        ledger.getCodeSize(bob) == code.len
+        ledger.getCode(bob) == code
+        ledger.getOriginalCode(bob) == code
+        ledger.fatalError.isNone
+
     test "accessList operations":
       proc verifyAddrs(ledger: LedgerRef, addrs: varargs[int]): bool =
         for c in addrs:
@@ -626,6 +660,21 @@ proc runLedgerBasicOperationsTests() =
       check ledger.verifySlots(0xbb, 0x01, 0x02, 0x03)
       check ledger.verifySlots(0xcc, 0x01)
       check ledger.verifySlots(0xdd, 0x04)
+
+    test "ReadOnlyLedger accessList slot check":
+      var ledger = LedgerRef.init(memDB.baseTxFrame())
+      let
+        a = initAddr(0xee)
+        b = initAddr(0xef)
+      ledger.accessList(a)
+      ledger.accessList(b, 1.u256)
+      let ro = ReadOnlyLedger(ledger)
+      # warm address, cold slot
+      check ro.inAccessList(a)
+      check ro.inAccessList(a, 1.u256) == false
+      # warm slot, address itself not in the address set
+      check ro.inAccessList(b) == false
+      check ro.inAccessList(b, 1.u256)
 
     test "ledger contractCollision":
       # use previous hash
@@ -732,19 +781,31 @@ proc runLedgerBasicOperationsTests() =
         witnessKeys.getOrDefault(key) == false
 
     test "Witness keys - Get code":
-      var
-        ledger = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
+      let
         addr1 = initAddr(1)
+        addr2 = initAddr(2)
+        addr3 = initAddr(3)
+      block: # Only a read of non-empty pre-state code marks the code touched
+        let pre = LedgerRef.init(memDB.baseTxFrame(), false)
+        pre.setCode(addr1, @[0x00'u8])
+        pre.setCode(addr3, @[0x01'u8])
+        pre.persist()
 
+      var ledger = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
+      ledger.setCode(addr3, @[]) # cleared before it is read
       discard ledger.getCode(addr1)
+      discard ledger.getCode(addr2)
+      discard ledger.getCode(addr3)
 
       let
         witnessKeys = ledger.getWitnessKeys()
         key = (addr1, Opt.none(UInt256))
       check:
-        witnessKeys.len() == 1
+        witnessKeys.len() == 3
         witnessKeys.contains(key)
         witnessKeys.getOrDefault(key) == true
+        witnessKeys.getOrDefault((addr2, Opt.none(UInt256))) == false
+        witnessKeys.getOrDefault((addr3, Opt.none(UInt256))) == false
 
     test "Witness keys - Get storage":
       var
@@ -780,12 +841,17 @@ proc runLedgerBasicOperationsTests() =
 
     test "Witness keys - Get account, code and storage":
       var
-        ledger = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
         addr1 = initAddr(1)
         addr2 = initAddr(2)
         addr3 = initAddr(3)
         slot1 = 1.u256
+      block:
+        let pre = LedgerRef.init(memDB.baseTxFrame(), false)
+        pre.setCode(addr1, @[0x00'u8])
+        pre.setCode(addr2, @[0x01'u8])
+        pre.persist()
 
+      var ledger = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
 
       discard ledger.getAccount(addr1)
       discard ledger.getCode(addr2)

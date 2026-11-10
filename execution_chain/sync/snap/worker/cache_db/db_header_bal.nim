@@ -53,7 +53,7 @@
 
 import
   pkg/[eth/common, results, stew/endians2],
-  ./[db_api1, db_api9, db_desc, db_const, db_iter, db_rlp]
+  ./[db_api1, db_api9, db_desc, db_const, db_rlp]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -128,19 +128,6 @@ proc putHeader*(db: CacheDbRef, header: Header): PutResult =
 proc delHeader*(db: CacheDbRef, bn: BlockNumber): DelResult =
   db.del9(cHeader, bn)
 
-proc clearHeader*(db: CacheDbRef): DelResult =
-  db.clr1 cHeader
-
-iterator walkHeader*(db: CacheDbRef): WalkHeader =
-  for (key,data) in db.adb.colWalk9 key9(cHeader, 1u64):
-    let header = data.decodeHeader().valueOr:
-      var oops: WalkHeader
-      oops.error = error
-      yield oops
-      continue
-    doAssert key == header.number                   # FIXME, will go away
-    yield (header,"")
-
 # -------------
 
 proc hasBal*(db: CacheDbRef, bn: BlockNumber): BoolResult =
@@ -177,18 +164,6 @@ proc putBal*(
 
 proc delBal*(db: CacheDbRef, bn: BlockNumber): DelResult =
   db.del9(cBal, bn)
-
-proc clearBal*(db: CacheDbRef): DelResult =
-  db.clr1 cBal
-
-iterator walkBal*(db: CacheDbRef): WalkBal =
-  for (key,data) in db.adb.colWalk9 key9(cBal):
-    let bal = data.decodeBal().valueOr:
-      var oops: WalkBal
-      oops.error = error
-      yield oops
-      continue
-    yield (bal,"")
 
 # ------------------------------------------------------------------------------
 # End

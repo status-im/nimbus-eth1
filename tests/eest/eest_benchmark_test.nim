@@ -19,6 +19,7 @@ const
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_benchmark",
+    "eest_benchmark_amsterdam",
   ]
 
 const skipFiles = [
@@ -31,6 +32,6 @@ runEESTSuite(
   baseFolder,
   suiteName,
   eestType,
-  testFilter = "*ecrecover*",
+  testFilter = "*",
   parallelEnabled = false
 )

@@ -227,13 +227,17 @@ proc mergePayloadImpl[LeafType, T](
           pfx = evtx.pfx.slice(n + 1)
         if pfx.len > 0:
           # Remaining prefix: create new BoundaryNode pointing to the same child.
-          let newExt = BoundaryNodeRef.init(pfx, evtx.childKey)
+          # A collapsed branch at the end of the prefix stays collapsed.
+          let newExt = BoundaryNodeRef.init(pfx, evtx.childKey, evtx.unprovenCollapse)
           db.layersPutKey(
             (root, local), newExt,
             rlpEncodeExt(pfx, evtx.childKey).digestTo(HashKey))
+          if evtx.unprovenCollapse:
+            db.unprovenCollapses.add((root, local))
         else:
           # No remaining prefix: store a nil as vertex with the known branch hash.
-          # computeKeyImpl still works via kMap
+          # computeKeyImpl still works via kMap. This also restores a collapsed
+          # branch, if any.
           db.layersPutKey((root, local), BranchRef(nil), evtx.childKey)
 
         let leafVtx = block: # Add the new entry

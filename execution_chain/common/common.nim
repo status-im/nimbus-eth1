@@ -201,11 +201,12 @@ proc initializeDb(com: CommonRef) =
       FcuHashAndNumber(hash: baseHash, number: base.number)
 
   # Check for truncated history
-  var sohNum = BlockNumber(0)
+  var sohNum = "n/a"
   txFrame.getFirstBlockHeader().isErrOr:
     doAssert 0 < value.number
     com.startOfHistory = value.parentHash
-    sohNum = value.number - 1
+    if 0 < value.number:
+      sohNum = $(value.number - 1)
 
   info "Database initialized",
     base = (baseHash, base.number),
@@ -225,7 +226,8 @@ proc init(com         : CommonRef,
           balStatePrefetch: bool,
           balStatePrefetchWorkers: int,
           balParallelExecution: bool,
-          parallelSenderRecovery: bool) =
+          parallelSenderRecovery: bool,
+          emptyStateDb: bool) =
 
   config.daoCheck()
 
@@ -249,9 +251,12 @@ proc init(com         : CommonRef,
       txFrame = db.baseTxFrame()
 
     # Must not overwrite the global state on the single state DB
-
     com.genesisHeader = txFrame.getBlockHeader(0.BlockNumber).valueOr:
-      writeGenesis(genesis, txFrame, fork)
+      let genesisHeader = writeGenesis(genesis, txFrame, fork)
+      if emptyStateDb:
+        info "Initialising for empty state DB"
+        genesis.flushGenesisAccounts(txFrame)
+      genesisHeader
 
     com.setForkId(com.genesisHeader)
 
@@ -296,6 +301,7 @@ proc new*(
     balStatePrefetchWorkers = 0;
     balParallelExecution = false;
     parallelSenderRecovery = false;
+    emptyStateDb = false;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -313,7 +319,8 @@ proc new*(
     balStatePrefetch,
     balStatePrefetchWorkers,
     balParallelExecution,
-    parallelSenderRecovery)
+    parallelSenderRecovery,
+    emptyStateDb)
 
 proc new*(
     _: type CommonRef;
@@ -328,6 +335,7 @@ proc new*(
     balStatePrefetchWorkers = 0;
     balParallelExecution = false;
     parallelSenderRecovery = false;
+    emptyStateDb = false;
       ): CommonRef =
 
   ## There is no genesis data present
@@ -345,7 +353,8 @@ proc new*(
     balStatePrefetch,
     balStatePrefetchWorkers,
     balParallelExecution,
-    parallelSenderRecovery)
+    parallelSenderRecovery,
+    emptyStateDb)
 
 proc refresh*(com: CommonRef) =
   ## Readjust to updated database, e.g. after moving forward history from
@@ -363,7 +372,8 @@ proc refresh*(com: CommonRef) =
     balStatePrefetch = com.balStatePrefetch,
     balStatePrefetchWorkers = com.balStatePrefetchWorkers,
     balParallelExecution = com.balParallelExecution,
-    parallelSenderRecovery = com.parallelSenderRecovery)
+    parallelSenderRecovery = com.parallelSenderRecovery,
+    emptyStateDb = false)
 
 # ------------------------------------------------------------------------------
 # Public functions

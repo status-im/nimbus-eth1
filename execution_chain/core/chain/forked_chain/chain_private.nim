@@ -164,13 +164,13 @@ proc processBlock*(
     # when building the witness.
     vmState.ledger.clearWitnessKeys()
     vmState.ledger.clearCollapsedSiblings()
-    vmState.ledger.clearDeployedCodeHashes()
+    vmState.ledger.clearWrittenCode()
     vmState.ledger.clearBlockHashesCache()
 
     processBlock()
 
     let
-      preStateLedger = LedgerRef.init(parentBlk.txFrame)
+      preStateLedger = LedgerRef.init(txFrame.parent())
       witness = Witness.build(preStateLedger, vmState.ledger, parentBlk.header, header)
 
     # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.

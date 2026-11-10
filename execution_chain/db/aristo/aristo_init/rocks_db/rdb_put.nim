@@ -107,9 +107,9 @@ proc putVtx*(
       let vtx = BranchRef(vtx)
       rdb.rdVtxLru.del(rvid)
       if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
-        rdb.rdBranchLru.put(rvid, (vtx.startVid, vtx.used))
+        rdb.rdBranchLru.put(rvid, vtx.startVid, vtx.used)
       else:
-        discard rdb.rdBranchLru.update(rvid, (vtx.startVid, vtx.used))
+        discard rdb.rdBranchLru.update(rvid, vtx.startVid, vtx.used)
     else:
       rdb.rdBranchLru.del(rvid)
       

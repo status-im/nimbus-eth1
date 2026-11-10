@@ -35,12 +35,6 @@ template del1*(
       ): untyped =
   db.adb.rDel @[byte col]
 
-template clr1*(
-    db: CacheDbRef;
-    col: MptAsmCol;
-      ): untyped =
-  db.adb.rClear col
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

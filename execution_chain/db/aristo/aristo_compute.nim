@@ -124,10 +124,11 @@ proc putKeyAtLevel(
 
   if level >= txRef.db.baseTxFrame().level:
     var frame = txRef
-    while frame.level > level:
+    while frame.level > level and frame.parent.level != disposedLevel:
       frame = frame.parent
 
-    frame.layersMergeKey(rvid, key)
+    if frame.level == level:
+      frame.layersMergeKey(rvid, key)
     # A snapshot frame at or below the merge level must not be patched - the
     # equal-level case is already covered by layersMergeKey updating its own
     # frame's snapshot.
@@ -289,12 +290,14 @@ when compileOption("threads"):
         inc counts[level - baseLevel]
 
     for i, count in counts:
-      if count > 0:
+      if count > 0 and not frames[i].isNil:
         frames[i].layersReserveKeys(count)
 
     for buf in bufs:
       for item in buf:
-        frames[item[2].int - baseLevel].layersMergeKey(item[0], item[1])
+        let frame = frames[item[2].int - baseLevel]
+        if not frame.isNil:
+          frame.layersMergeKey(item[0], item[1])
         if not snapshotFrame.isNil and item[2].int < snapshotFrame.level:
           snapshotFrame.layersMergeKeyInSnapshot(item[0], item[1])
 
@@ -401,8 +404,8 @@ proc computeKeyImpl(
       rlpEncodeStoLeaf(vtx.pfx, vtx.stoData).digestTo(HashKey)
     of BoundaryNode:
       # Boundary node from a witness (no branch): pfx and childKey (absent branch
-      # hash) are sufficient to get the extension RLP. putSubtrie set the key
-      # so normally this branch is not reached.
+      # hash) are sufficient to get the extension RLP. putSubtrie sets the key,
+      # a branch collapse in deleteImpl does not.
       let ev = BoundaryNodeRef(vtx)
       rlpEncodeExt(ev.pfx, ev.childKey).digestTo(HashKey)
     of Branches:

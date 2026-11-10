@@ -16,13 +16,12 @@
 import
   std/concurrency/atomics,
   stew/endians2,
-  ../../../../concurrency/lru,
   ../../../core_db/backend/rocksdb_desc,
   ../../[aristo_blobify, aristo_desc],
-  ../init_common
+  ../init_common,
+  ./rdb_cache
 
-
-export lru, rocksdb_desc
+export rdb_cache, rocksdb_desc
 
 const AdmKey* = default(seq[byte])
 
@@ -42,26 +41,13 @@ type
     baseDb*: RocksDbInstanceRef
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
 
-    # Note that the key type `VertexID` for LRU caches requires that there is
-    # strictly no vertex ID re-use.
-    #
-    # Otherwise, in some fringe cases one might remove a vertex with key
-    # `(root1,vid)` and insert another vertex with key `(root2,vid)` while
-    # re-using the vertex ID `vid`. Without knowledge of `root1` and `root2`,
-    # the LRU cache will return the same vertex for `(root2,vid)` also for
-    # `(root1,vid)`.
-    #
-    # The other alternaive would be to use the key type `RootedVertexID` which
-    # is less memory and time efficient (the latter one due to internal LRU
-    # handling of the longer key.)
-    #
-    rdKeyLru*: ConcurrentLruCache[RootedVertexID,HashKey] ## Read cache
+    rdKeyLru*: RdbKeyLru ## Read cache
     rdKeySize*: int
 
-    rdVtxLru*: ConcurrentLruCache[RootedVertexID,VertexBuf] ## Read cache
+    rdVtxLru*: RdbVtxLru ## Read cache
     rdVtxSize*: int
 
-    rdBranchLru*: ConcurrentLruCache[RootedVertexID, (VertexID, uint16)]
+    rdBranchLru*: RdbBranchLru
     rdBranchSize*: int
 
     rdbPrintStats*: bool               ## Print statistics on closure

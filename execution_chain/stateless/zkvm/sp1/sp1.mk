@@ -44,7 +44,7 @@ check_sp1_sdk:
 	@[ -f "$(ZKVM_LIB)" ] && [ -f "$(ZKVM_LD)" ] || { \
 		echo "ERROR: SP1 zkEVM SDK not found under $(SP1_SDK)"; \
 		echo "  fetch it with:"; \
-		echo "    V=v6.6.0; mkdir -p $(SP1_SDK) && curl -sSL \\"; \
+		echo "    V=v6.9.0; mkdir -p $(SP1_SDK) && curl -sSL \\"; \
 		echo "      https://github.com/succinctlabs/sp1/releases/download/\$$V/zkevm-sdk-\$$V.tar.gz \\"; \
 		echo "      | tar -xz -C $(SP1_SDK) --strip-components=1"; \
 		echo "  or pass SP1_SDK=<path>"; exit 1; }

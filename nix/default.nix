@@ -35,7 +35,7 @@ in stdenv.mkDerivation rec {
     root = ./..;
     fileset = lib.fileset.unions [
       ./../Makefile ./../nimbus.nimble ./../config.nims
-      ./../execution_chain ./../nimbus_verified_proxy
+      ./../execution_chain ./../verified_proxy
       ./../portal ./../execution_api
       ./../vendor ./../scripts ./../tools
     ];

@@ -5,14 +5,18 @@
 This script compares outputs from two `nimbus import --debug-csv-stats`, a
 baseline and a contender.
 
-To use it, set up a virtual environment:
+Dependencies are declared inline via [PEP 723](https://peps.python.org/pep-0723/)
+(`pandas`, `matplotlib`). Run with a PEP 723-compatible runner such as `uv`, or
+install them into a venv manually:
 
 ```bash
-# Create a venv for the tool
+# Recommended: uv reads the script's dependency metadata
+uv run block-import-stats.py
+
+# Or install into a venv manually (requirements.txt was removed in #5073)
 python -m venv stats
 . stats/bin/activate
-pip install -r requirements.txt
-
+pip install pandas matplotlib
 python block-import-stats.py
 ```
 

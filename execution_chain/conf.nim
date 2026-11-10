@@ -76,6 +76,7 @@ type
     Eth                           ## enable eth_ set of RPC API
     Debug                         ## enable debug_ set of RPC API
     Admin                         ## enable admin_ set of RPC API
+    Testing                       ## enable testing_ set of RPC API
 
   ExecutionClientConf* = object
     ## Main configuration for the execution client - when updating, coordinate
@@ -355,6 +356,12 @@ type
       desc: "Number of entries in the storage leaf cache"
       name: "debug-sto-leaf-cache-size".}: int
 
+    stoStaticLookup {.
+      hidden
+      defaultValue: defaultStoStaticLookup
+      desc: "Resolve storage slot lookups through the storage trie's static vids"
+      name: "debug-sto-static-lookup".}: bool
+
     rdbPrintStats {.
       hidden
       desc: "Print RDB statistics at exit"
@@ -471,7 +478,7 @@ type
         name: "rpc" .}: bool
 
       rpcApi {.
-        desc: "Enable specific set of RPC API (available: eth, debug, admin)"
+        desc: "Enable specific set of RPC API (available: eth, debug, admin, testing)"
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
         name: "rpc-api" .}: seq[string]
@@ -482,7 +489,7 @@ type
         name: "ws" .}: bool
 
       wsApi {.
-        desc: "Enable specific set of Websocket RPC API (available: eth, debug, admin)"
+        desc: "Enable specific set of Websocket RPC API (available: eth, debug, admin, testing)"
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
         name: "ws-api" .}: seq[string]
@@ -782,6 +789,7 @@ proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
     of "eth": result.incl RpcFlag.Eth
     of "debug": result.incl RpcFlag.Debug
     of "admin": result.incl RpcFlag.Admin
+    of "testing": result.incl RpcFlag.Testing
     else:
       error "Unknown RPC API: ", name=item
       quit QuitFailure
@@ -896,6 +904,7 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
     parallelStateRootComputation = config.parallelStateRootComputation,
     threadSafeCaches = config.threadSafeCaches(),
     blockCacheType = config.rocksdbBlockCacheType,
+    stoStaticLookup = config.stoStaticLookup,
   )
 
 func jwtSecretOpt*(config: ExecutionClientConf): Opt[InputFile] =

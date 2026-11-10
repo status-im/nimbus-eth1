@@ -11,28 +11,50 @@
 {.push raises: [].}
 
 import
+  system/ansi_c,
   stew/assign2,
   ./evm_errors,
   ./interpreter/utils/utils_numeric
 
 type
   EvmMemory* = object
-    bytes*:  seq[byte]
+    data: ptr UncheckedArray[byte]
+    length: int
+    capacity: int
+
+proc `=copy`*(
+    dest: var EvmMemory, src: EvmMemory
+) {.error: "Copying EvmMemory is forbidden".} =
+  discard
 
 func init*(_: type EvmMemory): EvmMemory =
-  EvmMemory(
-    bytes: newSeqOfCap[byte](1024)
-  )
+  EvmMemory()
 
 template len*(memory: EvmMemory): int =
-  memory.bytes.len
+  memory.length
+
+template bytes*(memory: EvmMemory): openArray[byte] =
+  memory.data.toOpenArray(0, memory.length - 1)
+
+func resize(memory: var EvmMemory, newLen: int) =
+  if newLen > memory.capacity:
+    memory.capacity = max(newLen, max(2 * memory.capacity, 1024))
+    {.cast(noSideEffect).}:
+      memory.data = cast[ptr UncheckedArray[byte]](
+        c_realloc(memory.data, csize_t(memory.capacity)))
+  zeroMem(addr memory.data[memory.length], newLen - memory.length)
+  memory.length = newLen
+
+proc dispose*(memory: var EvmMemory) =
+  c_free(memory.data)
+  memory = EvmMemory()
 
 template extend*(memory: var EvmMemory; startPos, size: int) =
   let sz = size
   if sz > 0:
     let newSize = ceil32(startPos + sz)
-    if newSize > memory.bytes.len:
-      memory.bytes.setLen(newSize)
+    if newSize > memory.len:
+      memory.resize(newSize)
 
 func init*(_: type EvmMemory, size: Natural): EvmMemory =
   result = EvmMemory.init()

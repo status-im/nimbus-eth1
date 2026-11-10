@@ -1,0 +1,120 @@
+# Nimbus
+# Copyright (c) 2025-2026 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+{.used.}
+{.push raises: [], gcsafe.}
+
+import
+  unittest2,
+  chronos,
+  web3/[eth_api, eth_api_types],
+  eth/common/eth_types_rlp,
+  ../engine/blocks,
+  ../engine/types,
+  ../engine/header_store,
+  ./test_utils,
+  ./test_api_backend
+
+suite "test fees verification":
+  test "check api methods":
+    let
+      ts = TestApiState.init(1.u256)
+      (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
+        raise newException(TestProxyError, error.errMsg)
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
+
+    ts.loadBlock(blk)
+    engine.setAnchor(convHeader(blk), blk.hash, Optimistic)
+
+    let
+      gasPrice = waitFor frontend.eth_gasPrice()
+      priorityFee = waitFor frontend.eth_maxPriorityFeePerGas()
+
+    # we are only checking the API interface atm
+    check:
+      gasPrice.isOk()
+      priorityFee.isOk()
+      gasPrice.get() > Quantity(0)
+      priorityFee.get() > Quantity(0)
+
+    let blobFee = waitFor frontend.eth_blobBaseFee()
+
+    # blobs weren't enabled on paris
+    check blobFee.isErr()
+
+    ts.clear()
+    engine.headerStore.clear()
+
+    let blk2 = getBlockFromJson("verified_proxy/tests/data/Prague.json")
+
+    ts.loadBlock(blk2)
+    engine.setAnchor(convHeader(blk2), blk2.hash, Optimistic)
+
+    let blobFeePrague = waitFor frontend.eth_blobBaseFee()
+
+    check:
+      blobFeePrague.isOk()
+      blobFeePrague.get() > u256(0)
+
+    ts.clear()
+    engine.headerStore.clear()
+
+  # we are only testing the API and params encoding for this method
+  # since it is only passed through to the provider (no verification)
+  test "eth_feeHistory accepts fractional percentiles":
+    let
+      ts = TestApiState.init(1.u256)
+      (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
+        raise newException(TestProxyError, error.errMsg)
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
+      blockCount = Quantity(4) # arbitrary number
+      newestBlock = blockId(blk.number)
+      percentiles = @[12.5, 50.0, 99.9]
+      expectedFeeHistory = FeeHistoryResult(
+        oldestBlock: blk.number,
+        baseFeePerGas: @[blk.baseFeePerGas.get(0.u256)],
+        gasUsedRatio: @[0.5],
+        reward: Opt.some(
+          @[@[1_000_000_000.u256], @[2_000_000_000.u256], @[3_000_000_000.u256]]
+        ),
+      )
+
+    ts.loadBlock(blk)
+    ts.loadFeeHistory(blockCount, newestBlock, expectedFeeHistory)
+
+    let history = waitFor frontend.eth_feeHistory(blockCount, newestBlock, percentiles)
+
+    check:
+      history.isOk()
+      history.get().oldestBlock == expectedFeeHistory.oldestBlock
+      history.get().baseFeePerGas == expectedFeeHistory.baseFeePerGas
+      history.get().gasUsedRatio == expectedFeeHistory.gasUsedRatio
+      history.get().reward == expectedFeeHistory.reward
+
+  test "eth_feeHistory with empty percentiles":
+    let
+      ts = TestApiState.init(1.u256)
+      (engine, frontend) = initTestEngine(ts, 1, 1).valueOr:
+        raise newException(TestProxyError, error.errMsg)
+      blk = getBlockFromJson("verified_proxy/tests/data/Paris.json")
+      blockCount = Quantity(1) # arbitrary number
+      newestBlock = blockId(blk.number)
+      expectedFeeHistory = FeeHistoryResult(
+        oldestBlock: blk.number,
+        baseFeePerGas: @[blk.baseFeePerGas.get(0.u256)],
+        gasUsedRatio: @[0.5],
+        reward: Opt.none(seq[FeeHistoryReward]),
+      )
+
+    ts.loadBlock(blk)
+    ts.loadFeeHistory(blockCount, newestBlock, expectedFeeHistory)
+
+    let history = waitFor frontend.eth_feeHistory(blockCount, newestBlock, @[])
+
+    check:
+      history.isOk()
+      history.get().oldestBlock == expectedFeeHistory.oldestBlock

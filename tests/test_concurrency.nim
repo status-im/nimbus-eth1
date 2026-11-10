@@ -10,6 +10,6 @@
 
 import
   ./test_concurrency/[
-    test_lru, test_queue, test_readwritelock, test_semaphore, test_shared_types,
-    test_type_traits, test_utils
+    test_lru, test_maybe_owned, test_queue, test_readwritelock, test_semaphore,
+    test_shared_types, test_type_traits
   ]

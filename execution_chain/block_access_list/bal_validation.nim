@@ -44,7 +44,7 @@ func checkCodeChange(newCode: openArray[byte]): Result[void, string] =
 
   ok()
 
-func checkBalSize(
+func checkBalSize*(
     bal: BlockAccessListRef, blockGasLimit: GasInt
 ): Result[void, string] =
   # We assume there are no duplicate addresses, storageChanges or storageReads

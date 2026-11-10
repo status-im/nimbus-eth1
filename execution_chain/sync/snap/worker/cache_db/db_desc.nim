@@ -69,8 +69,6 @@ type
     ranges: ItemKeyRangeSet
 
   CacheFlatAccData* = tuple
-    dirtyStorage: bool
-    dirtyCode: bool
     account: Account
 
   WalkHeader* = tuple
