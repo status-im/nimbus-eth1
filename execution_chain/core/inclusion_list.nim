@@ -16,7 +16,7 @@ import
 
 from ../transaction import recoverSenderCached
 from ../utils/utils import short
-from ../evm/types import BaseVMState
+from ../evm/types import BaseVMState, com
 from ../transaction/call_types import intrinsicGas
 from ./validate import gasCost, validateTransaction, validateTxBasic
 from ./executor/process_transaction import checkBlockGasCapacity
