@@ -16,6 +16,11 @@ inputs:
     required: false
     default: false
 
+  LLVM_VERSION:
+    description: 'llvm-mingw version'
+    required: false
+    default: "20261020" # LLVM 23.1.4
+
   nim-cache:
     description: 'Enable nim compiler prebuilt binary cache'
     required: false
@@ -101,9 +106,9 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: external/mingw-${{ matrix.cpu }}
-        key: mingw-llvm-21-${{ matrix.cpu }}-${{ matrix.os }}-${{ github.ref_name }}
+        key: mingw-llvm-${{ inputs.LLVM_VERSION }}-${{ matrix.cpu }}-${{ matrix.os }}-${{ github.ref_name }}
         restore-keys: |
-          mingw-llvm-21-${{ matrix.cpu }}-${{ matrix.os }}-master
+          mingw-llvm-${{ inputs.LLVM_VERSION }}-${{ matrix.cpu }}-${{ matrix.os }}-master
 
     - name: Install llvm-mingw dependency (Windows)
       if: |
@@ -112,7 +117,7 @@ runs:
       shell: bash
       run: |
         mkdir -p external
-        LLVM_VERSION="20250730"
+        LLVM_VERSION=${{ inputs.LLVM_VERSION }}
         MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_VERSION"
         if [[ '${{ matrix.cpu }}' == 'amd64' ]]; then
           MINGW_URL="$MINGW_BASE/llvm-mingw-$LLVM_VERSION-ucrt-x86_64.zip"
