@@ -184,42 +184,40 @@ proc handleNewPayload(ben: BeaconEngineRef, request: HttpRequestRef,
       let body =
         try: SSZ.decode(data, ExecutionPayloadEnvelopeParis)
         except CatchableError: return sszDecodeErrorResponse()
-      status = await ben.newPayload(fork, body.payload, Opt.none(BlockAccessListRef),
-        Opt.none(Hash32), Opt.none(seq[seq[byte]]))
+      status = await ben.newPayload(fork, body.payload, Opt.none(Hash32),
+        Opt.none(seq[seq[byte]]))
     of EngineFork.Shanghai:
       let body =
         try: SSZ.decode(data, ExecutionPayloadEnvelopeShanghai)
         except CatchableError: return sszDecodeErrorResponse()
-      status = await ben.newPayload(fork, body.payload, Opt.none(BlockAccessListRef),
-        Opt.none(Hash32), Opt.none(seq[seq[byte]]))
+      status = await ben.newPayload(fork, body.payload, Opt.none(Hash32),
+        Opt.none(seq[seq[byte]]))
     of EngineFork.Cancun:
       let body =
         try: SSZ.decode(data, ExecutionPayloadEnvelopeCancun)
         except CatchableError: return sszDecodeErrorResponse()
       let beaconRoot = Opt.some(toHash32(body.parent_beacon_block_root))
-      status = await ben.newPayload(fork, body.payload, Opt.none(BlockAccessListRef),
-        beaconRoot, Opt.none(seq[seq[byte]]))
+      status = await ben.newPayload(fork, body.payload, beaconRoot,
+        Opt.none(seq[seq[byte]]))
     of EngineFork.Prague, EngineFork.Osaka:
       let body =
         try: SSZ.decode(data, ExecutionPayloadEnvelopePrague)
         except CatchableError: return sszDecodeErrorResponse()
       let beaconRoot = Opt.some(toHash32(body.parent_beacon_block_root))
       let executionRequests = Opt.some(ethExecutionRequests(body.execution_requests))
-      status = await ben.newPayload(fork, body.payload, Opt.none(BlockAccessListRef),
-        beaconRoot, executionRequests)
+      status = await ben.newPayload(fork, body.payload, beaconRoot,
+        executionRequests)
     of EngineFork.Amsterdam:
       let body =
         try: SSZ.decode(data, ExecutionPayloadEnvelopeAmsterdam)
         except CatchableError: return sszDecodeErrorResponse()
       let beaconRoot = Opt.some(toHash32(body.parent_beacon_block_root))
       let executionRequests = Opt.some(ethExecutionRequests(body.execution_requests))
-      status = await ben.newPayload(fork, body.payload, ethBlockAccessList(body.payload),
-        beaconRoot, executionRequests)
+      status = await ben.newPayload(fork, body.payload, beaconRoot,
+        executionRequests)
     RestApiResponse.response(SSZ.encode(status), Http200, "application/octet-stream")
   except RpcResponseError as e:
     applicationErrorToRest(e)
-  except RlpError as e:
-    invalidRequestResponse("failed to decode block in payload: " & e.msg)
 
 # https://github.com/ethereum/execution-apis/pull/885
 proc handleNewPayloadWithWitness(
@@ -249,7 +247,6 @@ proc handleNewPayloadWithWitness(
         await ben.newPayloadWithWitness(
           fork,
           body.payload,
-          ethBlockAccessList(body.payload),
           Opt.some(toHash32(body.parent_beacon_block_root)),
           Opt.some(ethExecutionRequests(body.execution_requests)),
         )
@@ -257,8 +254,6 @@ proc handleNewPayloadWithWitness(
         return internalErrorResponse(error)
     except RpcResponseError as e:
       return applicationErrorToRest(e)
-    except RlpError as e:
-      return invalidRequestResponse("failed to decode block in payload: " & e.msg)
 
   RestApiResponse.response(SSZ.encode(resp), Http200, "application/octet-stream")
 
