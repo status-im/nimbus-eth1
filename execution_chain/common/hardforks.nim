@@ -43,10 +43,10 @@ type
     Osaka
     Bpo1
     Bpo2
+    Amsterdam
     Bpo3
     Bpo4
     Bpo5
-    Amsterdam
     Bogota
 
 const lastPurelyBlockNumberBasedFork* = GrayGlacier
@@ -180,11 +180,11 @@ type
     osakaTime*          : Opt[EthTime]
     bpo1Time*           : Opt[EthTime]
     bpo2Time*           : Opt[EthTime]
+    amsterdamTime*      : Opt[EthTime]
+    bogotaTime*         : Opt[EthTime]
     bpo3Time*           : Opt[EthTime]
     bpo4Time*           : Opt[EthTime]
     bpo5Time*           : Opt[EthTime]
-    amsterdamTime*      : Opt[EthTime]
-    bogotaTime*         : Opt[EthTime]
 
     terminalTotalDifficulty*: Opt[UInt256]
     depositContractAddress*: Opt[Address]
@@ -252,10 +252,10 @@ func toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   result.timeThresholds[Osaka] = conf.osakaTime
   result.timeThresholds[Bpo1] = conf.bpo1Time
   result.timeThresholds[Bpo2] = conf.bpo2Time
+  result.timeThresholds[Amsterdam] = conf.amsterdamTime
   result.timeThresholds[Bpo3] = conf.bpo3Time
   result.timeThresholds[Bpo4] = conf.bpo4Time
   result.timeThresholds[Bpo5] = conf.bpo5Time
-  result.timeThresholds[Amsterdam] = conf.amsterdamTime
   result.timeThresholds[Bogota] = conf.bogotaTime
 
 func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable) =
@@ -283,10 +283,10 @@ func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
   conf.osakaTime           = t.timeThresholds[HardFork.Osaka]
   conf.bpo1Time            = t.timeThresholds[HardFork.Bpo1]
   conf.bpo2Time            = t.timeThresholds[HardFork.Bpo2]
+  conf.amsterdamTime       = t.timeThresholds[HardFork.Amsterdam]  
   conf.bpo3Time            = t.timeThresholds[HardFork.Bpo3]
   conf.bpo4Time            = t.timeThresholds[HardFork.Bpo4]
   conf.bpo5Time            = t.timeThresholds[HardFork.Bpo5]
-  conf.amsterdamTime       = t.timeThresholds[HardFork.Amsterdam]
   conf.bogotaTime          = t.timeThresholds[HardFork.Bogota]
 
 # ------------------------------------------------------------------------------
@@ -316,10 +316,10 @@ const
     FkOsaka,          # Osaka
     FkOsaka,          # Bpo1
     FkOsaka,          # Bpo2
-    FkOsaka,          # Bpo3
-    FkOsaka,          # Bpo4
-    FkOsaka,          # Bpo5
     FkAmsterdam,      # Amsterdam
+    FkAmsterdam,      # Bpo3
+    FkAmsterdam,      # Bpo4
+    FkAmsterdam,      # Bpo5
     FkBogota,         # Bogota
   ]
 
