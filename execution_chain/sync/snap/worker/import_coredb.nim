@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos, eth/common, metrics, stew/interval_set],
   ../../../db/core_db,
-  ./[helpers, cache_db, worker_desc]
+  ./[helpers, cache_db, update, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -29,6 +29,7 @@ type
     nErrors: uint
 
   ImportDesc = tuple
+    ctx: SnapCtxRef
     stats: CoredbImportStats
     accPath: Hash32
     count: int
@@ -53,7 +54,10 @@ template persistRegularly(
       tx.checkpoint(0)
       db.persist tx
       ctrl.count = 0
-      metrics.set(nec_snap_dbimport_progress, ctrl.accPath.to(UInt256).per256)
+      let w = ctrl.accPath.to(UInt256).per256
+      metrics.set(nec_snap_dbimport_progress, w)
+      ctrl.ctx.updateEta w
+
     let now = Moment.now()
     if ctrl.timer + coreDbImportMsgInterval < now:
       debug info & ": Importing into core DB", stats=ctrl.stats
@@ -207,18 +211,22 @@ proc fetchStateRoot(
 proc importFlat(
     db: CoreDbRef;
     tx: CoreDbTxRef;
-    adb: CacheDbRef;
+    ctx: SnapCtxRef;
     stopOnError: bool;
     info: static[string];
       ): CoredbImportStats =
   var ctrl: ImportDesc
+  ctrl.ctx = ctx
+
   metrics.set(nec_snap_dbimport_progress, 0)
 
   # Import canonical head
-  let cNum = tx.mergeCanonicalBacklog(adb, info).valueOr:
-    error info & ": Failed importing header backlog"
-    ctrl.stats.nErrors.inc
-    return ctrl.stats
+  let
+    adb = ctx.pool.cacheDB
+    cNum = tx.mergeCanonicalBacklog(adb, info).valueOr:
+      error info & ": Failed importing header backlog"
+      ctrl.stats.nErrors.inc
+      return ctrl.stats
 
   # Merge flat tables into CoreDb/Aristo.
   var count = 0
@@ -279,21 +287,25 @@ proc importFlat(
 
 proc importCoreDbMetricsReset*(ctx: SnapCtxRef) =
   metrics.set(nec_snap_dbimport_progress, 0)
+  ctx.resetEta()
 
 proc importCoreDb*(
     db: CoreDbRef;
     tx: CoreDbTxRef;
-    adb: CacheDbRef;
+    ctx: SnapCtxRef;
     info: static[string];
     stopOnError = false;
       ): Opt[CoredbImportStats] =
   ## Import the flat tables into a version of CoreDb.
   ##
+  ctx.resetEta()
+
   let
+    adb = ctx.pool.cacheDB
     start = Moment.now()
     status = ?adb.getAccMissingIntv(info)
     header = ?adb.getHeader(status.number, info)
-    txStats = db.importFlat(tx, adb, stopOnError, info) # import data
+    txStats = db.importFlat(tx, ctx, stopOnError, info) # import data
 
   if 0 < txStats.nErrors:
     error info & ": Error importing snap data", number=status.number, txStats
@@ -317,9 +329,9 @@ proc importCoreDb*(
 
   ok(txStats)
 
-proc wipeCacheDb*(adb: CacheDbRef) =
+proc wipeCacheDb*(ctx: SnapCtxRef) =
   ## Wipe cache DB on disk
-  adb.close(wipe=true)
+  ctx.pool.cacheDB.close(wipe=true)
 
 # ------------------------------------------------------------------------------
 # End

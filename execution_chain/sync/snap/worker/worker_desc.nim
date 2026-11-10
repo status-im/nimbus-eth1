@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  std/[paths, sets],
+  std/[math, paths, sets],
   pkg/[chronos, eth/common, minilru, results],
   ../../../core/chain,
   ../../sync_desc,
@@ -107,6 +107,11 @@ type
     accUnproc*: UnprocItemKeys       ## Account download sync
     accRefresh*: HashSet[Address]    ## Refresh addresses (after BAL forward)
 
+  EtaSpline* = seq[(Moment,float)]                  # (x,y) pairs
+    ## A set of at most three splines for interpolating a straight line
+    ## supported by the first and the last spline. The first two splines
+    ## must have minimum distance.
+
   SnapPeerData* = object
     ## Local descriptor data extension
     snapVersion*: int                ## For logging
@@ -138,6 +143,7 @@ type
     nSnap2Peers*: int                ## # of Active snap/2 peers for proto use
     failedEthBalId*: EthBalHashSet   ## Ditto for eth peers
     resetReq*: bool                  ## Restart system (problem with cache data)
+    etaSpline*: EtaSpline            ## Needed to calculate ETA
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
@@ -241,6 +247,61 @@ func toStr*(error: SnapError): string =
     result &= "(" & error.name & ")"
   if 0 < error.msg.len:
     result &= "[" & error.msg & "]"
+
+# ---------
+
+proc clear*(spline: var EtaSpline) =
+  spline.setLen(0)
+
+proc apply*(spline: var EtaSpline, y: float) =
+  let x = Moment.now()
+  case spline.len:
+  of 0, 2:
+    spline.add (x,y)
+  of 1:
+     if etaSplineDistMin1 < x - spline[0][0]:
+       # (x,y) has minimum distance from the first spline. so add it
+       spline.add (x,y)
+  of 3:
+    if etaSplineDistMin2 < x - spline[1][0]:
+      # (x,y) has minimum distance from the second spline. so replace the
+      # three spline set by a spline tuple.
+      spline = @[spline[1], (x,y)]
+    else:
+      # Replace last spline
+      spline[2] = (x,y)
+  else:
+    raiseAssert "No more than 3 splines"
+
+proc eta*(spline: EtaSpline): Opt[Duration] =
+  if spline.len < 2:
+    return err()
+
+  template toNs(w: Moment): int64 =
+    (w - Moment.low).nanoseconds
+
+  let
+    x0 = spline[0][0].toNs                          # unit: ns
+    x1 = spline[^1][0].toNs                         # unit: ns
+    y0 = spline[0][1]
+    y1 = spline[^1][1]
+
+  # This must have been made certain by the `apply()` function
+  doAssert x0 + etaSplineDistMin1.nanoseconds <= x1
+
+  if y0.almostEqual(y1):                            # infinite horizon
+    return err()
+
+  let
+    # Straight line: `y = m x + c` with `m = (y1-y0)/(x1-x0)`, `c = y1 - m x1`
+    m = (y1 - y0) / (x1 - x0).float                 # unit: 1/ns
+
+    # Value 1 is reached at x9: `1 = m x9 + c` => `1 = m (x9 - x1) + y1`
+    # At time x1, ETA is `x9 - x1 = x1 + (1.0 - y1) / m`
+    H = (1.0 - y1) / m                              # unit: ns
+
+  # Convert nanoseconde from float
+  ok(nanoseconds H.int64)
 
 # ------------------------------------------------------------------------------
 # End
