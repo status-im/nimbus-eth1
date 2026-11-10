@@ -31,10 +31,11 @@ inputs:
     required: false
     default: false
 
+env:
+  LLVM_VERSION: "20261020" # LLVM 23.1.4
+    
 runs:
   using: "composite"
-  env:
-    LLVM_VERSION: "20261020" # LLVM 23.1.4
   steps:
     - name: Windows missing wmic workaround
       if: runner.os == 'Windows'
