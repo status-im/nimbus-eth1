@@ -57,7 +57,8 @@ type
     StorageChanged
     StatementChanged
     NewlyCreated # EIP-6780: self destruct only in same transaction
-    ClearAccountPreserveBalance
+    SelfDestructed
+    SelfDestructed8246
 
   AccountFlags = set[AccountFlag]
 
@@ -163,7 +164,7 @@ const
     StorageChanged,
     StatementChanged,
     NewlyCreated,
-    ClearAccountPreserveBalance
+    SelfDestructed8246,
     }
 
   EMPTY_STATEMENT = CoreDbAccount(
@@ -352,7 +353,7 @@ proc storageValue(
 
 proc kill(acc: AccountRef) =
   acc.flags.excl {LeafExists, CodeChanged, StorageChanged, StatementChanged}
-  acc.overlayStorage.reset()
+  acc.overlayStorage.reset() # free memory
   acc.original.storage.reset()
   acc.original.code.reset()
   acc.code.reset()
@@ -878,52 +879,43 @@ proc applyBlockAccessList*(ledger: LedgerRef, bal: BlockAccessList, txCount: int
       acc.overlayStorage[slotChanges.slot] = slotChanges.changes[changePos].newValue
       acc.flags.incl StorageChanged
 
-proc deleteAccount(ledger: LedgerRef, address: Address) =
-  # make sure all savePoints already committed
-  doAssert(ledger.savePoint.parentSavePoint.isNil)
-  let acc = ledger.getAccount(address)
-  if Dirty notin acc.flags:
-    ledger.savePoint.dirty[address] = acc
-    acc.flags.incl Dirty
-
-  if ClearAccountPreserveBalance in acc.flags and acc.statement.balance.isZero.not:
-    if ledger.txFrame.hasStorage(acc.accPath).valueOr(false):
-      acc.original.storage.reset()
-    else:
-      acc.flags.excl StorageChanged
-
-    acc.overlayStorage.reset()
-    acc.statement.nonce = 0
-    acc.flags.incl StatementChanged
-    acc.statement.codeHash = EMPTY_CODE_HASH
-    acc.code = nil
-    acc.flags.excl CodeChanged
-  else:
-    acc.kill()
-
 proc selfDestruct*(ledger: LedgerRef, address: Address) =
-  ledger.setBalance(address, 0.u256)
+  # SELFDESTRUCT: burn balance now and remove account later
+  var acc = ledger.getAccount(address, false)
+  if acc.isNil:
+    return
+
+  acc = ledger.makeDirty(address, acc)
+  acc.statement.balance = 0'u256
+  acc.flags.incl SelfDestructed
   ledger.savePoint.selfDestruct.incl address
 
 proc selfDestruct6780*(ledger: LedgerRef, address: Address): bool =
+  # EIP-6780: SELFDESTRUCT, same but only if it's a newly created contract
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
     return false
 
   if NewlyCreated in acc.flags:
-    ledger.selfDestruct(address)
+    let acc = ledger.makeDirty(address, acc)
+    acc.statement.balance = 0'u256
+    acc.flags.incl SelfDestructed
+    ledger.savePoint.selfDestruct.incl address
+
     true
   else:
     false
 
 proc selfDestruct8246*(ledger: LedgerRef, address: Address): bool =
+  # EIP-8246: SELFDESTRUCT same but keep the balance
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
     return false
 
   if NewlyCreated in acc.flags:
-    ledger.makeDirty(address, acc).flags.incl ClearAccountPreserveBalance
+    ledger.makeDirty(address, acc).flags.incl SelfDestructed8246
     ledger.savePoint.selfDestruct.incl address
+
     true
   else:
     false
@@ -978,25 +970,32 @@ proc persist*(ledger: LedgerRef,
   # make sure all savePoint already committed
   doAssert(ledger.savePoint.parentSavePoint.isNil)
 
-  for address in ledger.savePoint.selfDestruct:
-    ledger.deleteAccount(address)
-
   for address, acc in ledger.savePoint.dirty: # This is a hotspot in block processing
-    if clearEmptyAccounts and acc.exists() and acc.isEmpty():
+    # Self-destructed accounts must retain their values throughout transaction
+    # processing and only kill/clear themselves at the end
+    if SelfDestructed8246 in acc.flags:
+      if acc.statement.balance.isZero():
+        acc.kill()
+      else:
+        acc.overlayStorage.reset()
+        acc.statement.codeHash = EMPTY_CODE_HASH
+        acc.statement.nonce = 0
+        acc.code = nil
+        acc.flags.incl {StatementChanged}
+        acc.flags.excl {CodeChanged, StorageChanged}
+    elif (SelfDestructed in acc.flags) or
+        (clearEmptyAccounts and acc.exists() and acc.isEmpty()):
+      # EIP-161: empty accounts get removed from the trie
       acc.kill()
 
-    if LeafExists in acc.flags:
+    if acc.exists():
       if CodeChanged in acc.flags:
         acc.persistCode(ledger)
         acc.original.code = acc.code
 
-      if NewlyCreated in acc.flags or ClearAccountPreserveBalance in acc.flags:
-        # TODO https://github.com/status-im/nimbus-eth1/issues/4024
-        # When overwriting an account, other clients clear storage - it seems
-        # however there's limited spec clarity on this point - in particular,
-        # conformance tests pass both with and without this line at the time of
-        # writing!
+      if NewlyCreated in acc.flags:
         ledger.txFrame.clearStorage(acc.accPath).expect("can clear storage of account")
+        acc.original.storage.clear()
 
       if {IsNew, StatementChanged} * acc.flags != {}:
         # Update account before its storage, in case it's a new account
@@ -1009,6 +1008,8 @@ proc persist*(ledger: LedgerRef,
         acc.persistStorage(ledger).isOkOr:
           ledger.setFatalErrorOrAssert(error)
 
+      acc.flags = acc.flags - resetFlags
+
     else:
       ledger.savePoint.cache.del address
       if IsNew notin acc.flags:
@@ -1016,8 +1017,6 @@ proc persist*(ledger: LedgerRef,
         ledger.txFrame.deleteAccount(acc.accPath).isOkOr:
           if error.error != AccNotFound:
             ledger.setFatalErrorOrAssert(info & $$error)
-
-    acc.flags = acc.flags - resetFlags
 
   if clearCache:
     # This overwrites the cache from the previous persist, providing a crude LRU
