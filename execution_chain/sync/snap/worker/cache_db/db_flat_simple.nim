@@ -34,6 +34,9 @@ template failedUpdating(info, what: static[string]): auto =
 template failedDeleting(info, what: static[string]): auto =
   info & ": Failed deleting " & what & " on cache"
 
+template failedClearing(info, what: static[string]): auto =
+  info & ": Failed deleting " & what & " on cache"
+
 template failedRangeUpd(info, what: static[string]): auto =
   info & ": Failed updaing " & what & " ranges"
 
@@ -135,30 +138,16 @@ proc putFlatAcc*(
   ok()
 
 proc putFlatAcc*(
-  db: CacheDbRef;
-  accPath: Hash32;
-  dirtyStorage: bool;
-  dirtyCode: bool;
-  account: Account;
-   info: static[string];
-    ): Opt[void] =
-  db.putFlatAcc(accPath, dirtyStorage, dirtyCode, account).isOkOr:
-    error info.failedUpdating AccountInfo, accPath=accPath.toStr,
-      dirtyStorage, dirtyCode, `error`=error
-    return err()
-  ok()
-
-proc putFlatAcc*(
     db: CacheDbRef;
     accPath: Hash32;
-    dirtyStorage: bool;
-    dirtyCode: bool;
-    payload: openArray[byte];
+    acc: Account;
     info: static[string];
       ): Opt[void] =
-  db.putFlatAcc(accPath, dirtyStorage, dirtyCode, payload).isOkOr:
+  var accData: CacheFlatAccData
+  accData.account = acc
+  db.putFlatAcc(accPath, accData).isOkOr:
     error info.failedUpdating AccountInfo, accPath=accPath.toStr,
-      dirtyStorage, dirtyCode, `error`=error
+      `error`=error
     return err()
   ok()
 
@@ -185,6 +174,17 @@ proc hasStoMissingIntv*(
     return err()
   ok(move data)
 
+proc hasStoMissingIntv*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[bool] =
+  var data = db.hasStoMissingIntv(accPath).valueOr:
+    error info.failedToFetch StoMissingIntvInfo,
+      accPath=accPath.toStr, `error`=error
+    return err()
+  ok(move data)
+
 proc getStoMissingIntv*(
     db: CacheDbRef;
     accPath: Hash32;
@@ -199,18 +199,6 @@ proc getStoMissingIntv*(
     # requirement of missing intv record for accounts (which must exisit.)
     return Opt.some(Opt.none(CacheStoMissingIntvData))
   Opt.some(move data)
-
-proc putStoMissingIntv*(
-    db: CacheDbRef;
-    accPath: Hash32;
-    ranges: ItemKeyRangeSet;
-    info: static[string];
-      ): Opt[void] =
-  db.putStoMissingIntv(accPath, ranges).isOkOr:
-    error info.failedRangeUpd StoMissingIntvInfo,
-      accPath=accPath.toStr, `error`=error
-    return err()
-  ok()
 
 proc putStoMissingIntv*(
     db: CacheDbRef;
@@ -361,6 +349,17 @@ proc delFlatSlot*(
       ): Opt[void] =
   db.delFlatSlot(accPath).isOkOr:
     error info.failedDeleting FlatSlotInfo & " sub-MPT", accPath=accPath.toStr,
+      `error`=error
+    return err()
+  ok()
+
+proc clearFlatSlot*(
+    db: CacheDbRef;
+    accPath: Hash32;
+    info: static[string];
+      ): Opt[void] =
+  db.clearFlatSlot(accPath).isOkOr:
+    error info.failedClearing FlatSlotInfo & " sub-MPT", accPath=accPath.toStr,
       `error`=error
     return err()
   ok()

@@ -13,14 +13,14 @@
 import
   std/bitops,
   pkg/[chronicles, chronos, stew/interval_set],
-  ./download/[account, bals, code, header, storage],
-  ./[helpers, cache_db, delete_account, worker_desc]
+  ./download/[account, bals, code, delete_account, header, storage],
+  ./[helpers, cache_db, worker_desc]
 
 logScope:
   topics = "snap sync"
 
 export
-  account, header
+  account, header, storage
 
 type
   DownloadInfo = tuple
@@ -94,8 +94,8 @@ proc startDownloading(
   ctx.accUnproc.init ItemKeyRangeMax
   ctx.pool.pivotNum = number                        # set pivot
   if 0 < ctx.pool.pivotNum:
-    debug info & ": Start downloading accounts",
-      pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
+    info info & ": Start downloading pivot state data",
+      pivot=ctx.pool.pivotNum, forward=ctx.pool.forwardNum
   ok()
 
 proc verifyAmsterdamOrLater(
@@ -128,6 +128,7 @@ proc verifyAmsterdamOrLater(
 
 proc downloadInit*(
     ctx: SnapCtxRef;
+    marked: seq[Address];
     info: static[string];
       ): Opt[void] =
   let firstPivot = ctx.setFirstPivotFromFinNumber(info)
@@ -143,8 +144,9 @@ proc downloadInit*(
       ctx.accUnproc.unprocessed = accState.ranges   # copy reference (!)
       ctx.pool.pivotNum = accState.number           # set pivot
       if 0 < ctx.pool.pivotNum:                     # ready ok?
-        debug info & ": Continue downloading accounts",
-          pivotNum=ctx.pool.pivotNum, forwardNum=ctx.pool.forwardNum
+        info info & ": Continue downloading pivot state data",
+          pivot=ctx.pool.pivotNum, forward=ctx.pool.forwardNum,
+          nAccRefetch=marked.len
     else:
       ?ctx.startDownloading(firstPivot, info)
 
@@ -153,7 +155,16 @@ proc downloadInit*(
   elif ctx.pool.pivotNum == 0:                      # delayed intialisation?
     ?ctx.startDownloading(firstPivot, info)
 
+  # Add marked account addresses. In case `startDownloading()` was called
+  # there is nothing to do as the missing range is the full interval. But
+  # in that case there would be no marked list either.
+  for w in marked:
+    let accKey = w.computeAccPath.to(ItemKey)
+    if not ctx.accUnproc.covered(accKey):
+      ctx.accUnproc.unprocessed.merge accKey
+
   ctx.accountDownloadMetricsUpdate()
+  ctx.storageDownloadMetricsUpdate(info)
   ok()
 
 template downloadCommit*(
@@ -183,7 +194,7 @@ template downloadCommit*(
       bodyRc = typeof(bodyRc).err(error)
       break body
 
-    chronicles.info info & ": Ready for state update"
+    chronicles.info info & ": Ready for forwarding pivot state"
     # End `block body`
 
   bodyRc
@@ -230,37 +241,53 @@ template downloadState*(
     var
       didSomething = false                          # logging only
       doEntity = toMask[int](0..2)
+      nRefreshSeq = 0
     while buddy.ctrl.running and doEntity != 0:
 
       if doEntity.testBit(0):
-        buddy.accountDownload(stateRoot, number, info).isOkOr:
-          if error != ECompleted:
-            bodyRc = typeof(bodyRc).err(error)
-            break
+        let rc = buddy.accountDownload(stateRoot, number, info)
+        if rc.isOk:
           didSomething = true                       # logging only
+
+          if rc.value:                              # refresh only?
+            # The storage downloader will not be called until several
+            # accounts are refreshed consecutively in refresh-only mode.
+            nRefreshSeq.inc                         # consec. refresh requests
+            if nRefreshSeq < nConsecutiveAccountRefreshMax:
+              continue
+          nRefreshSeq = 0                           # reset request seq count
+
+          doEntity.setBit(1)                        # re-activate storage & code
+          doEntity.setBit(2)
+        elif rc.error == ECompleted:
           doEntity.clearBit(0)                      # done with accounts
-        doEntity.setBit(1)                          # re-activate storage & code
-        doEntity.setBit(2)
+        else:
+          bodyRc = typeof(bodyRc).err(rc.error)
+          break
 
       if doEntity.testBit(1):
         if buddy.ctrl.stopped:
           break
-        buddy.storageDownload(stateRoot, number, info).isOkOr:
-          if error != ECompleted:
-            bodyRc = typeof(bodyRc).err(error)
-            break
+        let rc = buddy.storageDownload(stateRoot, number, info)
+        if rc.isOk:
           didSomething = true                       # logging only
+        elif rc.error == ECompleted:
           doEntity.clearBit(1)                      # done with storage so far
+        else:
+          bodyRc = typeof(bodyRc).err(rc.error)
+          break
 
       if doEntity.testBit(2):
         if buddy.ctrl.stopped:
           break
-        buddy.codeDownload(stateRoot, number, info).isOkOr:
-          if error != ECompleted:
-            bodyRc = typeof(bodyRc).err(error)
-            break
+        let rc = buddy.codeDownload(stateRoot, number, info)
+        if rc.isOk:
           didSomething = true                       # logging only
+        elif rc.error == ECompleted:
           doEntity.clearBit(2)                      # done with code so far
+        else:
+          bodyRc = typeof(bodyRc).err(rc.error)
+          break
       # End `while ..`
 
     let data {.used.} = ctx.downloadReady(info).valueOr:
@@ -269,7 +296,10 @@ template downloadState*(
       break body
 
     if didSomething:
-      debug info & ": Downloaded data", peer, accountsDone=data.accDone,
+      chronicles.info info & ": Downloaded pivot state data", peer,
+        pivot=ctx.pool.pivotNum,
+        accCoverage=(1.0 - ctx.accUnproc.totalRatio).pcStr,
+        accountsDone=data.accDone,
         storageDone=data.stoDone, codeDone=data.codeDone,
         syncState=($buddy.syncState), nSyncPeers=ctx.nSyncPeers()
       discard
@@ -303,8 +333,8 @@ template downloadBals*(
     ctx.pool.forwardNum = ctx.getLastBalNum()
     bodyRc = typeof(bodyRc).ok()
 
-    chronicles.info info & ": Imported BALs", pivotNum=ctx.pool.pivotNum,
-      forwardNum=ctx.pool.forwardNum, nBALs=rc.value
+    chronicles.info info & ": Downloaded BALs", pivot=ctx.pool.pivotNum,
+      forward=ctx.pool.forwardNum, nBALs=rc.value
 
   bodyRc
 
@@ -343,7 +373,7 @@ template downloadResume*(
 
     # Delete all accounts for partial sub-MPTs and contract codes.
     for accPath in accPaths:
-      ctx.deleteAccount(accPath, timer, info).isOkOr:
+      ctx.deleteAccount(accPath, info).isOkOr:
         break body                                  # failed
 
     bodyRc = typeof(bodyRc).ok()

@@ -111,6 +111,9 @@ proc commit*(
     # Otherwise `maxKey` would be internally adjusted to `max(minKey,maxKey)`
     doAssert udb.unprocessed.merge(minKey, maxKey) == maxKey - minKey + 1
 
+proc covered*(udb: UnprocItemKeys, pt: ItemKey): bool =
+  ## Check whether the argument `pt` is on the database.
+  udb.unprocessed.covered(pt) or udb.borrowed.covered(pt)
 
 func avail*(udb: UnprocItemKeys): Opt[UInt256] =
   ## Returns the number of `ItemKey` entries that can be fetched (maybe split

@@ -44,6 +44,7 @@ proc resetServices*(ctx: SnapCtxRef; info: static[string]): Opt[void] =
 
   # Set up accounts download metrics
   ctx.accountDownloadMetricsReset()
+  ctx.storageDownloadMetricsReset()
 
   # Manage BAL fetching from eth peer
   ctx.pool.failedEthBalId = EthBalHashSet.init ethFetchBalCapacity

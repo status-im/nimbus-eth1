@@ -34,7 +34,7 @@
 import
   ./cache_db/[
     db_desc, db_flat, db_flat_simple, db_init,
-    db_header_bal, db_header_bal_simple, db_stats]
+    db_header_bal, db_header_bal_simple]
 
 export
   db_desc,
@@ -42,7 +42,6 @@ export
   db_flat_simple,
   db_header_bal,
   db_header_bal_simple,
-  db_init,
-  db_stats
+  db_init
 
 # End

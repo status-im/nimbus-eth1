@@ -13,6 +13,7 @@
 import
   std/[tables, deques],
   chronos,
+  metrics,
   minilru,
   ../../../common,
   ../../../db/[core_db, fcu_db],
@@ -20,6 +21,9 @@ import
   ../../../portal/portal,
   ./block_quarantine,
   ./chain_branch
+
+declareGauge nec_finalized_block_number, "" &
+  "Block number of the latest known finalized block (fork-choice finality)"
 
 from ../../../block_access_list/bal_builder import BlockAccessListRef
 
@@ -138,10 +142,12 @@ type
 # These functions are private to ForkedChainRef
 # ------------------------------------------------------------------------------
 
-func tryUpdatePendingFCU*(c: ForkedChainRef, finHash: Hash32, number: uint64): bool =
+proc tryUpdatePendingFCU*(c: ForkedChainRef, finHash: Hash32, number: uint64): bool =
   c.pendingFCU = zeroHash32
   if number > c.latestFinalized.number:
     c.latestFinalized = FcuHashAndNumber(number: number, hash: finHash)
+    nec_finalized_block_number.set(number.int64)
+
     return true
   # false
 

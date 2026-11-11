@@ -30,7 +30,8 @@ func short*(peerID: Hash): string =
   s.substr(s.len-8).toLowerAscii
 
 func toStr*(h: Hash32): string =
-  if h == emptyRoot: "empty"
+  if h == EMPTY_ROOT_HASH: "emptyRoot"
+  elif h == EMPTY_CODE_HASH: "emptyCode"
   elif h == zeroHash32: "zero"
   else: h.short
 

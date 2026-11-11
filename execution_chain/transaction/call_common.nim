@@ -12,7 +12,6 @@ import
   eth/common/eth_types, stint,
   results,
   chronicles,
-  stew/assign2,
   ../evm/[types, state],
   ../evm/[message, precompiles, internals, interpreter_dispatch, evm_errors],
   ../evm/interpreter/op_handlers/oph_helpers,
@@ -68,7 +67,7 @@ proc setupComputation(params: CallParams, keepStack: bool, vmState: BaseVMState,
               msg.currentTarget = generateContractAddress(vmState, params.sender)
               CodeBytesRef.initCopy(params.tx.payload)
             else:
-              assign(msg.data, params.tx.payload)
+              msg.borrowData(params.tx.payload)
               getRecipientCode(vmState, msg)
 
     if MsgFlags.Delegated in msg.flags:
@@ -241,7 +240,7 @@ proc finishRunningComputation(
 
     when T is DebugCallResult:
       result.stack = move(c.finalStack)
-      result.memory = move(c.memory)
+      result.memory = move(c.finalMemory)
   elif T is TxResult:
     result.gasUsed = gasUsed.txGasUsed
     result.blockExecutionGasUsed = gasUsed.blockExecutionGasUsed
@@ -269,7 +268,7 @@ proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
       else:
         if tx.value.isZero.not and not ledger.isAccountAlive(c.msg.currentTarget):
           ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
-        assign(c.msg.data, tx.payload)
+        c.msg.borrowData(tx.payload)
         getRecipientCode(vmState, c.msg)
 
   if MsgFlags.Delegated in c.msg.flags:

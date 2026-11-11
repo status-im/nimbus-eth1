@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -8,7 +8,7 @@
 # ##################################################################
 # Macros to facilitate opcode enum and table creation
 
-import macros
+import stew/shims/macros
 
 macro fill_enum_table_holes*(enumTy: typedesc[enum], nop_filler, body: untyped): untyped =
   ## Fill the holes of table mapping for enum with a default value
@@ -39,19 +39,16 @@ macro fill_enum_table_holes*(enumTy: typedesc[enum], nop_filler, body: untyped):
   body[0].expectKind(nnkBracket)
 
   let
-    enumImpl = enumTy.getType[1]
     opctable = body[0]
 
   result = nnkBracket.newTree()
   var
-    opcode = 1 # enumImpl[0] is an empty node
     body_idx = 0
 
-  while opcode < enumImpl.len:
+  for field in enumFields(enumTy):
     opctable[body_idx].expectKind(nnkExprColonExpr)
-    if eqIdent(enumImpl[opcode], opctable[body_idx][0]):
+    if eqIdent(field.name, opctable[body_idx][0]):
       result.add opctable[body_idx]
       inc body_idx
     else:
       result.add nop_filler
-    inc opcode

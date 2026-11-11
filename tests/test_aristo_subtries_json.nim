@@ -6,13 +6,14 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/os,
+  std/[os, sequtils],
   unittest2,
   stint,
   eth/common/[hashes, addresses, accounts, accounts_rlp],
   eth/rlp,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/db/[ledger, core_db],
+  ../execution_chain/db/aristo/aristo_proof,
   ../execution_chain/common/[chain_config_loader, genesis]
 
 proc getGenesisAlloc(filePath: string): GenesisAlloc =
@@ -195,7 +196,7 @@ suite "Aristo subtries json tests":
         paths[keccak256(address.data())] = slots
 
         var proofNodes: seq[seq[byte]]
-        txFrame.multiProof(paths, proofNodes).expect("ok")
+        txFrame.multiProof(paths, [], proofNodes).expect("ok")
         let nodes = toNodesTable(proofNodes)
 
         check:
@@ -227,7 +228,7 @@ suite "Aristo subtries json tests":
         paths[keccak256(address.data())] = slots
 
       var proofNodes: seq[seq[byte]]
-      txFrame.multiProof(paths, proofNodes).expect("ok")
+      txFrame.multiProof(paths, [], proofNodes).expect("ok")
       let nodes = toNodesTable(proofNodes)
 
       check:
@@ -265,8 +266,12 @@ suite "Aristo subtries json tests":
     paths[keccak256(address.data())] = slotPaths
 
     var proofNodes: seq[seq[byte]]
-    ledger.txFrame.multiProof(paths, proofNodes).expect("ok")
+    ledger.txFrame.multiProof(paths, [], proofNodes).expect("ok")
     let nodes = toNodesTable(proofNodes)
+
+    proc hasEmbeddedChild(node: seq[byte]): bool =
+      let r = rlpFromBytes(node)
+      r.listLen() == 17 and (0 ..< 16).anyIt(r.listElem(it).isList())
 
     let
       subtrieDb = newCoreDbRef(DefaultDbMemory)
@@ -276,8 +281,14 @@ suite "Aristo subtries json tests":
       paths.len() == 1
       proofNodes.len() > 0
       nodes.len() > 0
+      # As in the spec, embedded (<32 byte) nodes are only held by their parent
+      proofNodes.anyIt(it.hasEmbeddedChild())
+      proofNodes.allIt(it.len() >= 32)
       subtrieTxFrame.putSubtrie(stateRoot, nodes).isOk()
       subtrieTxFrame.getStateRoot().get() == stateRoot
+    let storageRoot = ledger.getStorageRoot(address)
+    for p in slotPaths:
+      check verifyProof(nodes, storageRoot, p).value() == Opt.some(@[1'u8])
 
     # Get the values from the subtrie
     let
@@ -334,7 +345,7 @@ suite "Aristo subtries json tests":
       paths[a] = @[]
       paths[e] = @[]
       var proofNodes: seq[seq[byte]]
-      full.multiProof(paths, proofNodes).expect("ok")
+      full.multiProof(paths, [], proofNodes).expect("ok")
       let witness = newCoreDbRef(DefaultDbMemory).baseTxFrame().txFrameBegin()
       doAssert witness.putSubtrie(full.getStateRoot().get(), toNodesTable(proofNodes)).isOk()
       Dbs(full: full, witness: witness)
@@ -349,15 +360,12 @@ suite "Aristo subtries json tests":
     proc rootsMatch(dbs: Dbs): bool =
       dbs.witness.getStateRoot().get() == dbs.full.getStateRoot().get()
 
-    proc witnessHasUnprovenCollapse(dbs: Dbs): bool =
-      LedgerRef.init(dbs.witness).hasUnprovenCollapse()
-
     block: # Deleting a collapses B onto S, which needs S
       let dbs = setup()
       check:
         dbs.delete(a)
         dbs.rootsMatch()
-        dbs.witnessHasUnprovenCollapse()
+        dbs.witness.hasUnprovenCollapse()
 
     block: # Inserting c restores B
       let dbs = setup()
@@ -365,7 +373,7 @@ suite "Aristo subtries json tests":
         dbs.delete(a)
         dbs.insert(c)
         dbs.rootsMatch()
-        not dbs.witnessHasUnprovenCollapse()
+        not dbs.witness.hasUnprovenCollapse()
 
     block: # Inserting b splits above B, which stays collapsed
       let dbs = setup()
@@ -373,17 +381,17 @@ suite "Aristo subtries json tests":
         dbs.delete(a)
         dbs.insert(b)
         dbs.rootsMatch()
-        dbs.witnessHasUnprovenCollapse()
+        dbs.witness.hasUnprovenCollapse()
 
     block: # R collapses onto the collapsed B, then a re-insert restores B
       let dbs = setup()
       check:
         dbs.delete(a)
         dbs.delete(e)
-        dbs.witnessHasUnprovenCollapse()
+        dbs.witness.hasUnprovenCollapse()
         dbs.insert(a)
         dbs.rootsMatch()
-        not dbs.witnessHasUnprovenCollapse()
+        not dbs.witness.hasUnprovenCollapse()
 
   test "Branch shared by a branch parent and an extension parent":
     let

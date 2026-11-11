@@ -123,15 +123,14 @@ proc getKey*(
 ): Result[(HashKey, VertexRef), (AristoError, string)] =
   block:
     # Try LRU cache first
-    let rc =
-      if GetVtxFlag.PeekCache in flags:
-        rdb.rdKeyLru.peek(rvid)
-      else:
-        rdb.rdKeyLru.get(rvid)
-
-    if rc.isOk:
-      rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok((rc.value, nil))
+    if GetVtxFlag.PeekCache in flags:
+      rdb.rdKeyLru.withPeek(rvid, cached):
+        rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
+        return ok((cached.key, nil))
+    else:
+      rdb.rdKeyLru.withGet(rvid, cached):
+        rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
+        return ok((cached.key, nil))
 
     rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
 
@@ -200,16 +199,16 @@ proc getKeys*(
   for i, rvid in rvids:
     block lookup:
       block:
-        let rc =
-          if GetVtxFlag.PeekCache in flags:
-            rdb.rdKeyLru.peek(rvid)
-          else:
-            rdb.rdKeyLru.get(rvid)
-
-        if rc.isOk:
-          rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-          keyvtxs[i] = (rc.value, VertexRef(nil))
-          break lookup
+        if GetVtxFlag.PeekCache in flags:
+          rdb.rdKeyLru.withPeek(rvid, cached):
+            rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
+            keyvtxs[i] = (cached.key, VertexRef(nil))
+            break lookup
+        else:
+          rdb.rdKeyLru.withGet(rvid, cached):
+            rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
+            keyvtxs[i] = (cached.key, VertexRef(nil))
+            break lookup
 
         rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
 
@@ -301,14 +300,14 @@ proc getVtx*(
 ): Result[VertexRef, (AristoError, string)] =
   # Try LRU cache first
   block:
-    let rc =
-      if GetVtxFlag.PeekCache in flags:
-        rdb.rdBranchLru.peek(rvid)
-      else:
-        rdb.rdBranchLru.get(rvid)
-    if rc.isOk():
-      rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok(BranchRef.init(rc[][0], rc[][1]))
+    if GetVtxFlag.PeekCache in flags:
+      rdb.rdBranchLru.withPeek(rvid, cached):
+        rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
+        return ok(BranchRef.init(cached.startVid, cached.used))
+    else:
+      rdb.rdBranchLru.withGet(rvid, cached):
+        rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
+        return ok(BranchRef.init(cached.startVid, cached.used))
 
   block:
     var vtx: VertexRef
@@ -358,7 +357,7 @@ proc getVtx*(
   if GetVtxFlag.PeekCache notin flags:
     if res.value.vType == Branch:
       let vtx = BranchRef(res.value())
-      rdb.rdBranchLru.put(rvid, (vtx.startVid, vtx.used))
+      rdb.rdBranchLru.put(rvid, vtx.startVid, vtx.used)
     else:
       rdb.rdVtxLru.put(rvid, vtxBuf)
 

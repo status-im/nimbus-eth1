@@ -34,8 +34,6 @@ import
   ./tx_tabs,
   ./tx_item
 
-from eth/common/eth_types_rlp import rlpHash
-
 logScope:
   topics = "txpool"
 
@@ -47,7 +45,7 @@ declareCounter nec_txpool_rejected_total, "Transactions rejected on add",
   labels = ["reason"]
 
 type
-  PosPayloadAttr = object
+  PosPayloadAttr* = object
     feeRecipient: Address
     timestamp   : EthTime
     prevRandao  : Bytes32
@@ -194,7 +192,10 @@ func baseFee*(xp: TxPoolRef): GasInt =
 func excessBlobGas(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
 
+proc followLatest(xp: TxPoolRef) {.raises: [], gcsafe.}
+
 proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
+  xp.followLatest()
   xp.vmState.ledger.getNonce(account)
 
 proc getPendingNonce*(xp: TxPoolRef; account: Address): AccountNonce =
@@ -339,6 +340,15 @@ proc updateVmState*(xp: TxPoolRef) =
   ## Reset transaction environment on top of the latest block.
   xp.updateVmState(xp.chain.latestHeader, xp.chain.latestHash)
 
+proc followLatest(xp: TxPoolRef) =
+  if xp.chain.latestHash != xp.vmState.blockCtx.parentHash:
+    xp.pos.timestamp = max(xp.pos.timestamp, xp.chain.latestHeader.timestamp)
+    xp.updateVmState()
+  else:
+    # An evicted snapshot is loaded back into the same frame, which the pool's
+    # frame still sits on
+    discard xp.chain.txFrame(xp.chain.latestHash)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -386,8 +396,7 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     # and base fee. The context timestamp only moves forward so that an
     # in-flight build cycle's slot timestamp (always beyond the head's) is
     # preserved.
-    xp.pos.timestamp = max(xp.pos.timestamp, xp.chain.latestHeader.timestamp)
-    xp.updateVmState()
+    xp.followLatest()
   elif xp.pos.timestamp != xp.vmState.blockCtx.timestamp:
     xp.updateVmState()
 
@@ -592,6 +601,9 @@ proc getBlobCellAndProofV1*(xp: TxPoolRef, v: VersionedHash, indicesBitarray: Bi
 # PoS payload attributes getters
 # ------------------------------------------------------------------------------
 
+func posAttrs*(xp: TxPoolRef): PosPayloadAttr =
+  xp.pos
+
 func feeRecipient*(xp: TxPoolRef): Address =
   xp.pos.feeRecipient
 
@@ -613,6 +625,9 @@ func slotNumber*(xp: TxPoolRef): uint64 =
 # ------------------------------------------------------------------------------
 # PoS payload attributes setters
 # ------------------------------------------------------------------------------
+
+func `posAttrs=`*(xp: TxPoolRef, val: PosPayloadAttr) =
+  xp.pos = val
 
 func `feeRecipient=`*(xp: TxPoolRef, val: Address) =
   xp.pos.feeRecipient = val

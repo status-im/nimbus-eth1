@@ -27,6 +27,8 @@ proc isKeyframe(txFrame: AristoTxRef): bool =
 
 proc clearSnapshot*(txFrame: AristoTxRef) {.raises: [], gcsafe.}
 
+proc dispose*(txFrame: AristoTxRef) {.raises: [], gcsafe.}
+
 proc removeSnapshotFrame(db: AristoDbRef, txFrame: AristoTxRef) =
   let index = db.snapshots.find(txFrame)
   if index != -1:
@@ -40,7 +42,10 @@ proc addSnapshotFrame(db: AristoDbRef, txFrame: AristoTxRef) =
 
   if db.snapshots.len() == db.maxSnapshots:
     let frame = db.snapshots.pop()
-    frame.clearSnapshot()
+    if frame.detached:
+      frame.dispose()
+    else:
+      frame.clearSnapshot()
 
   db.snapshots.push(txFrame)
 
@@ -86,6 +91,9 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
 
         # Verify that https://github.com/nim-lang/Nim/issues/23759 is not present
         assert frame.snapshot.vtx.len == 0 and frame.snapshot.level.isNone()
+
+        if frame.detached:
+          frame.dispose()
 
       if frame.snapshot.level.isSome() and isKeyframe:
         txFrame.snapshot.vtx = initTable[RootedVertexID, VtxSnapshot](
@@ -161,6 +169,31 @@ proc clearSnapshot*(txFrame: AristoTxRef) =
 
   if not txFrame.isKeyframe():
     txFrame.snapshot.reset()
+
+proc detach*(txFrame: AristoTxRef) =
+  ## Keep only the snapshot, which also holds the frame's own changes. The
+  ## frame no longer needs its ancestors and is disposed once a child takes
+  ## the snapshot or the snapshot is evicted.
+  doAssert txFrame.snapshot.level.isSome() and not txFrame.isKeyframe()
+
+  txFrame.sTab.reset()
+  txFrame.kMap.reset()
+  txFrame.accLeaves.reset()
+  txFrame.stoLeaves.reset()
+  txFrame.detached = true
+
+proc loadSnapshot*(txFrame: AristoTxRef, base: AristoTxRef) =
+  ## Make `txFrame` a detached child of `base` whose state is the snapshot
+  ## folded in by `deblobifyTxFrameInto`. The in-memory state of `base` goes
+  ## under it, and the snapshot is queued with the others.
+  doAssert base.isKeyframe() and txFrame.blockNumber.isSome()
+
+  txFrame.db = base.db
+  txFrame.parent = base
+  txFrame.snapshot.copyUnder(base)
+  txFrame.snapshot.level = Opt.some(base.level)
+  txFrame.detach()
+  base.db.addSnapshotFrame(txFrame)
 
 proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   doAssert not txFrame.isDisposed()
@@ -294,6 +327,7 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   # Since txFrame is now the base, it contains all changes and therefore acts
   # as a snapshot
   txFrame.snapshot.level = Opt.some(txFrame.level)
+  txFrame.detached = false
   txFrame.sTab.clear()
   txFrame.kMap.clear()
   txFrame.accLeaves.clear()

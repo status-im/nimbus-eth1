@@ -43,10 +43,10 @@ proc updateEtaInit*(ctx: BeaconCtxRef) =
   ctx.pool.syncEta.reset
   ctx.pool.syncEta.headerTime = etaHeaderTimeDefault
   ctx.pool.syncEta.blockTime = etaBlockTimeDefault
-  if ctx.pool.standByMode:
-    metrics.set(nec_sync_eta_secs, 0f)              # currently all done
+  if ctx.pool.standByMode == BeaconServerMode.none:
+    metrics.set(nec_sync_eta_secs, -1)              # waiting for data
   else:
-    metrics.set(nec_sync_eta_secs, -1)
+    metrics.set(nec_sync_eta_secs, 0f)              # currently all done
 
 # --------------
 
@@ -54,7 +54,7 @@ proc updateEtaIdle*(ctx: BeaconCtxRef) =
   ## Metrics update while system state is idle so it can be run on a ticker.
   ## Othewise, ETA updates are done with the syncer state handler.
   ##
-  if ctx.pool.standByMode:
+  if ctx.pool.standByMode != BeaconServerMode.none:
     metrics.set(nec_sync_eta_secs, 0f)              # currently all done
 
   elif ctx.pool.syncState == BeaconState.idle and

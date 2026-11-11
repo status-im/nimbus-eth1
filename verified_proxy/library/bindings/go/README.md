@@ -1,0 +1,126 @@
+# nimbus-verified-proxy Go bindings
+
+Go bindings for [Nimbus Verified Proxy](https://nimbus.guide/verified-proxy.html) — a light-client-backed Ethereum JSON-RPC proxy that cryptographically verifies responses before returning them.
+
+## Requirements
+
+- Go 1.24+
+- CGo (enabled by default)
+- C++ standard library (`libstdc++` on Linux/Windows, `libc++` on macOS)
+
+## Installation
+
+```sh
+go get github.com/status-im/nimbus-eth1/verified_proxy/library/bindings/go
+```
+
+The package links against a precompiled static library (`libverifproxy`). After adding the dependency, fetch the library for your platform:
+
+```sh
+go get -tool github.com/status-im/nimbus-eth1/verified_proxy/library/bindings/go/cmd/verifproxy-setup-libs
+go tool verifproxy-setup-libs
+```
+
+`verifproxy-setup-libs` downloads the correct `libverifproxy` from the GitHub release matching the module version and writes it into the module cache.
+
+## Usage
+
+```go
+import "github.com/status-im/nimbus-eth1/verified_proxy/library/bindings/go/verifproxy"
+
+const config = `{
+  "eth2Network":      "mainnet",
+  "trustedBlockRoot": "<trusted-block-root>",
+  "executionApiUrls": "https://your-execution-node",
+  "beaconApiUrls":    "https://your-beacon-node",
+  "logLevel":         "INFO"
+}`
+
+ctx, err := verifproxy.Start(config, nil, nil)
+if err != nil {
+    log.Fatal(err)
+}
+defer ctx.Stop()
+
+if err := ctx.Sync(30*time.Second); err != nil {
+    log.Fatal(err)
+}
+interval, err := ctx.SyncInterval(30*time.Second)
+if err != nil {
+    log.Fatal(err)
+}
+go func() {
+    for range time.Tick(interval) {
+        if err := ctx.Sync(30*time.Second); err != nil {
+            log.Printf("sync: %v", err)
+        }
+    }
+}()
+
+result, err := ctx.CallRpc("eth_blockNumber", "[]", 30*time.Second)
+```
+
+The proxy does not sync in the background and requests never trigger a sync. You decide
+when to advance the light client by calling `Sync`; `SyncInterval` returns the suggested
+period (the beacon slot duration). Requests made before the first successful `Sync` fail.
+
+## Configuration
+
+| Field | Description |
+|---|---|
+| `eth2Network` | Network name: `mainnet`, `sepolia`, `hoodi`, or an OP Stack network (`op-mainnet`, `base-mainnet`, `op-sepolia`) |
+| `trustedBlockRoot` | A trusted checkpoint block root (hex) used to bootstrap the light client |
+| `executionApiUrls` | Comma-separated execution layer JSON-RPC URLs |
+| `beaconApiUrls` | Comma-separated beacon API URLs |
+| `opExecutionApiUrls` | Comma-separated L2 (op-geth) execution JSON-RPC URLs. Only used for OP Stack networks |
+| `logLevel` | Log verbosity: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL` |
+| `logStdout` | Log destination: `Auto`, `None`, or `Stdout` |
+
+When an OP Stack network is configured, the primary engine verifies the L1 the rollup
+settles to (so `eth_*` calls target L1) and a secondary L2 engine is served under the `op_`
+namespace. Call it through the same `CallRpc`, e.g.
+`ctx.CallRpc("op_getBalance", params, timeout)`.
+
+## Custom transports
+
+By default HTTP transports are used for both the execution and beacon APIs. You can override them:
+
+```go
+execTransport := func(url, method, params string) (json.RawMessage, error) {
+    // forward to your own RPC client
+}
+
+beaconTransport := func(url, endpoint, params string) (json.RawMessage, error) {
+    // forward to your own beacon client
+}
+
+ctx, err := verifproxy.Start(config, execTransport, beaconTransport)
+```
+
+## API
+
+```go
+// Start initialises the proxy. It does not sync; call Sync afterwards.
+// Pass nil transports to use the default HTTP implementations.
+func Start(configJson string, exec ExecTransportFunc, beacon BeaconTransportFunc) (*Context, error)
+
+// Sync advances the light client once (nvp_eth_sync).
+// A timeout <= 0 uses the default request timeout (5s).
+func (ctx *Context) Sync(timeout time.Duration) error
+
+// SyncInterval is the suggested period between Sync calls (nvp_eth_syncInterval).
+func (ctx *Context) SyncInterval(timeout time.Duration) (time.Duration, error)
+
+// OpSync advances the OP anchors once (nvp_op_sync). Errors if no OP network is configured.
+func (ctx *Context) OpSync(timeout time.Duration) error
+
+// OpSyncInterval is the suggested period between OpSync calls (nvp_op_syncInterval).
+func (ctx *Context) OpSyncInterval(timeout time.Duration) (time.Duration, error)
+
+// CallRpc sends a JSON-RPC call and waits for the verified result.
+func (ctx *Context) CallRpc(method, params string, timeout time.Duration) (string, error)
+
+// Stop shuts down the proxy and frees resources.
+func (ctx *Context) Stop() error
+```
+

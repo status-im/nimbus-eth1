@@ -233,6 +233,27 @@ proc copyFrom*(snapshot: var Snapshot, tx: AristoTxRef) =
   for k, v in tx.stoLeaves:
     snapshot.sto[k] = (v, tx.level)
 
+proc copyUnder*(snapshot: var Snapshot, tx: AristoTxRef) =
+  ## Add the in-memory state that reads through `tx` find, under the newer
+  ## entries already in `snapshot`
+  for w in tx.rstack(stopAtSnapshot = true):
+    if w.snapshot.level.isSome():
+      for k, v in w.snapshot.vtx:
+        discard snapshot.vtx.hasKeyOrPut(k, v)
+      for k, v in w.snapshot.acc:
+        discard snapshot.acc.hasKeyOrPut(k, v)
+      for k, v in w.snapshot.sto:
+        discard snapshot.sto.hasKeyOrPut(k, v)
+      break
+
+    for rvid, vtx in w.sTab:
+      discard snapshot.vtx.hasKeyOrPut(
+        rvid, (vtx, w.kMap.getOrDefault(rvid, VOID_HASH_KEY), w.level))
+    for k, v in w.accLeaves:
+      discard snapshot.acc.hasKeyOrPut(k, (v, w.level))
+    for k, v in w.stoLeaves:
+      discard snapshot.sto.hasKeyOrPut(k, (v, w.level))
+
 proc mergeAndDiscard*(trg, src: var HashKey) =
   trg = src
 

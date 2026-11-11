@@ -134,8 +134,12 @@ proc readValue*(
     r: var JsonReader[EthJson],
     value: var array[HardFork.Cancun .. HardFork.high, Opt[BlobSchedule]],
 ) {.gcsafe, raises: [SerializationError, IOError].} =
+  {.warning: "remove AmsterdamBPOInc/Dec if bpo3 already scheduled".}
   wrapValueError:
-    for key in r.readObjectFields:
+    for rawKey in r.readObjectFields:
+      let key = if rawKey == "AmsterdamBPOIncrease" or
+                   rawKey == "AmsterdamBPODecrease": "bpo3"
+                else: rawKey
       blobScheduleParser(r, key, value)
 
 proc readValue*(r: var JsonReader[EthJson], val: var GenesisStorage)

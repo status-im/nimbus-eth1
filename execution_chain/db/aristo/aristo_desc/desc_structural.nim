@@ -90,14 +90,12 @@ type
   ## written from background pre-fetch threads under refc (which uses thread-local heaps).
   
   CachedAccLeaf* = object
-    case empty*: bool
-    of true:
-      discard
-    of false:
-      account*: AristoAccount
-      stoID*: StorageID
-      stoHint*: uint8
-      pfxLen*: uint8
+    account*: AristoAccount
+    stoVid: VertexID
+    stoValid: bool
+    stoHint*: uint8
+    pfxLen*: uint8
+    empty*: bool
 
   CachedStoLeaf* = object
     stoData*: UInt256
@@ -125,6 +123,9 @@ type
     PeekCache
       ## Peek into, but don't update cache - useful on work loads that are
       ## unfriendly to caches
+
+static:
+  doAssert sizeof(CachedAccLeaf) == 88
 
 const
   Leaves* = {VertexType.AccLeaf, VertexType.StoLeaf}
@@ -162,8 +163,12 @@ template init*(
 template init*(
     T: type CachedAccLeaf, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID,
     stoHintp: uint8 = 0): T =
-  T(empty: false, account: accountp, stoID: stoIDp, stoHint: stoHintp,
-    pfxLen: uint8(pfxp.len))
+  let stoID = stoIDp
+  T(account: accountp, stoVid: stoID.vid, stoValid: stoID.isValid, stoHint: stoHintp,
+    pfxLen: uint8(pfxp.len), empty: false)
+
+template stoID*(c: CachedAccLeaf): StorageID =
+  (isValid: c.stoValid, vid: c.stoVid)
 
 template init*(
     T: type CachedStoLeaf, pfxp: NibblesBuf, stoDatap: UInt256): T =

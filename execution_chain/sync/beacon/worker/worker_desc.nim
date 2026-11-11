@@ -189,7 +189,7 @@ type
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
     syncState*: BeaconState          ## Current syncer state
-    standByMode*: bool               ## Do not generally activate if `true`
+    standByMode*: BeaconServerMode   ## In most cases `none`
     subState*: SyncSubState          ## Additional state variables
     nextMetricsUpdate*: Moment       ## For updating metrics
 

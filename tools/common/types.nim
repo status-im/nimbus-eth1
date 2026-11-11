@@ -37,16 +37,19 @@ type
     OsakaToBPO1AtTime15k
     BPO2
     BPO1ToBPO2AtTime15k
-    BPO3
-    BPO2ToBPO3AtTime15k
-    BPO4
-    BPO3ToBPO4AtTime15k
-    BPO5
-    BPO4ToBPO5AtTime15k
     Amsterdam
     BPO2ToAmsterdamAtTime15k
     Bogota
     AmsterdamToBogotaAtTime15k
+    BPO3
+    AmsterdamBPOIncrease
+    AmsterdamBPODecrease
+    AmsterdamToBPOIncreaseAtTime15k
+    AmsterdamToBPODecreaseAtTime15k
+    BPO4
+    BPO3ToBPO4AtTime15k
+    BPO5
+    BPO4ToBPO5AtTime15k
 
   LogLevel* = enum
     Silent

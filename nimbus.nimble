@@ -8,7 +8,7 @@
 mode = ScriptMode.Verbose
 
 packageName   = "nimbus"
-version       = "0.4.3"
+version       = "0.4.4"
 author        = "Status Research & Development GmbH"
 description   = "An Ethereum client for Resource-Restricted Devices"
 license       = "Apache License 2.0"
@@ -16,7 +16,7 @@ skipDirs      = @["tests", "examples"]
 # we can't have the result of a custom task in the "bin" var - https://github.com/nim-lang/nimble/issues/542
 # bin           = @["build/nimbus"]
 
-requires "nim >= 2.2.12",
+requires "nim >= 2.2.14",
   "beacon_chain",
   "blscurve",
   "bncurve",
@@ -45,7 +45,7 @@ when declared(namedBin):
   namedBin = {
     "execution_chain/nimbus_execution_client": "nimbus_execution_client",
     "portal/client/nimbus_portal_client": "nimbus_portal_client",
-    "nimbus_verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
+    "verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
   }.toTable()
 
 import std/[os, strutils]

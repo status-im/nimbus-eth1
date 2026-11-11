@@ -344,7 +344,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
     return false
 
   for i in 0 ..< numChunks:
-    let actual = asmResult.memory.bytes.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex()
+    let actual = asmResult.memory.toOpenArray(i * chunkLen, (i + 1) * chunkLen - 1).toHex()
     let mem = boa.memory[i].toHex()
     if mem != actual:
       error "different memory value", idx=i, expected=mem, actual=actual

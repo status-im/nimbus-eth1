@@ -73,6 +73,8 @@ proc close*(db: CacheDbRef, wipe = false) =
   ## Close database unless done yet. If the argument `wipe` is set
   ## `true`, then the database will be physically deleted.
   ##
+  if db.adb.isNil:
+    return
   db.closeDb()
   if wipe:
     try:
@@ -89,7 +91,7 @@ proc close*(db: CacheDbRef, wipe = false) =
     except CatchableError:
       discard
 
-proc clear*(db: CacheDbRef; info: static[string]): bool =
+proc backupAndClear*(db: CacheDbRef; info: static[string]): bool =
   ## Close database and move it to a backup directory, then re-open a new
   ## database. Any previous backup database will be deleted.
   ##

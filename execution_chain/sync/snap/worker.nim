@@ -13,7 +13,7 @@
 import
   pkg/[chronicles, chronos, minilru, results],
   pkg/[beacon_chain/process_state, stew/byteutils],
-  ./worker/[download, helpers, cache_db, import_coredb,
+  ./worker/[download, helpers, cache_db,
             state_forward, start_stop, update, worker_desc]
 
 logScope:
@@ -117,12 +117,12 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       ctx.downloadResume(info).isOkOr:
         ctx.pool.resetReq = true                    # not much else possible
         break body
-      discard ctx.downloadInit(info)                # init download if possible
+      discard ctx.downloadInit(@[], info)           # init download if possible
 
     of SnapClear:
       # Clear cache DB if needed.
       let hasDataOrErr = ctx.pool.cacheDB.hasAccMissingIntv(info).valueOr: true
-      if hasDataOrErr and not ctx.pool.cacheDB.clear(info):
+      if hasDataOrErr and not ctx.pool.cacheDB.backupAndClear(info):
         bodyRc = daemonWaitClearFailInterval        # take a nap
         break body
 
@@ -135,7 +135,7 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
         bodyRc = daemonWaitReadyDwnldFailInterval   # take a nap
         break body
 
-      ctx.downloadInit(info).isOkOr:                # get ready
+      ctx.downloadInit(@[], info).isOkOr:           # get ready
         bodyRc = daemonWaitReadyInitFailInterval    # take a nap
 
     of SnapDownload:
@@ -153,7 +153,6 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       ctx.downloadCommit(info).isOkOr:              # write back ranges to DB
         # FIXME: any useful error handling here?
         error info & ": Error storing progress", `error`=error
-      await ctx.statsStateLog info                  # FIXME, will go away
 
     of SnapBalsFetch:
       discard ctx.headerDownloadTrigger(info)       # see `SnapDownload`
@@ -163,44 +162,33 @@ template runDaemon*(ctx: SnapCtxRef; info: static[string]): Duration =
       discard
 
     of SnapStateForward:
-      ctx.stateForward(info).isOkOr:
+      let refetch = ctx.stateForward(info).valueOr:
         # FIXME: some smart error handling here?
         break body
 
       # Prepare for next download cyle
-      discard ctx.downloadInit(info)                # get cache DB ready
-
-      debug info & ": Forwarded state", pivotNum=ctx.pool.pivotNum,
-        forwardNum=ctx.pool.forwardNum
-
-    of SnapAssembleMpt:
-      ctx.importCoreDb(info).isOkOr:
-        ctx.pool.resetReq = true                    # not much else possible
-
-    of SnapStop:
-      await ctx.statsStateLog info                  # FIXME, will go away
-      ctx.accountDownloadMetricsReset()             # cosmetics
-
-      # Done, terminate
-      if 0 < ctx.pool.newCoreDb.newDbPath.len:
-        if not ctx.pool.newCoreDb.waitSync:
-          notice info & ": Snap sync successful, will terminate",
-            dbPath=ctx.pool.newCoreDb.newDbPath
-          ctx.pool.newCoreDb.waitSync = true
-          ctx.headerDownloadCancel()
-        elif ctx.beaconState == BeaconState.idle:
-          ctx.daemon = false                        # all done, stop
-          ctx.pool.newCoreDb.waitSync = false
-          ctx.pool.newCoreDb.snapSyncStop = true
-        else:
-          ctx.pool.lastBcSyncLog.logCtrl(beaconSyncIdleLogWaitInterval):
-            debug info & ": Waiting for beacon sync to terminate",
-              beaconState=ctx.beaconState
-          bodyRc = daemonWaitHeaderStopInterval     # wait for beacon sync
+      ctx.downloadInit(refetch, info).isOkOr:       # get cache DB ready
+        # FIXME: some smart error handling here?
         break body
 
-      # This should have been handled by the FSA update
-      raiseAssert info & ": Snap sync is not ready yet to terminate"
+    of SnapStop:
+      ctx.accountDownloadMetricsReset()             # cosmetics
+      ctx.storageDownloadMetricsReset()
+
+      # Done, terminate
+      if not ctx.pool.newCoreDb.waitSync:
+        notice info & ": Snap sync will terminate"
+        ctx.pool.newCoreDb.waitSync = true
+        ctx.headerDownloadCancel()
+      elif ctx.beaconState == BeaconState.idle:
+        ctx.daemon = false                          # all done, stop
+        ctx.pool.newCoreDb.waitSync = false
+        ctx.pool.newCoreDb.snapSyncStop = true
+      else:
+        ctx.pool.lastBcSyncLog.logCtrl(beaconSyncIdleLogWaitInterval):
+          debug info & ": Waiting for beacon sync to terminate",
+            beaconState=ctx.beaconState
+        bodyRc = daemonWaitHeaderStopInterval       # wait for beacon sync
 
     # End block: `body`
 
@@ -259,7 +247,7 @@ template runPeer*(
       buddy.downloadState(info).isOkOr:
         if error == ENoDataAvailable:
           buddy.suspendDownload()
-          debug info & ": State downloading stopped", peer,
+          debug info & ": Stopped pivot state downloading", peer,
             pivot=ctx.pool.pivotNum, syncState=($buddy.syncState),
             nSyncPeers=ctx.nSyncPeers(), `error`=error
         bodyRc = peerWaitDownloadInterval

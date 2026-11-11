@@ -210,10 +210,10 @@ func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
     Osaka : Opt.some(BlobSchedule(target: 6'u64, max: 9'u64, baseFeeUpdateFraction: 5_007_716'u64)),
     Bpo1  : Opt.some(BlobSchedule(target: 10'u64, max: 15'u64, baseFeeUpdateFraction: 8_346_193'u64)),
     Bpo2  : Opt.some(BlobSchedule(target: 14'u64, max: 21'u64, baseFeeUpdateFraction: 11_684_671'u64)),
+    Amsterdam: Opt.some(BlobSchedule(target: 14'u64, max: 21'u64, baseFeeUpdateFraction: 11_684_671'u64)),
     Bpo3  : Opt.none(BlobSchedule),
     Bpo4  : Opt.none(BlobSchedule),
     Bpo5  : Opt.none(BlobSchedule),
-    Amsterdam: Opt.some(BlobSchedule(target: 14'u64, max: 21'u64, baseFeeUpdateFraction: 11_684_671'u64)),
     Bogota: Opt.some(BlobSchedule(target: 14'u64, max: 21'u64, baseFeeUpdateFraction: 11_684_671'u64)),
   ]
 
@@ -312,7 +312,6 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       osakaTime:           Opt.some(1_761_677_592.EthTime), # Tuesday, 28 October 2025 18:53:12
       bpo1Time:            Opt.some(1_762_365_720.EthTime), # Wednesday, 5 November 2025 18:02:00
       bpo2Time:            Opt.some(1_762_955_544.EthTime), # Wednesday, 12 November 2025 13:52:24
-      amsterdamTime:       Opt.some(1_793_036_568.EthTime), # Monday, 26 October 2026 17:42:48
       depositContractAddress: Opt.some(HOODI_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )

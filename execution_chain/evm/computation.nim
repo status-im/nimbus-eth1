@@ -200,9 +200,13 @@ proc dispose*(c: Computation) =
   if c.stack != nil:
     if c.keepStack:
       c.finalStack = toSeq(c.stack.items())
+      c.finalMemory = @(c.memory.bytes)
 
     c.stack.dispose()
     c.stack = nil
+
+  c.memory.dispose()
+  c.msg.clearData()
 
 proc rollback*(c: Computation) =
   if c.balTrackerEnabled:

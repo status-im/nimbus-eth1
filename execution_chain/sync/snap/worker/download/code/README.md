@@ -1,55 +1,62 @@
-Contract Code
-=============
+Contract Codes
+==============
 
 Representation rules for contract codes
 ---------------------------------------
 
-* A contract code is addressed by an account path which also addresses
-  the corresponding account.
+1. A contract code data entry is stored as a *seq[byte]* in the *FlatCode*
+  table, indexed by its account address
 
-* A contract code data is stored as a blob (i.e. seq[byte])
+2. The corresponding account record has a valid *codeHash* field which can
+   have values
+   + *EMPTY_CODE_HASH* if there is no contract code (i.e. the data is empty)
+   + *zeroHash32* if there is a non-empty contract code but the hash has not
+     been calculated, yet (note that data is addressed by its account path)
+   + Otherwise, the *codeHash* field must match the contract code
 
-* The corresponding account record has a valid *codeHash* field.
+3. An exisiting contract code is represented as
+   + a valid account record as described in 2
+   + a non-empty *FlatCode* table entry for this contract code holding
+     data (see 1)
+   + there is no *MissingBlob* table record (indexed by the account path)
 
-* A complete contract code consists of
-
-  + a valid *codeHash* field of the corresponding account record
-  + a *dirtyCode* field reset to *false* of the corresponding account record
-  + *no MissingBlob* table record relative to this contract code
-  + a non-empty *FlatCode* table entry holding this contract code
-  + *no* lock record for this contract code
-
-* A missing contract code consists of
-
-  + a valid *codeHash* field of the corresponding account record
-  + a *dirtyCode* field set to *true* of the corresponding account record
-  + a *MissingBlob* table record relative to this contract code
-  + *no FlatCode* table entry holding this contract code
-  +  *no* lock record for this contract code
+4. A contract code to be downloaded later is represented as
+   + a valid account record as described in 2 with a non-*zeroHash32* code hash
+   + there is *no* *FlatCode* table entry for this contract code holding data
+   + a *MissingBlob* table record (indexed by the account path)
 
 Download and updating rules for contract codes
 ----------------------------------------------
 
-While updating a contract code in a quasi multi-threaded environment
-by downloading *snap* data, the following actions take place.
+A contract code is registered to be downloaded when the corresponding account
+record was downloaded for the first time (i.e. not a refresh download.)
 
-* A lock record for the contract code is created (identified by account path.)
-* From the *MissingBlob* table, the corresopnding record is removed.
-* Download and save the contract code if it could be fetched.
-* Depending of whether the contract code could be fetched, do
-  + if it could be fetched, reset the *dirtyCode* field of the corresponding
-	account record
-  + otherwise update and save the contract code address on the *MissingBlob*
-    table
-* Remove the lock record
+The contract code is later downloaded, indexed by the *codehash* field of
+the account record and saved in the *FlatCode* table (indexed by its account
+path.)
 
-Consequences
-------------
+After applying a BAL update to a contract code, the *codeHash* field of
+the account record will be set to *zeroHash32*. This *codeHash* field may in
+turn be reset to the contract code hash by re-fetching/refreshing the account
+record (needed to complete a storage slots update.)
 
-After a state root change due to BAL forwarding, updating a missing contract
-code would require an update of the corresponding account record in order to
-fetch the current code via *codeHash*, which is stored in the account record.
+Core DB import rules
+--------------------
 
-For that reason, all missing contract code addresses and the corresponding
-account records will be deleted. The account will then be declared missing
-before BAL forwarding takes place.
+If a contract code is to be imported into *Core DB*, the hash of the contract
+code must be compiled.
+
+If the *codeHash* field of the corresponding account record is not
+*zeroHash32*, it must be made certain that the *codeHash* matches hash compiled
+earlier.
+
+Otherwise, the *codeHash* is set to the hash compiled earlier.
+
+Miscellaneous
+-------------
+
+While processing contract codes, administrative table entries may temporarily
+be removed from the cache DB and replaced by a lock record. This lock record
+must be removed after processing has finished.
+
+Lock records are intended to support error/disaster recovery.

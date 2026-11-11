@@ -75,7 +75,10 @@ template accountDownload*(
   ## On success, the template returns a list of accounts for storage and
   ## code processing.
   ##
-  var bodyRc = Result[void,ErrorType].err(EGeneric)
+  ## A successful return code is `true` if a new list of accounts was
+  ## downloaded, and `false` if there were refreshed accounts, only.
+  ##
+  var bodyRc = Result[bool,ErrorType].err(EGeneric)
   block body:
     let
       ctx = buddy.ctx
@@ -84,13 +87,11 @@ template accountDownload*(
       peer {.inject,used.} = $buddy.peer            # logging only
       root {.inject,used.} = stateRoot.toStr        # logging ony
 
-      ivReq = ctx.accUnproc.fetchLeast(unprocAccountsRangeMax).valueOr:
-        trace info & ": Currently no more unpocessed", peer, root, number,
-          syncState=($buddy.syncState)
-        bodyRc = typeof(bodyRc).err(ECompleted)
-        break body                                  # return err()
+      ivReq {.inject.} =
+        ctx.accUnproc.fetchLeast(unprocAccountsRangeMax).valueOr:
+          bodyRc = typeof(bodyRc).err(ECompleted)
+          break body                                # return err()
 
-    let
       data = buddy.fetchAccounts(stateRoot, ivReq).valueOr:
         ctx.accUnproc.commit(ivReq, ivReq)          # registry roll back
         bodyRc = typeof(bodyRc).err(error)
@@ -101,8 +102,9 @@ template accountDownload*(
 
       mpt = stateRoot.validate(ivReq.minPt, data.accounts, data.proof).valueOr:
         buddy.ctrl.zombie = true                    # peer not useful
-        debug info & ": Accounts validation failed", peer, root,number,
+        debug info & ": Accounts validation failed", peer, root, pivot=number,
           ivReq=ivReq.flStr, nAccounts, nProof, syncState=($buddy.syncState)
+        ctx.accUnproc.commit(ivReq, ivReq)          # registry roll back
         bodyRc = typeof(bodyRc).err(EValidationError)
         break body                                  # return err()
 
@@ -113,31 +115,40 @@ template accountDownload*(
               else: min(data.accounts[^1].accHash.to(ItemKey), ivReq.maxPt)
 
     # Save accounts on flat tables
+    var refreshOnly {.inject.} = true               # init for return code
     for w in data.accounts:
       if limit < w.accHash.to(ItemKey):             # ignore excess entries
         break                                       # exit `for()` loop
 
-      let
-        acc = cast[Account](w.accBody)              # distinct field diffs only
-        dirtyStorage =
-          if acc.storageRoot == EMPTY_ROOT_HASH: false
-          else:
-            let ikrs = ItemKeyRangeSet.init ItemKeyRangeMax
-            adb.putStoMissingIntv(w.accHash, ikrs, info).isOkOr:
-              bodyRc = typeof(bodyRc).err(ECacheError)
-              ctx.accUnproc.commit(ivReq, ivReq)    # registry roll back
-              break body                            # return err()
-            true
-        dirtyCode =
-          if acc.codeHash == EMPTY_CODE_HASH: false
-          else:
-            adb.putMissingBlob(w.accHash, info).isOkOr:
-              bodyRc = typeof(bodyRc).err(ECacheError)
-              ctx.accUnproc.commit(ivReq, ivReq)    # registry roll back
-              break body                            # return err()
-            true
+      let acc = cast[Account](w.accBody)            # distinct field diffs only
 
-      adb.putFlatAcc(w.accHash, dirtyStorage, dirtyCode, acc, info).isOkOr:
+      # Check whether this account was marked for re-fetch while storage
+      # data or contract code records already exist on the cache DB.
+      let maybe = adb.getFlatAcc(w.accHash, info)
+      if maybe.isSome():
+        let prvData = maybe.unsafeGet()
+        trace info & ": Updating account record", peer, root, pivot=number,
+          accPath=w.accHash.toStr, storageRoot=acc.storageRoot.toStr,
+          codeHash=acc.codeHash.toStr, syncState=($buddy.syncState)
+
+      else:
+        refreshOnly = false                         # not a refreshed account
+
+        if acc.storageRoot != EMPTY_ROOT_HASH:
+          var data: CacheStoMissingIntvData
+          data.ranges = ItemKeyRangeSet.init ItemKeyRangeMax
+          adb.putStoMissingIntv(w.accHash, data, info).isOkOr:
+            bodyRc = typeof(bodyRc).err(ECacheError)
+            ctx.accUnproc.commit(ivReq, ivReq)      # registry roll back
+            break body                              # return err()
+
+        if acc.codeHash != EMPTY_CODE_HASH:
+          adb.putMissingBlob(w.accHash, info).isOkOr:
+            bodyRc = typeof(bodyRc).err(ECacheError)
+            ctx.accUnproc.commit(ivReq, ivReq)      # registry roll back
+            break body                              # return err()
+
+      adb.putFlatAcc(w.accHash, acc, info).isOkOr:
         bodyRc = typeof(bodyRc).err(ECacheError)
         ctx.accUnproc.commit(ivReq, ivReq)          # registry roll back
         break body
@@ -152,11 +163,11 @@ template accountDownload*(
     # Update metrics
     ctx.accountDownloadMetricsUpdate()
 
-    chronicles.info info & ": Accounts saved", peer, root,
-      number, ivResp=(ivReq.minPt,limit).flStr, nAccounts, nProof,
+    debug info & ": Accounts saved", peer, root, pivot=number,
+      ivResp=(ivReq.minPt,limit).flStr, nAccounts, nProof, refreshOnly,
       syncState=($buddy.syncState)
 
-    bodyRc = typeof(bodyRc).ok()
+    bodyRc = typeof(bodyRc).ok(refreshOnly)
 
   bodyRc
 

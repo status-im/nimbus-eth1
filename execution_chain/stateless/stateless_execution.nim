@@ -22,7 +22,7 @@ import
   ../db/core_db/memory_only,
   ../evm/[types, state],
   ../core/[validate, executor/process_block],
-  ../block_access_list/bal_validation,
+  ../block_access_list/[bal_tracker, bal_validation],
   ./[witness_types, witness_verification, stateless_types]
 
 from beacon_chain/spec/datatypes/electra import
@@ -39,6 +39,9 @@ func toExecutionWitness*(w: ExecutionWitnessWithKeys): ExecutionWitness =
     res.state.add(ByteList[MAX_BYTES_PER_WITNESS_NODE].init(node))
   for code in w.codes:
     res.codes.add(ByteList[MAX_BYTES_PER_CODE].init(code))
+  # Witness.build emits at most MAX_WITNESS_HEADERS headers, as BLOCKHASH only
+  # reaches back that far.
+  doAssert w.headers.len <= MAX_WITNESS_HEADERS, "Too many headers in witness"
   for header in w.headers:
     discard res.headers.add(ByteList[MAX_BYTES_PER_HEADER].init(header))
   res
@@ -70,9 +73,15 @@ proc statelessProcessBlock*(
   if memoryTxFrame.getStateRoot().get() != preStateRoot:
     return err("Witness subtrie state root mismatch")
 
-  # Load the contract code into the database indexed by code hash.
+  # Load the contract code into the database indexed by code hash. The empty
+  # code needs no entry: accounts without code never look it up.
+  # Note: The spec and other clients accept an empty code entry too on the
+  # guest side, but no host adds it in the witness.
   for c in witness.codes:
-    doAssert memoryTxFrame.persistCodeByHash(keccak256(c.asSeq()), c.asSeq()).isOk()
+    if c.len == 0:
+      continue
+    memoryTxFrame.persistCodeByHash(keccak256(c.asSeq()), c.asSeq()).isOkOr:
+      return err("Unable to load witness code: " & error)
 
   # Load the block hashes into the database indexed by block number.
   for i, h in verified.headers:
@@ -116,8 +125,17 @@ proc statelessProcessBlock*(
   )
   doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
 
-  if memoryVmState.ledger.hasUnprovenCollapse():
+  if memoryVmState.ledger.txFrame.hasUnprovenCollapse():
     return err("Witness lacks the sibling node of a collapsed branch")
+
+  # As in the spec, the payload's BAL is only checked against the one execution
+  # produces, through its hash in the header. Checking earlier does not remove
+  # the cost for worst-case: a well-formed but wrong BAL fails late.
+  # EIP-7928 caps the size of the BAL the block produces:
+  # https://github.com/ethereum/execution-specs/blob/3ebcb5d02126918eb2aad599b3cf286200d4f458/src/ethereum/forks/amsterdam/fork.py#L859
+  if memoryVmState.balTrackerEnabled:
+    ?memoryVmState.balTracker.getBlockAccessList().get().checkBalSize(
+      blk.header.gasLimit)
 
   ok()
 
@@ -132,6 +150,9 @@ template statelessProcessBlock*(
     witness: ExecutionWitness, id: NetworkId, blk: Block
 ): Result[void, string] =
   statelessProcessBlock(witness, id, chainConfigForNetwork(id), blk)
+
+template append(w: var RlpWriter, tx: gloas.Transaction) =
+  w.appendRawBytes(distinctBase tx)
 
 # https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/execution_engine/validation_helpers.py#L1
 func toBlock(
@@ -158,7 +179,7 @@ func toBlock(
       ommersHash: EMPTY_UNCLE_HASH,
       coinbase: p.fee_recipient,
       stateRoot: Hash32(p.state_root.data),
-      transactionsRoot: orderedTrieRoot(txs),
+      transactionsRoot: orderedTrieRoot(p.transactions),
       receiptsRoot: Hash32(p.receipts_root.data),
       logsBloom: Bloom(p.logs_bloom.data),
       difficulty: 0.u256,
@@ -312,20 +333,6 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
     return err("Invalid block hash")
 
   ?is_valid_versioned_hashes(input.new_payload_request.versionedHashes, blk)
-
-  # Early validation of the input BAL before execution, just like is done for the
-  # stateful path. Rejects invalid BALs early without paying the cost of block execution.
-  if com.isAmsterdamOrLater(blk.header.timestamp):
-    let
-      expectedBalHash = blk.header.blockAccessListHash.valueOr:
-        return err("Post-Amsterdam block header must have blockAccessListHash")
-
-      balBytes = input.new_payload_request.executionPayload.block_access_list.asSeq()
-      bal: BlockAccessListRef = new BlockAccessList
-
-    bal[] = BlockAccessList.decode(balBytes).valueOr:
-      return err("Failed to decode block access list: " & error)
-    ?bal.validate(expectedBalHash, blk.header.gasLimit)
 
   statelessProcessBlock(input.witness, com, blk)
 

@@ -21,7 +21,7 @@ from ../beacon/web3_eth_conv import Hash32
 
 {.push raises: [].}
 
-declareCounter nec_engine_api_request_duration_ms,
+declareCounter nec_engine_api_request_duration_seconds,
   "Cumulative Engine API RPC request processing time in milliseconds",
   labels = ["method"]
 
@@ -32,8 +32,8 @@ declareCounter nec_engine_api_request_count,
 template apiTiming(meth: static string, body: untyped): untyped =
   let start = Moment.now()
   let res = body
-  nec_engine_api_request_duration_ms.inc(
-    (Moment.now() - start).milliseconds(),
+  nec_engine_api_request_duration_seconds.inc(
+    (Moment.now() - start).fseconds(),
     labelValues = [meth])
   nec_engine_api_request_count.inc(1, labelValues = [meth])
   res

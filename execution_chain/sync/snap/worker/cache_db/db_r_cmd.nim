@@ -12,7 +12,6 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
   pkg/[results, rocksdb],
   pkg/stew/byteutils,
   ./[db_const, db_desc]
@@ -28,7 +27,7 @@ when extraTraceMessages:
 # ------------------------------------------------------------------------------
 
 proc rGet*(adb: RocksDbRef, key: openArray[byte]): BlobResult =
-  const info = "mpt/get: "
+  const info = "get: "
 
   var res: seq[byte]
   proc onData(data: openArray[byte]) =
@@ -49,7 +48,7 @@ proc rPut*(
     key: openArray[byte];
     data: openArray[byte];
       ): PutResult =
-  const info = "mpt/put: "
+  const info = "put: "
   adb.put(key, data).isOkOr:
     when extraTraceMessages:
       trace info & "failed", key=key.toHex, `error`=error
@@ -57,7 +56,7 @@ proc rPut*(
   ok()
 
 proc rDel*(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
-  const info = "mpt/del: "
+  const info = "del: "
   adb.delete(key).isOkOr:
     when extraTraceMessages:
       trace info & "failed", key=key.toHex, `error`=error
@@ -66,39 +65,15 @@ proc rDel*(adb: RocksDbReadWriteRef; key: openArray[byte]): DelResult =
 
 proc rClear*(
     adb: RocksDbReadWriteRef;
-    col: MptAsmCol;
-    force = false;
+    minKey: openArray[byte];
+    maxKey: openArray[byte];
       ): DelResult =
-  const info = "mpt/clear: "
-  let rit = adb.openIterator().valueOr:
-    return err(info & "Iterator open error, col=" & $col & ", error=" & $error)
-  defer: rit.close()
-
-  var
-    nErrors = 0
-    key: seq[byte]
-
-  rit.seekToKey(@[col.ord.byte])
-  while rit.isValid():
-    key.setLen(0)
-    rit.key(proc(w: openArray[byte]) {.gcsafe, raises: [].} = key = @w)
-    rit.next()
-
-    if 0 < key.len:
-      if col.ord.byte != key[0]:
-        break
-
-      adb.delete(key).isOkOr:
-        if not force:
-          return err(info & "Deletion failed" &
-            ", col=" & $col & ", error=" & $error)
-        nErrors.inc
-
-  if 0 < nErrors:
-    err(info & "Some deletions failed" &
-      ", col=" & $col & ", nFailed=" & $nErrors)
-  else:
-    ok()
+  const info = "clear: "
+  adb.deleteRange(minKey, maxKey).isOkOr:
+    when extraTraceMessages:
+      trace info & "failed", col=minKey[0], `error`=error
+    return err(info & $error)
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

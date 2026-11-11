@@ -59,7 +59,8 @@ proc validate*[T: SnapAccount|StorageItem](
   err()
 
 proc rightMost*(db: NodeTrieRef): bool =
-  ## Returns `true` if there can be no more leafs to the right
+  ## Returns `true` if there can be no more leafs with path greater than the
+  ## `leafs[]` argument from the `validate()` directive.
   db.atRightEnd
 
 # ------------------------------------------------------------------------------

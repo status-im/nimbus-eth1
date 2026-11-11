@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2026 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -462,7 +462,7 @@ proc new*(T: type StreamManager, d: protocol.Protocol): T =
     socketConfig = SocketConfig.init(
       # Setting to none means that incoming sockets are in Connected state, which
       # means they can send and receive data.
-      incomingSocketReceiveTimeout = none(Duration),
+      incomingSocketReceiveTimeout = Opt.none(Duration),
       payloadSize = uint32(maxUtpPayloadSize),
     )
     manager = StreamManager(streams: @[], rng: d.rng)

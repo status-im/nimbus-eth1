@@ -36,6 +36,8 @@ const
     ## VertexID of state root entry in the MPT
 
   STATIC_VID_LEVELS* = 8
+
+  STO_PROBE_MIN_LEVEL* = 2
     ## Number of MPT levels in a trie that get a fixed VertexID based
     ## on the initial nibbles of the path. We'll consume a little bit more than
     ## `STATIC_VID_LEVELS*4` bits for the static part of the vid space:
