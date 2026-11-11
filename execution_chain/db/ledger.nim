@@ -351,20 +351,11 @@ proc storageValue(
     result = acc.originalStorageValue(address, slot, ledger)
 
 proc kill(acc: AccountRef) =
-  acc.flags.excl LeafExists
+  acc.flags.excl {LeafExists, CodeChanged, StorageChanged, StatementChanged}
   acc.overlayStorage.reset()
   acc.original.storage.reset()
   acc.original.code.reset()
   acc.code.reset()
-
-proc cachedCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
-  ## Code from the cache, or code held back from the database
-  let code = ledger.code.get(codeHash)
-  if code.isSome() or ledger.heldCode.len == 0:
-    return code
-  ledger.heldCode.withValue(codeHash, held):
-    return Opt.some(held[])
-  Opt.none(CodeBytesRef)
 
 func writtenCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
   ## Code set earlier in the block in a save point that is still active. A
@@ -374,6 +365,15 @@ func writtenCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
     sp.writtenCode.withValue(codeHash, code):
       return Opt.some(code[])
     sp = sp.parentSavePoint
+  Opt.none(CodeBytesRef)
+
+proc cachedCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
+  ## Code from the cache, or code held back from the database
+  let code = ledger.code.get(codeHash) or ledger.writtenCode(codeHash)
+  if code.isSome():
+    return code
+  ledger.heldCode.withValue(codeHash, held):
+    return Opt.some(held[])
   Opt.none(CodeBytesRef)
 
 proc persistCode(acc: AccountRef, ledger: LedgerRef) =
@@ -472,28 +472,6 @@ proc makeDirty(ledger: LedgerRef, address: Address, acc: AccountRef, cloneStorag
     ledger.savePoint.cache[address] = clone
     ledger.savePoint.dirty[address] = clone
     clone
-
-template getCodeSizeImpl(ledger: LedgerRef, acc: AccountRef): int =
-  if acc.code == nil:
-    if acc.statement.codeHash == EMPTY_CODE_HASH:
-      return 0
-    acc.code = ledger.cachedCode(acc.statement.codeHash).valueOr:
-      # On a cache miss, we don't fetch the code - instead, we fetch just the
-      # length - should the code itself be needed, it will typically remain
-      # cached and easily accessible in the database layer - this is to prevent
-      # EXTCODESIZE calls from messing up the code cache and thus causing
-      # recomputation of the jump destination table
-      var rc = ledger.txFrame.getCodeLenByHash(acc.statement.codeHash)
-      if rc.isOk:
-        return rc.value
-      ledger.writtenCode(acc.statement.codeHash).valueOr:
-        # A non-empty code hash whose length is missing from the database: record
-        # a fatalError but still return 0 so the async EVM continues.
-        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=rc.error
-        ledger.fatalError = Opt.some("getCodeSize(): failed to fetch code length from database")
-        return 0
-
-  acc.code.len()
 
 # ------------------------------------------------------------------------------
 # Public methods
@@ -602,41 +580,35 @@ proc recordCodeRead(ledger: LedgerRef, address: Address, codeHash: Hash32) =
   ## block.
   ## We overwrite any existing false entry so codeTouched is set to true
   ## even if the account was previously accessed without touching the code.
-  if codeHash != EMPTY_CODE_HASH and ledger.writtenCode(codeHash).isNone():
+  if ledger.collectWitness and ledger.writtenCode(codeHash).isNone():
     ledger.witnessKeys[(address, Opt.none(UInt256))] = true
 
 proc getCode*(ledger: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
   let acc = ledger.getAccount(address, false)
-
-  if ledger.collectWitness and not acc.isNil:
-    ledger.recordCodeRead(address, acc.statement.codeHash)
-
-  if acc.isNil:
+  if acc.isNil or acc.statement.codeHash == EMPTY_CODE_HASH:
     when returnHash:
       return (EMPTY_CODE_HASH, CodeBytesRef())
     else:
       return CodeBytesRef()
 
+  ledger.recordCodeRead(address, acc.statement.codeHash)
+
   if acc.code.isNil:
     acc.code =
-      if acc.statement.codeHash != EMPTY_CODE_HASH:
-        ledger.cachedCode(acc.statement.codeHash).valueOr:
-          var rc = ledger.txFrame.getCodeByHash(acc.statement.codeHash)
-          if rc.isErr:
-            ledger.writtenCode(acc.statement.codeHash).valueOr:
-              # A non-empty code hash with no code in the database: record a fatalError
-              # but still return empty code so the async EVM continues.
-              warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=rc.error
-              ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
-              CodeBytesRef()
-          else:
-            let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
-            ledger.code.put(acc.statement.codeHash, newCode)
-            newCode
-      else:
-        CodeBytesRef()
+      ledger.cachedCode(acc.statement.codeHash).valueOr:
+        var rc = ledger.txFrame.getCodeByHash(acc.statement.codeHash)
+        if rc.isErr:
+          # A non-empty code hash with no code in the database: record a fatalError
+          # but still return empty code so the async EVM continues.
+          warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=rc.error
+          ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
+          CodeBytesRef()
+        else:
+          let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
+          ledger.code.put(acc.statement.codeHash, newCode)
+          newCode
 
   when returnHash:
     (acc.statement.codeHash, acc.code)
@@ -645,39 +617,48 @@ proc getCode*(ledger: LedgerRef,
 
 proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
   let acc = ledger.getAccount(address, false)
-  if acc.isNil:
+  if acc.isNil or acc.original.statement.codeHash == EMPTY_CODE_HASH:
     return CodeBytesRef()
 
-  if ledger.collectWitness:
-    ledger.recordCodeRead(address, acc.original.statement.codeHash)
+  ledger.recordCodeRead(address, acc.original.statement.codeHash)
 
   if acc.original.code.isNil:
     acc.original.code =
-      if acc.original.statement.codeHash != EMPTY_CODE_HASH:
-        ledger.cachedCode(acc.original.statement.codeHash).valueOr:
-          var rc = ledger.txFrame.getCodeByHash(acc.original.statement.codeHash)
-          if rc.isErr:
-            ledger.writtenCode(acc.original.statement.codeHash).valueOr:
-              warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=rc.error
-              CodeBytesRef()
-          else:
-            let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
-            ledger.code.put(acc.original.statement.codeHash, newCode)
-            newCode
-      else:
-        CodeBytesRef()
+      ledger.cachedCode(acc.original.statement.codeHash).valueOr:
+        var rc = ledger.txFrame.getCodeByHash(acc.original.statement.codeHash)
+        if rc.isErr:
+          warn logTxt "getCode()", codeHash=acc.original.statement.codeHash, error=rc.error
+          CodeBytesRef()
+        else:
+          let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
+          ledger.code.put(acc.original.statement.codeHash, newCode)
+          newCode
 
   acc.original.code
 
 proc getCodeSize*(ledger: LedgerRef, address: Address): int =
   let acc = ledger.getAccount(address, false)
 
-  if ledger.collectWitness and not acc.isNil:
-    ledger.recordCodeRead(address, acc.statement.codeHash)
-
-  if acc.isNil:
+  if acc.isNil or acc.statement.codeHash == EMPTY_CODE_HASH:
     return 0
-  getCodeSizeImpl(ledger, acc)
+
+  ledger.recordCodeRead(address, acc.statement.codeHash)
+
+  if acc.code.isNil:
+    acc.code = ledger.cachedCode(acc.statement.codeHash).valueOr:
+      # On a cache miss, we don't fetch the code - instead, we fetch just the
+      # length - should the code itself be needed, it will typically remain
+      # cached and easily accessible in the database layer - this is to prevent
+      # EXTCODESIZE calls from messing up the code cache and thus causing
+      # recomputation of the jump destination table
+      return ledger.txFrame.getCodeLenByHash(acc.statement.codeHash).valueOr:
+        # A non-empty code hash whose length is missing from the database: record
+        # a fatalError but still return 0 so the async EVM continues.
+        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error
+        ledger.fatalError = Opt.some("getCodeSize(): failed to fetch code length from database")
+        return 0
+
+  acc.code.len()
 
 proc getCommittedStorage*(ledger: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ledger.getAccount(address, false)
@@ -763,10 +744,6 @@ proc addBalance*(
     delta: UInt256,
     checkEmptyAccount: bool,
 ) =
-  # EIP161: We must check emptiness for the objects such that the account
-  # clearing (0,0,0 objects) can take effect. This is not required for hardforks
-  # starting at the merge because by then no empty accounts remain in the state,
-  # so callers in that regime can skip the lookup via checkEmptyAccount = false.
   if delta.isZero:
     if checkEmptyAccount:
       let acc = ledger.getAccount(address)
@@ -825,11 +802,18 @@ proc setCode*(ledger: LedgerRef, address: Address, code: seq[byte]) =
   if acc.statement.codeHash != codeHash:
     let acc = ledger.makeDirty(address, acc)
     acc.statement.codeHash = codeHash
+    acc.flags.incl StatementChanged
+
+    if code.len == 0:
+      acc.flags.excl CodeChanged
+      acc.code = nil # EMPTY_CODE_HASH
+      return
+
     # Try to reuse cache entry if it exists, but don't save the code - it's not
     # a given that it will be executed within LRU range
-    acc.code = ledger.code.get(codeHash).valueOr(CodeBytesRef.init(code))
-    acc.flags.incl {CodeChanged, StatementChanged}
-    if (ledger.collectWitness or ledger.stateless) and code.len > 0:
+    acc.flags.incl CodeChanged
+    acc.code = ledger.cachedCode(codeHash).valueOr(CodeBytesRef.init(code))
+    if (ledger.collectWitness or ledger.stateless):
       ledger.savePoint.writtenCode[codeHash] = acc.code
 
 proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
@@ -902,7 +886,7 @@ proc deleteAccount(ledger: LedgerRef, address: Address) =
     ledger.savePoint.dirty[address] = acc
     acc.flags.incl Dirty
 
-  if ClearAccountPreserveBalance in acc.flags:
+  if ClearAccountPreserveBalance in acc.flags and acc.statement.balance.isZero.not:
     if ledger.txFrame.hasStorage(acc.accPath).valueOr(false):
       acc.original.storage.reset()
     else:
@@ -911,14 +895,9 @@ proc deleteAccount(ledger: LedgerRef, address: Address) =
     acc.overlayStorage.reset()
     acc.statement.nonce = 0
     acc.flags.incl StatementChanged
-
-    if acc.statement.codeHash != EMPTY_ACCOUNT.codeHash:
-      acc.flags.incl CodeChanged
-      acc.statement.codeHash = EMPTY_ACCOUNT.codeHash
-      acc.code = CodeBytesRef.init(@[])
-
-    if acc.isEmpty:
-      acc.kill()
+    acc.statement.codeHash = EMPTY_CODE_HASH
+    acc.code = nil
+    acc.flags.excl CodeChanged
   else:
     acc.kill()
 
