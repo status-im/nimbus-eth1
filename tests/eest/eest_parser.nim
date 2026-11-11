@@ -85,7 +85,7 @@ type
     network*: string
     genesisBlockHeader*: GenesisHeader
     pre*: GenesisAlloc
-    postState*: JsonNode
+    # postState*: JsonString # skip post-state, not used
     lastblockhash*: Hash32
     config*: EnvConfig
 

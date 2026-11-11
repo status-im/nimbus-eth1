@@ -11,7 +11,7 @@
 {.define: unittest2DisableParamFiltering.}
 
 import
-  std/[json, os],
+  std/[json, os, strutils],
   unittest2,
   chronos,
   stew/byteutils,
@@ -19,18 +19,14 @@ import
   web3/eth_api_types,
   web3/engine_api_types,
   web3/primitives,
-  json_rpc/rpcclient,
-  json_rpc/rpcserver,
   ../../execution_api/conversions,
   ../../execution_api/execution_types,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
-  ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
   ../../execution_chain/stateless/stateless_execution,
   ../../execution_chain/stateless/stateless_guest,
   ../../execution_chain/stateless/stateless_host,
-  ../../execution_api/engine_client,
   ./eest_helpers,
   ./bal_parser
 
@@ -335,7 +331,7 @@ proc processFile*(
         let header = testUnit.genesisBlockHeader.to(Header)
         check testUnit.genesisBlockHeader.hash == header.computeRlpHash
         let env = prepareEnv(
-          testUnit, header, rpcEnabled = false, statelessEnabled, parallelEnabled
+          testUnit, header, statelessEnabled, parallelEnabled
         )
 
         let testResult = waitFor env.runTest(
