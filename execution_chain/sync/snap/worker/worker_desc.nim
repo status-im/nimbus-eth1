@@ -289,7 +289,7 @@ proc eta*(spline: EtaSpline): Opt[Duration] =
   # This must have been made certain by the `apply()` function
   doAssert x0 + etaSplineDistMin1.nanoseconds <= x1
 
-  if y0.almostEqual(y1):                            # infinite horizon
+  if y0.almostEqual(y1) or y1 < y0:                 # infinite horizon
     return err()
 
   let
@@ -297,10 +297,10 @@ proc eta*(spline: EtaSpline): Opt[Duration] =
     m = (y1 - y0) / (x1 - x0).float                 # unit: 1/ns
 
     # Value 1 is reached at x9: `1 = m x9 + c` => `1 = m (x9 - x1) + y1`
-    # At time x1, ETA is `x9 - x1 = x1 + (1.0 - y1) / m`
+    # At time x1, ETA is `x9 - x1 = (1 - y1) / m`
     H = (1.0 - y1) / m                              # unit: ns
 
-  # Convert nanoseconde from float
+  # Convert to nanoseconde from float
   ok(nanoseconds H.int64)
 
 # ------------------------------------------------------------------------------
