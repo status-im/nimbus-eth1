@@ -176,10 +176,10 @@ const
     "osaka",
     "bpo1",
     "bpo2",
+    "amsterdam",
     "bpo3",
     "bpo4",
     "bpo5",
-    "amsterdam",
     "bogota",
   ]
 
