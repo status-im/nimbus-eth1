@@ -30,3 +30,6 @@ type
 
 const
   FkLatest* = EVMFork.high
+  FkEmptyAccountChecks* = {FkSpurious..FkLondon}
+    # EIP-161: clear empty accounts
+    # EIP-7523: no more empty accounts post-merge

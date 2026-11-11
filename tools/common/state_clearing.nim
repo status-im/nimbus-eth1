@@ -27,11 +27,11 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
   # create the account in VMs prior to the state clearing rules,
   # as well as conditionally cleaning up the coinbase account when left
   # empty in VMs after the state clearing rules came into effect.
-  let isSpuriousAndLater = vmState.fork >= FkSpurious
+  let checkEmptyAccount = vmState.fork in FkEmptyAccountChecks
 
   vmState.mutateLedger:
-    if touched and isSpuriousAndLater:
-      ledger.addBalance(miner, 0.u256)
+    if touched and checkEmptyAccount:
+      ledger.addBalance(miner, 0.u256, checkEmptyAccount)
 
     # db.persist is an important step when using `db/ledger`
     # it will affect the account storage's location
@@ -40,4 +40,4 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
 
     # do not clear cache, we need the cache when constructing
     # post state
-    ledger.persist(clearEmptyAccount = isSpuriousAndLater)
+    ledger.persist(clearEmptyAccount = checkEmptyAccount)

@@ -25,7 +25,7 @@ import
   ./aristo/[aristo_blobify, aristo_desc]
 
 export
-  code_bytes, core_db.computeAccPath, core_Db.computeSlotKey
+  code_bytes, core_db.computeAccPath, core_db.computeSlotKey
 
 const
   codeLruSize = 16*1024
