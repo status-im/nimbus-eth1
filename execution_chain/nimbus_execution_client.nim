@@ -309,15 +309,15 @@ proc internalRestart(
   # Import snap data.
   let
     txFrame = com.db.baseTxFrame()
-    cacheDb = nimbus.snapSyncRef.ctx.pool.cacheDB
+    ctx = nimbus.snapSyncRef.ctx
     stopOnError = true
     stats = com.db.importCoreDb(
-                       txFrame, cacheDb, "Snap Import", stopOnError).valueOr:
+                       txFrame, ctx, "Snap Import", stopOnError).valueOr:
       fatal "CoreDb import failed. STOP"
       quit(QuitFailure)
 
   # Remove snap sync cache DB
-  cacheDb.wipeCacheDb()
+  ctx.wipeCacheDb()
 
   # Shut down currently unwanted modules. No async poller must be running.
   QuitFailure.onException("Exception while reconfiguring"):

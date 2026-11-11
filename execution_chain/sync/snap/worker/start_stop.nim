@@ -15,7 +15,7 @@ import
   pkg/[chronicles, metrics, minilru],
   ../../../networking/p2p,
   ../../wire_protocol,
-  ./[cache_db, download, worker_desc]
+  ./[cache_db, download, import_coredb, worker_desc]
 
 logScope:
   topics = "snap sync"
@@ -41,10 +41,12 @@ proc resetServices*(ctx: SnapCtxRef; info: static[string]): Opt[void] =
   ##
   # Initialise account range accounting
   ctx.accUnproc.init ItemKeyRangeMax
+  ctx.accRefresh.clear()
 
-  # Set up accounts download metrics
+  # Set up metrics
   ctx.accountDownloadMetricsReset()
   ctx.storageDownloadMetricsReset()
+  ctx.importCoreDbMetricsReset()
 
   # Manage BAL fetching from eth peer
   ctx.pool.failedEthBalId = EthBalHashSet.init ethFetchBalCapacity
@@ -56,7 +58,7 @@ proc resetServices*(ctx: SnapCtxRef; info: static[string]): Opt[void] =
   ctx.pool.newCoreDb[].reset
 
   # Import and cache locally the Genesis header from `CoreDb` database. It
-  # might be present alteady due to a continuation of the last session.
+  # might be present aleady due to a continuation of the last session.
   let haveGenesis = ctx.pool.cacheDB.hasHeader(BlockNumber 0).valueOr: false
   if not haveGenesis:
     let
@@ -94,6 +96,11 @@ proc destroyServices*(ctx: SnapCtxRef) =
   if not ctx.pool.cacheDB.isNil:
     ctx.pool.cacheDB.close()
     ctx.pool.cacheDB = CacheDbRef(nil)
+
+    # Reset metrics
+    ctx.accountDownloadMetricsReset()
+    ctx.storageDownloadMetricsReset()
+    ctx.importCoreDbMetricsReset()
 
 # ---------
 

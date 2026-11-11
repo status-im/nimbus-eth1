@@ -5,17 +5,17 @@
     "name": "00000000000055",
     "namespace": "default",
     "uid": "b60d04f6-8713-47f5-961c-348ca7395439",
-    "resourceVersion": "1793028797832012",
-    "generation": 29,
+    "resourceVersion": "1794329595241999",
+    "generation": 34,
     "creationTimestamp": "2026-07-23T09:26:04Z",
     "labels": {
       "grafana.app/deprecatedInternalID": "4063479426818048"
     },
     "annotations": {
       "grafana.app/createdBy": "user:afsymvffaw3k0c",
-      "grafana.app/saved-from-ui": "Grafana v13.2.4 (0e79aef9d9)",
+      "grafana.app/saved-from-ui": "Grafana v13.3.0 (6f8ce3c693)",
       "grafana.app/updatedBy": "user:afsymvffaw3k0c",
-      "grafana.app/updatedTimestamp": "2026-10-26T15:33:17Z"
+      "grafana.app/updatedTimestamp": "2026-11-10T16:53:15Z"
     }
   },
   "spec": {
@@ -162,7 +162,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.4",
+            "version": "13.3.0",
             "spec": {
               "options": {
                 "annotations": {
@@ -296,6 +296,31 @@
                         "value": {
                           "fixedColor": "super-light-purple",
                           "mode": "fixed"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "__systemRef": "hideSeriesFrom",
+                    "matcher": {
+                      "id": "byNames",
+                      "options": {
+                        "mode": "exclude",
+                        "names": [
+                          "CL_head",
+                          "CL_finalised"
+                        ],
+                        "prefix": "All except:",
+                        "readOnly": true
+                      }
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.hideFrom",
+                        "value": {
+                          "legend": false,
+                          "tooltip": true,
+                          "viz": true
                         }
                       }
                     ]
@@ -460,7 +485,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.4",
+            "version": "13.3.0",
             "spec": {
               "options": {
                 "annotations": {
@@ -715,7 +740,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.4",
+            "version": "13.3.0",
             "spec": {
               "options": {
                 "annotations": {
@@ -880,6 +905,30 @@
                         }
                       }
                     ]
+                  },
+                  {
+                    "__systemRef": "hideSeriesFrom",
+                    "matcher": {
+                      "id": "byNames",
+                      "options": {
+                        "mode": "exclude",
+                        "names": [
+                          "headers_unprocessed"
+                        ],
+                        "prefix": "All except:",
+                        "readOnly": true
+                      }
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.hideFrom",
+                        "value": {
+                          "legend": false,
+                          "tooltip": true,
+                          "viz": true
+                        }
+                      }
+                    ]
                   }
                 ]
               }
@@ -933,7 +982,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.4",
+            "version": "13.3.0",
             "spec": {
               "options": {
                 "annotations": {
@@ -1147,7 +1196,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.4",
+            "version": "13.3.0",
             "spec": {
               "options": {
                 "annotations": {
@@ -1305,7 +1354,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.4",
+            "version": "13.3.0",
             "spec": {
               "options": {
                 "annotations": {
@@ -1447,12 +1496,34 @@
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
-                        "legendFormat": "sync_eta_secs",
+                        "legendFormat": "sync_eta",
                         "range": true,
                         "useBackend": false
                       }
                     },
                     "refId": "A",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "bfsyo1ibaja4gc"
+                      },
+                      "spec": {
+                        "editorMode": "builder",
+                        "expr": "nec_snap_eta_secs{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "instant": false,
+                        "legendFormat": "snap_eta",
+                        "range": true
+                      }
+                    },
+                    "refId": "B",
                     "hidden": false
                   }
                 }
@@ -1464,7 +1535,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.4",
+            "version": "13.3.0",
             "spec": {
               "options": {
                 "annotations": {
@@ -1555,6 +1626,30 @@
                         }
                       }
                     ]
+                  },
+                  {
+                    "__systemRef": "hideSeriesFrom",
+                    "matcher": {
+                      "id": "byNames",
+                      "options": {
+                        "mode": "exclude",
+                        "names": [
+                          "snap_eta"
+                        ],
+                        "prefix": "All except:",
+                        "readOnly": true
+                      }
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.hideFrom",
+                        "value": {
+                          "legend": false,
+                          "tooltip": true,
+                          "viz": true
+                        }
+                      }
+                    ]
                   }
                 ]
               }
@@ -1574,6 +1669,28 @@
             "kind": "QueryGroup",
             "spec": {
               "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "bfsyo1ibaja4gc"
+                      },
+                      "spec": {
+                        "editorMode": "builder",
+                        "expr": "nec_snap_dbimport_progress{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "instant": false,
+                        "legendFormat": "dbimport_progress",
+                        "range": true
+                      }
+                    },
+                    "refId": "C",
+                    "hidden": false
+                  }
+                },
                 {
                   "kind": "PanelQuery",
                   "spec": {
@@ -1648,7 +1765,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.2.4",
+            "version": "13.3.0",
             "spec": {
               "options": {
                 "annotations": {
@@ -1762,6 +1879,21 @@
                         "id": "color",
                         "value": {
                           "fixedColor": "light-orange",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "scope": "series",
+                      "options": "dbimport_progress"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
                           "mode": "fixed"
                         }
                       }
