@@ -205,7 +205,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, params: CallParams): GasUsed 
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackAddBalanceChange(params.sender, gasRefundAmount)
     vmState.mutateLedger:
-      ledger.addBalance(params.sender, gasRefundAmount, checkEmptyAccount = fork < FkParis)
+      ledger.addBalance(params.sender, gasRefundAmount, fork.checkEmptyAccount())
 
   GasUsed(
     evmGasUsed: c.msg.gas - txGasLeft,
@@ -266,7 +266,7 @@ proc prepareDispatch(params: CallParams, c: Computation): EvmResultVoid =
           ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch create new account")
         CodeBytesRef.initCopy(tx.payload)
       else:
-        if tx.value.isZero.not and not ledger.isAccountAlive(c.msg.currentTarget):
+        if tx.value.isZero.not and ledger.isAccountEmpty(c.msg.currentTarget):
           ? c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "prepareDispatch call new account")
         c.msg.borrowData(tx.payload)
         getRecipientCode(vmState, c.msg)

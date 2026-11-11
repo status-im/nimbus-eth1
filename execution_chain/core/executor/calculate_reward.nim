@@ -62,11 +62,11 @@ proc calculateReward*(vmState: BaseVMState; account: Address;
     uncleReward = uncleReward * blockReward
     uncleReward = uncleReward div 8.u256
     vmState.mutateLedger:
-      ledger.addBalance(uncle.coinbase, uncleReward)
+      ledger.addBalance(uncle.coinbase, uncleReward, vmState.fork.checkEmptyAccount())
     mainReward += blockReward div 32.u256
 
   vmState.mutateLedger:
-    ledger.addBalance(account, mainReward)
+    ledger.addBalance(account, mainReward, vmState.fork.checkEmptyAccount())
 
 
 proc calculateReward*(vmState: BaseVMState;
