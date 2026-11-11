@@ -25,7 +25,7 @@ import
   ./aristo/[aristo_blobify, aristo_desc]
 
 export
-  code_bytes, core_db.computeAccPath, core_Db.computeSlotKey
+  code_bytes, core_db.computeAccPath, core_db.computeSlotKey
 
 const
   codeLruSize = 16*1024
@@ -53,7 +53,6 @@ type
     LeafExists
     IsNew
     Dirty
-    Touched
     CodeChanged
     StorageChanged
     StatementChanged
@@ -80,7 +79,6 @@ type
     txFrameRef: MaybeOwned[CoreDbTxRef]
     savePoint: LedgerSpRef
 
-    ripemdSpecial: bool
     storeSlotHash*: bool
     cache: Table[Address, AccountRef]
       # Second-level cache for the ledger save point, which is cleared on every
@@ -161,7 +159,6 @@ const
   resetFlags = {
     Dirty,
     IsNew,
-    Touched,
     CodeChanged,
     StorageChanged,
     StatementChanged,
@@ -579,7 +576,6 @@ proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
     "reinit txFrame must be a direct child of the ledger's current frame"
   ledger.txFrame = txFrame
   ledger.txFrame.collectWitness = ledger.collectWitness
-  ledger.ripemdSpecial = false
   ledger.fatalError = Opt.none(string)
   ledger.balOverlay = Opt.none(BlockAccessListOverlay)
   ledger.witnessKeys.clear()
@@ -741,7 +737,7 @@ proc originalAccountEmpty*(ledger: LedgerRef, address: Address): bool =
     return true
   acc.original.statement == EMPTY_STATEMENT
 
-proc forcePersist*(ledger: LedgerRef, address: Address) =
+proc touch*(ledger: LedgerRef, address: Address) =
   ## Force an account to be written to the database on the next `persist` even
   ## if it was not modified. Loading a pre-state (genesis alloc) must put every
   ## account in the state trie, including empty accounts that no transaction
@@ -765,7 +761,7 @@ proc addBalance*(
     ledger: LedgerRef,
     address: Address,
     delta: UInt256,
-    checkEmptyAccount: bool = true,
+    checkEmptyAccount: bool,
 ) =
   # EIP161: We must check emptiness for the objects such that the account
   # clearing (0,0,0 objects) can take effect. This is not required for hardforks
@@ -775,7 +771,7 @@ proc addBalance*(
     if checkEmptyAccount:
       let acc = ledger.getAccount(address)
       if acc.isEmpty:
-        ledger.makeDirty(address, acc).flags.incl Touched
+        discard ledger.makeDirty(address, acc)
     elif ledger.collectWitness or ledger.stateless:
       # The reference implementation reads the account even for a zero-value
       # credit (e.g. zero-amount withdrawals, zero-fee coinbase payments), so
@@ -887,8 +883,6 @@ proc applyBlockAccessList*(ledger: LedgerRef, bal: BlockAccessList, txCount: int
         acc.flags.incl {StatementChanged}
       if codePos >= 0:
         ledger.setCode(address, accChanges.codeChanges[codePos].newCode)
-      if acc.isEmpty:
-        acc.flags.incl Touched
 
     for slotChanges in accChanges.storageChanges:
       let changePos = slotChanges.changes.findLastWriteBefore(boundary)
@@ -959,23 +953,9 @@ proc selfDestructLen*(ledger: LedgerRef): int =
   ledger.savePoint.selfDestruct.len
 
 proc ripemdSpecial*(ledger: LedgerRef) =
-  ledger.ripemdSpecial = true
-
-proc clearEmptyAccounts(ledger: LedgerRef) =
-  # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
-  for acc in ledger.savePoint.dirty.values():
-    if Touched in acc.flags and acc.isEmpty and acc.exists:
-      acc.kill()
-
-  # https://github.com/ethereum/EIPs/issues/716
-  if ledger.ripemdSpecial:
-    let acc = ledger.getAccount(RIPEMD_ADDR, false)
-    if not acc.isNil and acc.isEmpty and acc.exists:
-      ledger.savePoint.dirty[RIPEMD_ADDR] = acc
-      acc.flags.incl Dirty
-      acc.kill()
-
-    ledger.ripemdSpecial = false
+  let acc = ledger.getAccount(RIPEMD_ADDR, false)
+  if not acc.isNil and acc.isEmpty and acc.exists:
+    discard ledger.makeDirty(RIPEMD_ADDR, acc)
 
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
@@ -1011,7 +991,7 @@ proc clearBlockHashesCache*(ledger: LedgerRef) =
     ledger.blockHashes = BlockHashesCache.init(MAX_PREV_HEADER_DEPTH.int)
 
 proc persist*(ledger: LedgerRef,
-              clearEmptyAccount: bool = false,
+              clearEmptyAccounts: bool,
               clearCache = false,
               clearWitness = false) =
   const info = "persist(): "
@@ -1022,10 +1002,10 @@ proc persist*(ledger: LedgerRef,
   for address in ledger.savePoint.selfDestruct:
     ledger.deleteAccount(address)
 
-  if clearEmptyAccount:
-    ledger.clearEmptyAccounts()
-
   for address, acc in ledger.savePoint.dirty: # This is a hotspot in block processing
+    if clearEmptyAccounts and acc.exists() and acc.isEmpty():
+      acc.kill()
+
     if LeafExists in acc.flags:
       if CodeChanged in acc.flags:
         acc.persistCode(ledger)

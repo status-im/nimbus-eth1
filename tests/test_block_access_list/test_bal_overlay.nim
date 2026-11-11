@@ -126,7 +126,7 @@ suite "Block access list overlay":
       dbLedger.setStorage(address1, slot1, 10.u256)
       dbLedger.setStorage(address1, slot2, 20.u256)
       dbLedger.setBalance(address2, 2.u256)
-      dbLedger.persist()
+      dbLedger.persist(clearEmptyAccounts = false)
 
     block:
       let ledger = ledgerWithOverlay(coreDb, bal, 1)
@@ -217,7 +217,7 @@ suite "BAL overlay ledger reads":
       dbLedger.setStorage(bothAddr, slotB, 888.u256)
       dbLedger.setBalance(deletedAddr, 100.u256)
       dbLedger.setStorage(deletedAddr, slotA, 555.u256)
-      dbLedger.persist()
+      dbLedger.persist(clearEmptyAccounts = false)
 
   test "getBalance reads overlay pre-state and falls back to the database":
     block: # index 2

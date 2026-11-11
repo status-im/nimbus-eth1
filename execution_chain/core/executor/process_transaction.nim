@@ -75,7 +75,7 @@ proc commitOrRollbackDependingOnGasUsed(
     vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
     vmState.balTracker.commitCallFrame()
 
-  vmState.ledger.addBalance(vmState.coinbase(), txFee, checkEmptyAccount = vmState.fork < FkParis)
+  vmState.ledger.addBalance(vmState.coinbase(), txFee, vmState.fork.checkEmptyAccount())
   vmState.ledger.commit(savePoint)
   vmState.cumulativeGasUsed += gasUsed
   vmState.blockExecutionGasUsed += callResult.blockExecutionGasUsed
@@ -177,7 +177,7 @@ proc processTransaction*(
       ok(move(callResult))
 
   if persist:
-    vmState.ledger.persist(clearEmptyAccount = vmState.hardFork >= Spurious)
+    vmState.ledger.persist(vmState.fork.clearEmptyAccounts())
 
   # Checked after persist so a BLOCKHASH miss, a missing-code lookup (both set
   # during the EVM run) and a partial witness persist failure are all caught here.

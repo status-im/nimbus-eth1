@@ -160,7 +160,7 @@ proc modBalance(ledger: LedgerRef, address: Address) =
   ## This function is crucial for profucing the crash. If must
   ## modify the balance so that the database gets written.
   # ledger.blindBalanceSetter(address)
-  ledger.addBalance(address, 1.u256)
+  ledger.addBalance(address, 1.u256, checkEmptyAccount = false)
 
 
 proc runTrial2ok(env: TestEnv, ledger: LedgerRef; inx: int) =
@@ -177,7 +177,7 @@ proc runTrial2ok(env: TestEnv, ledger: LedgerRef; inx: int) =
     ledger.modBalance(eAddr)
     ledger.commit(savePoint)
 
-  ledger.persist()
+  ledger.persist(clearEmptyAccounts = false)
 
 
 proc runTrial3(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
@@ -188,7 +188,7 @@ proc runTrial3(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
     let savePoint = ledger.beginSavePoint
     ledger.modBalance(eAddr)
     ledger.commit(savePoint)
-    ledger.persist()
+    ledger.persist(clearEmptyAccounts = false)
 
   block body2:
     let savePoint = ledger.beginSavePoint
@@ -199,13 +199,13 @@ proc runTrial3(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
       break body2
 
     ledger.commit(savePoint)
-    ledger.persist()
+    ledger.persist(clearEmptyAccounts = false)
 
   block:
     let savePoint = ledger.beginSavePoint
     ledger.modBalance(eAddr)
     ledger.commit(savePoint)
-    ledger.persist()
+    ledger.persist(clearEmptyAccounts = false)
 
 
 proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) =
@@ -217,7 +217,7 @@ proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) 
       let savePoint = ledger.beginSavePoint
       ledger.modBalance(eAddr)
       ledger.commit(savePoint)
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
 
     block:
       let savePoint = ledger.beginSavePoint
@@ -230,9 +230,9 @@ proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) 
       ledger.modBalance(eAddr)
       ledger.commit(savePoint)
 
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
 
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
 
 proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
   ## Like `runTrial3()` but with four blocks and extra db transaction frames.
@@ -243,13 +243,13 @@ proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
       let savePoint = ledger.beginSavePoint
       ledger.modBalance(eAddr)
       ledger.commit(savePoint)
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
 
     block:
       let savePoint = ledger.beginSavePoint
       ledger.modBalance(eAddr)
       ledger.commit(savePoint)
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
 
     block body3:
       let savePoint = ledger.beginSavePoint
@@ -260,14 +260,14 @@ proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
         break body3
 
       ledger.commit(savePoint)
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
 
   block:
     block:
       let savePoint = ledger.beginSavePoint
       ledger.modBalance(eAddr)
       ledger.commit(savePoint)
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
 
 # ------------------------------------------------------------------------------
 # Test Runner
@@ -498,7 +498,7 @@ proc runLedgerBasicOperationsTests() =
       check ledger.getBalance(addr1) == 1000.u256
       ledger.subBalance(addr1, 100.u256)
       check ledger.getBalance(addr1) == 900.u256
-      ledger.addBalance(addr1, 200.u256)
+      ledger.addBalance(addr1, 200.u256, checkEmptyAccount = false)
       check ledger.getBalance(addr1) == 1100.u256
 
       ledger.setNonce(addr1, 1)
@@ -516,7 +516,7 @@ proc runLedgerBasicOperationsTests() =
       check ledger.contractCollision(addr1) == true
       check ledger.getCodeSize(addr1) == code.len
 
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
       stateRoot = ledger.getStateRoot()
 
       var db = LedgerRef.init(memDB.baseTxFrame())
@@ -541,7 +541,7 @@ proc runLedgerBasicOperationsTests() =
       check ac2.accountExists(addr2) == false
       check ac2.isAccountAlive(addr2) == false
 
-      ac2.persist()
+      ac2.persist(clearEmptyAccounts = false)
       # readonly operations should not modify
       # state trie at all
       check ac2.getStateRoot() == stateRoot
@@ -550,7 +550,7 @@ proc runLedgerBasicOperationsTests() =
       var ledger = LedgerRef.init(memDB.baseTxFrame())
       var addr2 = initAddr(2)
       ledger.setCode(addr2, code)
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
       check ledger.getCode(addr2) == code
       let
         key = contractHashKey(keccak256(code))
@@ -567,7 +567,7 @@ proc runLedgerBasicOperationsTests() =
         let pre = LedgerRef.init(memDB.baseTxFrame())
         pre.holdCode = true
         pre.setCode(bob, code)
-        pre.persist()
+        pre.persist(clearEmptyAccounts = false)
 
       # A rolled back write must not serve the code
       let reverted = LedgerRef.init(memDB.baseTxFrame(), false, stateless = true)
@@ -584,7 +584,7 @@ proc runLedgerBasicOperationsTests() =
       ledger.setCode(alice, code)
       ledger.setCode(alice, @[])
       ledger.commit(sp2)
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
       check:
         ledger.getCodeSize(bob) == code.len
         ledger.getCode(bob) == code
@@ -685,7 +685,7 @@ proc runLedgerBasicOperationsTests() =
       ledger.setStorage(addr2, 1.u256, 1.u256)
       check ledger.contractCollision(addr2) == false
 
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
       check ledger.contractCollision(addr2) == true
 
       let addr3 = initAddr(3)
@@ -731,7 +731,7 @@ proc runLedgerBasicOperationsTests() =
       check keys.len == 0
       check vals.len == 0
 
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
       for k, v in ledger.cachedStorage(addr2):
         keys.add k
         vals.add v
@@ -789,7 +789,7 @@ proc runLedgerBasicOperationsTests() =
         let pre = LedgerRef.init(memDB.baseTxFrame(), false)
         pre.setCode(addr1, @[0x00'u8])
         pre.setCode(addr3, @[0x01'u8])
-        pre.persist()
+        pre.persist(clearEmptyAccounts = false)
 
       var ledger = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
       ledger.setCode(addr3, @[]) # cleared before it is read
@@ -849,7 +849,7 @@ proc runLedgerBasicOperationsTests() =
         let pre = LedgerRef.init(memDB.baseTxFrame(), false)
         pre.setCode(addr1, @[0x00'u8])
         pre.setCode(addr2, @[0x01'u8])
-        pre.persist()
+        pre.persist(clearEmptyAccounts = false)
 
       var ledger = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
 
@@ -907,10 +907,10 @@ proc runLedgerBasicOperationsTests() =
 
       check ledger.getWitnessKeys().len() == 5
 
-      ledger.persist() # persist should not clear the witness keys by default
+      ledger.persist(clearEmptyAccounts = false) # persist should not clear the witness keys by default
       check ledger.getWitnessKeys().len() == 5
 
-      ledger.persist(clearWitness = true)
+      ledger.persist(clearEmptyAccounts = false, clearWitness = true)
       check ledger.getWitnessKeys().len() == 0
 
     test "Get block hash":
@@ -964,7 +964,7 @@ proc runLedgerBasicOperationsTests() =
 
     for i in 1..iterations:
       ledger.setStorage(address, u256(i), slotValue)
-    ledger.persist()
+    ledger.persist(clearEmptyAccounts = false)
 
     let
       stateRoot = ledger.getStateRoot()

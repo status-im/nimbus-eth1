@@ -149,5 +149,5 @@ proc applyDAOHardFork*(ledger: LedgerRef) =
   const zero = 0.u256
   # Move every DAO account and extra-balance account funds into the refund contract
   for address in DAODrainList:
-    ledger.addBalance(DAORefundContract, ledger.getBalance(address))
+    ledger.addBalance(DAORefundContract, ledger.getBalance(address), checkEmptyAccount = true)
     ledger.setBalance(address, zero)

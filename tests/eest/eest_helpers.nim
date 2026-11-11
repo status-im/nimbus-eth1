@@ -21,7 +21,6 @@ import
   ./eest_parser
 
 import ../../tools/common/helpers as chp except HardFork
-from ../../tools/evmstate/helpers import setupLedger
 
 export
   eest_parser
@@ -55,14 +54,14 @@ proc newForkedChain*(
 ): ForkedChainRef =
   let
     memDB = newCoreDbRef(DefaultDbMemory, enableCaches = true)
-    ledger = LedgerRef.init(memDB.baseTxFrame())
     config = getChainConfig(unit.network).expect("ok")
 
   config.chainId = unit.config.chainid
   config.blobSchedule = unit.config.blobSchedule
 
-  setupLedger(unit.pre, ledger)
-  ledger.persist()
+  discard writeGenesisAlloc(unit.pre, memDB.baseTxFrame())
+
+  let ledger = LedgerRef.init(memDB.baseTxFrame())
 
   ledger.txFrame.persistHeaderAndSetHead(genesis).isOkOr:
     debugEcho "Failed to put genesis header into database: ", error

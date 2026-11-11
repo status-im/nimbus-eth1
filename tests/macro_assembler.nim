@@ -35,7 +35,7 @@ from ../execution_chain/db/aristo
 import ../execution_chain/transaction except GasPrice
 import ../tools/common/helpers except LogLevel
 
-export byteutils
+export byteutils, ledger
 
 {.experimental: "dynamicBindSym".}
 
@@ -350,8 +350,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
       error "different memory value", idx=i, expected=mem, actual=actual
       return false
 
-  var ledger = vmState.ledger
-  ledger.persist()
+  vmstate.ledger.persist(vmState.fork.clearEmptyAccounts())
 
   let
     al = com.db.baseTxFrame()

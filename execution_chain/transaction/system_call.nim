@@ -104,7 +104,8 @@ proc systemCall*(params: SysCallParams, T: type): T =
   c.preExecComputation()
   if c.isSuccess:
     c.execCallOrCreate()
-    ledger.persist(clearEmptyAccount = true)
+    # System calls are only used post-Spurious.
+    ledger.persist(clearEmptyAccounts = true)
   else:
     # execCallOrCreate normally disposes the computation, dispose here too
     # otherwise the EVM stack leaks.

@@ -35,7 +35,7 @@ suite "Stateless: Witness Verification":
     ledger.setStorage(addr1, slot1, 100.u256)
     ledger.setStorage(addr1, slot2, 200.u256)
     ledger.setStorage(addr1, slot3, 300.u256)
-    ledger.persist(clearWitness = true)
+    ledger.persist(clearEmptyAccounts = false, clearWitness = true)
 
     let
       stateRoot = ledger.getStateRoot()

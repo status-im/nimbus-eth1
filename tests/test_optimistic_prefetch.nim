@@ -72,7 +72,7 @@ proc initEnv(): PrefetchEnv =
 
   # Workers read state through the parent frame, so fund the sender there
   funding.setBalance(sender, 1_000_000_000.u256)
-  funding.persist()
+  funding.persist(clearEmptyAccounts = false)
 
   let
     parent = Header(stateRoot: EMPTY_ROOT_HASH)

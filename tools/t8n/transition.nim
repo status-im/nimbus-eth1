@@ -437,20 +437,6 @@ proc exec(ctx: TransContext,
 
   ok(output)
 
-proc setupAlloc(ledger: LedgerRef, alloc: GenesisAlloc) =
-  for accAddr, acc in alloc:
-    ledger.setNonce(accAddr, acc.nonce)
-    ledger.setCode(accAddr, acc.code)
-    ledger.setBalance(accAddr, acc.balance)
-
-    for slot, value in acc.storage:
-      ledger.setStorage(accAddr, slot, value)
-
-    # The pre-state must contain every alloc account, even empty ones that no
-    # transaction touches (their values never change, so the setters above do
-    # not mark them dirty).
-    ledger.forcePersist(accAddr)
-
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
   # we can't raise exception here, it'll mess with EVM exception handler.
   # so, store the exception for later using `hashError`
@@ -637,6 +623,8 @@ proc transitionAction*(ctx: var TransContext,
     hashError: ""
   )
 
+  discard writeGenesisAlloc(com.db.baseTxFrame(), ctx.alloc)
+
   vmState.init(
     parent      = parent,
     header      = header,
@@ -653,10 +641,6 @@ proc transitionAction*(ctx: var TransContext,
       vmState = nil
     com.shutdownTaskpool()
     com.db.close()
-
-  vmState.mutateLedger:
-    ledger.setupAlloc(ctx.alloc)
-    ledger.persist(clearEmptyAccount = false)
 
   ? ctx.parseTxs(com.chainId)
   let res = ? exec(ctx, vmState, conf.stateReward, header, conf)
