@@ -208,6 +208,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
     ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 
+  ?vmState.ledger.storeHeldCode()
 
   if PersistHeaders in p.flags:
     let blockHash = header.computeBlockHash()
