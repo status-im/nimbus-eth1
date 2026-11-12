@@ -26,11 +26,10 @@ import
 logScope:
   topics = "beacon engine"
 
-func validateVersionedHashed(payload: ExecutionPayload,
-                              expected: openArray[Hash32]): bool {.raises: [RlpError].} =
+func validateVersionedHashed(txs: openArray[Transaction],
+                              expected: openArray[Hash32]): bool =
   var versionedHashes: seq[VersionedHash]
-  for x in payload.transactions:
-    let tx = rlp.decode(distinctBase(x), Transaction)
+  for tx in txs:
     versionedHashes.add tx.versionedHashes
 
   if versionedHashes.len != expected.len:
@@ -205,7 +204,7 @@ proc newPayload*(ben: BeaconEngineRef,
                  beaconRoot = Opt.none(Hash32),
                  executionRequests = Opt.none(seq[seq[byte]]),
                  withWitness = false):
-                   Future[PayloadStatus] {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
+                   Future[PayloadStatus] {.async: (raises: [CancelledError, RpcResponseError]).} =
 
   trace "Engine API request received",
     meth = "newPayload",
@@ -259,7 +258,7 @@ proc newPayload*(ben: BeaconEngineRef,
       raise invalidParams("newPayload" & $apiVersion &
         ": expect blobVersionedHashes but got none")
 
-    if not validateVersionedHashed(payload, versionedHashes.value):
+    if not validateVersionedHashed(blk.transactions, versionedHashes.value):
       return invalidStatus("newPayload" & $apiVersion &
         ": invalid blob versionedHashes")
 
