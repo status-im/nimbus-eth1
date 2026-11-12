@@ -69,6 +69,15 @@ const
     ## nano-seep wait. This is the time between wto of these nano-seep
     ## directives.
 
+  etaSplineDistMin1* = chronos.minutes(2)
+    ## Minimum spline distance for linear ETA interpolation. This is the
+    ## initial interval which is held deliberately small so that the ETA
+    ## display kicks in early.
+
+  etaSplineDistMin2* = chronos.minutes(10)
+    ## Minimum spline distance for linear ETA interpolation applicable after
+    ## initialisation with ` etaSplineDistMin1`.
+
   # -----------------
 
   noPeersLogWaitInterval* = chronos.seconds(50)

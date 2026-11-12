@@ -187,7 +187,7 @@ proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = 
       else:
         let header = testUnit.genesisBlockHeader.to(Header)
         check testUnit.genesisBlockHeader.hash == header.computeRlpHash
-        let env = prepareEnv(testUnit, header, rpcEnabled = false, statelessEnabled, parallelEnabled)
+        let env = prepareEnv(testUnit, header, statelessEnabled, parallelEnabled)
 
         let testResult = env.runTest(testUnit, statelessEnabled)
         check testResult == Result[void, string].ok()

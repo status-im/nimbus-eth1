@@ -13,7 +13,11 @@
 import
   std/paths,
   pkg/[chronicles, metrics, stew/interval_set],
+  ./update/update_eta,
   ./[cache_db, worker_const, worker_desc]
+
+export
+  update_eta
 
 logScope:
   topics = "snap sync"

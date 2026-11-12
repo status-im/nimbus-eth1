@@ -98,7 +98,7 @@ jobs:
           find . -type d -name "nimcache" -exec rm -rf {} +
           # "-static" option will not work for osx unless static system libraries are provided
           make ${DEFAULT_MAKE_FLAGS} test t8n_test evmstate_test
-          make eest_tool_test
+          make ${DEFAULT_MAKE_FLAGS} eest_tool_test
 
   eest:
     needs: matrix_config
@@ -139,5 +139,4 @@ jobs:
           ./env.sh nim --version
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
-          make ${DEFAULT_MAKE_FLAGS} rocksdb
-          make eest_full_test
+          make ${DEFAULT_MAKE_FLAGS} eest_full_test
