@@ -282,12 +282,24 @@ proc runBlockUnit(
   result = env.runBlockTest(unit, opts, rejections)
   env.close()
 
+when defined(windows):
+  proc longPath(path: string): string =
+    ## Windows opens a path longer than MAX_PATH only in its `\\?\` form.
+    try:
+      "\\\\?\\" & normalizedPath(absolutePath(path))
+    except CatchableError:
+      path
+
+else:
+  template longPath(path: string): string =
+    path
+
 template runFile(path: string, T: type, runUnit: untyped): string =
   ## A file that is not JSON cannot be run; a fixture in it that Nimbus cannot
   ## read, such as one for a fork it does not know, fails on its own.
   let fixtures =
     try:
-      parseFile(path)
+      parseFile(longPath(path))
     except CatchableError as exc:
       return "E" & path & ": " & exc.msg
   if fixtures.kind != JObject:
@@ -479,7 +491,7 @@ proc collectFiles(paths: seq[string], errors: var seq[string]): seq[string] =
   ## sorted and each once; a path that cannot be found or read is an error.
   proc readable(file: string): bool =
     try:
-      var f = open(file, fmRead)
+      var f = open(longPath(file), fmRead)
       f.close()
       true
     except IOError:
