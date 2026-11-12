@@ -121,24 +121,6 @@ proc prepareEnv(
 
   let env = Env(chain: ForkedChainRef.init(com))
 
-  if opts.balReport:
-    com.balExecutionCB = proc(
-        header: Header, parallel: bool, reason: string
-    ) {.gcsafe, raises: [].} =
-      let hash = header.computeBlockHash
-      let line = %*{
-        "event": "balExecution",
-        "block": header.number,
-        "hash": hash.data.to0xHex(),
-        "path": (if parallel: "parallel" else: "sequential"),
-        "reason": env.kept.getOrDefault(hash, reason),
-      }
-      try:
-        stderr.write($line & "\n")
-        stderr.flushFile()
-      except IOError:
-        discard
-
   if opts.mode == EngineTest:
     env.engine = BeaconEngineRef.new(TxPoolRef.new(env.chain))
     env.server = RpcServer.new()
@@ -151,6 +133,38 @@ proc close(env: Env) =
     waitFor env.engine.stop()
   waitFor env.chain.flushBaseLoop()
   env.chain.com.db.close()
+
+proc reportExecution(
+    env: Env, opts: Options, number: uint64, hash: Hash32, timestamp: EthTime,
+    hasList: bool,
+) =
+  ## With `--bal-report`, print the executor a block runs on, by the gates of
+  ## `balParallelExecutionEnabled`, and the first gate that ruled parallel out.
+  if not opts.balReport or number == 0:
+    return
+  let reason =
+    if hash in env.kept:
+      env.kept.getOrDefault(hash)
+    else:
+      when not compileOption("threads"):
+        "no-threads"
+      else:
+        if opts.balSequential: "disabled"
+        elif not hasList: "no-access-list"
+        elif not env.chain.com.isAmsterdamOrLater(timestamp): "pre-amsterdam"
+        else: ""
+  let line = %*{
+    "event": "balExecution",
+    "block": number,
+    "hash": hash.data.to0xHex(),
+    "path": (if reason.len == 0: "parallel" else: "sequential"),
+    "reason": reason,
+  }
+  try:
+    stderr.write($line & "\n")
+    stderr.flushFile()
+  except IOError:
+    discard
 
 proc genesisHeader(unit: UnitEnv): Result[Header, string] =
   let header = unit.genesisBlockHeader.to(Header)
@@ -238,6 +252,8 @@ proc runBlockTest(
       hash = blk.header.computeBlockHash
       bal = env.deliveredList(x, blk.header, opts)
       res = waitFor env.chain.importBlock(blk, bal)
+    env.reportExecution(
+      opts, blk.header.number, hash, blk.header.timestamp, bal.isSome)
     if res.isErr:
       rejections.add rejection(i, Opt.some(hash), res.error.msg)
       if not expectInvalid:
@@ -348,8 +364,24 @@ proc forkchoice(env: Env, version: int, head: string): string =
     return "forkchoiceUpdated status " & status
   ""
 
+proc reportPayload(env: Env, opts: Options, payload: JsonNode) =
+  if not opts.balReport:
+    return
+  try:
+    let list = payload{"blockAccessList"}.getStr
+    env.reportExecution(
+      opts,
+      fromHex[uint64](payload["blockNumber"].getStr),
+      Hash32.fromHex(payload["blockHash"].getStr),
+      EthTime(fromHex[uint64](payload["timestamp"].getStr)),
+      list.len > 2,
+    )
+  except CatchableError:
+    discard
+
 proc runEngineTest(
-    env: Env, unit: RawEngineUnitEnv, genesis: Hash32, rejections: var seq[JsonNode]
+    env: Env, opts: Options, unit: RawEngineUnitEnv, genesis: Hash32,
+    rejections: var seq[JsonNode],
 ): string =
   let payloads = unit.engineNewPayloads.getElems()
   if payloads.len == 0:
@@ -388,6 +420,8 @@ proc runEngineTest(
       continue
 
     let status = response{"result"}{"status"}.getStr
+    if status in ["VALID", "INVALID"]:
+      env.reportPayload(opts, payload["params"][0])
     if status == "INVALID":
       let hash =
         try:
@@ -428,7 +462,7 @@ proc runEngineUnit(
     return error
   result =
     try:
-      env.runEngineTest(unit, genesis.computeBlockHash, rejections)
+      env.runEngineTest(opts, unit, genesis.computeBlockHash, rejections)
     except CatchableError as exc:
       "malformed fixture: " & exc.msg
   env.close()
