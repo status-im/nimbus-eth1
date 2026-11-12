@@ -233,13 +233,26 @@ func validateEip2930SignatureForm(tx: Transaction): bool =
   isValid = isValid and tx.R < SECPK1_N
   isValid
 
-func gasCost*(tx: Transaction): UInt256 =
+func gasCost*(tx: Transaction): Opt[UInt256] =
+  ## Maximum gas and blob gas fee of `tx`, none if it does not fit in 256 bits
   if tx.txType >= TxEip4844:
-    tx.gasLimit.u256 * tx.maxFeePerGas.u256 + tx.getTotalBlobGas.u256 * tx.maxFeePerBlobGas
+    let
+      # 64-bit by 64-bit, cannot overflow
+      gasFee = tx.gasLimit.u256 * tx.maxFeePerGas.u256
+      blobGas = tx.getTotalBlobGas.u256
+    # maxFeePerBlobGas is a full UInt256, so the blob fee and the total can
+    # exceed 256 bits. UInt256 arithmetic would wrap; the spec uses unbounded
+    # integers, where such a cost is more than any balance.
+    if blobGas.isZero.not and tx.maxFeePerBlobGas > high(UInt256) div blobGas:
+      return Opt.none(UInt256)
+    let blobFee = blobGas * tx.maxFeePerBlobGas
+    if blobFee > high(UInt256) - gasFee:
+      return Opt.none(UInt256)
+    Opt.some(gasFee + blobFee)
   elif tx.txType >= TxEip1559:
-    tx.gasLimit.u256 * tx.maxFeePerGas.u256
+    Opt.some(tx.gasLimit.u256 * tx.maxFeePerGas.u256)
   else:
-    tx.gasLimit.u256 * tx.gasPrice.u256
+    Opt.some(tx.gasLimit.u256 * tx.gasPrice.u256)
 
 func validateTxBasic*(
     com:      CommonRef,
@@ -388,7 +401,8 @@ proc validateTransaction*(
     return err(&"invalid tx: maxFee is smaller than baseFee. maxFee={tx.maxFeePerGas}, baseFee={baseFee}")
 
   # the signer must be able to fully afford the transaction
-  let gasCost = tx.gasCost()
+  let gasCost = tx.gasCost().valueOr:
+    return err("invalid tx: not enough cash for gas. required balance exceeds 256 bits")
 
   if balance < gasCost:
     return err(&"invalid tx: not enough cash for gas. avail={balance}, require={gasCost}")
