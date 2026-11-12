@@ -530,7 +530,7 @@ proc runLedgerBasicOperationsTests() =
       var ac2 = LedgerRef.init(memDB.baseTxFrame())
       var addr2 = initAddr(2)
 
-      check ac2.getCodeHash(addr2) == emptyAcc.codeHash
+      check ac2.getCodeHash(addr2) == default(Hash32) # All-zeroes for non-existant account
       check ac2.getBalance(addr2) == emptyAcc.balance
       check ac2.getNonce(addr2) == emptyAcc.nonce
       check ac2.getCode(addr2) == []
@@ -710,15 +710,9 @@ proc runLedgerBasicOperationsTests() =
         keys.add k
         vals.add v
 
-      # before persist, there are storages in cache
-      check keys.len == 2
-      check vals.len == 2
-
-      check 1.u256 in keys
-      check 2.u256 in keys
-
-      # before persist, the values are all original values
-      check vals == @[0.u256, 0.u256]
+      # no cache for new accounts
+      check keys.len == 0
+      check vals.len == 0
 
       keys.reset
       vals.reset

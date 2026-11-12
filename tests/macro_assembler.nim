@@ -350,7 +350,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
       error "different memory value", idx=i, expected=mem, actual=actual
       return false
 
-  vmstate.ledger.persist(vmState.fork.clearEmptyAccounts())
+  vmState.ledger.persist(vmState.fork.clearEmptyAccounts())
 
   let
     al = com.db.baseTxFrame()

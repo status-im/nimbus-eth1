@@ -61,6 +61,15 @@ type
     statelessInputBytes*: Opt[seq[byte]]
     statelessOutputBytes*: Opt[seq[byte]]
 
+  BlockDescNode* = object
+    expectException*: string
+    rlp*: seq[byte]
+    blockAccessList*: JsonNode
+    rlp_decoded*: JsonNode
+    executionWitness*: JsonNode
+    statelessInputBytes*: Opt[seq[byte]]
+    statelessOutputBytes*: Opt[seq[byte]]
+
   Numero* = distinct uint64
 
   PayloadParam* = object
@@ -91,7 +100,7 @@ type
 
   ## Blockchain Test Types
   BlockchainUnitEnv* = object of UnitEnv
-    blocks*: JsonNode
+    blocks*: seq[BlockDescNode]
 
   BlockchainUnitDesc* = object
     name*: string
@@ -114,6 +123,7 @@ type
 GenesisHeader.useDefaultReaderIn EthJson
 PayloadItem.useDefaultReaderIn EthJson
 EngineUnitEnv.useDefaultReaderIn EthJson
+BlockDescNode.useDefaultReaderIn EthJson
 BlockchainUnitEnv.useDefaultReaderIn EthJson
 EnvConfig.useDefaultReaderIn EthJson
 BlobSchedule.useDefaultReaderIn EthJson

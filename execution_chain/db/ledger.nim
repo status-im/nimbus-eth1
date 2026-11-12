@@ -207,6 +207,20 @@ proc isEmpty(acc: AccountRef): bool =
     acc.statement.balance.isZero and
     acc.statement.codeHash == EMPTY_CODE_HASH
 
+proc slotKey(ledger: LedgerRef, slot: UInt256): Hash32 =
+  ledger.slots.get(slot).valueOr:
+    let slotKey = computeSlotKey(slot)
+    ledger.slots.put(slot, slotKey)
+
+    if ledger.storeSlotHash:
+      # Write only if it was not cached to avoid writing the same data over and
+      # over..
+      let key = slotKey.slotHashToSlotKey
+      ledger.txFrame.put(key.toOpenArray, blobify(slot).data).isOkOr:
+        warn logTxt "slotKey()", slot, error = ($$error)
+
+    slotKey
+
 proc getAccount(
     ledger: LedgerRef;
     address: Address;
@@ -300,10 +314,13 @@ proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
 template exists(acc: AccountRef): bool =
   LeafExists in acc.flags
 
-template fetchSlotChecked(ledger: LedgerRef, accPath: Hash32, slotKey: Hash32): UInt256 =
+template fetchSlotChecked(ledger: LedgerRef, accPath: Hash32, slot: UInt256): UInt256 =
   ## Like `fetchSlot`, but a witness gap on the slot's path is a fatal
   ## condition rather than a silent `0`. Records the condition without an
   ## early return, same reasoning as `getAccount`.
+  let slotKey = ledger.slots.get(slot).valueOr:
+    computeSlotKey(slot)
+
   let slotRc = ledger.txFrame.fetchSlot(accPath, slotKey)
   if slotRc.isErr:
     if slotRc.error.isAristo and slotRc.error.aErr in MissingNodeErrors:
@@ -322,21 +339,20 @@ proc originalStorageValue(
       ): UInt256 =
   # share the same original storage between multiple
   # versions of account
-  acc.original.storage.withValue(slot, val) do:
+  if acc.flags * {IsNew, NewlyCreated} != {}:
+    # New and newly created accounts have no original storage, so we can skip
+    # all lookups and caching
+    return 0'u256
+
+  acc.original.storage.withValue(slot, val):
     return val[]
 
-  # Not in the original values cache - go to the DB unless it's a new account
-  if acc.flags * {IsNew, NewlyCreated} == {}:
-    result =
-      if ledger.balOverlay.isNone():
-        let slotKey = ledger.slots.get(slot).valueOr:
-          computeSlotKey(slot)
-        ledger.fetchSlotChecked(acc.accPath, slotKey)
-      else:
-        ledger.balOverlay[].getStorage(address, slot).valueOr:
-          let slotKey = ledger.slots.get(slot).valueOr:
-            computeSlotKey(slot)
-          ledger.fetchSlotChecked(acc.accPath, slotKey)
+  result =
+    if ledger.balOverlay.isNone():
+      ledger.fetchSlotChecked(acc.accPath, slot)
+    else:
+      ledger.balOverlay[].getStorage(address, slot).valueOr:
+        ledger.fetchSlotChecked(acc.accPath, slot)
 
   acc.original.storage[slot] = result
 
@@ -346,10 +362,9 @@ proc storageValue(
     slot: UInt256;
     ledger: LedgerRef;
       ): UInt256 =
-  acc.overlayStorage.withValue(slot, val) do:
+  acc.overlayStorage.withValue(slot, val):
     return val[]
-  do:
-    result = acc.originalStorageValue(address, slot, ledger)
+  acc.originalStorageValue(address, slot, ledger)
 
 proc kill(acc: AccountRef) =
   acc.flags.excl {LeafExists, CodeChanged, StorageChanged, StatementChanged}
@@ -415,45 +430,28 @@ template abortOnFatalError*(ledger: LedgerRef) =
 proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   const info = "persistStorage(): "
 
-  if acc.overlayStorage.len == 0:
-    # TODO: remove the storage too if we figure out
-    # how to create 'virtual' storage room for each account
-    return ok()
-
   # Save `overlayStorage[]` on database
   let original = acc.original
   for slot, value in acc.overlayStorage:
-    original.storage.withValue(slot, v):
-      if v[] == value:
-        continue # Avoid writing A-B-A updates
+    if acc.flags * {IsNew, NewlyCreated} * acc.flags != {}:
+      if value.isZero:
+        continue
+    else:
+      original.storage.withValue(slot, v):
+        if v[] == value:
+          continue # Avoid writing A-B-A updates
 
-    var cached = true
-    let slotKey = ledger.slots.get(slot).valueOr:
-      cached = false
-      let slotKey = computeSlotKey(slot)
-      ledger.slots.put(slot, slotKey)
-      slotKey
-
-    if value > 0:
+    let slotKey = ledger.slotKey(slot)
+    if value.isZero:
+      ledger.txFrame.deleteSlot(acc.accPath, slotKey).isOkOr:
+        return err(info & $$error)
+      original.storage.del(slot)
+    else:
       ledger.txFrame.mergeSlot(acc.accPath, slotKey, value).isOkOr:
         return err(info & $$error)
 
       # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
       original.storage[slot] = value
-
-    else:
-      ledger.txFrame.deleteSlot(acc.accPath, slotKey).isOkOr:
-        return err(info & $$error)
-      original.storage.del(slot)
-
-    if ledger.storeSlotHash and not cached:
-      # Write only if it was not cached to avoid writing the same data over and
-      # over..
-      let
-        key = slotKey.slotHashToSlotKey
-        rc = ledger.txFrame.put(key.toOpenArray, blobify(slot).data)
-      if rc.isErr:
-        warn logTxt "persistStorage()", slot, error=($$rc.error)
 
   acc.overlayStorage.clear()
   ok()
@@ -833,17 +831,11 @@ proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
     acc.flags.incl StorageChanged
 
 proc clearStorage*(ledger: LedgerRef, address: Address) =
-  # If there is an existing account with the given address, it is overwritten.
-  let acc = ledger.getAccount(address)
-  acc.flags.incl {LeafExists, NewlyCreated}
+  # If there is an existing account with the given address, its storage will get
+  # overwritten on persist
 
-  if ledger.txFrame.hasStorage(acc.accPath).valueOr(false):
-    # need to clear the storage from the database first
-    let acc = ledger.makeDirty(address, acc, cloneStorage = false)
-    # also clear originalStorage cache, otherwise
-    # both getStorage and getCommittedStorage will
-    # return wrong value
-    acc.original.storage.clear()
+  let acc = ledger.makeDirty(address, ledger.getAccount(address))
+  acc.flags.incl {LeafExists, NewlyCreated}
 
 proc applyBlockAccessList*(ledger: LedgerRef, bal: BlockAccessList, txCount: int) =
   ## Set the block access list's final state for indices up to `txCount` on
