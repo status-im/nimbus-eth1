@@ -128,7 +128,7 @@ proc makeCaseDispatcher(forkArg: EVMFork, tracingEnabled: bool, opArg, cpt: NimN
             if not `cpt`.continuation.isNil:
               break
 
-        of Stop, Return, Revert, SelfDestruct:
+        of Stop, Return, Revert, SelfDestruct, Approve:
           quote:
             `handler`
             break
