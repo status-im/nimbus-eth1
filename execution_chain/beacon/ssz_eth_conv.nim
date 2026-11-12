@@ -11,16 +11,19 @@
 
 import
   std/[sequtils, typetraits],
+  results,
   eth/common/eth_types_rlp,
   eth/trie/ordered_trie,
   beacon_chain/spec/forks,
   ./web3_eth_conv,
   ./payload_conv,
-  ../core/pooled_txs
+  ../core/pooled_txs,
+  ../stateless/witness_types
 
 from ./engine_ssz_types import
   BlobsBundleV1, BlobsBundleV2, ExecutionRequestsList, MAX_BYTES_PER_EXECUTION_REQUEST,
-  ExecutionPayloadBodyParis, ExecutionPayloadBodyShanghai, ExecutionPayloadBodyAmsterdam
+  ExecutionPayloadBodyParis, ExecutionPayloadBodyShanghai, ExecutionPayloadBodyAmsterdam,
+  ExecutionWitness, WitnessNodes, WitnessCodes, WitnessHeaders
 
 func toHash32*(d: Eth2Digest): Hash32 =
   d.data.to(Hash32)
@@ -235,3 +238,25 @@ func sszExecutionRequests*(reqs: seq[seq[byte]]): engine_ssz_types.ExecutionRequ
 
 func ethExecutionRequests*(reqs: engine_ssz_types.ExecutionRequestsList): seq[seq[byte]] =
   asSeq(reqs).mapIt(asSeq(it))
+
+# https://github.com/ethereum/execution-apis/pull/885
+
+func sszWitnessItems[T: List](t: typedesc[T], items: openArray[seq[byte]]):
+    Result[T, string] =
+  ## TODO: Not sure if we should care about doing these length checks as
+  ## they should normally not be exceeded at witness generation time.
+  type Item = ElemType(T)
+  var list: T
+  for item in items:
+    if item.len > Item.maxLen:
+      return err("witness item exceeds its byte limit")
+    if not list.add(Item.init(item)):
+      return err("witness field exceeds its item limit")
+  ok(list)
+
+func sszExecutionWitness*(w: ExecutionWitnessWithKeys):
+    Result[engine_ssz_types.ExecutionWitness, string] =
+  ok(engine_ssz_types.ExecutionWitness(
+    state: ?sszWitnessItems(WitnessNodes, w.state),
+    codes: ?sszWitnessItems(WitnessCodes, w.codes),
+    headers: ?sszWitnessItems(WitnessHeaders, w.headers)))

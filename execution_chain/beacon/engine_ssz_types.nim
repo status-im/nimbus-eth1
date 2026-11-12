@@ -17,6 +17,9 @@ import
   beacon_chain/spec/datatypes/[bellatrix, capella, deneb, gloas]
 
 from beacon_chain/spec/datatypes/fulu import BYTES_PER_CELL
+from ../stateless/stateless_types import
+  MAX_WITNESS_HEADERS, MAX_BYTES_PER_CODE, MAX_BYTES_PER_HEADER,
+  MAX_BYTES_PER_WITNESS_NODE
 
 export engine_types, presets, BYTES_PER_CELL
 
@@ -58,7 +61,28 @@ const
   MAX_BAL_BYTES* = MAX_BYTES_PER_TX
   MAX_REQUEST_BODY_SIZE* = 64 * 1024 * 1024
 
+  # POST /engine/v1/payloads/witness
+  # https://github.com/ethereum/execution-apis/pull/885
+  MAX_WITNESS_ITEMS* = 1 shl 20
+
 type
+  WitnessNodes* = List[ByteList[Limit MAX_BYTES_PER_WITNESS_NODE], Limit MAX_WITNESS_ITEMS]
+  WitnessCodes* = List[ByteList[Limit MAX_BYTES_PER_CODE], Limit MAX_WITNESS_ITEMS]
+  WitnessHeaders* = List[ByteList[Limit MAX_BYTES_PER_HEADER], Limit MAX_WITNESS_HEADERS]
+
+  ExecutionWitness* = object
+    ## TODO: Still different in definition from the stateless_types.ExecutionWitness
+    ## as that one uses progressive lists for state and codes.
+    ## Results in same serialization though so we could in theory also skip the defintion here.
+    state*: WitnessNodes ## RLP encoded account and storage trie nodes
+    codes*: WitnessCodes ## Contract bytecode read from the pre state
+    headers*: WitnessHeaders
+      ## RLP encoded ancestor headers, oldest to newest, ending at the parent
+
+  PayloadStatusWithWitness* = object
+    payload_status*: engine_types.PayloadStatus
+    witness*: Optional[ExecutionWitness]
+
   PayloadAttributesParis* = object
     timestamp*: uint64
     prev_randao*: Eth2Digest

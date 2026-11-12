@@ -7,8 +7,9 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-# Support for the engine_newPayloadWithWitness* methods. These are not (yet)
-# part of the Engine API spec.
+# Support for the engine_newPayloadWithWitness* methods and for the REST
+# POST /engine/v1/payloads/witness endpoint. The former is not part of the
+# Engine API spec, the latter follows execution-apis#885.
 
 {.push gcsafe, raises: [].}
 
@@ -48,8 +49,8 @@ func encodeExtWitness(w: ExecutionWitnessWithKeys): Result[seq[byte], string] =
     rlp.encode(ExtWitness(headers: headers, codes: w.codes, state: w.state, keys: @[]))
   )
 
-proc collectWitness*(ben: BeaconEngineRef, blk: Block): Opt[seq[byte]] =
-  ## Return the RLP-encoded execution witness for `blk`, or none if unavailable.
+proc collectWitness*(ben: BeaconEngineRef, blk: Block): Opt[ExecutionWitnessWithKeys] =
+  ## Return the execution witness for `blk`, or none if unavailable.
   ## When the node runs with `--stateless-provider` the witness stored during
   ## import is used else it is generated on demand by re-executing the block
   ## against its parent state.
@@ -63,10 +64,19 @@ proc collectWitness*(ben: BeaconEngineRef, blk: Block): Opt[seq[byte]] =
 
   let w = witness.valueOr:
     warn "Execution witness not available", hash = blockHash.short, error = error
+    return Opt.none(ExecutionWitnessWithKeys)
+
+  Opt.some(w)
+
+proc collectExtWitness*(ben: BeaconEngineRef, blk: Block): Opt[seq[byte]] =
+  ## Return the RLP-encoded (geth wire format) execution witness for `blk`,
+  ## or none if unavailable.
+  let w = ben.collectWitness(blk).valueOr:
     return Opt.none(seq[byte])
 
   let encoded = encodeExtWitness(w).valueOr:
-    warn "Failed to encode execution witness", hash = blockHash.short, error = error
+    warn "Failed to encode execution witness",
+      hash = blk.header.computeBlockHash().short, error = error
     return Opt.none(seq[byte])
 
   Opt.some(encoded)
