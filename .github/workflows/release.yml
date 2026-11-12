@@ -105,7 +105,7 @@ jobs:
           TZ: "Etc/UTC"
         run: |
           sudo apt-get -qq update
-          sudo apt-get -qq -y install binfmt-support qemu-user-static
+          sudo apt-get -qq -y install qemu-user qemu-user-binfmt
 
       - name: Checkout code
         uses: actions/checkout@v6
