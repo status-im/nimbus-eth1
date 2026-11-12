@@ -367,6 +367,20 @@ suite "Engine SSZ API REST transport: business logic":
     check status.status == uint8(PayloadStatusCode.INVALID)
     check status.status != PAYLOAD_STATUS_INVALID_BLOCK_HASH
 
+  test "POST /payloads with an undecodable transaction should return 200 INVALID":
+    var corrupted = builtPayload
+    check corrupted.transactions.add(bellatrix.Transaction.init(@[byte 0xc1]))
+    let body = SSZ.encode(ExecutionPayloadEnvelopeParis(payload: corrupted))
+    let resp = waitFor HttpClientRequestRef.post(session, base & "/engine/v1/payloads",
+      headers = @[
+        ("Eth-Execution-Version", "paris"),
+        ("Content-Type", "application/octet-stream")],
+      body = body).get().fetch()
+    check resp[0] == 200
+    let status = SSZ.decode(resp[1], PayloadStatus)
+    check status.status == uint8(PayloadStatusCode.INVALID)
+    check "Failed to decode block" in status.validation_error.get.toString
+
   test "POST /forkchoice with an inconsistent forkchoice state should return 409 invalid-forkchoice":
     # The block imported above is known to the chain but is not (yet) the
     # canonical head, so referencing it as for the FCU while pointing
@@ -766,4 +780,44 @@ suite "Engine SSZ API REST transport: payload witness":
     check:
       resp[0] == 200
       status.payload_status.status == uint8(PayloadStatusCode.INVALID)
+      not status.witness.isSome
+
+  test "POST /payloads with an undecodable BAL should return 200 INVALID":
+    var corrupted = built.payload
+    corrupted.block_access_list = gloas.BlockAccessList.init(@[byte 0xc1])
+    let body = SSZ.encode(ExecutionPayloadEnvelopeAmsterdam(
+      payload: corrupted,
+      parent_beacon_block_root: beaconRoot,
+      execution_requests: built.execution_requests))
+    let resp = waitFor HttpClientRequestRef.post(session, base & "/engine/v1/payloads",
+      headers = @[
+        ("Eth-Execution-Version", "amsterdam"),
+        ("Content-Type", "application/octet-stream")],
+      body = body).get().fetch()
+    let status = SSZ.decode(resp[1], PayloadStatus)
+    check:
+      resp[0] == 200
+      status.status == uint8(PayloadStatusCode.INVALID)
+      "Failed to decode BAL" in status.validation_error.get.toString
+
+  test "POST /payloads/witness with an undecodable transaction should return 200 INVALID":
+    var corrupted = built.payload
+    corrupted.transactions = @[gloas.Transaction.init(@[byte 0xc1])]
+    let resp = submitWitness(corrupted)
+    let status = SSZ.decode(resp[1], PayloadStatusWithWitness)
+    check:
+      resp[0] == 200
+      status.payload_status.status == uint8(PayloadStatusCode.INVALID)
+      "Failed to decode block" in status.payload_status.validation_error.get.toString
+      not status.witness.isSome
+
+  test "POST /payloads/witness with an undecodable BAL should return 200 INVALID":
+    var corrupted = built.payload
+    corrupted.block_access_list = gloas.BlockAccessList.init(@[byte 0xc1])
+    let resp = submitWitness(corrupted)
+    let status = SSZ.decode(resp[1], PayloadStatusWithWitness)
+    check:
+      resp[0] == 200
+      status.payload_status.status == uint8(PayloadStatusCode.INVALID)
+      "Failed to decode BAL" in status.payload_status.validation_error.get.toString
       not status.witness.isSome

@@ -30,7 +30,7 @@ from ../engine_ssz_types import
 from ../../rpc/engine_ssz_conv import toSsz, toWeb3
 from beacon_chain/spec/forks import ForkyExecutionPayload
 from ../ssz_eth_conv import
-  ethBlock, toHash32, sszExecutionWitness
+  ethBlock, ethBlockAccessList, toHash32, sszExecutionWitness
 
 logScope:
   topics = "beacon engine"
@@ -421,17 +421,44 @@ proc newPayload*(ben: BeaconEngineRef,
 
   res
 
+# Transaction or BAL bytes that fail RLP decoding make the payload INVALID,
+# as in the JSON-RPC newPayload above.
+proc decodePayload(fork: EngineFork,
+                   payload: ForkyExecutionPayload,
+                   beaconRoot: Opt[Hash32],
+                   executionRequests: Opt[seq[seq[byte]]]):
+                     Result[(Block, Opt[BlockAccessListRef]),
+                       engine_ssz_types.PayloadStatus] =
+  let
+    blk =
+      try:
+        ethBlock(payload, beaconRoot, calcRequestsHash(executionRequests))
+      except RlpError as e:
+        warn "Failed to decode payload",
+          error = e.msg
+        return err(invalidStatus("newPayload" & $fork &
+          ": Failed to decode block in payload: " & e.msg))
+    blockAccessList =
+      try:
+        ethBlockAccessList(payload)
+      except RlpError as e:
+        warn "Failed to decode payload",
+          error = e.msg
+        return err(invalidStatus("newPayload" & $fork &
+          ": Failed to decode BAL in payload: " & e.msg))
+  ok((blk, blockAccessList))
+
 proc newPayload*(ben: BeaconEngineRef,
                     fork: EngineFork,
                     payload: ForkyExecutionPayload,
-                    blockAccessList: Opt[BlockAccessListRef],
                     beaconRoot: Opt[Hash32],
                     executionRequests: Opt[seq[seq[byte]]]):
                       Future[engine_ssz_types.PayloadStatus]
-                        {.async: (raises: [CancelledError, RpcResponseError, RlpError]).} =
+                        {.async: (raises: [CancelledError, RpcResponseError]).} =
   let
-    requestsHash = calcRequestsHash(executionRequests)
-    blk = ethBlock(payload, beaconRoot, requestsHash)
+    (blk, blockAccessList) =
+      decodePayload(fork, payload, beaconRoot, executionRequests).valueOr:
+        return error
     blockHash = toHash32(payload.block_hash)
   var res = await processNewPayload(ben, fork, blk, blockAccessList,
     blockHash, Opt.none(seq[Hash32]), executionRequests)
@@ -446,15 +473,16 @@ proc newPayloadWithWitness*(
     ben: BeaconEngineRef,
     fork: EngineFork,
     payload: ForkyExecutionPayload,
-    blockAccessList: Opt[BlockAccessListRef],
     beaconRoot: Opt[Hash32],
     executionRequests: Opt[seq[seq[byte]]],
 ): Future[Result[PayloadStatusWithWitness, string]] {.
-    async: (raises: [CancelledError, RpcResponseError, RlpError])
+    async: (raises: [CancelledError, RpcResponseError])
 .} =
   let
-    requestsHash = calcRequestsHash(executionRequests)
-    blk = ethBlock(payload, beaconRoot, requestsHash)
+    (blk, blockAccessList) = decodePayload(
+      fork, payload, beaconRoot, executionRequests
+    ).valueOr:
+      return ok(PayloadStatusWithWitness(payload_status: error))
     blockHash = toHash32(payload.block_hash)
     status = await processNewPayload(
       ben,
