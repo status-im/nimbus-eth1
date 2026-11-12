@@ -432,25 +432,25 @@ proc runLedgerBasicOperationsTests() =
       ledger.commit(outer)
       check ledger.peekCode(codeHash).isNone
 
-    test "accountExists and isAccountAlive":
+    test "accountExists and isAccountEmpty":
       check ledger.accountExists(address) == false
-      check ledger.isAccountAlive(address) == false
+      check ledger.isAccountEmpty(address) == true
 
       ledger.setBalance(address, 1000.u256)
 
       check ledger.accountExists(address) == true
-      check ledger.isAccountAlive(address) == true
+      check ledger.isAccountEmpty(address) == false
 
       ledger.setBalance(address, 0.u256)
       ledger.setNonce(address, 1)
-      check ledger.isAccountAlive(address) == true
+      check ledger.isAccountEmpty(address) == false
 
       ledger.setCode(address, code)
       ledger.setNonce(address, 0)
-      check ledger.isAccountAlive(address) == true
+      check ledger.isAccountEmpty(address) == false
 
       ledger.setCode(address, newSeq[byte]())
-      check ledger.isAccountAlive(address) == false
+      check ledger.isAccountEmpty(address) == true
       check ledger.accountExists(address) == true
 
     test "clone storage":
@@ -490,7 +490,7 @@ proc runLedgerBasicOperationsTests() =
       var ledger = LedgerRef.init(memDB.baseTxFrame())
       var addr1 = initAddr(1)
 
-      check ledger.isAccountAlive(addr1) == false
+      check ledger.isAccountEmpty(addr1) == true
       check ledger.accountExists(addr1) == false
       check ledger.contractCollision(addr1) == false
 
@@ -539,7 +539,7 @@ proc runLedgerBasicOperationsTests() =
       check ac2.getStorage(addr2, 1.u256) == 0.u256
       check ac2.contractCollision(addr2) == false
       check ac2.accountExists(addr2) == false
-      check ac2.isAccountAlive(addr2) == false
+      check ac2.isAccountEmpty(addr2) == true
 
       ac2.persist(clearEmptyAccounts = false)
       # readonly operations should not modify

@@ -191,10 +191,10 @@ proc applyOverlay(ledger: LedgerRef, address: Address, acc: AccountRef) =
     acc.code = CodeBytesRef.init(overlayAcc.code[])
     acc.flags.incl CodeChanged
 
-proc isEmpty(acc: AccountRef): bool =
-  acc.statement.nonce == 0 and
-    acc.statement.balance.isZero and
-    acc.statement.codeHash == EMPTY_CODE_HASH
+func isEmpty(statement: CoreDbAccount): bool =
+  # Check nonce first since it's the fastest to compare
+  statement.nonce == 0 and statement.balance.isZero and
+    statement.codeHash == EMPTY_CODE_HASH
 
 proc slotKey(ledger: LedgerRef, slot: UInt256): Hash32 =
   ledger.slots.get(slot).valueOr:
@@ -262,7 +262,7 @@ proc getAccount(
     ledger.applyOverlay(address, result)
     # If the account from the overlay is empty, it was self destructed
     # and so we treat it as such.
-    if result.isEmpty():
+    if result.statement.isEmpty():
       result = nil
 
   if not result.isNil:
@@ -543,8 +543,9 @@ proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   ledger.savePoint.writtenCode.clear()
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
+  const noCodeHash = default(Hash32)
   let acc = ledger.getAccount(address, false)
-  if acc.isNil: EMPTY_ACCOUNT.codeHash
+  if acc.isNil() or acc.statement.isEmpty(): noCodeHash
   else: acc.statement.codeHash
 
 proc getBalance*(ledger: LedgerRef, address: Address): UInt256 =
@@ -679,22 +680,17 @@ proc accountExists*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
   acc.isNil.not
 
-proc isEmptyAccount*(ledger: LedgerRef, address: Address): bool =
-  let acc = ledger.getAccount(address, false)
-  doAssert not acc.isNil
-  acc.isEmpty()
-
-proc isAccountAlive*(ledger: LedgerRef, address: Address): bool =
+proc isAccountEmpty*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
-    return false
-  not acc.isEmpty()
+    return true
+  acc.statement.isEmpty()
 
 proc originalAccountEmpty*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
     return true
-  acc.original.statement == EMPTY_STATEMENT
+  acc.original.statement.isEmpty()
 
 proc touch*(ledger: LedgerRef, address: Address) =
   ## Force an account to be written to the database on the next `persist` even
@@ -724,7 +720,7 @@ proc addBalance*(
   if delta.isZero:
     if checkEmptyAccount:
       let acc = ledger.getAccount(address)
-      if acc.isEmpty:
+      if acc.statement.isEmpty():
         discard ledger.makeDirty(address, acc)
     elif ledger.collectWitness or ledger.stateless:
       # The reference implementation reads the account even for a zero-value
@@ -890,7 +886,7 @@ proc selfDestructLen*(ledger: LedgerRef): int =
 
 proc ripemdSpecial*(ledger: LedgerRef) =
   let acc = ledger.getAccount(RIPEMD_ADDR, false)
-  if not acc.isNil and acc.isEmpty:
+  if not acc.isNil and acc.statement.isEmpty():
     discard ledger.makeDirty(RIPEMD_ADDR, acc)
 
 template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
@@ -953,7 +949,7 @@ proc persist*(ledger: LedgerRef,
           acc.flags.incl {StatementChanged}
           acc.flags.excl {CodeChanged, StorageChanged}
           true
-      elif (SelfDestructed in acc.flags) or (clearEmptyAccounts and acc.isEmpty()):
+      elif (SelfDestructed in acc.flags) or (clearEmptyAccounts and acc.statement.isEmpty()):
         # EIP-161: empty accounts get removed from the trie
         # EIP-8246: before this, self-destructed balances are burned
         acc.destruct()
@@ -1158,8 +1154,7 @@ proc getCode*(ledger: ReadOnlyLedger, address: Address): CodeBytesRef = getCode(
 proc getCodeSize*(ledger: ReadOnlyLedger, address: Address): int = getCodeSize(distinctBase ledger, address)
 proc contractCollision*(ledger: ReadOnlyLedger, address: Address): bool = contractCollision(distinctBase ledger, address)
 proc accountExists*(ledger: ReadOnlyLedger, address: Address): bool = accountExists(distinctBase ledger, address)
-proc isAccountAlive*(ledger: ReadOnlyLedger, address: Address): bool = isAccountAlive(distinctBase ledger, address)
-proc isEmptyAccount*(ledger: ReadOnlyLedger, address: Address): bool = isEmptyAccount(distinctBase ledger, address)
+proc isAccountEmpty*(ledger: ReadOnlyLedger, address: Address): bool = isAccountEmpty(distinctBase ledger, address)
 proc getCommittedStorage*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase ledger, address, slot)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase ledger, address)
 proc inAccessList*(ledger: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase ledger, address, slot)
