@@ -412,7 +412,7 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   # Save `overlayStorage[]` on database
   let original = acc.original
   for slot, value in acc.overlayStorage:
-    if acc.flags * {IsNew, NewlyCreated} * acc.flags != {}:
+    if acc.flags * {IsNew, NewlyCreated} != {}:
       if value.isZero:
         continue
     else:
@@ -604,7 +604,7 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
     acc.original.code = ledger.cachedCode(acc.original.statement.codeHash).valueOr:
       var rc = ledger.txFrame.getCodeByHash(acc.original.statement.codeHash)
       if rc.isErr:
-        warn logTxt "getCode()",
+        warn logTxt "getOriginalCode()",
           codeHash = acc.original.statement.codeHash, error = rc.error
         CodeBytesRef()
       else:
