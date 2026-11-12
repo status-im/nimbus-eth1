@@ -81,6 +81,10 @@ type
     maxFeePerBlobGas*    : Opt[UInt256]
     blobVersionedHashes* : Opt[seq[Hash32]]
     authorizationList*   : Opt[seq[Authorization]]
+    sender*    : Opt[Address]
+    frames*    : Opt[seq[TransactionFrame]]
+    signatures*: Opt[seq[FrameSignature]]
+    nonceKeys* : Opt[seq[UInt256]]
 
   TxList* = seq[Result[Transaction, string]]
 
@@ -107,6 +111,8 @@ type
     gasUsed*: GasInt
     blockHash*: Hash32
     transactionIndex*: int
+    payer*: Address
+    frameReceipts*: seq[FrameReceipt]
 
   # ExecutionResult contains the execution status after running a state test, any
   # error that might have occurred and a dump of the final state if requested.

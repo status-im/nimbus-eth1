@@ -57,7 +57,7 @@ proc postExecutionCreate(c: Computation, child: Computation, newAccountCharged: 
     if c.fork >= FkAmsterdam:
       c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
       if newAccountCharged:
-        c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
+        c.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
 
     if not child.error.burnsGas: # Means return was `REVERT`.
       # From create, only use `outputData` if child returned with `REVERT`.
@@ -80,7 +80,7 @@ proc execSubCreate(c: Computation; childMsg: Message;
   if c.fork >= FkAmsterdam:
     newAccountCharged = not c.accountExistsOrAlive(child.msg.currentTarget)
     if newAccountCharged:
-      c.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "Create op new account").isOkOr:
+      c.chargeStateGas(CREATE_ACCOUNT_STATE_GAS, "Create op new account").isOkOr:
         child.dispose()
         return err(error)
 

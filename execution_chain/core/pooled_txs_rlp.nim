@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2025-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -48,7 +48,7 @@ proc readTxTyped(rlp: var Rlp, tx: var PooledTransaction) {.raises: [RlpError].}
   let
     txType = rlp.readTxType()
     numFields =
-      if txType == TxEip4844:
+      if txType == TxEip4844 or txType == TxEip8141:
         rlp.listLen
       else:
         1

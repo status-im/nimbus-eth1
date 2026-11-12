@@ -52,6 +52,9 @@ proc recoverSenderCached*(msgHash: Hash32, sig: Signature): Opt[Address] =
     res
 
 proc recoverSenderCached*(tx: Transaction): Opt[Address] =
+  if tx.txType == TxEip8141:
+    return Opt.some(tx.sender)
+
   let
     sig = ?tx.signature()
     msgHash = tx.rlpHashForSigning(tx.isEip155())
@@ -60,6 +63,7 @@ proc recoverSenderCached*(tx: Transaction): Opt[Address] =
 proc signTransaction*(
     tx: Transaction, privateKey: PrivateKey, eip155 = true
 ): Transaction =
+  doAssert(tx.txType != TxEip8141, "Frame transactions are not allowed to sign using this function")
   result = tx
   result.signature = result.sign(privateKey, eip155)
 

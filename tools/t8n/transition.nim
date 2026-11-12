@@ -114,6 +114,7 @@ proc toTxReceipt(receipt: StoredReceipt,
   let
     contractAddress = genAddress(tx, sender)
     rec = receipt.to(Receipt)
+
   TxReceipt(
     txType: tx.txType,
     root: if rec.isHash: rec.hash else: default(Hash32),
@@ -125,7 +126,9 @@ proc toTxReceipt(receipt: StoredReceipt,
     contractAddress: contractAddress,
     gasUsed: gasUsed,
     blockHash: default(Hash32),
-    transactionIndex: txIndex
+    transactionIndex: txIndex,
+    payer: rec.payer,
+    frameReceipts: rec.frameReceipts,
   )
 
 proc calcLogsHash(receipts: openArray[StoredReceipt]): Hash32 =
