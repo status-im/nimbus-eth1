@@ -13,7 +13,7 @@
 import
   std/[macros, strformat],
   chronicles,
-  stew/[byteutils],
+  stew/[byteutils, ptrops],
   ../constants,
   ../db/ledger,
   ./interpreter/[op_dispatcher],
@@ -38,11 +38,23 @@ proc runVM(
   when tracingEnabled:
     c.prepareTracer()
 
+  let
+    codeLen = c.code.len
+    code = cast[ptr UncheckedArray[byte]](c.code.bytes.baseAddr)
+
   while true:
     {.computedGoto.}
-    c.instr = c.code.next()
+    let pc = c.code.pc
+    var op = Op.Stop
+    if pc < codeLen:
+      {.push checks: off.}
+      op = Op(code[pc])
+      {.pop.}
+      c.code.pc = pc + 1
+    when tracingEnabled:
+      c.instr = op
 
-    dispatchInstr(fork, tracingEnabled, c.instr, c)
+    dispatchInstr(fork, tracingEnabled, op, c)
 
   ok()
 
@@ -212,9 +224,6 @@ proc executeOpcodes*(c: Computation) =
       # continuation has finished
       if c.tracingEnabled:
         c.traceOpCodeEnded(c.instr, c.opIndex)
-
-    if c.instr == Return or c.instr == Revert or c.instr == SelfDestruct:
-      break blockOne
 
     c.selectVM(fork, c.tracingEnabled).isOkOr:
       handleEvmError(error)

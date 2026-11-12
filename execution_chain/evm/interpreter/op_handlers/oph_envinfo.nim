@@ -58,11 +58,11 @@ func originOp(cpt: VmCpt): EvmResultVoid =
   ## 0x32, Get execution origination address.
   cpt.stack.push cpt.getOrigin()
 
-func callerOp(cpt: VmCpt): EvmResultVoid =
+template callerOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x33, Get caller address.
   cpt.stack.push cpt.msg.sender
 
-func callValueOp(cpt: VmCpt): EvmResultVoid =
+template callValueOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x34, Get deposited value by the instruction/transaction
   ##       responsible for this execution
   cpt.stack.push cpt.msg.value
@@ -87,7 +87,7 @@ func callDataLoadOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsTop value
   ok()
 
-func callDataSizeOp(cpt: VmCpt): EvmResultVoid =
+template callDataSizeOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x36, Get size of input data in current environment.
   cpt.stack.push cpt.msg.data.len.u256
 
@@ -298,7 +298,7 @@ const
      forks: VmOpAllForks,
      name: "caller",
      info: "Get caller address",
-     exec: callerOp),
+     exec: VmOpInlined),
 
 
     (opCode: CallValue,       ## 0x34, Execution deposited value
@@ -306,7 +306,7 @@ const
      name: "callValue",
      info: "Get deposited value by the instruction/transaction " &
            "responsible for this execution",
-     exec: callValueOp),
+     exec: VmOpInlined),
 
 
     (opCode: CallDataLoad,    ## 0x35, Input data
@@ -320,7 +320,7 @@ const
      forks: VmOpAllForks,
      name: "callDataSize",
      info: "Get size of input data in current environment",
-     exec: callDataSizeOp),
+     exec: VmOpInlined),
 
 
     (opCode: CallDataCopy,    ## 0x37, Copy input data to memory.

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -37,7 +37,7 @@ func slt(x, y: UInt256): bool =
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc addOp(cpt: VmCpt): EvmResultVoid =
+template addOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x01, Addition
   cpt.stack.binaryOp(`+`)
 
@@ -45,7 +45,7 @@ proc mulOp(cpt: VmCpt): EvmResultVoid =
   ## 0x02, Multiplication
   cpt.stack.binaryOp(`*`)
 
-proc subOp(cpt: VmCpt): EvmResultVoid =
+template subOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x03, Substraction
   cpt.stack.binaryOp(`-`)
 
@@ -77,29 +77,29 @@ proc sdivOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.binaryWithTop(sdiv256)
 
-proc moduloOp(cpt: VmCpt): EvmResultVoid =
-  ## 0x06, Modulo
-  template mod256(top, lhs, rhs) =
-    if rhs.isZero:
-      top = zero(UInt256)
-    else:
-      top = lhs mod rhs
+template mod256(top, lhs, rhs) =
+  if rhs.isZero:
+    top = zero(UInt256)
+  else:
+    top = lhs mod rhs
 
+template moduloOp*(cpt: VmCpt): EvmResultVoid =
+  ## 0x06, Modulo
   cpt.stack.binaryWithTop(mod256)
 
-proc smodOp(cpt: VmCpt): EvmResultVoid =
-  ## 0x07, Signed modulo
-  template smod256(top, lhs, rhs) =
-    if rhs.isZero.not:
-      var sign: bool
-      extractSign(rhs, sign)
-      extractSign(lhs, sign)
-      top = lhs mod rhs
-      setSign(top, sign)
+template smod256(top, lhs, rhs) =
+  if rhs.isZero.not:
+    var sign: bool
+    extractSign(rhs, sign)
+    extractSign(lhs, sign)
+    top = lhs mod rhs
+    setSign(top, sign)
 
+template smodOp*(cpt: VmCpt): EvmResultVoid =
+  ## 0x07, Signed modulo
   cpt.stack.binaryWithTop(smod256)
 
-proc addmodOp(cpt: VmCpt): EvmResultVoid =
+template addmodOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x08, Modulo addition
   ## Intermediate computations do not roll over at 2^256
   ? cpt.stack.lsCheck(3)
@@ -114,9 +114,9 @@ proc addmodOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop value
-  ok()
+  EvmResultVoid.ok()
 
-proc mulmodOp(cpt: VmCpt): EvmResultVoid =
+template mulmodOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x09, Modulo multiplication
   ## Intermediate computations do not roll over at 2^256
   ? cpt.stack.lsCheck(3)
@@ -131,7 +131,7 @@ proc mulmodOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop value
-  ok()
+  EvmResultVoid.ok()
 
 proc expOp(cpt: VmCpt): EvmResultVoid =
   ## 0x0A, Exponentiation
@@ -177,10 +177,11 @@ proc ltOp(cpt: VmCpt): EvmResultVoid =
     (lhs < rhs).uint.u256
   cpt.stack.binaryOp(lt256)
 
-proc gtOp(cpt: VmCpt): EvmResultVoid =
+template gt256(lhs, rhs): auto =
+  (lhs > rhs).uint.u256
+
+template gtOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x11, Greater-than comparison
-  template gt256(lhs, rhs): auto =
-    (lhs > rhs).uint.u256
   cpt.stack.binaryOp(gt256)
 
 proc sltOp(cpt: VmCpt): EvmResultVoid =
@@ -208,19 +209,19 @@ proc isZeroOp(cpt: VmCpt): EvmResultVoid =
     value.isZero.uint.u256
   cpt.stack.unaryOp(zero256)
 
-proc andOp(cpt: VmCpt): EvmResultVoid =
+template andOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x16, Bitwise AND
   cpt.stack.binaryOp(`and`)
 
-proc orOp(cpt: VmCpt): EvmResultVoid =
+template orOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x17, Bitwise OR
   cpt.stack.binaryOp(`or`)
 
-proc xorOp(cpt: VmCpt): EvmResultVoid =
+template xorOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x18, Bitwise XOR
   cpt.stack.binaryOp(`xor`)
 
-proc notOp(cpt: VmCpt): EvmResultVoid =
+template notOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x19, Check if zero
   cpt.stack.unaryOp(`not`)
 
@@ -304,7 +305,7 @@ const
      forks: VmOpAllForks,
      name: "add",
      info: "Addition operation",
-     exec: VmOpFn addOp),
+     exec: VmOpInlined),
 
 
     (opCode: Mul,         ##  0x02, Multiplication
@@ -318,7 +319,7 @@ const
      forks: VmOpAllForks,
      name: "sub",
      info: "Subtraction operation",
-     exec: subOp),
+     exec: VmOpInlined),
 
 
     (opCode: Div,         ## 0x04, Division
@@ -339,14 +340,14 @@ const
      forks: VmOpAllForks,
      name: "modulo",
      info: "Modulo remainder operation",
-     exec: moduloOp),
+     exec: VmOpInlined),
 
 
     (opCode: Smod,        ## 0x07, Signed modulo
      forks: VmOpAllForks,
      name: "smod",
      info: "Signed modulo remainder operation",
-     exec: smodOp),
+     exec: VmOpInlined),
 
 
     (opCode: Addmod,      ## 0x08, Modulo addition, Intermediate
@@ -354,7 +355,7 @@ const
      forks: VmOpAllForks,
      name: "addmod",
      info: "Modulo addition operation",
-     exec: addmodOp),
+     exec: VmOpInlined),
 
 
     (opCode: Mulmod,      ## 0x09, Modulo multiplication, Intermediate
@@ -362,7 +363,7 @@ const
      forks: VmOpAllForks,
      name: "mulmod",
      info: "Modulo multiplication operation",
-     exec: mulmodOp),
+     exec: VmOpInlined),
 
 
     (opCode: Exp,         ## 0x0a, Exponentiation
@@ -390,7 +391,7 @@ const
      forks: VmOpAllForks,
      name: "gt",
      info: "Greater-than comparison",
-     exec: gtOp),
+     exec: VmOpInlined),
 
 
     (opCode: Slt,         ## 0x12, Signed less-than
@@ -425,28 +426,28 @@ const
      forks: VmOpAllForks,
      name: "andOp",
      info: "Bitwise AND operation",
-     exec: andOp),
+     exec: VmOpInlined),
 
 
     (opCode: Or,          ## 0x17, OR
      forks: VmOpAllForks,
      name: "orOp",
      info: "Bitwise OR operation",
-     exec: orOp),
+     exec: VmOpInlined),
 
 
     (opCode: Xor,         ## 0x18, XOR
      forks: VmOpAllForks,
      name: "xorOp",
      info: "Bitwise XOR operation",
-     exec: xorOp),
+     exec: VmOpInlined),
 
 
     (opCode: Not,         ## 0x19, NOT
      forks: VmOpAllForks,
      name: "notOp",
      info: "Bitwise NOT operation",
-     exec: notOp),
+     exec: VmOpInlined),
 
 
     (opCode: Byte,        ## 0x1a, Retrieve byte
