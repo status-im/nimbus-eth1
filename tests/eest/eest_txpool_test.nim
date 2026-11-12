@@ -29,6 +29,10 @@ const skipFiles = [
   # will pass when executed by txpool. It's already amazing we only need
   # to skip one fixture file.
   "test_correct_decreasing_blob_gas_costs.json",
+
+  # requires both tx.maxPriorityFeePerGas and tx.maxFeePerGas
+  # of EIP-1559 as UInt256
+  "admission_constraints.json",
 ]
 
 runEESTSuite(

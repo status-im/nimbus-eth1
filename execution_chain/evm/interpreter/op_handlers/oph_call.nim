@@ -248,7 +248,7 @@ proc execSubCall(c: Computation; childMsg: Message; code: CodeBytesRef;
       if c.fork >= FkAmsterdam:
         c.gasMeter.returnStateGas(child.gasMeter.stateGasLeft)
         if newAccountCharged:
-          c.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
+          c.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
 
     let actualOutputSize = min(memLen, child.output.len)
     if actualOutputSize > 0:
@@ -295,7 +295,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
       # And it also make EVM tracer produce two traces of call or weird result.
       # So we check it here before actually charging state gas and keep the tracer produce single trace of call.
       ? cpt.gasMeter.checkGas(gasCost1, CREATE_ACCOUNT_STATE_GAS)
-      ? cpt.gasMeter.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
+      ? cpt.chargeStateGas(CREATE_ACCOUNT_STATE_GAS,
         reason = "CALL: State gas new account")
 
   let
@@ -326,7 +326,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
       depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     if newAccountCharged:
-      cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
+      cpt.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     return ok()
 
   cpt.memory.extend(p.memInPos, p.memInLen)
@@ -336,7 +336,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   if senderBalance < p.value:
     cpt.gasMeter.returnGas(childGasLimit)
     if newAccountCharged:
-      cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
+      cpt.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
     return ok()
 
   # Pass full reservoir to child (no 63/64 rule for state gas)
