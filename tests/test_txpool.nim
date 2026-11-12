@@ -23,6 +23,7 @@ import
   ../execution_chain/db/storage_types,
   ../execution_chain/core/chain,
   ../execution_chain/core/eip4844,
+  ../execution_chain/core/validate,
   ../execution_chain/[conf, transaction, constants],
   ../execution_chain/core/tx_pool,
   ../execution_chain/core/tx_pool/tx_desc {.all.},
@@ -1100,6 +1101,31 @@ suite "TxPool test suite":
     let next = xp.checkAssembleBlock(1)
     check next.blk.transactions[0] == probe.tx
     xp.checkImportBlock(next, 0)
+
+  test "blob tx whose maximum cost does not fit in 256 bits is not packed":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      acc = mx.getAccount(0)
+      # GAS_PER_BLOB * 2^239 = 2^256: the sender would need more than
+      # high(UInt256) wei to cover the maximum blob fee
+      ptx = MakeTxParams(chainId: mx.chainId, key: acc.key, nonce: 0).makeTx(
+        BlobTx(
+          recipient: Opt.some(recipient),
+          gasLimit: 75000,
+          blobGasFee: 1.u256 shl 239,
+          blobCount: 1,
+          blobID: 0.BlobID,
+        ))
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+
+    check xp.vmState.validateTransaction(ptx.tx, acc.address).isErr
+    discard xp.addTx(ptx)
+    discard xp.checkAssembleBlock(0)
 
 suite "TxPool BAL post-Amsterdam":
   # Regression test for PR #4148: tx_packer left an outer beginCallFrame in
