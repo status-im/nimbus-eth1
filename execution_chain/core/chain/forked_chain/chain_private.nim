@@ -94,8 +94,6 @@ proc getVmState(
     txFrame,
     enableBalTracker = enableBalTracker,
   )
-  # Code is stored with the block's other data, once the block is accepted
-  vmState.ledger.holdCode = true
   vmState
 
 proc processBlock*(

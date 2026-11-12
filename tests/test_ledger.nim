@@ -456,12 +456,10 @@ proc runLedgerBasicOperationsTests() =
     test "clone storage":
       # give access to private fields of AccountRef
       privateAccess(AccountRef)
-      privateAccess(OriginalValueRef)
+      privateAccess(TxAccountRef)
       var x = AccountRef(
         overlayStorage: Table[UInt256, UInt256](),
-        original: OriginalValueRef(
-          storage: Table[UInt256, UInt256]()
-        )
+        original: TxAccountRef()
       )
 
       x.overlayStorage[10.u256] = 11.u256
@@ -564,10 +562,10 @@ proc runLedgerBasicOperationsTests() =
       block:
         # Pre-state: bob holds code that is not in the database, as when a
         # witness omits it
-        let pre = LedgerRef.init(memDB.baseTxFrame())
-        pre.holdCode = true
-        pre.setCode(bob, code)
-        pre.persist(clearEmptyAccounts = false)
+        let frame = memDB.baseTxFrame()
+        frame.mergeAccount(bob.computeAccPath, CoreDbAccount(
+          codeHash: keccak256(code)
+        )).expect("ok")
 
       # A rolled back write must not serve the code
       let reverted = LedgerRef.init(memDB.baseTxFrame(), false, stateless = true)
