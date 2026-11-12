@@ -56,6 +56,11 @@ proc getRecipientCode(vmState: BaseVMState, msg: Message): Result[CodeBytesRef, 
 proc setupComputation(params: SysCallParams): Result[Computation, string] =
   let
     vmState = params.vmState
+
+  # non Frame Transaction should not use frame related features
+  vmState.disableFrame()
+
+  let
     stateGasReservoir = if vmState.fork >= FkAmsterdam: SYSTEM_STATE_GAS_RESERVOIR.GasInt
                         else: 0.GasInt
     msg = Message(
