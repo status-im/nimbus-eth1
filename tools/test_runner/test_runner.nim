@@ -501,6 +501,8 @@ proc collectFiles(paths: seq[string], errors: var seq[string]): seq[string] =
     if fileExists(path):
       result.add path
     elif dirExists(path):
+      # walkDirRec checks only the top directory, so it would skip an
+      # unreadable subdirectory and its fixtures without an error.
       var dirs = @[path]
       while dirs.len > 0:
         let dir = dirs.pop()
