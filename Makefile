@@ -110,6 +110,8 @@ endif
 	t8n_test \
 	evmstate \
 	evmstate_test \
+	test_runner \
+	test_runner_test \
 	stateless_guest_baremetal \
 	stateless_guest_native \
 	stateless_execution_test
@@ -517,6 +519,16 @@ t8n_test: | build deps t8n
 evmstate: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) "tools/evmstate/$@.nim"
+
+# builds the EEST blocktest and enginetest runner
+test_runner: | build deps rocksdb
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) -o:build/$@ "tools/test_runner/$@.nim"
+
+# builds the EEST runner and runs its test suite
+test_runner_test: | build deps test_runner
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) -o:build/$@ "tools/test_runner/$@.nim"
 
 # builds and runs evm state tool test suite
 evmstate_test: | build deps evmstate
