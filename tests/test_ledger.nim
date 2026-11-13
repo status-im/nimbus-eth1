@@ -453,37 +453,6 @@ proc runLedgerBasicOperationsTests() =
       check ledger.isAccountEmpty(address) == true
       check ledger.accountExists(address) == true
 
-    test "clone storage":
-      # give access to private fields of AccountRef
-      privateAccess(AccountRef)
-      privateAccess(TxAccountRef)
-      var x = AccountRef(
-        overlayStorage: Table[UInt256, UInt256](),
-        original: TxAccountRef()
-      )
-
-      x.overlayStorage[10.u256] = 11.u256
-      x.overlayStorage[11.u256] = 12.u256
-
-      x.original.storage[10.u256] = 11.u256
-      x.original.storage[11.u256] = 12.u256
-
-      var y = x.clone(cloneStorage = true)
-      y.overlayStorage[12.u256] = 13.u256
-      y.original.storage[12.u256] = 13.u256
-
-      check 12.u256 notin x.overlayStorage
-      check 12.u256 in y.overlayStorage
-
-      check x.overlayStorage.len == 2
-      check y.overlayStorage.len == 3
-
-      check 12.u256 in x.original.storage
-      check 12.u256 in y.original.storage
-
-      check x.original.storage.len == 3
-      check y.original.storage.len == 3
-
     test "Ledger various operations":
       var ledger = LedgerRef.init(memDB.baseTxFrame())
       var addr1 = initAddr(1)

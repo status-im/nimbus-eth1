@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, hashes, sets, typetraits],
+  std/[tables, hashes, sets, typetraits, deques],
   chronicles,
   results,
   minilru,
@@ -81,14 +81,71 @@ type
     original: TxAccountRef
     overlayStorage: Table[UInt256, UInt256]
 
+  # The kind of a single undo record in the save point journal. The journal
+  # stores individual field updates (not whole account snapshots) so that an
+  # `AccountRef` is never cloned: there is one live `AccountRef` per address
+  # and the journal undoes each field change on rollback. Every entry carries
+  # the previous `flags`, so rollback restores them one by one and no ownership
+  # tracking is needed. The `Flags` kind is only used for mutations that change
+  # a flag without any field (e.g. `selfDestruct8246`, `clearStorage`).
+  JournalKind = enum
+    Create  # the account was added to the cache (it did not exist before)
+    Balance # statement.balance changed
+    Nonce   # statement.nonce changed
+    Code    # statement.codeHash and code changed
+    Storage # overlayStorage[slot] changed
+    NoStorage # slot was missing
+    Flags   # only the flags changed (no field)
+
+  # A single undo record: the previous value of a field changed within a save
+  # point, plus the previous flags. Only the fields relevant to `kind` are
+  # meaningful; `prevFlags` is restored by every non-`Create` entry.
+  JournalEntry = object
+    address: Address
+    prevFlags: AccountFlags
+
+    case kind: JournalKind
+    of Create: discard
+    of Balance: prevBalance: UInt256
+    of Nonce: prevNonce: AccountNonce
+    of Code:
+      prevCodeHash: Hash32
+      prevCode: CodeBytesRef
+    of Storage:
+      slot: UInt256
+      prevStorageValue: UInt256
+    of NoStorage:
+      noslot: UInt256
+    of Flags: discard
+
   LedgerRef* = ref object
     txFrameRef: MaybeOwned[CoreDbTxRef]
     savePoint: LedgerSpRef
 
     storeSlotHash*: bool
     cache: Table[Address, AccountRef]
-      # Second-level cache for the ledger save point, which is cleared on every
-      # persist
+      ## The account cache, shared by all active save points and living on the
+      ## ledger (never moved between save points). There is one live `AccountRef`
+      ## per address; the undo journal restores the pre-save point state. A `nil`
+      ## reference is an empty cache that auto-initializes on the first
+      ## `beginSavePoint`.
+    cache2: Table[Address, AccountRef]
+      ## Second-level account cache, swapped with `cache` on `persist` so the
+      ## just-persisted accounts are served from it instead of re-fetched.
+    journal: seq[JournalEntry]
+      ## The undo buffer (modeled after go-ethereum's core/state/journal.go),
+      ## kept as a single stack on the ledger: every cache entry created or
+      ## replaced records its previous value. A save point stores the journal
+      ## length at the moment it began (`journalIndex`); `rollback` pops the
+      ## stack back to that index applying the entries in reverse, and `commit`
+      ## leaves the entries in place (an enclosing rollback still undoes them).
+    dirty: Table[Address, AccountRef]
+      ## The dirty accounts, shared by all active save points and living on the
+      ## ledger (never moved between save points). An account is added once, when
+      ## its `Dirty` flag is set (by `makeDirty`); it is removed on a rollback
+      ## that restores a flag state without `Dirty` (the journal entry's
+      ## `prevFlags`). This mirrors the `Dirty` flag on the live account, so the
+      ## two stay in sync and `commit` needs no merge.
     code: LruCache[Hash32, CodeBytesRef]
       ## The code cache provides two main benefits:
       ##
@@ -159,8 +216,10 @@ type
 
   LedgerSpRef* = ref object
     parentSavePoint: LedgerSpRef
-    cache: Table[Address, AccountRef]
-    dirty: Table[Address, AccountRef]
+    journalIndex: int
+      ## The length of the ledger's undo journal at the moment this save point
+      ## began. `rollback` pops the journal back to this index (applying the
+      ## entries in reverse); `commit` leaves the entries in place.
     selfDestruct: HashSet[Address]
     accessList: ac_access_list.AccessList
     pendingCode: Table[Hash32, CodeBytesRef]
@@ -249,17 +308,15 @@ proc getAccount(ledger: LedgerRef, address: Address, shouldCreate = true): Accou
     if not ledger.witnessKeys.contains(lookupKey):
       ledger.witnessKeys[lookupKey] = false
 
-  # search account from layers of cache
-  var sp = ledger.savePoint
-  while sp != nil:
-    result = sp.cache.getOrDefault(address)
-    if not result.isNil:
-      return
-    sp = sp.parentSavePoint
+  # search the account cache shared by all active save points
+  result = ledger.cache.getOrDefault(address)
+  if not result.isNil:
+    return
 
-  if ledger.cache.pop(address, result):
+  if ledger.cache2.pop(address, result):
     # Check second-level cache
-    ledger.savePoint.cache[address] = result
+    ledger.cache[address] = result
+    ledger.journal.add JournalEntry(kind: Create, address: address, prevFlags: result.flags)
     return
 
   var clearStorage = false
@@ -327,20 +384,8 @@ proc getAccount(ledger: LedgerRef, address: Address, shouldCreate = true): Accou
     )
 
   # cache the account
-  ledger.savePoint.cache[address] = result
-
-proc clone(acc: AccountRef, cloneStorage: bool): AccountRef =
-  result = AccountRef(
-    statement: acc.statement,
-    accPath:   acc.accPath,
-    flags:     acc.flags,
-    code:      acc.code,
-    original:  acc.original,
-  )
-
-  if cloneStorage:
-    # it's ok to clone a table this way
-    result.overlayStorage = acc.overlayStorage
+  ledger.cache[address] = result
+  ledger.journal.add JournalEntry(kind: Create, address: address, prevFlags: result.flags)
 
 template fetchSlotChecked(ledger: LedgerRef, accPath: Hash32, slot: UInt256): UInt256 =
   ## Like `fetchSlot`, but a witness gap on the slot's path is a fatal
@@ -519,7 +564,7 @@ proc writeDiff(ledger: LedgerRef) =
           ledger.setFatalErrorOrAssert($$error)
         txAcc[].storage.del(slot)
 
-      txAcc[].storageDels.clear()
+      txAcc[].storageDels.reset()
 
       for slot, value in txAcc[].storageDiff:
         let slotKey = ledger.slotKey(slot)
@@ -527,9 +572,9 @@ proc writeDiff(ledger: LedgerRef) =
           ledger.setFatalErrorOrAssert($$error)
         txAcc[].storage[slot] = value
 
-      txAcc[].storageDiff.clear()
+      txAcc[].storageDiff.reset()
 
-  ledger.collected.clear()
+  ledger.collected.reset()
 
 proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   const info = "persistStorage(): "
@@ -557,24 +602,22 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
       # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
       original.storage[slot] = value
 
-  acc.overlayStorage.clear()
+  acc.overlayStorage.reset()
   ok()
 
-proc makeDirty(ledger: LedgerRef, address: Address, acc: AccountRef, cloneStorage = true): AccountRef =
-  if address in ledger.savePoint.cache:
-    # it's already in latest savePoint
-    if Dirty notin acc.flags:
-      ledger.savePoint.dirty[address] = acc
-      acc.flags.incl Dirty
-    acc
-  else:
-    let clone = acc.clone(cloneStorage)
-    # put a copy into latest savePoint - be careful to do so even if the
-    # existing account is already dirty but lives in an earlier savepoint!
-    clone.flags.incl Dirty
-    ledger.savePoint.cache[address] = clone
-    ledger.savePoint.dirty[address] = clone
-    clone
+proc makeDirty(ledger: LedgerRef, address: Address, acc: AccountRef): AccountRef =
+  # Mark the account dirty: it must be written on the next `persist`. The
+  # account is mutated in place (no clone); the journal entry for the field
+  # mutation is recorded *before* this is called, so its `prevFlags` reflects
+  # the flag state with `Dirty` unset. The account is added to the shared dirty
+  # set (and the `Dirty` flag set) only the first time it becomes dirty; a later
+  # mutation in any save point finds the flag already set and skips both. On a
+  # rollback that restores a flag state without `Dirty`, the address is removed
+  # from the shared set again (see `rollback`), so it can be re-added later.
+  if Dirty notin acc.flags:
+    ledger.dirty[address] = acc
+    acc.flags.incl Dirty
+  acc
 
 # ------------------------------------------------------------------------------
 # Public methods
@@ -586,7 +629,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef): LedgerRef =
 
 proc isTopLevelClean*(ledger: LedgerRef): bool =
   ## Getter, returns `true` if all pending data have been commited.
-  ledger.savePoint.parentSavePoint.isNil and ledger.savePoint.dirty.len == 0 and
+  ledger.savePoint.parentSavePoint.isNil and ledger.dirty.len == 0 and
     ledger.collected.len == 0
 
 proc getStateRoot*(ledger: LedgerRef): Hash32 =
@@ -598,7 +641,8 @@ proc getStateRoot*(ledger: LedgerRef): Hash32 =
 
 proc beginSavePoint*(ledger: LedgerRef): LedgerSpRef =
   let savePoint = LedgerSpRef(
-    parentSavePoint: ledger.savePoint
+    parentSavePoint: ledger.savePoint,
+    journalIndex: ledger.journal.len
   )
 
   ledger.savePoint = savePoint
@@ -610,6 +654,58 @@ proc rollback*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   # Any child transaction must be committed or rolled-back before
   # its parent transactions:
   doAssert ledger.savePoint == savePoint and not savePoint.parentSavePoint.isNil
+
+  # Pop the undo journal back to this save point's index, applying the entries
+  # in reverse: restore each changed field and delete the accounts that were
+  # created. The cache lives on the ledger, so the restored state is visible
+  # immediately. Field entries are always replayed before the `Create` entry
+  # for the same account (which is earlier in the journal), so the account is
+  # still cached when its fields are restored.
+  while ledger.journal.len > savePoint.journalIndex:
+    let entry = ledger.journal.pop()
+    # The account is always cached for a non-`Create` entry: its `Create` entry
+    # (if any) is earlier in the journal and is replayed after this one.
+    let acc =
+      if entry.kind == Create:
+        nil
+      else:
+        let a = ledger.cache.getOrDefault(entry.address)
+        doAssert a != nil, "journal entry for an account missing from the cache"
+        a
+    case entry.kind:
+    of Create:
+      ledger.cache.del(entry.address)
+    of Balance:
+      acc.statement.balance = entry.prevBalance
+      acc.flags = entry.prevFlags
+      if Dirty notin entry.prevFlags:
+        ledger.dirty.del(entry.address)
+    of Nonce:
+      acc.statement.nonce = entry.prevNonce
+      acc.flags = entry.prevFlags
+      if Dirty notin entry.prevFlags:
+        ledger.dirty.del(entry.address)
+    of Code:
+      acc.statement.codeHash = entry.prevCodeHash
+      acc.code = entry.prevCode
+      acc.flags = entry.prevFlags
+      if Dirty notin entry.prevFlags:
+        ledger.dirty.del(entry.address)
+    of Storage:
+      acc.overlayStorage[entry.slot] = entry.prevStorageValue
+      acc.flags = entry.prevFlags
+      if Dirty notin entry.prevFlags:
+        ledger.dirty.del(entry.address)
+    of NoStorage:
+      acc.overlayStorage.del(entry.noslot)
+      acc.flags = entry.prevFlags
+      if Dirty notin entry.prevFlags:
+        ledger.dirty.del(entry.address)
+    of Flags:
+      acc.flags = entry.prevFlags
+      if Dirty notin entry.prevFlags:
+        ledger.dirty.del(entry.address)
+
   ledger.savePoint = savePoint.parentSavePoint
 
   reset(savePoint[]) # Release memory
@@ -621,8 +717,9 @@ proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   doAssert ledger.savePoint == savePoint and not savePoint.parentSavePoint.isNil
 
   ledger.savePoint = savePoint.parentSavePoint
-  ledger.savePoint.cache.mergeAndReset(savePoint.cache)
-  ledger.savePoint.dirty.mergeAndReset(savePoint.dirty)
+  # The cache, the undo journal, and the dirty set all live on the ledger, so
+  # there is nothing to move or merge: the committed journal entries simply
+  # stay on the stack, and an enclosing rollback still undoes them.
   ledger.savePoint.accessList.mergeAndReset(savePoint.accessList)
   ledger.savePoint.selfDestruct.mergeAndReset(savePoint.selfDestruct)
   ledger.savePoint.writtenCode.mergeAndReset(savePoint.writtenCode)
@@ -630,7 +727,7 @@ proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   if ledger.savePoint.parentSavePoint.isNil:
     for codeHash, code in savePoint.pendingCode:
       ledger.code.put(codeHash, code)
-    savePoint.pendingCode.clear()
+    savePoint.pendingCode.reset()
   else:
     ledger.savePoint.pendingCode.mergeAndReset(savePoint.pendingCode)
 
@@ -661,8 +758,8 @@ proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   ledger.fatalError = Opt.none(string)
   ledger.balOverlay = Opt.none(BlockAccessListOverlay)
   ledger.collected.reset()
-  ledger.witnessKeys.clear()
-  ledger.savePoint.writtenCode.clear()
+  ledger.witnessKeys.reset()
+  ledger.savePoint.writtenCode.reset()
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
   const noCodeHash = default(Hash32)
@@ -825,12 +922,13 @@ proc touch*(ledger: LedgerRef, address: Address) =
   if acc.isNil:
     return
   if Dirty notin acc.flags:
-    ledger.savePoint.dirty[address] = acc
+    ledger.dirty[address] = acc
     acc.flags.incl Dirty
 
 proc setBalance*(ledger: LedgerRef, address: Address, balance: UInt256) =
   let acc = ledger.getAccount(address)
   if acc.statement.balance != balance:
+    ledger.journal.add JournalEntry(kind: Balance, address: address, prevBalance: acc.statement.balance, prevFlags: acc.flags)
     let acc = ledger.makeDirty(address, acc)
     acc.flags.incl StatementChanged
     acc.statement.balance = balance
@@ -842,6 +940,7 @@ proc addBalance*(
     if checkEmptyAccount:
       let acc = ledger.getAccount(address)
       if acc.statement.isEmpty():
+        ledger.journal.add JournalEntry(kind: Flags, address: address, prevFlags: acc.flags)
         discard ledger.makeDirty(address, acc)
     elif ledger.collectWitness or ledger.stateless:
       # The reference implementation reads the account even for a zero-value
@@ -851,7 +950,9 @@ proc addBalance*(
       discard ledger.getAccount(address, shouldCreate = false)
     return
 
-  let acc = ledger.makeDirty(address, ledger.getAccount(address))
+  let acc = ledger.getAccount(address)
+  ledger.journal.add JournalEntry(kind: Balance, address: address, prevBalance: acc.statement.balance, prevFlags: acc.flags)
+  discard ledger.makeDirty(address, acc)
   acc.flags.incl StatementChanged
   acc.statement.balance += delta
 
@@ -862,19 +963,24 @@ proc subBalance*(ledger: LedgerRef, address: Address, delta: UInt256) =
     # But early exit will prevent the account creation.
     # In this case, the SYSTEM_ADDRESS
     return
-  let acc = ledger.makeDirty(address, ledger.getAccount(address))
+  let acc = ledger.getAccount(address)
+  ledger.journal.add JournalEntry(kind: Balance, address: address, prevBalance: acc.statement.balance, prevFlags: acc.flags)
+  discard ledger.makeDirty(address, acc)
   acc.flags.incl StatementChanged
   acc.statement.balance -= delta
 
 proc setNonce*(ledger: LedgerRef, address: Address, nonce: AccountNonce) =
   let acc = ledger.getAccount(address)
   if acc.statement.nonce != nonce:
+    ledger.journal.add JournalEntry(kind: Nonce, address: address, prevNonce: acc.statement.nonce, prevFlags: acc.flags)
     let acc = ledger.makeDirty(address, acc)
     acc.flags.incl StatementChanged
     acc.statement.nonce = nonce
 
 proc incNonce*(ledger: LedgerRef, address: Address) =
-  let acc = ledger.makeDirty(address, ledger.getAccount(address))
+  let acc = ledger.getAccount(address)
+  ledger.journal.add JournalEntry(kind: Nonce, address: address, prevNonce: acc.statement.nonce, prevFlags: acc.flags)
+  discard ledger.makeDirty(address, acc)
   acc.flags.incl StatementChanged
   acc.statement.nonce += 1
 
@@ -892,6 +998,7 @@ proc setCode*(ledger: LedgerRef, address: Address, code: seq[byte]) =
   let acc = ledger.getAccount(address)
   let codeHash = keccak256(code)
   if acc.statement.codeHash != codeHash:
+    ledger.journal.add JournalEntry(kind: Code, address: address, prevCodeHash: acc.statement.codeHash, prevCode: acc.code, prevFlags: acc.flags)
     let acc = ledger.makeDirty(address, acc)
     acc.statement.codeHash = codeHash
     acc.flags.incl StatementChanged
@@ -918,6 +1025,10 @@ proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
 
   let oldValue = acc.storageValue(address, slot, ledger)
   if oldValue != value:
+    acc.overlayStorage.withValue(slot, v):
+      ledger.journal.add JournalEntry(kind: Storage, address: address, slot: slot, prevStorageValue: v[], prevFlags: acc.flags)
+    do:
+      ledger.journal.add JournalEntry(kind: NoStorage, address: address, noslot: slot, prevFlags: acc.flags)
     let acc = ledger.makeDirty(address, acc)
     acc.overlayStorage[slot] = value
     acc.flags.incl StorageChanged
@@ -926,15 +1037,17 @@ proc clearStorage(acc: AccountRef) =
   ## Clear the account's storage on the next `persist` even if it was not
   ## modified. This is used to implement EIP-161's "clear empty accounts" rule.
   acc.original.clearStorage = true
-  acc.original.storageDiff.clear()
-  acc.original.storageDels.clear()
-  acc.original.storage.clear()
+  acc.original.storageDiff.reset()
+  acc.original.storageDels.reset()
+  acc.original.storage.reset()
 
 proc clearStorage*(ledger: LedgerRef, address: Address) =
   # If there is an existing account with the given address, its storage will get
   # overwritten on persist
 
-  let acc = ledger.makeDirty(address, ledger.getAccount(address))
+  let acc = ledger.getAccount(address)
+  ledger.journal.add JournalEntry(kind: Flags, address: address, prevFlags: acc.flags)
+  discard ledger.makeDirty(address, acc)
   acc.flags.incl NewlyCreated
 
 proc applyBlockAccessList*(ledger: LedgerRef, bal: BlockAccessList, txCount: int) =
@@ -950,7 +1063,12 @@ proc applyBlockAccessList*(ledger: LedgerRef, bal: BlockAccessList, txCount: int
     var acc: AccountRef
 
     if balancePos >= 0 or noncePos >= 0 or codePos >= 0:
-      acc = ledger.makeDirty(address, ledger.getAccount(address))
+      acc = ledger.getAccount(address)
+      if balancePos >= 0:
+        ledger.journal.add JournalEntry(kind: Balance, address: address, prevBalance: acc.statement.balance, prevFlags: acc.flags)
+      if noncePos >= 0:
+        ledger.journal.add JournalEntry(kind: Nonce, address: address, prevNonce: acc.statement.nonce, prevFlags: acc.flags)
+      acc = ledger.makeDirty(address, acc)
       if balancePos >= 0:
         acc.statement.balance = accChanges.balanceChanges[balancePos].postBalance
         acc.flags.incl {StatementChanged}
@@ -965,7 +1083,14 @@ proc applyBlockAccessList*(ledger: LedgerRef, bal: BlockAccessList, txCount: int
       if changePos < 0:
         continue
       if acc.isNil:
-        acc = ledger.makeDirty(address, ledger.getAccount(address))
+        acc = ledger.getAccount(address)
+
+      acc.overlayStorage.withValue(slotChanges.slot, v):
+        ledger.journal.add JournalEntry(kind: Storage, address: address, slot: slotChanges.slot, prevStorageValue: v[], prevFlags: acc.flags)
+      do:
+        ledger.journal.add JournalEntry(kind: NoStorage, address: address, noslot: slotChanges.slot, prevFlags: acc.flags)
+
+      acc = ledger.makeDirty(address, acc)
       acc.overlayStorage[slotChanges.slot] = slotChanges.changes[changePos].newValue
       acc.flags.incl StorageChanged
 
@@ -975,6 +1100,7 @@ proc selfDestruct*(ledger: LedgerRef, address: Address) =
   if acc.isNil:
     return
 
+  ledger.journal.add JournalEntry(kind: Balance, address: address, prevBalance: acc.statement.balance, prevFlags: acc.flags)
   acc = ledger.makeDirty(address, acc)
   acc.statement.balance = 0'u256
   acc.flags.incl SelfDestructed
@@ -987,6 +1113,7 @@ proc selfDestruct6780*(ledger: LedgerRef, address: Address): bool =
     return false
 
   if NewlyCreated in acc.flags:
+    ledger.journal.add JournalEntry(kind: Balance, address: address, prevBalance: acc.statement.balance, prevFlags: acc.flags)
     let acc = ledger.makeDirty(address, acc)
     acc.statement.balance = 0'u256
     acc.flags.incl SelfDestructed
@@ -1003,7 +1130,9 @@ proc selfDestruct8246*(ledger: LedgerRef, address: Address): bool =
     return false
 
   if NewlyCreated in acc.flags:
-    ledger.makeDirty(address, acc).flags.incl SelfDestructed8246
+    ledger.journal.add JournalEntry(kind: Flags, address: address, prevFlags: acc.flags)
+    let acc = ledger.makeDirty(address, acc)
+    acc.flags.incl SelfDestructed8246
     ledger.savePoint.selfDestruct.incl address
 
     true
@@ -1022,13 +1151,13 @@ template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
 template clearWitnessKeys*(ledger: LedgerRef) =
-  ledger.witnessKeys.clear()
+  ledger.witnessKeys.reset()
 
 template clearCollapsedSiblings*(ledger: LedgerRef) =
   ledger.txFrame.clearCollapsedSiblings()
 
 template clearWrittenCode*(ledger: LedgerRef) =
-  ledger.savePoint.writtenCode.clear()
+  ledger.savePoint.writtenCode.reset()
 
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
   # Range checks must be done earlier, any miss here treated as an error:
@@ -1077,7 +1206,7 @@ proc persist*(
     do:
       ledger.collected[acc.accPath] = txAcc
 
-  for address, acc in ledger.savePoint.dirty: # This is a hotspot in block processing
+  for address, acc in ledger.dirty: # This is a hotspot in block processing
     # Self-destructed accounts must retain their values throughout transaction
     # processing and only kill/clear themselves at the end
     let exists =
@@ -1116,7 +1245,7 @@ proc persist*(
           acc.clearStorage()
         else:
           ledger.txFrame.clearStorage(acc.accPath).expect("can clear storage of account")
-          acc.original.storage.clear()
+          acc.original.storage.reset()
 
       if {IsNew, StatementChanged} * acc.flags != {}:
         # Update account before its storage, in case it's a new account
@@ -1136,11 +1265,11 @@ proc persist*(
         else:
           acc.persistStorage(ledger).isOkOr:
             ledger.setFatalErrorOrAssert(error)
-        acc.overlayStorage.clear()
+        acc.overlayStorage.reset()
 
       acc.flags.reset()
     else:
-      ledger.savePoint.cache.del address
+      ledger.cache.del address
       if IsNew notin acc.flags:
         # Only need to delete from the database what was there to begin with
         if useDiff:
@@ -1154,12 +1283,15 @@ proc persist*(
     # This overwrites the cache from the previous persist, providing a crude LRU
     # scheme with little overhead
     # TODO https://github.com/nim-lang/Nim/issues/23759
-    swap(ledger.cache, ledger.savePoint.cache)
-    ledger.savePoint.cache.reset()
+    swap(ledger.cache, ledger.cache2)
+    ledger.cache.reset()
 
-  ledger.savePoint.dirty.clear()
-  ledger.savePoint.selfDestruct.clear()
-  ledger.savePoint.accessList.clear() # EIP2929
+  ledger.dirty.reset()
+  # The top-level save point is never rolled back, so its journal entries are
+  # permanent (already committed to the frame): discard them.
+  ledger.journal.setLen(0)
+  ledger.savePoint.selfDestruct.reset()
+  ledger.savePoint.accessList.reset() # EIP2929
 
   if clearWitness:
     ledger.clearWitnessKeys()
@@ -1179,13 +1311,13 @@ proc storeHeldCode*(ledger: LedgerRef): Result[void, string] =
       ledger.txFrame.persistCodeByHash(codeHash, code.bytes()).isOkOr:
         return err("storeHeldCode(): " & error)
       code.persisted = true
-  ledger.heldCode.clear()
+  ledger.heldCode.reset()
   ok()
 
 iterator addresses*(ledger: LedgerRef): Address =
   # make sure all savePoint already committed
   doAssert(ledger.savePoint.parentSavePoint.isNil)
-  for address, _ in ledger.savePoint.cache:
+  for address, _ in ledger.cache:
     yield address
 
 iterator storage*(
@@ -1267,11 +1399,8 @@ proc getDirtyAccount*(ledger: LedgerRef, address: Address): AccountRef =
     return nil
 
 iterator dirtyAccounts*(ledger: LedgerRef): (Address, AccountRef) =
-  var sp = ledger.savePoint
-  while sp != nil:
-    for address, acc in sp.dirty:
-      yield (address, acc)
-    sp = sp.parentSavePoint
+  for address, acc in ledger.dirty:
+    yield (address, acc)
 
 # ------------------------------------------------------------------------------
 # Public AccountRef read-only methods
