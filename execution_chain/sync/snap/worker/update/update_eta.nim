@@ -30,6 +30,7 @@ proc updateEta*(ctx: SnapCtxRef, y: float) =
     metrics.set(nec_snap_eta_secs, -1)
 
 proc resetEta*(ctx: SnapCtxRef) =
+  ctx.pool.etaSpline.clear()
   metrics.set(nec_snap_eta_secs, 0)
 
 # ------------------------------------------------------------------------------

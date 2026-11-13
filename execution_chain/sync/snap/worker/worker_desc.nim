@@ -280,11 +280,14 @@ proc eta*(spline: EtaSpline): Opt[Duration] =
   template toNs(w: Moment): int64 =
     (w - Moment.low).nanoseconds
 
+  let y1 = spline[^1][1]
+  if 1.0 < y1:                                      # beyond target already
+    return ok(nanoseconds 0)
+
   let
     x0 = spline[0][0].toNs                          # unit: ns
     x1 = spline[^1][0].toNs                         # unit: ns
     y0 = spline[0][1]
-    y1 = spline[^1][1]
 
   # This must have been made certain by the `apply()` function
   doAssert x0 + etaSplineDistMin1.nanoseconds <= x1
@@ -299,6 +302,9 @@ proc eta*(spline: EtaSpline): Opt[Duration] =
     # Value 1 is reached at x9: `1 = m x9 + c` => `1 = m (x9 - x1) + y1`
     # At time x1, ETA is `x9 - x1 = (1 - y1) / m`
     H = (1.0 - y1) / m                              # unit: ns
+
+  if twoHundredYears.nanoseconds.float <= H:
+    return err()
 
   # Convert to nanoseconde from float
   ok(nanoseconds H.int64)

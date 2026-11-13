@@ -97,10 +97,13 @@ proc destroyServices*(ctx: SnapCtxRef) =
     ctx.pool.cacheDB.close()
     ctx.pool.cacheDB = CacheDbRef(nil)
 
-    # Reset metrics
-    ctx.accountDownloadMetricsReset()
-    ctx.storageDownloadMetricsReset()
-    ctx.importCoreDbMetricsReset()
+  ctx.accRefresh.clear()
+  ctx.accUnproc.clear()
+
+  # Reset metrics
+  ctx.accountDownloadMetricsReset()
+  ctx.storageDownloadMetricsReset()
+  ctx.importCoreDbMetricsReset()
 
 # ---------
 
