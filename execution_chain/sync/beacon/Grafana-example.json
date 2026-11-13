@@ -4,18 +4,18 @@
   "metadata": {
     "name": "00000000000055",
     "namespace": "default",
-    "uid": "b60d04f6-8713-47f5-961c-348ca7395439",
-    "resourceVersion": "1794329595241999",
-    "generation": 34,
-    "creationTimestamp": "2026-07-23T09:26:04Z",
+    "uid": "7047f0ce-74b2-4213-a66e-7e5ec0d14026",
+    "resourceVersion": "1795004456072004",
+    "generation": 11,
+    "creationTimestamp": "2026-11-16T10:53:40Z",
     "labels": {
-      "grafana.app/deprecatedInternalID": "4063479426818048"
+      "grafana.app/deprecatedInternalID": "490696282505216"
     },
     "annotations": {
       "grafana.app/createdBy": "user:afsymvffaw3k0c",
-      "grafana.app/saved-from-ui": "Grafana v13.3.0 (6f8ce3c693)",
+      "grafana.app/saved-from-ui": "Grafana v13.3.1 (da3aa3ff57)",
       "grafana.app/updatedBy": "user:afsymvffaw3k0c",
-      "grafana.app/updatedTimestamp": "2026-11-10T16:53:15Z"
+      "grafana.app/updatedTimestamp": "2026-11-18T12:20:56Z"
     }
   },
   "spec": {
@@ -67,7 +67,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nec_sync_consensus_head{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_sync_consensus_head{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -92,7 +92,7 @@
                       },
                       "spec": {
                         "editorMode": "builder",
-                        "expr": "nec_sync_consensus_finalised{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_sync_consensus_finalised{job=\"mainnet\"}",
                         "instant": false,
                         "legendFormat": "CL_finalised",
                         "range": true
@@ -115,7 +115,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nec_execution_head{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_execution_head{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -141,7 +141,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nec_base{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_base{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -162,7 +162,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.3.0",
+            "version": "13.3.1",
             "spec": {
               "options": {
                 "annotations": {
@@ -299,31 +299,6 @@
                         }
                       }
                     ]
-                  },
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "CL_head",
-                          "CL_finalised"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
                   }
                 ]
               }
@@ -356,7 +331,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nec_snap_active_states{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_snap_active_states{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -383,7 +358,7 @@
                         "disableTextWrap": false,
                         "editorMode": "builder",
                         "exemplar": false,
-                        "expr": "nec_sync_peers{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_sync_peers{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -409,7 +384,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nec_snap_peers{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_snap_peers{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -435,7 +410,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nec_sync_header_lists_staged{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_sync_header_lists_staged{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -462,7 +437,7 @@
                         "disableTextWrap": false,
                         "editorMode": "builder",
                         "exemplar": false,
-                        "expr": "nec_sync_block_lists_staged{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_sync_block_lists_staged{job=\"mainnet\"}",
                         "format": "time_series",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
@@ -485,7 +460,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.3.0",
+            "version": "13.3.1",
             "spec": {
               "options": {
                 "annotations": {
@@ -667,7 +642,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nec_sync_distance_to_sync{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_sync_distance_to_sync{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -693,7 +668,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nec_sync_headers_unprocessed{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_sync_headers_unprocessed{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -719,7 +694,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nec_sync_blocks_unprocessed{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_sync_blocks_unprocessed{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -740,7 +715,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.3.0",
+            "version": "13.3.1",
             "spec": {
               "options": {
                 "annotations": {
@@ -905,30 +880,6 @@
                         }
                       }
                     ]
-                  },
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "headers_unprocessed"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
                   }
                 ]
               }
@@ -961,7 +912,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nec_sync_non_peers_connected{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_sync_non_peers_connected{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -982,7 +933,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.3.0",
+            "version": "13.3.1",
             "spec": {
               "options": {
                 "annotations": {
@@ -1149,7 +1100,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "process_virtual_memory_bytes{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "process_virtual_memory_bytes{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -1175,7 +1126,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "process_resident_memory_bytes{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "process_resident_memory_bytes{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -1196,7 +1147,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.3.0",
+            "version": "13.3.1",
             "spec": {
               "options": {
                 "annotations": {
@@ -1333,7 +1284,7 @@
                       "spec": {
                         "disableTextWrap": false,
                         "editorMode": "builder",
-                        "expr": "nim_gc_heap_instance_occupied_bytes{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nim_gc_heap_instance_occupied_bytes{job=\"mainnet\"}",
                         "fullMetaSearch": false,
                         "includeNullMetadata": true,
                         "instant": false,
@@ -1354,7 +1305,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.3.0",
+            "version": "13.3.1",
             "spec": {
               "options": {
                 "annotations": {
@@ -1489,16 +1440,11 @@
                         "name": "bfsyo1ibaja4gc"
                       },
                       "spec": {
-                        "disableTextWrap": false,
                         "editorMode": "builder",
-                        "exemplar": false,
-                        "expr": "nec_sync_eta_secs{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
-                        "fullMetaSearch": false,
-                        "includeNullMetadata": true,
+                        "expr": "nec_snap_accounts_eta_secs{job=\"mainnet\"}",
                         "instant": false,
-                        "legendFormat": "sync_eta",
-                        "range": true,
-                        "useBackend": false
+                        "legendFormat": "accounts_eta",
+                        "range": true
                       }
                     },
                     "refId": "A",
@@ -1517,13 +1463,57 @@
                       },
                       "spec": {
                         "editorMode": "builder",
-                        "expr": "nec_snap_eta_secs{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_snap_dbimport_eta_secs{job=\"mainnet\"}",
                         "instant": false,
-                        "legendFormat": "snap_eta",
+                        "legendFormat": "dbimport_eta",
+                        "range": true
+                      }
+                    },
+                    "refId": "D",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "bfsyo1ibaja4gc"
+                      },
+                      "spec": {
+                        "editorMode": "builder",
+                        "expr": "nec_sync_blocks_eta_secs{job=\"mainnet\"}",
+                        "instant": false,
+                        "legendFormat": "blocks_eta",
                         "range": true
                       }
                     },
                     "refId": "B",
+                    "hidden": false
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "prometheus",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "bfsyo1ibaja4gc"
+                      },
+                      "spec": {
+                        "editorMode": "builder",
+                        "expr": "nec_sync_headers_eta_secs{job=\"mainnet\"}",
+                        "instant": false,
+                        "legendFormat": "headers_eta",
+                        "range": true
+                      }
+                    },
+                    "refId": "C",
                     "hidden": false
                   }
                 }
@@ -1535,7 +1525,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.3.0",
+            "version": "13.3.1",
             "spec": {
               "options": {
                 "annotations": {
@@ -1552,24 +1542,20 @@
                 },
                 "tooltip": {
                   "hideZeros": false,
-                  "mode": "single",
+                  "mode": "multi",
                   "sort": "none"
                 }
               },
               "fieldConfig": {
                 "defaults": {
                   "unit": "s",
-                  "min": -1,
+                  "min": 0,
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
                       {
                         "value": 0,
                         "color": "green"
-                      },
-                      {
-                        "value": 80,
-                        "color": "red"
                       }
                     ]
                   },
@@ -1593,7 +1579,7 @@
                       "viz": false
                     },
                     "insertNulls": false,
-                    "lineInterpolation": "linear",
+                    "lineInterpolation": "smooth",
                     "lineWidth": 5,
                     "pointSize": 5,
                     "scaleDistribution": {
@@ -1615,38 +1601,59 @@
                   {
                     "matcher": {
                       "id": "byName",
-                      "options": "nec_sync_eta_secs"
+                      "options": "blocks_eta"
                     },
                     "properties": [
                       {
                         "id": "color",
                         "value": {
-                          "fixedColor": "light-purple",
+                          "fixedColor": "dark-green",
                           "mode": "fixed"
                         }
                       }
                     ]
                   },
                   {
-                    "__systemRef": "hideSeriesFrom",
                     "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "snap_eta"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
+                      "id": "byName",
+                      "options": "headers_eta"
                     },
                     "properties": [
                       {
-                        "id": "custom.hideFrom",
+                        "id": "color",
                         "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
+                          "fixedColor": "dark-orange",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "dbimport_eta"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "#85837c",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "accounts_eta"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "dark-yellow",
+                          "mode": "fixed"
                         }
                       }
                     ]
@@ -1681,7 +1688,7 @@
                       },
                       "spec": {
                         "editorMode": "builder",
-                        "expr": "nec_snap_dbimport_progress{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_snap_dbimport_progress{job=\"mainnet\"}",
                         "instant": false,
                         "legendFormat": "dbimport_progress",
                         "range": true
@@ -1703,7 +1710,7 @@
                       },
                       "spec": {
                         "editorMode": "builder",
-                        "expr": "nec_snap_storage_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_snap_storage_coverage{job=\"mainnet\"}",
                         "instant": false,
                         "legendFormat": "storage_coverage",
                         "range": true
@@ -1725,7 +1732,7 @@
                       },
                       "spec": {
                         "editorMode": "builder",
-                        "expr": "nec_snap_download_window{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_snap_download_window{job=\"mainnet\"}",
                         "instant": false,
                         "legendFormat": "download_window",
                         "range": true
@@ -1747,7 +1754,7 @@
                       },
                       "spec": {
                         "editorMode": "builder",
-                        "expr": "nec_snap_accounts_coverage{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+                        "expr": "nec_snap_accounts_coverage{job=\"mainnet\"}",
                         "instant": false,
                         "legendFormat": "accounts_coverage",
                         "range": true
@@ -1765,7 +1772,7 @@
           "vizConfig": {
             "kind": "VizConfig",
             "group": "timeseries",
-            "version": "13.3.0",
+            "version": "13.3.1",
             "spec": {
               "options": {
                 "annotations": {
@@ -1956,7 +1963,7 @@
               "x": 12,
               "y": 6,
               "width": 12,
-              "height": 5,
+              "height": 6,
               "element": {
                 "kind": "ElementReference",
                 "name": "panel-4"
@@ -1966,8 +1973,21 @@
           {
             "kind": "GridLayoutItem",
             "spec": {
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "element": {
+                "kind": "ElementReference",
+                "name": "panel-7"
+              }
+            }
+          },
+          {
+            "kind": "GridLayoutItem",
+            "spec": {
               "x": 12,
-              "y": 11,
+              "y": 12,
               "width": 12,
               "height": 6,
               "element": {
@@ -1980,20 +2000,7 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 0,
-              "y": 12,
-              "width": 12,
-              "height": 5,
-              "element": {
-                "kind": "ElementReference",
-                "name": "panel-7"
-              }
-            }
-          },
-          {
-            "kind": "GridLayoutItem",
-            "spec": {
-              "x": 0,
-              "y": 17,
+              "y": 18,
               "width": 12,
               "height": 4,
               "element": {
@@ -2006,7 +2013,7 @@
             "kind": "GridLayoutItem",
             "spec": {
               "x": 12,
-              "y": 17,
+              "y": 18,
               "width": 12,
               "height": 4,
               "element": {
