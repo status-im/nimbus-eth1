@@ -77,20 +77,21 @@ func validateChainId*(tx: Transaction, chainId: ChainId): (bool, ChainId) =
   else:
     (chainId == tx.chainId, tx.chainId)
 
-func maxPriorityFeePerGasNorm*(tx: Transaction): GasInt =
+func maxPriorityFeePerGasNorm*(tx: Transaction): UInt256 =
   if tx.txType < TxEip1559: tx.gasPrice else: tx.maxPriorityFeePerGas
 
-func maxFeePerGasNorm*(tx: Transaction): GasInt =
+func maxFeePerGasNorm*(tx: Transaction): UInt256 =
   if tx.txType < TxEip1559: tx.gasPrice else: tx.maxFeePerGas
 
-func effectiveGasPrice*(tx: Transaction, baseFeePerGas: GasInt): GasInt =
+func effectiveGasPrice*(tx: Transaction, baseFeePerGas: GasInt): UInt256 =
   if tx.txType < TxEip1559:
     tx.gasPrice
   else:
-    baseFeePerGas + min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFeePerGas)
+    let baseFee = baseFeePerGas.u256
+    baseFee + min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFee)
 
-func effectiveGasTip*(tx: Transaction, baseFeePerGas: Opt[UInt256]): GasInt =
-  let baseFeePerGas = baseFeePerGas.get(0.u256).truncate(GasInt)
+func effectiveGasTip*(tx: Transaction, baseFeePerGas: Opt[UInt256]): UInt256 =
+  let baseFeePerGas = baseFeePerGas.get(0.u256)
 
   min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFeePerGas)
 

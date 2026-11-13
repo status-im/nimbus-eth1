@@ -39,7 +39,7 @@ proc tx0(i: int): PooledTransaction =
       nonce:    i.AccountNonce,
       to:       Opt.some recipient,
       gasLimit: 1.GasInt,
-      gasPrice: 2.GasInt,
+      gasPrice: 2.u256,
       payload:  abcdef))
 
 proc tx1(i: int): PooledTransaction =
@@ -49,7 +49,7 @@ proc tx1(i: int): PooledTransaction =
       txType:   TxLegacy,
       nonce:    i.AccountNonce,
       gasLimit: 1.GasInt,
-      gasPrice: 2.GasInt,
+      gasPrice: 2.u256,
       payload:  abcdef))
 
 proc tx2(i: int): PooledTransaction =
@@ -61,7 +61,7 @@ proc tx2(i: int): PooledTransaction =
       nonce:      i.AccountNonce,
       to:         Opt.some recipient,
       gasLimit:   123457.GasInt,
-      gasPrice:   10.GasInt,
+      gasPrice:   10.u256,
       accessList: accesses,
       payload:    abcdef))
 
@@ -74,7 +74,7 @@ proc tx3(i: int): PooledTransaction =
       nonce:    i.AccountNonce,
       to:       Opt.some recipient,
       gasLimit: 123457.GasInt,
-      gasPrice: 10.GasInt,
+      gasPrice: 10.u256,
       payload:  abcdef))
 
 proc tx4(i: int): PooledTransaction =
@@ -85,7 +85,7 @@ proc tx4(i: int): PooledTransaction =
       chainId:    chainId(1),
       nonce:      i.AccountNonce,
       gasLimit:   123457.GasInt,
-      gasPrice:   10.GasInt,
+      gasPrice:   10.u256,
       accessList: accesses))
 
 proc tx5(i: int): PooledTransaction =
@@ -95,8 +95,8 @@ proc tx5(i: int): PooledTransaction =
       chainId:    chainId(1),
       nonce:      i.AccountNonce,
       gasLimit:   123457.GasInt,
-      maxPriorityFeePerGas: 42.GasInt,
-      maxFeePerGas: 10.GasInt,
+      maxPriorityFeePerGas: 42.u256,
+      maxFeePerGas: 10.u256,
       accessList: accesses))
 
 proc tx6(i: int): PooledTransaction =
@@ -110,8 +110,8 @@ proc tx6(i: int): PooledTransaction =
       nonce:               i.AccountNonce,
       to:                  Opt.some(recipient),
       gasLimit:            123457.GasInt,
-      maxPriorityFeePerGas:42.GasInt,
-      maxFeePerGas:        10.GasInt,
+      maxPriorityFeePerGas:42.u256,
+      maxFeePerGas:        10.u256,
       accessList:          accesses,
       versionedHashes:     @[digest]),
     blobsBundle: BlobsBundle(
@@ -130,8 +130,8 @@ proc tx7(i: int): PooledTransaction =
       nonce:               i.AccountNonce,
       to:                  Opt.some(recipient),
       gasLimit:            123457.GasInt,
-      maxPriorityFeePerGas:42.GasInt,
-      maxFeePerGas:        10.GasInt,
+      maxPriorityFeePerGas:42.u256,
+      maxFeePerGas:        10.u256,
       accessList:          accesses,
       versionedHashes:     @[digest],
       maxFeePerBlobGas:    10000000.u256))
@@ -147,8 +147,8 @@ proc tx8(i: int): PooledTransaction =
       nonce:               i.AccountNonce,
       to:                  Opt.some(recipient),
       gasLimit:            123457.GasInt,
-      maxPriorityFeePerGas:42.GasInt,
-      maxFeePerGas:        10.GasInt,
+      maxPriorityFeePerGas:42.u256,
+      maxFeePerGas:        10.u256,
       accessList:          accesses,
       versionedHashes:     @[digest],
       maxFeePerBlobGas:    10000000.u256))
@@ -159,8 +159,8 @@ proc txEip7702(i: int): PooledTransaction =
       txType:   TxEip7702,
       chainId:  chainId(1),
       nonce:    i.AccountNonce,
-      maxPriorityFeePerGas: 2.GasInt,
-      maxFeePerGas: 3.GasInt,
+      maxPriorityFeePerGas: 2.u256,
+      maxFeePerGas: 3.u256,
       gasLimit: 4.GasInt,
       to:       Opt.some recipient,
       value:    5.u256,
@@ -272,7 +272,7 @@ suite "Pooled Transactions":
         txType: TxLegacy,
         chainId: chainId(1),
         nonce: 9,
-        gasPrice: 20000000000'u64,
+        gasPrice: 20000000000.u256,
         gasLimit: 21000'u64,
         to: Opt.some address"0x3535353535353535353535353535353535353535",
         value: u256"1000000000000000000",

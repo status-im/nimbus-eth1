@@ -48,7 +48,7 @@ proc createTx(nonce: uint64, chainId: ChainId): Transaction =
     txType: TxLegacy,
     chainId: chainId,
     nonce: AccountNonce(nonce),
-    gasPrice: 1,
+    gasPrice: 1.u256,
     gasLimit: 400_000,
     to: Opt.none(Address),
     payload: hexToSeqByte("600656605b005b60016000f3") & newSeq[byte](initcodePadding),

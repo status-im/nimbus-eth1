@@ -127,7 +127,7 @@ func makeTx(
     txType  : TxLegacy,
     chainId : env.chainId,
     nonce   : AccountNonce(env.nonce),
-    gasPrice: gasPrice,
+    gasPrice: gasPrice.u256,
     gasLimit: gasLimit,
     to      : Opt.some(recipient),
     value   : amount,

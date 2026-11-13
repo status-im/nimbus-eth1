@@ -221,7 +221,9 @@ proc exportHistoricalRoots*(
     try:
       notice "Downloading beacon state"
       awaitWithTimeout(
-        client.getStateV2(StateIdent.init(StateIdentType.Finalized), cfg),
+        client.getStateV2(
+          StateIdent.init(StateIdentType.Finalized), cfg, restRequestsTimeout, nil
+        ),
         largeRequestsTimeout,
       ):
         error "Attempt to download beacon state timed out"

@@ -367,11 +367,11 @@ suite "TxPool test suite":
 
     let oldPrice = ptx.tx.gasPrice
     ptx.tx = mx.customizeTransaction(acc, ptx.tx,
-      CustomTx(gasPriceOrGasFeeCap: Opt.some(oldPrice*2)))
+      CustomTx(gasPriceOrGasFeeCap: Opt.some(oldPrice*2.u256)))
     xp.checkAddTxSupersede(ptx)
 
     let bundle = xp.checkAssembleBlock(1)
-    check bundle.blk.transactions[0].gasPrice == oldPrice*2
+    check bundle.blk.transactions[0].gasPrice == oldPrice*2.u256
     xp.checkImportBlock(bundle, 0)
 
   test "removeNewBlockTxs after two blocks":
@@ -424,7 +424,7 @@ suite "TxPool test suite":
     # superseding not hit sender max txs
     let oldPrice = ptx.tx.gasPrice
     ptx.tx = mx.customizeTransaction(acc, ptx.tx,
-      CustomTx(gasPriceOrGasFeeCap: Opt.some(oldPrice*2)))
+      CustomTx(gasPriceOrGasFeeCap: Opt.some(oldPrice*2.u256)))
     xp.checkAddTxSupersede(ptx)
 
     var numTxsPacked = 0
@@ -516,7 +516,7 @@ suite "TxPool test suite":
 
     var oldPrice = ptx0.tx.gasPrice
     ptx0.tx = mx.customizeTransaction(acc, ptx0.tx,
-      CustomTx(gasPriceOrGasFeeCap: Opt.some(oldPrice+1)
+      CustomTx(gasPriceOrGasFeeCap: Opt.some(oldPrice+1.u256)
     ))
     xp.checkAddTx(ptx0, txErrorReplacementGasTooLow)
 
@@ -525,8 +525,8 @@ suite "TxPool test suite":
     oldPrice = ptx1.tx.maxFeePerGas
     ptx1.tx = mx.customizeTransaction(acc, ptx1.tx,
       CustomTx(blobGas: Opt.some(oldGas+1),
-      gasTipCap: Opt.some(oldTip*2),
-      gasPriceOrGasFeeCap: Opt.some(oldPrice*2)
+      gasTipCap: Opt.some(oldTip*2.u256),
+      gasPriceOrGasFeeCap: Opt.some(oldPrice*2.u256)
     ))
     xp.checkAddTx(ptx1, txErrorReplacementBlobGasTooLow)
     xp.checkImportBlock(2, 0)
@@ -581,8 +581,8 @@ suite "TxPool test suite":
         gasUsed2 = xp.vmState.receipts[1].cumulativeGasUsed - gasUsed1
         totalBlobGasUsed = tx1.tx.getTotalBlobGas + tx2.tx.getTotalBlobGas
         blockValue =
-          gasUsed1.u256 * tx1.tx.effectiveGasTip(header.baseFeePerGas).u256 +
-          gasUsed2.u256 * tx2.tx.effectiveGasTip(header.baseFeePerGas).u256
+          gasUsed1.u256 * tx1.tx.effectiveGasTip(header.baseFeePerGas) +
+          gasUsed2.u256 * tx2.tx.effectiveGasTip(header.baseFeePerGas)
 
       check blockValue == bundle.blockValue
       check totalBlobGasUsed == header.blobGasUsed.get()
@@ -1126,6 +1126,43 @@ suite "TxPool test suite":
     check xp.vmState.validateTransaction(ptx.tx, acc.address).isErr
     discard xp.addTx(ptx)
     discard xp.checkAssembleBlock(0)
+
+  test "tx with a fee cap above 64 bits is packed, imported and pays the effective price":
+    # A fee cap only has to be covered by the balance, not paid, so a valid
+    # tx can carry one that doesn't fit in 64 bits. Test accounts hold
+    # 0x12345 * 2^64 wei, so 50000 gas at 2^64 per gas is covered.
+    let
+      env = initEnv(Prague)
+      xp = env.xp
+      mx = env.sender
+      chain = env.chain
+      acc = mx.getAccount(0)
+      feeCap = 1.u256 shl 64
+    var ptx = mx.makeTx(BaseTx(
+      txType: Opt.some(TxEip1559),
+      gasLimit: 50000,
+      recipient: Opt.some(recipient),
+      amount: amount,
+    ), acc, 0)
+    ptx.tx = mx.customizeTransaction(acc, ptx.tx,
+      CustomTx(gasPriceOrGasFeeCap: Opt.some(feeCap)))
+
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
+    xp.checkAddTx(ptx)
+
+    let
+      balanceBefore = LedgerRef.init(chain.latestTxFrame).getBalance(acc.address)
+      bundle = xp.checkAssembleBlock(1)
+      gasUsed = xp.vmState.receipts[0].cumulativeGasUsed
+      baseFee = bundle.blk.header.baseFeePerGas.get(0.u256).truncate(GasInt)
+      paid = gasUsed.u256 * ptx.tx.effectiveGasPrice(baseFee)
+    check bundle.blk.transactions[0].maxFeePerGas == feeCap
+    xp.checkImportBlock(bundle, 0)
+    check paid < feeCap
+    check LedgerRef.init(chain.latestTxFrame).getBalance(acc.address) ==
+      balanceBefore - paid - amount
 
 suite "TxPool BAL post-Amsterdam":
   # Regression test for PR #4148: tx_packer left an outer beginCallFrame in

@@ -66,8 +66,8 @@ proc commitOrRollbackDependingOnGasUsed(
   # Accept transaction and collect mining fee.
   let
     baseFee = vmState.blockCtx.baseFeePerGas
-    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
-    txFee = gasUsed.u256 * priorityFee.u256
+    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee.u256)
+    txFee = gasUsed.u256 * priorityFee
 
   callResult.txFee = txFee
 

@@ -346,9 +346,9 @@ proc toTransaction(tx: TransactionObject): Transaction =
     txType          : tx.`type`.get(0.Web3Quantity).TxType,
     chainId         : tx.chainId.get(0.u256),
     nonce           : tx.nonce.AccountNonce,
-    gasPrice        : tx.gasPrice.GasInt,
-    maxPriorityFeePerGas: tx.maxPriorityFeePerGas.get(0.Web3Quantity).GasInt,
-    maxFeePerGas    : tx.maxFeePerGas.get(0.Web3Quantity).GasInt,
+    gasPrice        : tx.gasPrice,
+    maxPriorityFeePerGas: tx.maxPriorityFeePerGas.get(0.u256),
+    maxFeePerGas    : tx.maxFeePerGas.get(0.u256),
     gasLimit        : tx.gas.GasInt,
     to              : tx.to,
     value           : tx.value,
@@ -383,7 +383,7 @@ type
     recType*: ReceiptType
     stateRoot*: Opt[Hash32]
     status*: Opt[bool]
-    effectiveGasPrice*: GasInt
+    effectiveGasPrice*: UInt256
     blobGasUsed*: Opt[uint64]
     blobGasPrice*: Opt[UInt256]
 
@@ -393,9 +393,9 @@ type
     blockNumber*: Opt[uint64]
     sender*: Address
     gasLimit*: GasInt
-    gasPrice*: GasInt
-    maxFeePerGas*: GasInt
-    maxPriorityFeePerGas*: GasInt
+    gasPrice*: UInt256
+    maxFeePerGas*: UInt256
+    maxPriorityFeePerGas*: UInt256
     hash*: Hash32
     payload*: seq[byte]
     nonce*: AccountNonce
@@ -427,7 +427,7 @@ proc toRPCReceipt(rec: ReceiptObject): RPCReceipt =
     recType: rec.`type`.get(0.Web3Quantity).ReceiptType,
     stateRoot: rec.root,
     status: maybeBool(rec.status),
-    effectiveGasPrice: rec.effectiveGasPrice.GasInt,
+    effectiveGasPrice: rec.effectiveGasPrice,
     blobGasUsed: maybeU64(rec.blobGasUsed),
     blobGasPrice: rec.blobGasPrice,
   )
@@ -439,9 +439,9 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
     blockNumber: maybeU64 tx.blockNumber,
     sender: tx.`from`,
     gasLimit: tx.gas.GasInt,
-    gasPrice: tx.gasPrice.GasInt,
-    maxFeePerGas: tx.maxFeePerGas.get(0.Web3Quantity).GasInt,
-    maxPriorityFeePerGas: tx.maxPriorityFeePerGas.get(0.Web3Quantity).GasInt,
+    gasPrice: tx.gasPrice,
+    maxFeePerGas: tx.maxFeePerGas.get(0.u256),
+    maxPriorityFeePerGas: tx.maxPriorityFeePerGas.get(0.u256),
     hash: tx.hash,
     payload: tx.input,
     nonce: tx.nonce.AccountNonce,

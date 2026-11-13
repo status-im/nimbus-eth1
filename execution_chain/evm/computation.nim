@@ -65,7 +65,7 @@ template getChainId*(c: Computation): UInt256 =
 template getOrigin*(c: Computation): Address =
   c.vmState.txCtx.origin
 
-template getGasPrice*(c: Computation): GasInt =
+template getGasPrice*(c: Computation): UInt256 =
   c.vmState.txCtx.effectiveGasPrice
 
 template getVersionedHash*(c: Computation, index: int): VersionedHash =

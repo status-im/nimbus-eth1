@@ -40,7 +40,7 @@ type
 
   TxContext* = object
     origin*           : Address
-    effectiveGasPrice*: GasInt
+    effectiveGasPrice*: UInt256
     blobBaseFee*      : UInt256
     tx*               : ptr Transaction
 

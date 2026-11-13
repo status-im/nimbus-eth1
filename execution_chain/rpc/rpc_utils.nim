@@ -53,7 +53,7 @@ proc invalidParams*(msg: string): ref RpcResponseError =
 proc calculateMedianGasPrice*(chain: ForkedChainRef): Result[GasInt, string] =
   const minGasPrice = 30_000_000_000.GasInt
   let blk = ?chain.latestBlock
-  var prices = blk.transactions.mapIt(it.gasPrice)
+  var prices = blk.transactions.mapIt(it.gasPrice.clampToGasInt)
 
   # TODO: This should properly incorporate the base fee in the block data,
   # and recommend a gas fee that likely gets the block to confirm.
@@ -67,7 +67,7 @@ proc calculateMedianGasPrice*(chain: ForkedChainRef): Result[GasInt, string] =
 proc calculateMedianMaxPriorityFeePerGas*(chain: ForkedChainRef): Result[GasInt, string] =
   let blk = ?chain.latestBlock
   var prices = blk.transactions
-    .mapIt(it.effectiveGasTip(blk.header.baseFeePerGas))
+    .mapIt(it.effectiveGasTip(blk.header.baseFeePerGas).clampToGasInt)
     .filterIt(it > 0.GasInt)
 
   ok(median(prices))
@@ -87,9 +87,9 @@ proc unsignedTx*(tx: TransactionArgs,
     res.gasLimit = 90000.GasInt
 
   if tx.gasPrice.isSome:
-    res.gasPrice = tx.gasPrice.get.GasInt
+    res.gasPrice = tx.gasPrice.get
   else:
-    res.gasPrice = ?calculateMedianGasPrice(chain)
+    res.gasPrice = (?calculateMedianGasPrice(chain)).u256
 
   if tx.value.isSome:
     res.value = tx.value.get
@@ -122,15 +122,15 @@ proc populateTransactionObject*(tx: Transaction,
   if (let sender = tx.recoverSenderCached(); sender.isOk):
     result.`from` = sender[]
   result.gas = Quantity(tx.gasLimit)
-  let baseFee = baseFeePerGas.get(0.u256).truncate(GasInt)
+  let baseFee = baseFeePerGas.get(0.u256)
   result.gasPrice =
     if tx.txType < TxEip1559:
-      Quantity(tx.gasPrice)
+      tx.gasPrice
     elif baseFeePerGas.isNone or tx.maxFeePerGas < baseFee:
       # Pending transactions, and transactions of rejected blocks.
-      Quantity(tx.maxFeePerGas)
+      tx.maxFeePerGas
     else:
-      Quantity(tx.effectiveGasPrice(baseFee))
+      tx.effectiveGasPrice(baseFee.truncate(GasInt))
   result.hash = tx.computeRlpHash
   result.input = tx.payload
   result.nonce = Quantity(tx.nonce)
@@ -151,8 +151,8 @@ proc populateTransactionObject*(tx: Transaction,
       result.chainId = chainId
 
   if tx.txType >= TxEip1559:
-    result.maxFeePerGas = Opt.some Quantity(tx.maxFeePerGas)
-    result.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
+    result.maxFeePerGas = Opt.some tx.maxFeePerGas
+    result.maxPriorityFeePerGas = Opt.some tx.maxPriorityFeePerGas
 
   if tx.txType == TxEip4844:
     result.maxFeePerBlobGas = Opt.some(tx.maxFeePerBlobGas)
@@ -273,8 +273,7 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
     res.status = Opt.some(Quantity(receipt.status.uint64))
 
   let baseFeePerGas = header.baseFeePerGas.get(0.u256)
-  let gasPrice = effectiveGasPrice(tx, baseFeePerGas.truncate(GasInt))
-  res.effectiveGasPrice = Quantity(gasPrice)
+  res.effectiveGasPrice = effectiveGasPrice(tx, baseFeePerGas.truncate(GasInt))
 
   if tx.txType == TxEip4844:
     res.blobGasUsed = Opt.some(Quantity(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))

@@ -158,7 +158,7 @@ proc prepareToRunComputation(params: CallParams) =
       ledger.incNonce(params.sender)
 
     # Charge for gas.
-    var gasFee = tx.gasLimit.u256 * params.effectiveGasPrice.u256
+    var gasFee = tx.gasLimit.u256 * params.effectiveGasPrice
     if fork >= Cancun:
       # EIP-4844
       gasFee += blobGasFee(tx.versionedHashes.len,
@@ -201,7 +201,7 @@ proc calculateAndPossiblyRefundGas(c: Computation, params: CallParams): GasUsed 
   # Refund for unused gas.
   let txGasLeft = tx.gasLimit - txGasUsed
   if txGasLeft > 0:
-    let gasRefundAmount = txGasLeft.u256 * params.effectiveGasPrice.u256
+    let gasRefundAmount = txGasLeft.u256 * params.effectiveGasPrice
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackAddBalanceChange(params.sender, gasRefundAmount)
     vmState.mutateLedger:

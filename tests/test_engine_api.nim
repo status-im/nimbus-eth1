@@ -190,7 +190,7 @@ proc makeSignedTx(env: TestEnv, nonce: AccountNonce = 0): Transaction =
     txType:   TxLegacy,
     chainId:  env.com.chainId,
     nonce:    nonce,
-    gasPrice: 30_000_000_000.GasInt,
+    gasPrice: 30_000_000_000.u256,
     gasLimit: 70_000.GasInt,
     to:       Opt.some(default(Address)),
     value:    1.u256,

@@ -44,12 +44,12 @@ type
     id    : Hash32             ## Transaction hash
     time  : Time               ## Time when added
     sender: Address            ## Sender account address
-    price : GasInt
+    price : UInt256
     rlpSize: uint64            ## `rlp.getEncodedLength(tx)`, see EIP-7934
 
   TxGasPrice = object
-    maxFee: GasInt
-    tip: GasInt
+    maxFee: UInt256
+    tip: UInt256
 
 # ------------------------------------------------------------------------------
 # Public functions, Constructor
@@ -76,7 +76,7 @@ proc new*(T: type TxItemRef;
 #  Public functions
 # -------------------------------------------------------------------------------
 
-func tip*(tx: Transaction; baseFee: GasInt): GasInt =
+func tip*(tx: Transaction; baseFee: GasInt): UInt256 =
   ## Tip calculator
   effectiveGasTip(tx, Opt.some(baseFee.u256))
 
@@ -121,7 +121,7 @@ template nonce*(item: TxItemRef): AccountNonce =
   ## Getter
   item.tx.nonce
 
-template price*(item: TxItemRef): GasInt =
+template price*(item: TxItemRef): UInt256 =
   ## Getter
   item.price
 
@@ -151,9 +151,9 @@ func validateTxGasBump*(current: TxItemRef, added: TxItemRef): Result[void, TxEr
     currentGasPrice = current.txGasPrice
     newGasPrice = added.txGasPrice
     minTipCap = currentGasPrice.tip +
-      (currentGasPrice.tip * MIN_GAS_PRICE_BUMP_PERCENT) div 100.GasInt
+      (currentGasPrice.tip * MIN_GAS_PRICE_BUMP_PERCENT.u256) div 100.u256
     minFeeCap = currentGasPrice.maxFee +
-      (currentGasPrice.maxFee * MIN_GAS_PRICE_BUMP_PERCENT) div 100.GasInt
+      (currentGasPrice.maxFee * MIN_GAS_PRICE_BUMP_PERCENT.u256) div 100.u256
 
   if newGasPrice.tip < minTipCap or newGasPrice.maxFee < minFeeCap:
     return err(txErrorReplacementGasTooLow)
