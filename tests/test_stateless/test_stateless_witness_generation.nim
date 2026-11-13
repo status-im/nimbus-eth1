@@ -36,7 +36,7 @@ suite "Stateless: Witness Generation":
     ledger.setStorage(addr1, slot1, 100.u256)
     ledger.setStorage(addr1, slot2, 200.u256)
     ledger.setStorage(addr1, slot3, 300.u256)
-    ledger.persist(clearWitness = true)
+    ledger.persist(clearEmptyAccounts = false, clearWitness = true)
 
 
   test "Get account":
@@ -71,7 +71,7 @@ suite "Stateless: Witness Generation":
 
   test "Set storage":
     ledger.setStorage(addr1, slot1, 20.u256)
-    ledger.persist()
+    ledger.persist(clearEmptyAccounts = false)
 
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
@@ -188,7 +188,7 @@ suite "Stateless: Witness Generation - collapses undone later in the block":
     ## Each (slot, value) write is its own transaction
     for (slot, value) in txs:
       ledger.setStorage(contract, slot, value)
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
 
   setup:
     let
@@ -249,23 +249,23 @@ suite "Stateless: Witness Generation - collapses undone later in the block":
         break
     preState.setBalance(x, 1.u256)
     preState.setBalance(y, 1.u256)
-    preState.persist()
+    preState.persist(clearEmptyAccounts = false)
 
     # Host: run the block and build the witness
     let host = LedgerRef.init(memDB.baseTxFrame().txFrameBegin(), false, collectWitness = true)
     host.selfDestruct(x)
-    host.persist()
+    host.persist(clearEmptyAccounts = false)
     host.setBalance(x, 2.u256)
-    host.persist()
+    host.persist(clearEmptyAccounts = false)
     let witness =
       Witness.build(host.getWitnessKeys(), host.txFrame.getCollapsedSiblings(), preState)
 
     # Guest: run the block on the witness only
     let guest = witness.statelessLedger(preState.getStateRoot())
     guest.selfDestruct(x)
-    guest.persist()
+    guest.persist(clearEmptyAccounts = false)
     guest.setBalance(x, 2.u256)
-    guest.persist()
+    guest.persist(clearEmptyAccounts = false)
 
     check:
       host.txFrame.getCollapsedSiblings().len == 0

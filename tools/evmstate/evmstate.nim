@@ -224,6 +224,8 @@ proc runExecution(ctx: var StateContext,
               else:
                 JsonTracer(nil)
 
+  discard writeGenesisAlloc(pre, com.db.baseTxFrame())
+
   let vmState = TestVMState()
   vmState.init(
     parent  = if conf.sanitizeEnv: com.sanitizeHeader(ctx.parent) else: ctx.parent,
@@ -236,10 +238,6 @@ proc runExecution(ctx: var StateContext,
     vmState.ledger.txFrame.dispose()
     vmState.dispose()
     com.db.close()
-
-  vmState.mutateLedger:
-    setupLedger(pre, ledger)
-    ledger.persist(clearEmptyAccount = false) # settle accounts storage
 
   let (stateRoot, status) =
     if subTest.expectException.len == 0:

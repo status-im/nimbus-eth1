@@ -325,7 +325,7 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 
 
   # Finish up, then vmState.ledger.stateRoot may be accessed
-  ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
+  ledger.persist(vmState.fork.clearEmptyAccounts())
 
   # Update flexi-array, set proper length
   vmState.receipts.setLen(pst.packedTxs.len)

@@ -86,10 +86,10 @@ proc beforeExecCall(c: Computation): bool =
         c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
         ledger.subBalance(c.msg.sender, c.msg.value)
         c.vmState.balTracker.trackAddBalanceChange(c.msg.currentTarget, c.msg.value)
-        ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
+        ledger.addBalance(c.msg.currentTarget, c.msg.value, c.fork.checkEmptyAccount())
       else:
         ledger.subBalance(c.msg.sender, c.msg.value)
-        ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
+        ledger.addBalance(c.msg.currentTarget, c.msg.value, c.fork.checkEmptyAccount())
 
     if c.fork >= FkAmsterdam:
       # EIP-7708: Emit transfer log for ETH-tx or contract call and CALL op code
@@ -115,15 +115,15 @@ proc beforeExecCreate(c: Computation): bool =
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
       ledger.subBalance(c.msg.sender, c.msg.value)
       c.vmState.balTracker.trackAddBalanceChange(c.msg.currentTarget, c.msg.value)
-      ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       ledger.clearStorage(c.msg.currentTarget)
+      ledger.addBalance(c.msg.currentTarget, c.msg.value, c.fork.checkEmptyAccount())
       if c.fork >= FkSpurious:
         c.vmState.balTracker.trackIncNonceChange(c.msg.currentTarget)
         ledger.incNonce(c.msg.currentTarget)
     else:
       ledger.subBalance(c.msg.sender, c.msg.value)
-      ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       ledger.clearStorage(c.msg.currentTarget)
+      ledger.addBalance(c.msg.currentTarget, c.msg.value, c.fork.checkEmptyAccount())
       if c.fork >= FkSpurious:
         # EIP161 nonce incrementation
         ledger.incNonce(c.msg.currentTarget)

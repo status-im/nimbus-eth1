@@ -65,7 +65,7 @@ suite "Stateroot Mismatch Checks":
     block:
       let ac0 = LedgerRef.init(txFrame0, false)
       ac0.setBalance(addr3, 300.u256)
-      ac0.persist(clearCache = true)
+      ac0.persist(clearEmptyAccounts = false, clearCache = true)
       txFrame0.checkpoint(1.BlockNumber, skipSnapshot = false)
       memDB.persist(txFrame0)
 
@@ -77,8 +77,8 @@ suite "Stateroot Mismatch Checks":
         ac1 = LedgerRef.init(txFrame1, false)
         preStateRoot = ac1.getStateRoot()
 
-      ac1.addBalance(addr1, 50.u256)
-      ac1.persist(clearCache = true)
+      ac1.addBalance(addr1, 50.u256, checkEmptyAccount = false)
+      ac1.persist(clearEmptyAccounts = false, clearCache = true)
       txFrame1.checkpoint(2.BlockNumber, skipSnapshot = false)
 
       let postStateRoot = ac1.getStateRoot()
@@ -90,8 +90,8 @@ suite "Stateroot Mismatch Checks":
         ac2 = LedgerRef.init(txFrame2, false)
         preStateRoot = ac2.getStateRoot()
 
-      ac2.addBalance(addr2, 200.u256)
-      ac2.persist(clearCache = true)
+      ac2.addBalance(addr2, 200.u256, checkEmptyAccount = false)
+      ac2.persist(clearEmptyAccounts = false, clearCache = true)
       txFrame2.checkpoint(3.BlockNumber, skipSnapshot = false)
       memDB.persist(txFrame2)
 
@@ -106,8 +106,8 @@ suite "Stateroot Mismatch Checks":
         ac3 = LedgerRef.init(txFrame3, false)
         preStateRoot = ac3.getStateRoot()
 
-      ac3.addBalance(addr1, 50.u256)
-      ac3.persist(clearCache = true)
+      ac3.addBalance(addr1, 50.u256, checkEmptyAccount = false)
+      ac3.persist(clearEmptyAccounts = false, clearCache = true)
 
       check:
         # Check balances
@@ -136,7 +136,7 @@ suite "Stateroot Mismatch Checks":
       ac0.setBalance(addr1, 0.u256)
       ac0.setCode(addr1, code)
       ac0.setStorage(addr1, slot3, 300.u256)
-      ac0.persist(clearCache = true)
+      ac0.persist(clearEmptyAccounts = false, clearCache = true)
       txFrame0.checkpoint(1.BlockNumber, skipSnapshot = false)
       memDB.persist(txFrame0)
 
@@ -150,7 +150,7 @@ suite "Stateroot Mismatch Checks":
 
       discard ac1.getStorage(addr1, slot1)
       ac1.setStorage(addr1, slot1, 50.u256)
-      ac1.persist(clearCache = true)
+      ac1.persist(clearEmptyAccounts = false, clearCache = true)
       txFrame1.checkpoint(2.BlockNumber, skipSnapshot = false)
 
       let postStateRoot = ac1.getStateRoot()
@@ -163,7 +163,7 @@ suite "Stateroot Mismatch Checks":
         preStateRoot = ac2.getStateRoot()
 
       ac2.setStorage(addr1, slot2, 200.u256)
-      ac2.persist(clearCache = true)
+      ac2.persist(clearEmptyAccounts = false, clearCache = true)
       txFrame2.checkpoint(3.BlockNumber, skipSnapshot = false)
       memDB.persist(txFrame2)
 
@@ -180,7 +180,7 @@ suite "Stateroot Mismatch Checks":
 
       let slotValue = ac3.getStorage(addr1, slot1)
       ac3.setStorage(addr1, slot1, slotValue + 50.u256)
-      ac3.persist(clearCache = true)
+      ac3.persist(clearEmptyAccounts = false, clearCache = true)
 
       check:
         # Check slots

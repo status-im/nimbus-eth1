@@ -14,7 +14,6 @@ import
   std/[json, os, strutils],
   chronos,
   unittest2,
-  stew/byteutils,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/conversions,
@@ -25,15 +24,14 @@ import
   ../../execution_chain/common/common,
   ./eest_helpers
 
-proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
+proc parseBlocks*(node: openArray[BlockDescNode]): seq[BlockDesc] =
   for x in node:
     try:
-      let blockRLP = hexToSeqByte(x["rlp"].getStr)
-      let blk = rlp.decode(blockRLP, EthBlock)
+      let blk = rlp.decode(x.rlp, EthBlock)
       result.add BlockDesc(
         blk: blk,
         #bal: parseBAL(x),
-        badBlock: "expectException" in x,
+        badBlock: x.expectException.len > 0,
       )
     except RlpError:
       # invalid rlp will not participate in block validation

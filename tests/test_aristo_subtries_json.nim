@@ -107,10 +107,10 @@ suite "Aristo subtries json tests":
           subtrieLedger.getBalance(address) == account.balance
 
         # Update values in the subtrie and check that the state root matches the full trie
-        fullTrieLedger.addBalance(address, 1.u256)
-        fullTrieLedger.persist()
-        subtrieLedger.addBalance(address, 1.u256)
-        subtrieLedger.persist()
+        fullTrieLedger.addBalance(address, 1.u256, checkEmptyAccount = false)
+        fullTrieLedger.persist(clearEmptyAccounts = false)
+        subtrieLedger.addBalance(address, 1.u256, checkEmptyAccount = false)
+        subtrieLedger.persist(clearEmptyAccounts = false)
 
         check:
           fullTrieLedger.getStateRoot() != stateRoot
@@ -161,15 +161,15 @@ suite "Aristo subtries json tests":
           check subtrieLedger.getStorage(address, k) == v
 
         # Update values in the subtrie and check that the state root matches the full trie
-        fullTrieLedger.addBalance(address, 1.u256)
+        fullTrieLedger.addBalance(address, 1.u256, checkEmptyAccount = false)
         for k, v in account.storage.pairs():
           fullTrieLedger.setStorage(address, k, v + 1.u256)
-        fullTrieLedger.persist()
+        fullTrieLedger.persist(clearEmptyAccounts = false)
 
-        subtrieLedger.addBalance(address, 1.u256)
+        subtrieLedger.addBalance(address, 1.u256, checkEmptyAccount = false)
         for k, v in account.storage.pairs():
           subtrieLedger.setStorage(address, k, v + 1.u256)
-        subtrieLedger.persist()
+        subtrieLedger.persist(clearEmptyAccounts = false)
 
         check:
           fullTrieLedger.getStateRoot() != stateRoot
@@ -258,7 +258,7 @@ suite "Aristo subtries json tests":
       let slot = i.u256
       ledger.setStorage(address, slot, slotValue)
       slotPaths.add(keccak256(slot.toBytesBE()))
-    ledger.persist()
+    ledger.persist(clearEmptyAccounts = false)
 
     let stateRoot = ledger.getStateRoot()
 
@@ -301,12 +301,12 @@ suite "Aristo subtries json tests":
       check subtrieLedger.getStorage(address, i.u256) == slotValue
 
     # Update values in the subtrie and check that the state root matches the full trie
-    fullTrieLedger.addBalance(address, 1000.u256)
+    fullTrieLedger.addBalance(address, 1000.u256, checkEmptyAccount = false)
     fullTrieLedger.setStorage(address, 0.u256, 100.u256)
-    fullTrieLedger.persist()
-    subtrieLedger.addBalance(address, 1000.u256)
+    fullTrieLedger.persist(clearEmptyAccounts = false)
+    subtrieLedger.addBalance(address, 1000.u256, checkEmptyAccount = false)
     subtrieLedger.setStorage(address, 0.u256, 100.u256)
-    subtrieLedger.persist()
+    subtrieLedger.persist(clearEmptyAccounts = false)
 
     check:
       fullTrieLedger.getStateRoot() != stateRoot
@@ -446,7 +446,7 @@ suite "Aristo subtries json tests":
     # Full node: an account with one storage slot
     fullLedger.setBalance(address, 10.u256)
     fullLedger.setStorage(address, 1.u256, 7.u256)
-    fullLedger.persist()
+    fullLedger.persist(clearEmptyAccounts = false)
 
     # Witness with the account but without its storage trie
     let
@@ -471,7 +471,7 @@ suite "Aristo subtries json tests":
     for ledger in [fullLedger, clearLedger]:
       ledger.clearStorage(address)
       ledger.setStorage(address, 2.u256, 8.u256)
-      ledger.persist()
+      ledger.persist(clearEmptyAccounts = false)
     check:
       clearLedger.fatalError.isNone()
       clearLedger.getStateRoot() == fullLedger.getStateRoot()
