@@ -50,6 +50,12 @@ proc invalidParams*(msg: string): ref RpcResponseError =
     msg: msg,
   )
 
+proc prunedHistory*(): ref RpcResponseError =
+  (ref RpcResponseError)(
+    code: 4444,
+    msg: "Pruned history unavailable",
+  )
+
 proc calculateMedianGasPrice*(chain: ForkedChainRef): Result[GasInt, string] =
   const minGasPrice = 30_000_000_000.GasInt
   let blk = ?chain.latestBlock

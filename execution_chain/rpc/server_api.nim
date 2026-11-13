@@ -99,6 +99,34 @@ proc getProof*(
       storageProof: storage,
     )
 
+proc parseStorageKey(
+    key: string
+): tuple[slot: UInt256, echoKey: string] {.raises: [RpcResponseError].} =
+  ## An eth_getProof key echoes as 32 bytes when it has 63 or 64 hex digits,
+  ## and as a minimal quantity otherwise.
+  if key.len < 2 or key[0] != '0' or key[1] notin {'x', 'X'}:
+    raise invalidParams("invalid hex in storage key: \"" & key & "\"")
+  let digits = key[2 .. ^1]
+  if digits.len > 64:
+    raise invalidParams(
+      "storage key too long (want at most 32 bytes): \"" & key & "\"")
+  for c in digits:
+    if c notin HexDigits:
+      raise invalidParams("invalid hex in storage key: \"" & key & "\"")
+
+  let slot =
+    if digits.len == 0:
+      0.u256
+    else:
+      try:
+        parse(digits, UInt256, 16)
+      except ValueError as exc:
+        raiseAssert "validated hex digits: " & exc.msg
+  if digits.len >= 63:
+    (slot, slot.to(Bytes32).to0xHex)
+  else:
+    (slot, "0x" & slot.toHex)
+
 proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Header, string] =
   api.chain.headerFromTag(blockTag)
 
@@ -666,21 +694,44 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       )
 
     proc eth_getProof(
-      data: Address, slots: seq[UInt256], quantityTag: Opt[BlockTag]
-    ): ProofResponse {.raises: [ValueError].} =
+      data: Address, slots: seq[string], quantityTag: Opt[BlockTag]
+    ): RpcProofResponse {.raises: [RpcResponseError, ValueError].} =
       ## Returns information about an account and storage slots (if the account is a contract
       ## and the slots are requested) along with account and storage proofs which prove the
       ## existence of the values in the state.
       ## See spec here: https://eips.ethereum.org/EIPS/eip-1186
       ##
       ## data: address of the account.
-      ## slots: integers of the positions in the storage to return with storage proofs.
+      ## slots: storage keys as hex strings of at most 64 digits, returned with storage proofs.
       ## quantityTag: integer block number, or the string "latest", "earliest" or "pending", see the default block parameter.
       ## Returns: the proof response containing the account, account proof and storage proof
-      let
-        txFrame = api.frameFromTag(quantityTag.get(defaultTag)).valueOr:
-          raise newException(ValueError, error)
-      getProof(txFrame, data, slots)
+      var
+        keys = newSeqOfCap[UInt256](slots.len)
+        echoKeys = newSeqOfCap[string](slots.len)
+      for slot in slots:
+        let (key, echoKey) = parseStorageKey(slot)
+        keys.add key
+        echoKeys.add echoKey
+
+      let header = api.headerFromTag(quantityTag.get(defaultTag)).valueOr:
+        raise newException(ValueError, error)
+      if header.number < api.chain.baseNumber:
+        raise prunedHistory()
+
+      let proof = getProof(api.chain.txFrame(header), data, keys)
+      var storageProof = newSeqOfCap[RpcStorageProof](proof.storageProof.len)
+      for i, item in proof.storageProof:
+        storageProof.add RpcStorageProof(
+          key: echoKeys[i], value: item.value, proof: item.proof)
+      RpcProofResponse(
+        address: proof.address,
+        accountProof: proof.accountProof,
+        balance: proof.balance,
+        codeHash: proof.codeHash,
+        nonce: proof.nonce,
+        storageHash: proof.storageHash,
+        storageProof: storageProof,
+      )
 
     proc eth_getBlockReceipts(
       quantityTag: BlockTag
