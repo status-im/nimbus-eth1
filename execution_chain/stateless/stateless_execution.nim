@@ -332,7 +332,7 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
       Hash32(input.new_payload_request.executionPayload.block_hash.data):
     return err("Invalid block hash")
 
-  ?is_valid_versioned_hashes(input.new_payload_request.versionedHashes, blk)
+  ?is_valid_versioned_hashes(input.new_payload_request.versionedHashes.asSeq, blk)
 
   statelessProcessBlock(input.witness, com, blk)
 
