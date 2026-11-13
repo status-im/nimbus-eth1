@@ -71,8 +71,7 @@ proc dispose*[E, T](q: var ConcurrentQueue[E, T]) =
 
 proc `=copy`*[E, T](
     dest: var ConcurrentQueue[E, T], src: ConcurrentQueue[E, T]
-) {.error: "Copying ConcurrentQueue is forbidden".} =
-  discard
+) {.error: "Copying ConcurrentQueue is forbidden".}
 
 template capacity*(q: ConcurrentQueue): int =
   q.data.len() - 1

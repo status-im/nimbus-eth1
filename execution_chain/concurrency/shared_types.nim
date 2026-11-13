@@ -64,8 +64,7 @@ proc dispose*[E](s: var SharedSeq[E]) =
 
 proc `=copy`*[E](
     dest: var SharedSeq[E], src: SharedSeq[E]
-) {.error: "Copying SharedSeq is forbidden".} =
-  discard
+) {.error: "Copying SharedSeq is forbidden".}
 
 template toOpenArray[E](s: SharedSeq[E]): openArray[E] =
   s.data.toOpenArray(0, s.count - 1)
@@ -288,8 +287,7 @@ proc dispose*[K, V](s: var SharedTable[K, V]) =
 
 proc `=copy`*[K, V](
     dest: var SharedTable[K, V], src: SharedTable[K, V]
-) {.error: "Copying SharedTable is forbidden".} =
-  discard
+) {.error: "Copying SharedTable is forbidden".}
 
 template len*[K, V](s: SharedTable[K, V]): int =
   ## Number of key/value pairs in the table.
