@@ -10,5 +10,5 @@
 import json_rpc/rpcserver, ./rpc_types, ../version
 
 proc installWeb3ApiHandlers*(rpcServer: RpcServer) =
-  rpcServer.rpc("web3_clientVersion", EthJson) do() -> string:
+  rpcServer.rpc("web3_clientVersion", PortalJson) do() -> string:
     return clientVersion

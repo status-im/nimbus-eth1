@@ -13,10 +13,21 @@ import
   stew/byteutils,
   results,
   eth/p2p/discoveryv5/[routing_table, node],
-  json_serialization/pkg/results,
-  web3/eth_json_marshal
+  json_serialization,
+  json_serialization/pkg/results
 
-export eth_json_marshal, routing_table, enr, node, results
+export json_serialization, routing_table, enr, node, results
+
+# The Portal JSON-RPC has its own flavor, so that its serializers do not apply
+# to the Ethereum JSON-RPC types of the `EthJson` flavor. For example, `NodeId`
+# is an alias of `UInt256`.
+createJsonFlavor PortalJson,
+  automaticObjectSerialization = false,
+  requireAllFields = false,
+  omitOptionalFields = false,
+  allowUnknownFields = true,
+  skipNullFields = true,
+  automaticPrimitivesSerialization = false
 
 # Portal Network JSON-RPC errors
 
@@ -112,22 +123,23 @@ type
     peerCount*: int
     acceptMetadata*: AcceptMetadata
 
-NodeInfo.useDefaultSerializationIn EthJson
-RoutingTableInfo.useDefaultSerializationIn EthJson
-PingResult.useDefaultSerializationIn EthJson
-(string, string).useDefaultSerializationIn EthJson
-ContentInfo.useDefaultSerializationIn EthJson
-AcceptMetadata.useDefaultSerializationIn EthJson
-PutContentResult.useDefaultSerializationIn EthJson
+NodeInfo.useDefaultSerializationIn PortalJson
+RoutingTableInfo.useDefaultSerializationIn PortalJson
+PingResult.useDefaultSerializationIn PortalJson
+(string, string).useDefaultSerializationIn PortalJson
+ContentInfo.useDefaultSerializationIn PortalJson
+AcceptMetadata.useDefaultSerializationIn PortalJson
+PutContentResult.useDefaultSerializationIn PortalJson
 
-EthJson.automaticSerialization(int, true)
-EthJson.automaticSerialization(int64, true)
-EthJson.automaticSerialization(uint64, true)
-EthJson.automaticSerialization(uint16, true)
-EthJson.automaticSerialization(seq, true)
-EthJson.automaticSerialization(string, true)
-EthJson.automaticSerialization(bool, true)
-EthJson.automaticSerialization(JsonString, true)
+PortalJson.automaticSerialization(int, true)
+PortalJson.automaticSerialization(int64, true)
+PortalJson.automaticSerialization(uint64, true)
+PortalJson.automaticSerialization(uint16, true)
+PortalJson.automaticSerialization(seq, true)
+PortalJson.automaticSerialization(string, true)
+PortalJson.automaticSerialization(bool, true)
+PortalJson.automaticSerialization(JsonString, true)
+PortalJson.automaticSerialization(JsonNode, true)
 
 func getNodeInfo*(ln: LocalDiscoveryNode): NodeInfo =
   NodeInfo(enr: ln.record, nodeId: ln.id)
@@ -153,29 +165,33 @@ func toNodeWithAddress*(enr: Record): DiscoveryNode {.raises: [ValueError].} =
     node
 
 proc readValue*(
-    r: var JsonReader[EthJson], val: var EnrSeqNumber
+    r: var JsonReader[PortalJson], val: var EnrSeqNumber
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
   val = EnrSeqNumber(r.parseInt(uint64))
 
 proc writeValue*(
-    w: var JsonWriter[EthJson], v: EnrSeqNumber
+    w: var JsonWriter[PortalJson], v: EnrSeqNumber
 ) {.gcsafe, raises: [IOError].} =
   w.writeValue(uint64(v))
 
-proc writeValue*(w: var JsonWriter[EthJson], v: Record) {.gcsafe, raises: [IOError].} =
+proc writeValue*(
+    w: var JsonWriter[PortalJson], v: Record
+) {.gcsafe, raises: [IOError].} =
   w.writeValue(v.toURI())
 
 proc readValue*(
-    r: var JsonReader[EthJson], val: var Record
+    r: var JsonReader[PortalJson], val: var Record
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
   val = Record.fromURI(r.parseString()).valueOr:
     r.raiseUnexpectedValue("Invalid ENR")
 
-proc writeValue*(w: var JsonWriter[EthJson], v: NodeId) {.gcsafe, raises: [IOError].} =
+proc writeValue*(
+    w: var JsonWriter[PortalJson], v: NodeId
+) {.gcsafe, raises: [IOError].} =
   w.writeValue(v.toBytesBE().to0xHex())
 
 proc writeValue*(
-    w: var JsonWriter[EthJson], v: Opt[NodeId]
+    w: var JsonWriter[PortalJson], v: Opt[NodeId]
 ) {.gcsafe, raises: [IOError].} =
   if v.isSome():
     w.writeValue(v.get())
@@ -183,7 +199,7 @@ proc writeValue*(
     w.writeValue(JsonString("null"))
 
 proc readValue*(
-    r: var JsonReader[EthJson], val: var NodeId
+    r: var JsonReader[PortalJson], val: var NodeId
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
   try:
     val = NodeId.fromHex(r.parseString())
@@ -191,7 +207,7 @@ proc readValue*(
     r.raiseUnexpectedValue("NodeId parser error: " & exc.msg)
 
 proc writeValue*(
-    w: var JsonWriter[EthJson], v: Opt[seq[byte]]
+    w: var JsonWriter[PortalJson], v: Opt[seq[byte]]
 ) {.gcsafe, raises: [IOError].} =
   if v.isSome():
     w.writeValue(v.get().to0xHex())
@@ -199,7 +215,7 @@ proc writeValue*(
     w.writeValue("0x")
 
 proc readValue*(
-    r: var JsonReader[EthJson], val: var seq[byte]
+    r: var JsonReader[PortalJson], val: var seq[byte]
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
   try:
     val = hexToSeqByte(r.parseString())
@@ -207,7 +223,7 @@ proc readValue*(
     r.raiseUnexpectedValue("seq[byte] parser error: " & exc.msg)
 
 proc writeValue*(
-    w: var JsonWriter[EthJson], v: CapabilitiesPayload
+    w: var JsonWriter[PortalJson], v: CapabilitiesPayload
 ) {.gcsafe, raises: [IOError].} =
   w.beginRecord()
 
@@ -219,7 +235,7 @@ proc writeValue*(
   w.endRecord()
 
 proc readValue*(
-    r: var JsonReader[EthJson], val: var CapabilitiesPayload
+    r: var JsonReader[PortalJson], val: var CapabilitiesPayload
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   try:
     for field in r.readObjectFields():
@@ -242,7 +258,7 @@ proc readValue*(
 # a JSON array with less than size n items is provided. And default objects
 # (in this case empty string) will be applied for the missing items.
 proc readValue*(
-    r: var JsonReader[EthJson], value: var ContentItem
+    r: var JsonReader[PortalJson], value: var ContentItem
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   type IDX = typeof low(value)
   var count = 0
@@ -256,7 +272,7 @@ proc readValue*(
     r.raiseUnexpectedValue("Array length mismatch")
 
 proc readValue*(
-    r: var JsonReader[EthJson], val: var Opt[uint16]
+    r: var JsonReader[PortalJson], val: var Opt[uint16]
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   if r.tokKind == JsonValueKind.Null:
     reset val
@@ -265,7 +281,7 @@ proc readValue*(
     val.ok r.readValue(uint16)
 
 proc readValue*(
-    r: var JsonReader[EthJson], val: var Opt[UnknownPayload]
+    r: var JsonReader[PortalJson], val: var Opt[UnknownPayload]
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   if r.tokKind == JsonValueKind.Null:
     reset val
