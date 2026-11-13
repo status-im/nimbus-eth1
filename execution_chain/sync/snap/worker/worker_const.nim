@@ -74,7 +74,7 @@ const
     ## initial interval which is held deliberately small so that the ETA
     ## display kicks in early.
 
-  etaSplineDistMin2* = chronos.minutes(10)
+  etaSplineDistMin2* = chronos.minutes(15)
     ## Minimum spline distance for linear ETA interpolation applicable after
     ## initialisation with ` etaSplineDistMin1`.
 
