@@ -18,24 +18,26 @@ OUTPUT_FORMAT("elf64-littleriscv")
 OUTPUT_ARCH("riscv")
 ENTRY(_start)
 
-/* zisk v1.3.2-alpha `core/src/mem.rs`:
+/* zisk v1.4.0-alpha `core/src/mem.rs`:
  *
- *   ROM_ADDR           0x80000000  ROM_SIZE 0x08000000      program code
- *   FLOAT_LIB_ROM_ADDR 0x87f00000                           soft-float lib, top 1M
+ *   ROM_ADDR           0x90000000  ROM_SIZE 0x08000000      program code
+ *   ZISKLIB_ROM_ADDR   0x97e00000                           ZisK lib, 1M
+ *   FLOAT_LIB_ROM_ADDR 0x97f00000                           soft-float lib, top 1M
  *   RAM_ADDR           0xa0000000  RAM_SIZE 0x20000000
  *     STACK_ADDR       0xa0000000  STACK_SIZE 0x400000      zisk stack, unused here
  *     SYS_ADDR         0xa0400000  SYS_SIZE 0x10000         registers, UART, CSRs
  *     OUTPUT_ADDR      0xa0410000  OUTPUT_MAX_SIZE 0x20000  public output
- *     general RAM      0xa0430000
+ *     GENERAL_RAM_ADDR 0xa0430000
+ *   ZISKLIB_RAM_ADDR   0xbffc0000                           ZisK lib, 192K
  *   FLOAT_LIB_RAM_ADDR 0xbfff0000                           soft-float lib, top 64K
  *
- *   rom = [ROM_ADDR, FLOAT_LIB_ROM_ADDR)    = 0x07f00000 bytes
- *   ram = [general RAM, FLOAT_LIB_RAM_ADDR) = 0x1fbc0000 bytes
+ *   rom = [ROM_ADDR, ZISKLIB_ROM_ADDR)         = 0x07e00000 bytes
+ *   ram = [GENERAL_RAM_ADDR, ZISKLIB_RAM_ADDR) = 0x1fb90000 bytes
  */
 MEMORY
 {
-  rom (rx)  : ORIGIN = 0x80000000, LENGTH = 0x07f00000
-  ram (rw)  : ORIGIN = 0xa0430000, LENGTH = 0x1fbc0000
+  rom (rx)  : ORIGIN = 0x90000000, LENGTH = 0x07e00000
+  ram (rw)  : ORIGIN = 0xa0430000, LENGTH = 0x1fb90000
 }
 
 /* The standard builds the loaded image from the program headers rather than
