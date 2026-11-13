@@ -123,13 +123,13 @@ type
     savePoint: LedgerSpRef
 
     storeSlotHash*: bool
-    cache: TableRef[Address, AccountRef]
+    cache: Table[Address, AccountRef]
       ## The account cache, shared by all active save points and living on the
       ## ledger (never moved between save points). There is one live `AccountRef`
       ## per address; the undo journal restores the pre-save point state. A `nil`
       ## reference is an empty cache that auto-initializes on the first
       ## `beginSavePoint`.
-    cache2: TableRef[Address, AccountRef]
+    cache2: Table[Address, AccountRef]
       ## Second-level account cache, swapped with `cache` on `persist` so the
       ## just-persisted accounts are served from it instead of re-fetched.
     journal: seq[JournalEntry]
@@ -313,7 +313,7 @@ proc getAccount(ledger: LedgerRef, address: Address, shouldCreate = true): Accou
   if not result.isNil:
     return
 
-  if not ledger.cache2.isNil and ledger.cache2.pop(address, result):
+  if ledger.cache2.pop(address, result):
     # Check second-level cache
     ledger.cache[address] = result
     ledger.journal.add JournalEntry(kind: Create, address: address, prevFlags: result.flags)
@@ -563,7 +563,7 @@ proc writeDiff(ledger: LedgerRef) =
           ledger.setFatalErrorOrAssert($$error)
         txAcc[].storage.del(slot)
 
-      txAcc[].storageDels.clear()
+      txAcc[].storageDels.reset()
 
       for slot, value in txAcc[].storageDiff:
         let slotKey = ledger.slotKey(slot)
@@ -571,9 +571,9 @@ proc writeDiff(ledger: LedgerRef) =
           ledger.setFatalErrorOrAssert($$error)
         txAcc[].storage[slot] = value
 
-      txAcc[].storageDiff.clear()
+      txAcc[].storageDiff.reset()
 
-  ledger.collected.clear()
+  ledger.collected.reset()
 
 proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
   const info = "persistStorage(): "
@@ -601,7 +601,7 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
       # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
       original.storage[slot] = value
 
-  acc.overlayStorage.clear()
+  acc.overlayStorage.reset()
   ok()
 
 proc makeDirty(ledger: LedgerRef, address: Address, acc: AccountRef): AccountRef =
@@ -639,11 +639,6 @@ proc getStateRoot*(ledger: LedgerRef): Hash32 =
 
 
 proc beginSavePoint*(ledger: LedgerRef): LedgerSpRef =
-  if ledger.cache.isNil:
-    # auto-initialize the shared cache (e.g. for a raw `LedgerRef()` used by
-    # the parallel executor)
-    ledger.cache = newTable[Address, AccountRef]()
-
   let savePoint = LedgerSpRef(
     parentSavePoint: ledger.savePoint,
     journalIndex: ledger.journal.len
@@ -731,7 +726,7 @@ proc commit*(ledger: LedgerRef, savePoint: LedgerSpRef) =
   if ledger.savePoint.parentSavePoint.isNil:
     for codeHash, code in savePoint.pendingCode:
       ledger.code.put(codeHash, code)
-    savePoint.pendingCode.clear()
+    savePoint.pendingCode.reset()
   else:
     ledger.savePoint.pendingCode.mergeAndReset(savePoint.pendingCode)
 
@@ -745,8 +740,6 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   new result
   result.txFrame = db
   result.storeSlotHash = storeSlotHash
-  result.cache = newTable[Address, AccountRef]()
-  result.cache2 = newTable[Address, AccountRef]()
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
@@ -764,8 +757,8 @@ proc reinit*(ledger: LedgerRef, txFrame: CoreDbTxRef) =
   ledger.fatalError = Opt.none(string)
   ledger.balOverlay = Opt.none(BlockAccessListOverlay)
   ledger.collected.reset()
-  ledger.witnessKeys.clear()
-  ledger.savePoint.writtenCode.clear()
+  ledger.witnessKeys.reset()
+  ledger.savePoint.writtenCode.reset()
 
 proc getCodeHash*(ledger: LedgerRef, address: Address): Hash32 =
   const noCodeHash = default(Hash32)
@@ -1044,9 +1037,9 @@ proc clearStorage(acc: AccountRef) =
   ## Clear the account's storage on the next `persist` even if it was not
   ## modified. This is used to implement EIP-161's "clear empty accounts" rule.
   acc.original.clearStorage = true
-  acc.original.storageDiff.clear()
-  acc.original.storageDels.clear()
-  acc.original.storage.clear()
+  acc.original.storageDiff.reset()
+  acc.original.storageDels.reset()
+  acc.original.storage.reset()
 
 proc clearStorage*(ledger: LedgerRef, address: Address) =
   # If there is an existing account with the given address, its storage will get
@@ -1158,13 +1151,13 @@ template getWitnessKeys*(ledger: LedgerRef): WitnessTable =
   ledger.witnessKeys
 
 template clearWitnessKeys*(ledger: LedgerRef) =
-  ledger.witnessKeys.clear()
+  ledger.witnessKeys.reset()
 
 template clearCollapsedSiblings*(ledger: LedgerRef) =
   ledger.txFrame.clearCollapsedSiblings()
 
 template clearWrittenCode*(ledger: LedgerRef) =
-  ledger.savePoint.writtenCode.clear()
+  ledger.savePoint.writtenCode.reset()
 
 proc getBlockHash*(ledger: LedgerRef, blockNumber: BlockNumber): Hash32 =
   # Range checks must be done earlier, any miss here treated as an error:
@@ -1252,7 +1245,7 @@ proc persist*(
           acc.clearStorage()
         else:
           ledger.txFrame.clearStorage(acc.accPath).expect("can clear storage of account")
-          acc.original.storage.clear()
+          acc.original.storage.reset()
 
       if {IsNew, StatementChanged} * acc.flags != {}:
         # Update account before its storage, in case it's a new account
@@ -1272,7 +1265,7 @@ proc persist*(
         else:
           acc.persistStorage(ledger).isOkOr:
             ledger.setFatalErrorOrAssert(error)
-        acc.overlayStorage.clear()
+        acc.overlayStorage.reset()
 
       acc.flags.reset()
     else:
@@ -1291,14 +1284,14 @@ proc persist*(
     # scheme with little overhead
     # TODO https://github.com/nim-lang/Nim/issues/23759
     swap(ledger.cache, ledger.cache2)
-    ledger.cache.clear()
+    ledger.cache.reset()
 
-  ledger.dirty.clear()
+  ledger.dirty.reset()
   # The top-level save point is never rolled back, so its journal entries are
   # permanent (already committed to the frame): discard them.
   ledger.journal.setLen(0)
-  ledger.savePoint.selfDestruct.clear()
-  ledger.savePoint.accessList.clear() # EIP2929
+  ledger.savePoint.selfDestruct.reset()
+  ledger.savePoint.accessList.reset() # EIP2929
 
   if clearWitness:
     ledger.clearWitnessKeys()
@@ -1318,7 +1311,7 @@ proc storeHeldCode*(ledger: LedgerRef): Result[void, string] =
       ledger.txFrame.persistCodeByHash(codeHash, code.bytes()).isOkOr:
         return err("storeHeldCode(): " & error)
       code.persisted = true
-  ledger.heldCode.clear()
+  ledger.heldCode.reset()
   ok()
 
 iterator addresses*(ledger: LedgerRef): Address =
