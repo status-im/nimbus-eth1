@@ -13,7 +13,7 @@ export rpcserver
 
 # nimbus portal specific RPC methods for the Portal beacon network.
 proc installPortalNimbusBeaconApiHandlers*(rpcServer: RpcServer, lc: LightClient) =
-  rpcServer.rpc("portal_nimbus_beaconSetTrustedBlockRoot", EthJson) do(
+  rpcServer.rpc("portal_nimbus_beaconSetTrustedBlockRoot", PortalJson) do(
     blockRoot: string
   ) -> bool:
     let root = Digest.fromHex(blockRoot)

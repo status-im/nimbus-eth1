@@ -23,15 +23,15 @@ export tables
 # Portal Network JSON-RPC implementation as per specification:
 # https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 
-ContentInfo.useDefaultSerializationIn EthJson
-TraceContentLookupResult.useDefaultSerializationIn EthJson
-TraceObject.useDefaultSerializationIn EthJson
-FailureInfo.useDefaultSerializationIn EthJson
-NodeMetadata.useDefaultSerializationIn EthJson
-TraceResponse.useDefaultSerializationIn EthJson
+ContentInfo.useDefaultSerializationIn PortalJson
+TraceContentLookupResult.useDefaultSerializationIn PortalJson
+TraceObject.useDefaultSerializationIn PortalJson
+FailureInfo.useDefaultSerializationIn PortalJson
+NodeMetadata.useDefaultSerializationIn PortalJson
+TraceResponse.useDefaultSerializationIn PortalJson
 
 proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
-  rpcServer.rpc(EthJson):
+  rpcServer.rpc(PortalJson):
     proc portal_beaconFindContent(
         enr: Record, contentKey: string
     ): JsonString {.async: (raises: [ValueError, CancelledError]).} =
@@ -50,13 +50,13 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
             content: foundContent.content.to0xHex(),
             utpTransfer: foundContent.utpTransfer,
           )
-          EthJson.encode(res).JsonString
+          PortalJson.encode(res).JsonString
         of Nodes:
           let enrs = foundContent.nodes.map(
             proc(n: DiscoveryNode): Record =
               n.record
           )
-          let jsonEnrs = EthJson.encode(enrs)
+          let jsonEnrs = PortalJson.encode(enrs)
           ("{\"enrs\":" & jsonEnrs & "}").JsonString
 
     proc portal_beaconOffer(
@@ -105,7 +105,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       let
         res = await p.traceContentLookup(keyBytes, contentId)
         _ = res.content.valueOr:
-          let data = EthJson.encode(res.trace).JsonString
+          let data = PortalJson.encode(res.trace).JsonString
           raise contentNotFoundErrWithTrace(data)
 
       res

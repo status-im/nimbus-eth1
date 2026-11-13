@@ -7,7 +7,7 @@
 
 import
   chronicles,
-  std/[json, typetraits, math],
+  std/[json, typetraits, math, strutils],
   asynctest,
   web3/eth_api,
   stew/byteutils,
@@ -522,6 +522,14 @@ proc rpcMain*() =
     test "eth_getStorageAt":
       let res = await client.eth_getStorageAt(contractAccWithStorage, 1.u256, blockId(1'u64))
       check FixedBytes[32](2345.u256.toBytesBE) == res
+
+    test "eth_getStorageAt storage key too long is invalid params":
+      try:
+        discard await client.call("eth_getStorageAt",
+          %[%(contractAccWithStorage.to0xHex), %("0x" & '0'.repeat(65)), %"latest"], EthJson)
+        check false
+      except RpcResponseError as exc:
+        check exc.code == -32602
 
     test "eth_getStorageValues":
       let r = await client.call("eth_getStorageValues",
