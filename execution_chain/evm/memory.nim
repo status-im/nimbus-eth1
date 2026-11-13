@@ -24,8 +24,7 @@ type
 
 proc `=copy`*(
     dest: var EvmMemory, src: EvmMemory
-) {.error: "Copying EvmMemory is forbidden".} =
-  discard
+) {.error: "Copying EvmMemory is forbidden".}
 
 func init*(_: type EvmMemory): EvmMemory =
   EvmMemory()
