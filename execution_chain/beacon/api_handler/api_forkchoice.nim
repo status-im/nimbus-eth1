@@ -233,17 +233,16 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     validateVersion(attrs, com, apiVersion)
 
     # Engine API spec: invalid payload attributes must fail the fcU itself.
-    # This check is cheap, so it stays synchronous; the expensive block
-    # assembly is deferred to the background builder and any failure there
-    # surfaces as `unknownPayload` at getPayload time.
+    # This check is cheap, so it stays synchronous; the full block assembly
+    # is deferred to the background builder.
     if ethTime(attrs.timestamp) <= header.timestamp:
       raise invalidAttr("timestamp must be strictly later than parent")
 
     let id = computePayloadId(headHash, attrs)
     # A repeated fcU with identical attributes schedules a rebuild so the
     # payload includes transactions that arrived since the previous build.
-    # startPayloadBuild only enqueues the task; the fcU response is not
-    # blocked on assembly.
+    # startPayloadBuild only assembles an empty payload and enqueues the full
+    # build.
     ben.startPayloadBuild(id, headHash, attrs)
 
     info "Scheduled payload build for block proposal",
