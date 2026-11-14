@@ -75,6 +75,7 @@ proc readValue*(r: var JsonReader[Fixture], val: var EnvStruct)
     of "withdrawals": r.readValue(val.withdrawals)
     of "depositContractAddress": r.readValue(val.depositContractAddress)
     of "slotNumber": r.readValue(val.slotNumber)
+    of "parentSlotNumber": r.readValue(val.parentSlotNumber)
     else: discard r.readValue(JsonString)
 
   if not currentCoinbaseParsed:

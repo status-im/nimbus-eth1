@@ -286,7 +286,7 @@ proc runStaleFirstBuildTest(env: TestEnv): Result[void, string] =
   let
     ben = env.beaconEngine
     header = env.chain.latestHeader
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
@@ -350,7 +350,7 @@ proc runBackgroundBuildTest(env: TestEnv): Result[void, string] =
   let
     ben = env.beaconEngine
     header = env.chain.latestHeader
-    update = ForkchoiceStateV1(
+    update = ForkchoiceState(
       headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix

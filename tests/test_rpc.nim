@@ -488,9 +488,17 @@ proc rpcMain*() =
         check progress.target == res.syncObject.highestBlock.uint64
 
     test "eth_baseFee":
-      let res = await client.call("eth_baseFee", %[], EthJson)
+      let
+        res = await client.call("eth_baseFee", %[], EthJson)
+        header = env.chain.latestHeader
+        # TODO: EIP-8198: where nextHeader info came from?
+        nextHeader = Header(
+          number: header.number + 1,
+          timestamp: header.timestamp,
+          slotNumber: header.slotNumber
+        )
       check EthJson.decode(res.string, UInt256) ==
-        com.calcEip1599BaseFee(env.chain.latestHeader)
+        com.calcBaseFee(header, nextHeader)
 
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()
