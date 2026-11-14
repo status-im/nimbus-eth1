@@ -39,7 +39,7 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; precompile: Precompiles
     let unsignedTx = Transaction(
       txType: TxLegacy,
       nonce: 0,
-      gasPrice: 1.GasInt,
+      gasPrice: 1.u256,
       gasLimit: 1_000_000_000.GasInt,
       to: Opt.some precompileAddrs[precompile],
       value: 0.u256,

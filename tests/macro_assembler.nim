@@ -407,9 +407,9 @@ proc createSignedTx(payload: seq[byte], chainId: ChainId): Transaction =
   let unsignedTx = Transaction(
     txType: TxEip4844,
     nonce: 0,
-    gasPrice: 1.GasInt,
+    gasPrice: 1.u256,
     gasLimit: 500_000_000.GasInt,
-    maxFeePerGas: 1.GasInt,
+    maxFeePerGas: 1.u256,
     to: Opt.some codeAddress,
     value: 500.u256,
     payload: payload,

@@ -2,7 +2,7 @@
 {
   "data" : "0x",
   "gas" : "0x50000",
-  "gasPrice" : "0x31eea408f8e1799cb883da2927b1336521d73c2c14accfebb70d5c5af006c",
+  "gasPrice" : "0xffffffffffffffff",
   "nonce" : "0x1",
   "to" : "0xd0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0",
   "value" : "0x1",

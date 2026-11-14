@@ -295,9 +295,9 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         txNode["accountNonce"] = newJInt(accountNonce.int64)
         txNode["type"] = newJString($item.tx.txType)
         txNode["gasLimit"] = newJInt(item.tx.gasLimit.int64)
-        txNode["maxFeePerGas"] = newJInt(item.tx.maxFeePerGasNorm.int64)
-        txNode["maxPriorityFeePerGas"] = newJInt(item.tx.maxPriorityFeePerGasNorm.int64)
-        txNode["effectiveTip"] = newJInt(tip.int64)
+        txNode["maxFeePerGas"] = newJString($item.tx.maxFeePerGasNorm)
+        txNode["maxPriorityFeePerGas"] = newJString($item.tx.maxPriorityFeePerGasNorm)
+        txNode["effectiveTip"] = newJString($tip)
         txNode["value"] = newJString($item.tx.value)
         txNode["age"] = newJString($age)
 

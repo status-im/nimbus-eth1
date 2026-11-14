@@ -32,7 +32,7 @@ proc makeTx(nonce: uint64, key = senderKey): Transaction =
     txType: TxLegacy,
     chainId: 1.u256.ChainId,
     nonce: AccountNonce(nonce),
-    gasPrice: 1_000_000_000,
+    gasPrice: 1_000_000_000.u256,
     gasLimit: 21_000,
     to: Opt.some(recipient),
     value: 1.u256,

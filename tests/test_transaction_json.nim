@@ -30,14 +30,6 @@ const
     "EIP158": "SpuriousDragon",
   }.toTable
 
-  # Valid per the fixtures, but their gas price does not fit the 64-bit
-  # `Transaction.gasPrice`, so decoding rejects them
-  KNOWN_UNDECODABLE = [
-    "GasLimitPriceProductOverflowtMinusOne",
-    "TransactionWithHighGasPrice",
-    "V_equals38",
-  ]
-
 proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus)
 
 proc transactionJsonMain*() =
@@ -77,10 +69,9 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
     try:
       tx = rlp.decode(safeHexToSeqByte(fixture["txbytes"].getStr), Transaction)
     except RlpError, ValueError:
-      if title notin KNOWN_UNDECODABLE:
-        # Only transactions that are invalid for every fork may fail to decode
-        for forkName, forkData in results:
-          check "exception" in forkData
+      # Only transactions that are invalid for every fork may fail to decode
+      for forkName, forkData in results:
+        check "exception" in forkData
       continue
 
     for forkName, forkData in results:
