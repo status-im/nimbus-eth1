@@ -59,6 +59,7 @@
 
       nixosModules = rec {
         execution-client = import ./nix/services/execution-client.nix { inherit (self) packages; };
+        verified-proxy = import ./nix/services/verified-proxy.nix { inherit (self) packages; };
         default = execution-client;
       };
 
@@ -67,6 +68,8 @@
       in rec {
         execution-client = callPackage ./nix/services/checks/execution-client.nix { inherit self; };
         execution_client = execution-client;
+        verified-proxy = callPackage ./nix/services/checks/verified-proxy.nix { inherit self; };
+        verified_proxy = verified-proxy;
       });
     };
 }
