@@ -396,11 +396,22 @@ proc convertLeaf(
 
   ok(node)
 
+const keyNibbles = 64 # account and storage trie keys are 32-byte hashes
+
+func hexPrefixLen(hexPrefix: openArray[byte]): int =
+  ## Path length in nibbles. 0 when empty.
+  if hexPrefix.len == 0:
+    0
+  else:
+    2 * (hexPrefix.len - 1) + int((hexPrefix[0] and 0x10) != 0)
+
 proc convertSubtrie(
     key: HashKey,
     src: Table[Hash32, seq[byte]],
     dst: var Table[HashKey, NodeRef],
+    depth: int,
     isStorage: static bool): Result[void, AristoError] {.gcsafe, raises: [RlpError]} =
+  ## `depth`: number of key nibbles consumed above this node.
   # Precondition: trieNodes have already been validated using verifyProof
   # Does not allocate any vertex ids when creating the VertexRef types.
   var rlpNode =
@@ -418,28 +429,36 @@ proc convertSubtrie(
     case rlpNode.listLen()
     of 2:
       rlpNode.tryEnterList()
-      let (isLeaf, segm) = NibblesBuf.fromHexPrefix(rlpNode.blobView)
+      let
+        (isLeaf, segm) = NibblesBuf.fromHexPrefix(rlpNode.blobView)
+        segmLen = hexPrefixLen(rlpNode.blobView)
       rlpNode.skipElem() # now at the link or payload
 
       if isLeaf:
+        if depth + segmLen != keyNibbles:
+          return err(PartTrkPathLength)
         let n = ?convertLeaf(rlpNode.blobView, segm, isStorage)
         if not isStorage and AccLeafRef(n.vtx).stoID.isValid:
           # Convert the storage subtrie
-          ?convertSubtrie(n.key[0], src, dst, isStorage = true)
+          ?convertSubtrie(n.key[0], src, dst, 0, isStorage = true)
         n
       else: # Extension node
+        # The branch below takes one more nibble
+        if segmLen == 0 or depth + segmLen >= keyNibbles:
+          return err(PartTrkPathLength)
         let k = HashKey.fromRlpItem(rlpNode).valueOr:
           return err(PartTrkLinkExpected)
 
         # Convert the child branch node which will be merged with this extension node
-        ?convertSubtrie(k, src, dst, isStorage)
+        ?convertSubtrie(k, src, dst, depth + segmLen, isStorage)
 
         if dst.contains(k):
+          let childNode = dst.getOrDefault(k)
+          if childNode.vtx.vType != Branch:
+            return err(PartTrkGarbledNode)
           # The child stays in `dst`: the same branch may also hang directly
           # under another branch elsewhere in the witness.
-          let
-            childNode = dst.getOrDefault(k)
-            childBranch = BranchRef(childNode.vtx)
+          let childBranch = BranchRef(childNode.vtx)
 
           NodeRef(
             key: childNode.key,
@@ -452,18 +471,23 @@ proc convertSubtrie(
             vtx: BoundaryNodeRef.init(segm, k))
 
     of 17: # Branch node
+      if depth >= keyNibbles:
+        return err(PartTrkPathLength)
       var
         key: array[16, HashKey]
         i = 0
       let branch = BranchRef.init(default(VertexID), 0)
       for elem in rlpNode:
         if i == 16:
-          break # the 17th item is the branch value, unused in state tries
+          # Value slot: always empty in account and storage tries
+          if not (elem.isBlob() and elem.isEmpty()):
+            return err(PartTrkGarbledNode)
+          break
         let k = HashKey.fromRlpItem(elem).valueOr:
           return err(PartTrkLinkExpected)
         if k.len() > 0:
           discard branch.setUsed(i.uint8, true)
-          ?convertSubtrie(k, src, dst, isStorage)
+          ?convertSubtrie(k, src, dst, depth + 1, isStorage)
         key[i] = k
         inc i
       NodeRef(key: key, vtx: branch)
@@ -562,7 +586,7 @@ proc putSubtrie*(
 
   try:
     var convertedNodes: Table[HashKey, NodeRef]
-    ?convertSubtrie(key, nodes, convertedNodes, isStorage = false)
+    ?convertSubtrie(key, nodes, convertedNodes, 0, isStorage = false)
     ?db.putSubtrie(key, convertedNodes)
   except RlpError:
     return err(PartTrkRlpError)
