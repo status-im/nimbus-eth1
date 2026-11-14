@@ -65,8 +65,7 @@ proc dispose(indexData: var BalIndexData) =
 
 proc `=copy`(
     dest: var BalIndexData, src: BalIndexData
-) {.error: "Copying BalIndexData is forbidden".} =
-  discard
+) {.error: "Copying BalIndexData is forbidden".}
 
 proc init*(builder: var BlockAccessListBuilder) =
   # Is a no-op because the perIndex array is zero initialized
@@ -90,8 +89,7 @@ proc dispose*(builderPtr: ptr BlockAccessListBuilder) =
 
 proc `=copy`(
     dest: var BlockAccessListBuilder, src: BlockAccessListBuilder
-) {.error: "Copying BlockAccessListBuilder is forbidden".} =
-  discard
+) {.error: "Copying BlockAccessListBuilder is forbidden".}
 
 proc ensureIndexCount*(builder: var BlockAccessListBuilder, n: int, exact = false) =
   if n > builder.perIndex.len:

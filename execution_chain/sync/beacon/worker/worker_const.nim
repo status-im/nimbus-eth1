@@ -96,7 +96,7 @@ const
     ## reset and suspened (waiting for the next activation to restart a new
     ## session.)
 
-  nFetchHeadersRequest* = 800
+  nFetchHeadersRequest* = 1024
     ## Number of headers that will be requested with a single `eth/xx` message.
     ##
     ## On `Geth`, responses to larger requests are all truncted to 1024 header

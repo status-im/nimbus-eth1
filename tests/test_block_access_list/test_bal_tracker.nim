@@ -668,7 +668,7 @@ suite "Block access list tracker":
     tracker.setBlockAccessIndex(1)
     tracker.beginCallFrame()
     tracker.trackAddBalanceChange(address1, 5.u256)
-    ledger.addBalance(address1, 5.u256)
+    ledger.addBalance(address1, 5.u256, checkEmptyAccount = false)
     tracker.trackIncNonceChange(address1)
     ledger.incNonce(address1)
     tracker.beginCallFrame()

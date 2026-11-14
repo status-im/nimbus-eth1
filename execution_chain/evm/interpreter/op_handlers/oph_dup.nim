@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -41,23 +41,17 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Duplicate " & blurb & " item in the stack"
 
 
-template dupImpl(cpt: VmCpt; n: int): EvmResultVoid =
+template dupImpl*(cpt: VmCpt; n: static int): EvmResultVoid =
   cpt.stack.dup(n)
 
 const
   inxRange = toSeq(1 .. 16)
 
 # ------------------------------------------------------------------------------
-# Private, op handlers implementation
-# ------------------------------------------------------------------------------
-
-genOphHandlers fnName, fnInfo, inxRange, dupImpl
-
-# ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-genOphList fnName, fnInfo, inxRange, "VmOpExecDup", opName
+genOphList fnName, fnInfo, inxRange, "VmOpExecDup", opName, inlined = true
 
 # ------------------------------------------------------------------------------
 # End

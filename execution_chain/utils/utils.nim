@@ -167,6 +167,11 @@ func hasBody*(h: Header): bool =
 func generateAddress*(address: Address, nonce: AccountNonce): Address =
   result.data[0..19] = keccak256(rlp.encodeList(address, nonce)).data.toOpenArray(12, 31)
 
+func clampToGasInt*(price: UInt256): GasInt =
+  ## Saturating conversion of a fee to `GasInt`, for 64-bit fee suggestions
+  if price > high(GasInt).u256: high(GasInt)
+  else: price.truncate(GasInt)
+
 const ZERO_CONTRACTSALT* = default(Bytes32)
 
 func generateSafeAddress*(address: Address, salt: Bytes32,

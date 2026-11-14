@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -149,5 +149,5 @@ proc applyDAOHardFork*(ledger: LedgerRef) =
   const zero = 0.u256
   # Move every DAO account and extra-balance account funds into the refund contract
   for address in DAODrainList:
-    ledger.addBalance(DAORefundContract, ledger.getBalance(address))
+    ledger.addBalance(DAORefundContract, ledger.getBalance(address), checkEmptyAccount = true)
     ledger.setBalance(address, zero)

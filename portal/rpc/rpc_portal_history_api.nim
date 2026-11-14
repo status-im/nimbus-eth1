@@ -30,18 +30,18 @@ export tables
 # These methods to be used for EL client integration.
 # They require the Header parameter in order for validation on the JSON-RPC server side (= Portal node).
 
-ContentInfo.useDefaultSerializationIn EthJson
-TraceContentLookupResult.useDefaultSerializationIn EthJson
-TraceObject.useDefaultSerializationIn EthJson
-FailureInfo.useDefaultSerializationIn EthJson
-NodeMetadata.useDefaultSerializationIn EthJson
-TraceResponse.useDefaultSerializationIn EthJson
+ContentInfo.useDefaultSerializationIn PortalJson
+TraceContentLookupResult.useDefaultSerializationIn PortalJson
+TraceObject.useDefaultSerializationIn PortalJson
+FailureInfo.useDefaultSerializationIn PortalJson
+NodeMetadata.useDefaultSerializationIn PortalJson
+TraceResponse.useDefaultSerializationIn PortalJson
 
 # TODO: It would be cleaner to use the existing getContent call for
 # less code duplication + automatic retries, but the specific error messages + extra content
 # info would need to be added to the existing calls.
 proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
-  rpcServer.rpc(EthJson):
+  rpcServer.rpc(PortalJson):
     proc portal_historyGetContent(
         contentKeyBytes: string
     ): ContentInfo {.async: (raises: [RpcResponseError, ValueError, CancelledError]).} =
@@ -90,7 +90,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
       let
         res = await n.portalProtocol.traceContentLookup(contentKeyByteList, contentId)
         valueBytes = res.content.valueOr:
-          let data = EthJson.encode(res.trace).JsonString
+          let data = PortalJson.encode(res.trace).JsonString
           raise contentNotFoundErrWithTrace(data)
 
       res

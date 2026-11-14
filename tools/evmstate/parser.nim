@@ -45,15 +45,15 @@ type
     chainId* : Opt[UInt256]
     nonce*   : Opt[AccountNonce]
     to*      : string
-    gasPrice*: Opt[GasInt]
+    gasPrice*: Opt[UInt256]
 
     gasLimit*: seq[GasInt]
     value*   : seq[UInt256]
     data*    : seq[seq[byte]]
 
-    maxFeePerGas*        : Opt[GasInt]
+    maxFeePerGas*        : Opt[UInt256]
     accessLists*         : Opt[seq[AccessList]]
-    maxPriorityFeePerGas*: Opt[GasInt]
+    maxPriorityFeePerGas*: Opt[UInt256]
     maxFeePerBlobGas*    : Opt[UInt256]
     blobVersionedHashes* : Opt[seq[Hash32]]
     authorizationList*   : Opt[seq[Authorization]]

@@ -52,8 +52,7 @@ proc dispose*(l: var ReadWriteLock) =
 
 proc `=copy`*(
     dest: var ReadWriteLock, src: ReadWriteLock
-) {.error: "Copying ReadWriteLock is forbidden".} =
-  discard
+) {.error: "Copying ReadWriteLock is forbidden".}
 
 template atomicAdd(a: var Atomic[int32], delta: int32, order: MemoryOrder): int32 =
   a.fetchAdd(delta, order) + delta

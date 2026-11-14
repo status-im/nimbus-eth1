@@ -30,3 +30,12 @@ type
 
 const
   FkLatest* = EVMFork.high
+
+template clearEmptyAccounts*(fork: EVMFork): bool =
+  ## EIP-161: Clear empty accounts that were touched by a transaction.
+  fork >= FkSpurious
+
+template checkEmptyAccount*(fork: EVMFork): bool =
+  ## EIP-7523: After the merge there are no more empty account checks so we no
+  ## longer need to check for empty accounts when adding balance to an account.
+  fork < FkParis

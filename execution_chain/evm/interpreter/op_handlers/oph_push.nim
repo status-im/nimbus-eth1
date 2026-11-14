@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -40,23 +40,17 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Push " & blurb & " on the stack"
 
 
-template pushImpl(cpt: VmCpt; n: static int): EvmResultVoid =
+template pushImpl*(cpt: VmCpt; n: static int): EvmResultVoid =
   cpt.stack.push cpt.code.readVmWord(n)
 
 const
   inxRange = toSeq(1 .. 32)
 
 # ------------------------------------------------------------------------------
-# Private, op handlers implementation
-# ------------------------------------------------------------------------------
-
-genOphHandlers fnName, fnInfo, inxRange, pushImpl
-
-# ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-genOphList fnName, fnInfo, inxRange, "VmOpExecPush", opName
+genOphList fnName, fnInfo, inxRange, "VmOpExecPush", opName, inlined = true
 
 
 # Push0 needs to be slightly different because it's only available after
@@ -65,7 +59,7 @@ genOphList fnName, fnInfo, inxRange, "VmOpExecPush", opName
 # about which opcodes are for which forks, but that seems uglier than
 # just adding Push0 here as a special case.)
 
-proc push0Op(cpt: VmCpt): EvmResultVoid =
+template push0Op*(cpt: VmCpt): EvmResultVoid =
   ## 0x5f, push 0 onto the stack
   cpt.stack.push(0)
 
@@ -76,7 +70,7 @@ const
      forks: VmOpShanghaiAndLater,
      name: "Push0",
      info: "Push 0 on the stack",
-     exec: push0Op)]
+     exec: VmOpInlined)]
 
 # ------------------------------------------------------------------------------
 # End

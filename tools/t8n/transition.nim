@@ -325,11 +325,11 @@ proc exec(ctx: TransContext,
       uncleReward = uncleReward * blockReward
       uncleReward = uncleReward div 8.u256
       vmState.mutateLedger:
-        ledger.addBalance(uncle.address, uncleReward)
+        ledger.addBalance(uncle.address, uncleReward, vmState.fork.checkEmptyAccount())
       mainReward += blockReward div 32.u256
 
     vmState.mutateLedger:
-      ledger.addBalance(ctx.env.currentCoinbase, mainReward)
+      ledger.addBalance(ctx.env.currentCoinbase, mainReward, vmState.fork.checkEmptyAccount())
 
   # Setup block access list tracker for post-execution system calls
   if vmState.balTrackerEnabled:
@@ -340,10 +340,10 @@ proc exec(ctx: TransContext,
     if vmState.balTrackerEnabled:
       for withdrawal in ctx.env.withdrawals.get:
         vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
-        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount, vmState.fork.checkEmptyAccount())
     else:
       for withdrawal in ctx.env.withdrawals.get:
-        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
+        vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount, vmState.fork.checkEmptyAccount())
 
   let miner = ctx.env.currentCoinbase
   coinbaseStateClearing(vmState, miner, stateReward.isSome())
@@ -449,7 +449,7 @@ proc setupAlloc(ledger: LedgerRef, alloc: GenesisAlloc) =
     # The pre-state must contain every alloc account, even empty ones that no
     # transaction touches (their values never change, so the setters above do
     # not mark them dirty).
-    ledger.forcePersist(accAddr)
+    ledger.touch(accAddr)
 
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
   # we can't raise exception here, it'll mess with EVM exception handler.
@@ -656,7 +656,7 @@ proc transitionAction*(ctx: var TransContext,
 
   vmState.mutateLedger:
     ledger.setupAlloc(ctx.alloc)
-    ledger.persist(clearEmptyAccount = false)
+    ledger.persist(clearEmptyAccounts = false)
 
   ? ctx.parseTxs(com.chainId)
   let res = ? exec(ctx, vmState, conf.stateReward, header, conf)

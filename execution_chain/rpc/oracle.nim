@@ -137,7 +137,7 @@ proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float
       gasUsed = bc.receipts[i].cumulativeGasUsed - prevUsed
     sorter[i] = TxGasAndReward(
       gasUsed: gasUsed.uint64,
-      reward: reward.u256
+      reward: reward
     )
     prevUsed = bc.receipts[i].cumulativeGasUsed
 

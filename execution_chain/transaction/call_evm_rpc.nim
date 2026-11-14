@@ -36,9 +36,9 @@ proc callVMState(
   let vmState = BaseVMState.new(Header(number: header.number - 1), header, com, txFrame)
 
   # A call without fees runs with a zero base fee, like geth with NoBaseFee.
-  if args.gasPrice.get(0.Quantity).uint64 == 0 and
-      args.maxFeePerGas.get(0.Quantity).uint64 == 0 and
-      args.maxPriorityFeePerGas.get(0.Quantity).uint64 == 0:
+  if args.gasPrice.get(0.u256).isZero and
+      args.maxFeePerGas.get(0.u256).isZero and
+      args.maxPriorityFeePerGas.get(0.u256).isZero:
     vmState.blockCtx.baseFeePerGas = 0
 
   vmState
@@ -102,7 +102,7 @@ proc rpcEstimateGas*(
   let feeCap = params.effectiveGasPrice
 
   # Recap the highest gas limit with account's available balance.
-  if feeCap > 0:
+  if not feeCap.isZero:
     if args.source.isNone:
       return err(OutputResult(error: "source is none, expect some"))
 
@@ -115,7 +115,7 @@ proc rpcEstimateGas*(
           $available & ", expect: " & $value))
       available -= value
 
-    let allowance = available div feeCap.u256
+    let allowance = available div feeCap
     # If the allowance is larger than maximum GasInt, skip checking
     if allowance < high(GasInt).u256 and hi > allowance.truncate(GasInt):
       let transfer = args.value.get(0.u256)

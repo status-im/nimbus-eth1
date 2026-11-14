@@ -353,8 +353,7 @@ proc dispose(s: var LruCache) =
 
 proc `=copy`[K, V](
     dest: var LruCache[K, V], src: LruCache[K, V]
-) {.error: "Copying LruCache is forbidden".} =
-  discard
+) {.error: "Copying LruCache is forbidden".}
 
 iterator mvalues[K, V](s: var LruCache[K, V]): var V =
   ## Mutable references to the values in MRU order - starting from the front
@@ -810,13 +809,11 @@ proc dispose*[K, V](lru: var ConcurrentLruCache[K, V]) =
 
 proc `=copy`[K, V](
     dest: var Shard[K, V], src: Shard[K, V]
-) {.error: "Copying Shard is forbidden".} =
-  discard
+) {.error: "Copying Shard is forbidden".}
 
 proc `=copy`*[K, V](
     dest: var ConcurrentLruCache[K, V], src: ConcurrentLruCache[K, V]
-) {.error: "Copying ConcurrentLruCache is forbidden".} =
-  discard
+) {.error: "Copying ConcurrentLruCache is forbidden".}
 
 template toShardIdx(h: Hash, shardBits: int): int =
   # Pick the shard from the top shardBits bits of the hash so that the shard

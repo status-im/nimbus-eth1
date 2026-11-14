@@ -14,6 +14,7 @@ import
   web3/[eth_api_types, eth_api],
   std/algorithm,
   ../../execution_chain/beacon/web3_eth_conv,
+  ../../execution_chain/utils/utils,
   ./types,
   ./blocks,
   ./transactions
@@ -44,8 +45,8 @@ proc suggestGasPrice*(
 
   var prices = newSeqOfCap[GasInt](64)
   for tx in txs:
-    if tx.gasPrice > GasInt(0):
-      prices.add(tx.gasPrice)
+    if not tx.gasPrice.isZero:
+      prices.add(tx.gasPrice.clampToGasInt)
 
   ok(max(minGasPrice, median(prices)))
 
@@ -59,7 +60,7 @@ proc suggestMaxPriorityGasPrice*(
   var prices = newSeqOfCap[GasInt](64)
 
   for tx in txs:
-    if tx.maxPriorityFeePerGas > GasInt(0):
-      prices.add(tx.maxPriorityFeePerGas)
+    if not tx.maxPriorityFeePerGas.isZero:
+      prices.add(tx.maxPriorityFeePerGas.clampToGasInt)
 
   ok(median(prices))

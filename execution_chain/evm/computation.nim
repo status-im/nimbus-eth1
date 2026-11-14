@@ -65,7 +65,7 @@ template getChainId*(c: Computation): UInt256 =
 template getOrigin*(c: Computation): Address =
   c.vmState.txCtx.origin
 
-template getGasPrice*(c: Computation): GasInt =
+template getGasPrice*(c: Computation): UInt256 =
   c.vmState.txCtx.effectiveGasPrice
 
 template getVersionedHash*(c: Computation, index: int): VersionedHash =
@@ -95,7 +95,7 @@ template accountExistsOrAlive*(c: Computation, address: Address): bool =
     c.vmState.balTracker.trackAddressAccess(address)
 
   if c.fork >= FkSpurious:
-    c.vmState.readOnlyLedger.isAccountAlive(address)
+    not c.vmState.readOnlyLedger.isAccountEmpty(address)
   else:
     c.vmState.readOnlyLedger.accountExists(address)
 
@@ -119,10 +119,7 @@ template getCodeHash*(c: Computation, address: Address): Hash32 =
     c.vmState.balTracker.trackAddressAccess(address)
 
   let db = c.vmState.readOnlyLedger
-  if not db.accountExists(address) or db.isEmptyAccount(address):
-    default(Hash32)
-  else:
-    db.getCodeHash(address)
+  db.getCodeHash(address)
 
 template selfDestruct*(c: Computation, address: Address) =
   c.execSelfDestruct(address)
@@ -379,7 +376,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
       # Transfer to beneficiary
       if c.balTrackerEnabled:
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
-      ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
+      ledger.addBalance(beneficiary, localBalance, c.fork.checkEmptyAccount())
 
       newContract = if c.fork >= FkAmsterdam:
                       ledger.selfDestruct8246(c.msg.currentTarget)
@@ -392,7 +389,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         c.emitSelfDestructLog(beneficiary, localBalance, newContract)
     else:
       # Transfer to beneficiary
-      ledger.addBalance(beneficiary, localBalance, checkEmptyAccount = c.fork < FkParis)
+      ledger.addBalance(beneficiary, localBalance, c.fork.checkEmptyAccount())
       ledger.selfDestruct(c.msg.currentTarget)
 
     trace "SELFDESTRUCT",

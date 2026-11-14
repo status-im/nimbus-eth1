@@ -18,35 +18,26 @@ OUTPUT_FORMAT("elf64-littleriscv")
 OUTPUT_ARCH("riscv")
 ENTRY(_start)
 
-/* Addresses come from zisk `core/src/mem.rs`:
+/* zisk v1.4.0-alpha `core/src/mem.rs`:
  *
- *   ROM_ADDR           0x80000000  ROM_SIZE 0x08000000 (128M)  program code
- *   FLOAT_LIB_ROM_ADDR 0x87f00000                              top 1M, soft-float lib
- *   RAM_ADDR           0xa0000000  RAM_SIZE 0x20000000 (512M)
- *     SYS_ADDR         0xa0000000  SYS_SIZE 0x10000            reserved: UART, CSRs
- *     OUTPUT_ADDR      0xa0010000  ..0xa0030000                public output
- *     AVAILABLE_MEM    0xa0030000                              general purpose RW
- *   FLOAT_LIB_RAM_ADDR 0xbfff0000                              top 64K, soft-float lib
+ *   ROM_ADDR           0x90000000  ROM_SIZE 0x08000000      program code
+ *   ZISKLIB_ROM_ADDR   0x97e00000                           ZisK lib, 1M
+ *   FLOAT_LIB_ROM_ADDR 0x97f00000                           soft-float lib, top 1M
+ *   RAM_ADDR           0xa0000000  RAM_SIZE 0x20000000
+ *     STACK_ADDR       0xa0000000  STACK_SIZE 0x400000      zisk stack, unused here
+ *     SYS_ADDR         0xa0400000  SYS_SIZE 0x10000         registers, UART, CSRs
+ *     OUTPUT_ADDR      0xa0410000  OUTPUT_MAX_SIZE 0x20000  public output
+ *     GENERAL_RAM_ADDR 0xa0430000
+ *   ZISKLIB_RAM_ADDR   0xbffc0000                           ZisK lib, 192K
+ *   FLOAT_LIB_RAM_ADDR 0xbfff0000                           soft-float lib, top 64K
  *
- * The soft-float library reserves space at the top of *both*, so code lives in
- * [0x80000000, 0x87f00000) and writable data in [0xa0030000, 0xbfff0000). Both
- * lengths below are those spans:
- *
- *   FLOAT_LIB_ROM_ADDR - ROM_ADDR           = 0x87f00000 - 0x80000000
- *                                           = 0x07f00000
- *   FLOAT_LIB_RAM_ADDR - AVAILABLE_MEM_ADDR = 0xbfff0000 - 0xa0030000
- *                                           = 0x1ffc0000
- *
- * Computed here rather than taken from zisk's AVAILABLE_MEM_SIZE, which is not
- * that span: it subtracts only SYS_SIZE and OUTPUT_MAX_SIZE, leaves the
- * soft-float reserve out entirely, and from AVAILABLE_MEM_ADDR would run
- * 0x20000 past the end of RAM. Nothing in zisk reads it, so it is not a bound
- * to rely on.
+ *   rom = [ROM_ADDR, ZISKLIB_ROM_ADDR)         = 0x07e00000 bytes
+ *   ram = [GENERAL_RAM_ADDR, ZISKLIB_RAM_ADDR) = 0x1fb90000 bytes
  */
 MEMORY
 {
-  rom (rx)  : ORIGIN = 0x80000000, LENGTH = 0x07f00000
-  ram (rw)  : ORIGIN = 0xa0030000, LENGTH = 0x1ffc0000
+  rom (rx)  : ORIGIN = 0x90000000, LENGTH = 0x07e00000
+  ram (rw)  : ORIGIN = 0xa0430000, LENGTH = 0x1fb90000
 }
 
 /* The standard builds the loaded image from the program headers rather than
@@ -67,9 +58,8 @@ PHDRS
   bss    PT_LOAD FLAGS(6); /* rw- */
 }
 
-/* Stack size. The guest recurses through trie and RLP code, and unlike a hosted
- * process there is no guard page and no growth thus overflow silently walks into the
- * heap. Generous on purpose as RAM is 512M */
+/* The guest recurses through trie and RLP code. No guard page: overflow runs
+ * into .bss. */
 __stack_size = 8M;
 
 SECTIONS
@@ -88,16 +78,9 @@ SECTIONS
     *(.gcc_except_table .gcc_except_table.*)
     *(.data.rel.ro .data.rel.ro.*)
 
-    /* C constructor/destructor tables: arrays of function pointers, walked at
-     * startup by a loop that calls each one. Empty here, and they must stay
-     * empty, because nothing on this target walks them. ZisK's loader skips
-     * SHT_INIT_ARRAY and `_zisk_main` tail-calls `main` without iterating, so
-     * any constructor listed here would simply never be called.
-     *
-     * Keeping them in ROM turns that into a loud failure. They carry SHF_WRITE,
-     * and an output section takes the union of its inputs' flags, so anything
-     * landing here makes .rodata writable inside ROM and ZisK rejects the ELF
-     * at load. */
+    /* Constructor/destructor tables. ziskos's `_zisk_main` walks them, so the
+     * bounds must be defined. Input sections carry SHF_WRITE: any entry makes
+     * .rodata writable and ZisK rejects the ELF. */
     . = ALIGN(8);
     PROVIDE_HIDDEN(__preinit_array_start = .);
     KEEP(*(.preinit_array))
@@ -148,19 +131,11 @@ SECTIONS
   . = . + __stack_size;
   PROVIDE(_init_stack_top = .);
 
-  /* Heap: all remaining RAM, under two pairs of names for the same bytes.
-   * `_heap_start`/`_heap_end` are the ones the standard mandates. zisk's
-   * `init_sys_alloc` (`ziskos/entrypoint/src/alloc/alloc.rs`) reads
-   * `_kernel_heap_bottom`/`_top` instead, and the link fails without them.
-   *
-   * Same bytes on purpose, but only one allocator may hand them out: newlib's
-   * malloc through _sbrk. zisk's own allocator is never called. */
+  /* `_heap_start`/`_heap_end`: standard-mandated names, used by newlib's _sbrk.
+   * The staticlib allocates from its own buffer in .bss. */
   . = ALIGN(16);
-  PROVIDE(_heap_start          = .);
-  PROVIDE(_kernel_heap_bottom  = .);
-
-  PROVIDE(_heap_end            = ORIGIN(ram) + LENGTH(ram));
-  PROVIDE(_kernel_heap_top     = ORIGIN(ram) + LENGTH(ram));
+  PROVIDE(_heap_start = .);
+  PROVIDE(_heap_end   = ORIGIN(ram) + LENGTH(ram));
 
   _end = .;
 

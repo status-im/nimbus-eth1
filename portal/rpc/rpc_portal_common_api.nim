@@ -27,7 +27,7 @@ proc installPortalCommonApiHandlers*(
     rpcServer: RpcServer, p: PortalProtocol, network: static PortalSubnetwork
 ) =
   template rpc(path: string, body: untyped): untyped =
-    rpc(rpcServer, path, EthJson, body)
+    rpc(rpcServer, path, PortalJson, body)
 
   const networkStr = network.symbolName()
 

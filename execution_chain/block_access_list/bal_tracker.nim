@@ -309,7 +309,12 @@ proc beginCallFrame*(tracker: BlockAccessListTrackerRef) =
 proc capturePreCode(tracker: BlockAccessListTrackerRef, idx: int32) =
   if tracker.accounts[idx].preCode < 0:
     tracker.accounts[idx].preCode = int32(tracker.codeHashes.len)
-    tracker.codeHashes.add(tracker.ledger.getCodeHash(tracker.accounts[idx].address))
+    tracker.codeHashes.add(
+      if not tracker.ledger.isAccountEmpty(tracker.accounts[idx].address):
+        tracker.ledger.getCodeHash(tracker.accounts[idx].address)
+      else:
+        EMPTY_CODE_HASH
+    )
 
 proc capturePreStorage(tracker: BlockAccessListTrackerRef, idx: int32) =
   if not tracker.storage[idx].preKnown:

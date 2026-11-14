@@ -83,7 +83,7 @@ func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-func popOp(cpt: VmCpt): EvmResultVoid =
+template popOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x50, Remove item from stack.
   cpt.stack.pop()
 
@@ -274,13 +274,13 @@ proc sstoreEIP8038Op(cpt: VmCpt): EvmResultVoid =
 
 # -------
 
-func jumpOp(cpt: VmCpt): EvmResultVoid =
+template jumpOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x56, Alter the program counter
   let jumpTarget = ? cpt.stack.popInt()
   cpt.jumpImpl(jumpTarget)
 
 
-func jumpIOp(cpt: VmCpt): EvmResultVoid =
+template jumpIOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x57, Conditionally alter the program counter.
   ? cpt.stack.lsCheck(2)
   let
@@ -289,10 +289,11 @@ func jumpIOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
 
   if testedValue.isZero:
-    return ok()
-  cpt.jumpImpl(jumpTarget)
+    EvmResultVoid.ok()
+  else:
+    cpt.jumpImpl(jumpTarget)
 
-func pcOp(cpt: VmCpt): EvmResultVoid =
+template pcOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x58, Get the value of the program counter prior to the increment
   ##       corresponding to this instruction.
   cpt.stack.push max(cpt.code.pc - 1, 0)
@@ -301,15 +302,15 @@ func msizeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x59, Get the size of active memory in bytes.
   cpt.stack.push cpt.memory.len
 
-func gasOp(cpt: VmCpt): EvmResultVoid =
+template gasOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x5a, Get the amount of available gas, including the corresponding
   ##       reduction for the cost of this instruction.
   cpt.stack.push cpt.gasMeter.executionGasLeft
 
-func jumpDestOp(cpt: VmCpt): EvmResultVoid =
+template jumpDestOp*(cpt: VmCpt): EvmResultVoid =
   ## 0x5b, Mark a valid destination for jumps. This operation has no effect
   ##       on machine state during execution.
-  ok()
+  EvmResultVoid.ok()
 
 func tloadOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5c, Load word from transient storage.
@@ -360,7 +361,7 @@ const
      forks: VmOpAllForks,
      name: "pop",
      info: "Remove item from stack",
-     exec: VmOpFn popOp),
+     exec: VmOpInlined),
 
 
     (opCode: Mload,     ## 0x51, Load word from memory
@@ -444,14 +445,14 @@ const
      forks: VmOpAllForks,
      name: "jump",
      info: "Alter the program counter",
-     exec: jumpOp),
+     exec: VmOpInlined),
 
 
     (opCode: JumpI,     ## 0x57, Conditional jump
      forks: VmOpAllForks,
      name: "jumpI",
      info: "Conditionally alter the program counter",
-     exec: jumpIOp),
+     exec: VmOpInlined),
 
 
     (opCode: Pc,        ## 0x58, Program counter prior to instruction
@@ -459,7 +460,7 @@ const
      name: "pc",
      info: "Get the value of the program counter prior to the increment "&
            "corresponding to this instruction",
-     exec: pcOp),
+     exec: VmOpInlined),
 
 
     (opCode: Msize,     ## 0x59, Memory size
@@ -474,7 +475,7 @@ const
      name: "gas",
      info: "Get the amount of available gas, including the corresponding "&
            "reduction for the cost of this instruction",
-     exec: gasOp),
+     exec: VmOpInlined),
 
 
     (opCode: JumpDest,  ## 0x5b, Mark jump target. This operation has no effect
@@ -482,7 +483,7 @@ const
      forks: VmOpAllForks,
      name: "jumpDest",
      info: "Mark a valid destination for jumps",
-     exec: jumpDestOp),
+     exec: VmOpInlined),
 
 
     (opCode: Tload,     ## 0x5c, Load word from transient storage.

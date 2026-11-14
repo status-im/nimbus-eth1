@@ -7,7 +7,7 @@
 
 import
   chronicles,
-  std/[json, typetraits, math],
+  std/[json, typetraits, math, strutils],
   asynctest,
   web3/eth_api,
   stew/byteutils,
@@ -170,7 +170,7 @@ func makeTx(
     txType: TxLegacy,
     chainId: env.chainId,
     nonce: AccountNonce(env.nonce),
-    gasPrice: gasPrice,
+    gasPrice: gasPrice.u256,
     gasLimit: gasLimit,
     to: recipient,
     value: amount,
@@ -199,11 +199,11 @@ proc makeBlobTx(env: var TestEnv, nonce: int): PooledTransaction =
       txType:              TxEip4844,
       chainId:             env.chainId,
       nonce:               AccountNonce(nonce),
-      gasPrice:            70000.GasInt,
+      gasPrice:            70000.u256,
       gasLimit:            123457.GasInt,
       to:                  Opt.some(zeroAddress),
-      maxPriorityFeePerGas:GasInt(10 ^ 9),
-      maxFeePerGas:        GasInt(10 ^ 9),
+      maxPriorityFeePerGas:(10 ^ 9).u256,
+      maxFeePerGas:        (10 ^ 9).u256,
       maxFeePerBlobGas:    1.u256,
       accessList:          accesses,
       versionedHashes:     @[digest])
@@ -523,6 +523,14 @@ proc rpcMain*() =
       let res = await client.eth_getStorageAt(contractAccWithStorage, 1.u256, blockId(1'u64))
       check FixedBytes[32](2345.u256.toBytesBE) == res
 
+    test "eth_getStorageAt storage key too long is invalid params":
+      try:
+        discard await client.call("eth_getStorageAt",
+          %[%(contractAccWithStorage.to0xHex), %("0x" & '0'.repeat(65)), %"latest"], EthJson)
+        check false
+      except RpcResponseError as exc:
+        check exc.code == -32602
+
     test "eth_getStorageValues":
       let r = await client.call("eth_getStorageValues",
         %[%*{contractAccWithStorage.to0xHex: [0.u256.to(Bytes32).to0xHex, 1.u256.to(Bytes32).to0xHex]}, %"latest"], EthJson)
@@ -624,7 +632,7 @@ proc rpcMain*() =
         `from`: Opt.some(signer),
         to: Opt.some(contractAddress),
         gas: Opt.some(w3Qty(100000'u)),
-        gasPrice: Opt.none(Quantity),
+        gasPrice: Opt.none(UInt256),
         value: Opt.some(100.u256),
         nonce: Opt.some(4.Quantity)
         )
@@ -641,7 +649,7 @@ proc rpcMain*() =
         `from`: Opt.some(signer),
         to: Opt.some(contractAddress),
         gas: Opt.some(w3Qty(100001'u)),
-        gasPrice: Opt.none(Quantity),
+        gasPrice: Opt.none(UInt256),
         value: Opt.some(100.u256),
         nonce: Opt.some(5.Quantity)
         )
@@ -672,7 +680,7 @@ proc rpcMain*() =
         `from`: Opt.some(signer),
         to: Opt.some(contractAddress),
         gas: Opt.some(w3Qty(100000'u)),
-        gasPrice: Opt.none(Quantity),
+        gasPrice: Opt.none(UInt256),
         value: Opt.some(100.u256)
         )
 
@@ -703,12 +711,12 @@ proc rpcMain*() =
 
       # With a sufficient fee cap the call sees the block base fee.
       ec.`from` = Opt.some(signer)
-      ec.maxFeePerGas = Opt.some(w3Qty(baseFee.truncate(uint64)))
+      ec.maxFeePerGas = Opt.some(baseFee)
       let paid = await client.eth_call(ec, "latest")
       check UInt256.fromBytesBE(paid) == baseFee
 
       # A fee cap below the base fee is rejected.
-      ec.maxFeePerGas = Opt.some(w3Qty(1'u64))
+      ec.maxFeePerGas = Opt.some(1.u256)
       expect RpcResponseError:
         discard await client.eth_call(ec, "latest")
 
@@ -717,8 +725,8 @@ proc rpcMain*() =
       check latestBlock.baseFeePerGas.get(0.u256) > 0.u256
       let ec = TransactionArgs(
         to: Opt.some(extraAddress),
-        maxFeePerGas: Opt.some(w3Qty(0'u64)),
-        maxPriorityFeePerGas: Opt.some(w3Qty(0'u64)),
+        maxFeePerGas: Opt.some(0.u256),
+        maxPriorityFeePerGas: Opt.some(0.u256),
         value: Opt.some(100.u256))
       let res = await client.eth_estimateGas(ec)
       check res == w3Qty(21000'u64)
@@ -769,7 +777,7 @@ proc rpcMain*() =
         `from`: Opt.some(signer),
         to: Opt.some(extraAddress),
         gas: Opt.some(w3Qty(42000'u)),
-        gasPrice: Opt.some(w3Qty(100'u)),
+        gasPrice: Opt.some(100.u256),
         value: Opt.some(100.u256)
         )
 
@@ -865,7 +873,7 @@ proc rpcMain*() =
           `from`: Opt.some(signer),
           to: Opt.some(extraAddress),
           gas: Opt.some(w3Qty(100000'u)),
-          gasPrice: Opt.some(w3Qty(100'u)),
+          gasPrice: Opt.some(100.u256),
           value: Opt.some(100.u256),
         )
         auth = Authorization(
@@ -911,8 +919,8 @@ proc rpcMain*() =
         `from`: Opt.some(signer),
         to: Opt.some(extraAddress),
         value: Opt.some(spendValue),
-        maxFeePerGas: Opt.some(w3Qty(hugeMaxFee.uint64)),
-        maxPriorityFeePerGas: Opt.some(w3Qty(priorityFee.uint64)),
+        maxFeePerGas: Opt.some(hugeMaxFee.u256),
+        maxPriorityFeePerGas: Opt.some(priorityFee.u256),
       )
 
       let res = await client.eth_estimateGas(eip1559Args)
@@ -923,7 +931,7 @@ proc rpcMain*() =
         `from`: Opt.some(extraAddress),
         to: Opt.some(signer),
         gas: Opt.some(w3Qty(21000'u)),
-        gasPrice: Opt.some(w3Qty(1'u)),
+        gasPrice: Opt.some(1.u256),
         value: Opt.some(1.u256),
       )
       expect(CatchableError):
@@ -934,7 +942,7 @@ proc rpcMain*() =
         `from`: Opt.some(signer),
         to: Opt.some(contractAddress),
         gas: Opt.some(w3Qty(100_000'u)),
-        gasPrice: Opt.some(w3Qty(8'u)),
+        gasPrice: Opt.some(8.u256),
         value: Opt.some(8.u256),
         input: Opt.some(hexToSeqByte("0001020304")),
       )
@@ -1000,7 +1008,7 @@ proc rpcMain*() =
       # Mined EIP-155 legacy tx: chainId set, no yParity, gasPrice as paid.
       check res.chainId == Opt.some(env.chainId)
       check res.yParity.isNone
-      check res.gasPrice == w3Qty(30_000_000_000'u64)
+      check res.gasPrice == 30_000_000_000.u256
 
       # Pending typed tx: gasPrice is the max fee, yParity is set.
       let pendingTx = env.makeBlobTx(6)
@@ -1008,7 +1016,7 @@ proc rpcMain*() =
       let pending = await client.eth_getTransactionByHash(computeRlpHash(pendingTx.tx))
       check pending.isNil.not
       check pending.blockNumber.isNone
-      check pending.gasPrice == w3Qty(uint64(10 ^ 9))
+      check pending.gasPrice == (10 ^ 9).u256
       check pending.yParity == Opt.some(w3Qty(uint64(pendingTx.tx.V)))
       check pending.yParity.get.uint64 <= 1
 
