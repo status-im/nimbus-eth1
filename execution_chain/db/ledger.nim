@@ -189,6 +189,8 @@ proc applyOverlay(ledger: LedgerRef, address: Address, acc: AccountRef) =
     acc.statement.codeHash = keccak256(overlayAcc.code[])
     acc.code = CodeBytesRef.init(overlayAcc.code[])
     acc.flags.incl CodeChanged
+  if overlayAcc.codeHash.isSome():
+    acc.statement.codeHash = overlayAcc.codeHash[]
 
 func isEmpty(statement: CoreDbAccount): bool =
   # Check nonce first since it's the fastest to compare
@@ -562,18 +564,7 @@ proc recordCodeRead(ledger: LedgerRef, address: Address, codeHash: Hash32) =
   if ledger.collectWitness and ledger.writtenCode(codeHash).isNone():
     ledger.witnessKeys[(address, Opt.none(UInt256))] = true
 
-proc getCode*(ledger: LedgerRef,
-              address: Address,
-              returnHash: static[bool] = false): auto =
-  let acc = ledger.getAccount(address, false)
-  if acc.isNil or acc.statement.codeHash == EMPTY_CODE_HASH:
-    when returnHash:
-      return (EMPTY_CODE_HASH, CodeBytesRef())
-    else:
-      return CodeBytesRef()
-
-  ledger.recordCodeRead(address, acc.statement.codeHash)
-
+proc ensureCodeLoaded(ledger: LedgerRef, acc: AccountRef) =
   if acc.code.isNil:
     acc.code = ledger.cachedCode(acc.statement.codeHash).valueOr:
       var rc = ledger.txFrame.getCodeByHash(acc.statement.codeHash)
@@ -587,6 +578,22 @@ proc getCode*(ledger: LedgerRef,
         let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
         ledger.code.put(acc.statement.codeHash, newCode)
         newCode
+
+proc getCode*(ledger: LedgerRef,
+              address: Address,
+              returnHash: static[bool] = false): auto =
+  let acc = ledger.getAccount(address, false)
+
+  if ledger.collectWitness and not acc.isNil:
+    ledger.recordCodeRead(address, acc.statement.codeHash)
+
+  if acc.isNil:
+    when returnHash:
+      return (EMPTY_CODE_HASH, CodeBytesRef())
+    else:
+      return CodeBytesRef()
+
+  ledger.ensureCodeLoaded(acc)
 
   when returnHash:
     (acc.statement.codeHash, acc.code)
@@ -686,6 +693,27 @@ proc originalAccountEmpty*(ledger: LedgerRef, address: Address): bool =
     return true
   acc.original.statement.isEmpty()
 
+proc canAdoptCode*(ledger: LedgerRef, address: Address): Opt[Hash32] =
+  let acc = ledger.getAccount(address, false)
+
+  if ledger.collectWitness and not acc.isNil:
+    ledger.recordCodeRead(address, acc.statement.codeHash)
+
+  if acc.isNil:
+    return Opt.none(Hash32)
+  if NewlyCreated in acc.flags:
+    return Opt.none(Hash32)
+  if acc.statement.codeHash == EMPTY_CODE_HASH:
+    return Opt.none(Hash32)
+  ledger.ensureCodeLoaded(acc)
+  if acc.code.len == 0:
+    # The check above for EMPTY_CODE_HASH should handle
+    # zero length. This is an extra check.
+    return Opt.none(Hash32)
+  if acc.code.bytes[0] == 0xEF:
+    return Opt.none(Hash32)
+  ok(acc.statement.codeHash)
+
 proc touch*(ledger: LedgerRef, address: Address) =
   ## Force an account to be written to the database on the next `persist` even
   ## if it was not modified. Loading a pre-state (genesis alloc) must put every
@@ -777,6 +805,14 @@ proc setCode*(ledger: LedgerRef, address: Address, code: seq[byte]) =
     acc.code = ledger.cachedCode(codeHash).valueOr(CodeBytesRef.init(code))
     if (ledger.collectWitness or ledger.stateless):
       ledger.savePoint.writtenCode[codeHash] = acc.code
+
+proc adoptCode*(ledger: LedgerRef, address: Address, codeHash: Hash32) =
+  let acc = ledger.getAccount(address)
+  acc.flags.incl {LeafExists}
+  if acc.statement.codeHash != codeHash:
+    let acc = ledger.makeDirty(address, acc)
+    acc.statement.codeHash = codeHash
+    acc.code = nil
 
 proc setStorage*(ledger: LedgerRef, address: Address, slot, value: UInt256) =
   let acc = ledger.getAccount(address)
