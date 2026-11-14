@@ -296,11 +296,16 @@ const
 
   # -----------
 
-  nCoreDbImportPersistBatch* = 384 * 1024
-    ## When importing accounts, storage, and contract codes the caches are
-    ## regularly saved to disk after this many items have benn processed.
-    ## This constant defines a memory/time trade off. The lower the value,
-    ## the less memory is used.
+  nCoreDbImportPersistBatch* = 128 * 1024
+    ## When importing accounts, storage, and contract codes are cached, and
+    ## regularly saved to disk after 128K items processed. The constant
+    ## defines the memory/time trade off.
+    ##
+    ## As of the current 11/2016 infrastructure, the importing time changes
+    ## were insignificant when raised to save every 384K instances, but the
+    ## memory footprint raised significantly (12G to 19G as tested on
+    ## `sepolia`.) Somewhat smaller values than 128K did not seem to reduce
+    ## the fooprint further.
 
   coreDbImportMsgInterval* = chronos.seconds(40)
     ## Some status noise messages from time to time

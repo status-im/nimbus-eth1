@@ -331,7 +331,9 @@ proc importCoreDb*(
 
 proc wipeCacheDb*(ctx: SnapCtxRef) =
   ## Wipe cache DB on disk
-  ctx.pool.cacheDB.close(wipe=true)
+  if not ctx.pool.cacheDB.isNil:
+    ctx.pool.cacheDB.close(wipe=true)
+    ctx.pool.cacheDB = CacheDbRef(nil)
 
 # ------------------------------------------------------------------------------
 # End
