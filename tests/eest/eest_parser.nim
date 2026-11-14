@@ -61,11 +61,14 @@ type
     statelessInputBytes*: Opt[seq[byte]]
     statelessOutputBytes*: Opt[seq[byte]]
 
+  RlpDecoded* = object
+    blockAccessList*: JsonNode
+    
   BlockDescNode* = object
     expectException*: string
     rlp*: seq[byte]
     blockAccessList*: JsonNode
-    rlp_decoded*: JsonNode
+    rlp_decoded*: Opt[RlpDecoded]
     executionWitness*: JsonNode
     statelessInputBytes*: Opt[seq[byte]]
     statelessOutputBytes*: Opt[seq[byte]]
@@ -127,6 +130,7 @@ BlockDescNode.useDefaultReaderIn EthJson
 BlockchainUnitEnv.useDefaultReaderIn EthJson
 EnvConfig.useDefaultReaderIn EthJson
 BlobSchedule.useDefaultReaderIn EthJson
+RlpDecoded.useDefaultReaderIn EthJson
 
 template wrapValueError(body: untyped) =
   try:

@@ -66,11 +66,11 @@ proc parseBAL(node: BlockDescNode, parallelEnabled: bool): Opt[BlockAccessListRe
     bal[] = balFromJson(node.blockAccessList)
     return Opt.some(bal)
 
-  if node.rlp_decoded.isNil.not:
+  if node.rlp_decoded.isSome:
     # Only need shallow validation
-    if "blockAccessList" in node.rlp_decoded:
+    if node.rlp_decoded.value.blockAccessList.isNil.not:
       let bal = new(BlockAccessListRef)
-      bal[] = balFromJson(node.rlp_decoded["blockAccessList"])
+      bal[] = balFromJson(node.rlp_decoded.value.blockAccessList)
       return Opt.some(bal)
 
 proc parseBlocks*(node: openArray[BlockDescNode], parallelEnabled: bool): seq[BlockDesc] =
