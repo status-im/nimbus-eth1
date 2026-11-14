@@ -12,9 +12,10 @@
 ## handler, following the client test runner interface in execution-specs
 ## (`docs/running_tests/consume/client_runners.md`). Results are one JSON
 ## array on stdout, everything else goes to stderr.
+{.push raises: [].}
 
 import
-  std/[algorithm, cpuinfo, json, os, parseutils, sequtils, strutils, tables],
+  std/[algorithm, cpuinfo, json, os, parseutils, sequtils, strutils, tables, typetraits],
   chronos,
   stew/byteutils,
   taskpools,
@@ -31,12 +32,12 @@ import
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
-  ../../execution_chain/common/common,
+  ../../execution_chain/beacon/api_handler/[api_forkchoice, api_newpayload],
+  ../../execution_chain/common/[common, genesis],
   ../../tests/eest/eest_parser,
   ../../tests/eest/bal_parser
 
 import ../common/helpers as chp except HardFork
-from ../evmstate/helpers import setupLedger
 
 # Load eagerly: lazy loading is not thread safe.
 discard loadTrustedSetupFromString(kzg.trustedSetup, 8)
@@ -54,17 +55,12 @@ type
     balWithhold: bool
     balReport: bool
 
-  RawEngineUnitEnv = object of UnitEnv
-    engineNewPayloads: JsonNode
-
   Env = ref object
     chain: ForkedChainRef
     engine: BeaconEngineRef
     server: RpcServer
     kept: Table[Hash32, string]
       ## Blocks whose list the runner kept back, with the report's reason.
-
-RawEngineUnitEnv.useDefaultReaderIn EthJson
 
 var
   work: Channel[string]
@@ -99,11 +95,10 @@ proc prepareEnv(
   config.chainId = unit.config.chainid
   config.blobSchedule = unit.config.blobSchedule
 
-  let
-    memDB = newCoreDbRef(DefaultDbMemory, enableCaches = true)
-    ledger = LedgerRef.init(memDB.baseTxFrame())
-  setupLedger(unit.pre, ledger)
-  ledger.persist()
+  let memDB = newCoreDbRef(DefaultDbMemory, enableCaches = true)
+  discard writeGenesisAlloc(unit.pre, memDB.baseTxFrame())
+
+  let ledger = LedgerRef.init(memDB.baseTxFrame())
   ledger.txFrame.persistHeaderAndSetHead(genesis).isOkOr:
     return err("cannot store the genesis header: " & $error)
 
@@ -197,15 +192,15 @@ proc fixtureResult(
 # ------------------------------------------------------------------------------
 
 proc deliveredList(
-    env: Env, blk: JsonNode, header: Header, opts: Options
+    env: Env, blk: BlockDescNode, header: Header, opts: Options
 ): Opt[BlockAccessListRef] =
   ## The fixture's list for this block, attached when its hash matches the
   ## header's and dropped otherwise, as the interface asks.
   let node =
-    if "blockAccessList" in blk:
-      blk["blockAccessList"]
-    elif "rlp_decoded" in blk and "blockAccessList" in blk["rlp_decoded"]:
-      blk["rlp_decoded"]["blockAccessList"]
+    if blk.blockAccessList.isNil.not:
+      blk.blockAccessList
+    elif blk.rlp_decoded.isSome and blk.rlp_decoded.value.blockAccessList.isNil.not:
+      blk.rlp_decoded.value.blockAccessList
     else:
       return Opt.none(BlockAccessListRef)
 
@@ -237,11 +232,11 @@ proc runBlockTest(
     if failure.len == 0:
       failure = msg
 
-  for i, x in unit.blocks.getElems():
-    let expectInvalid = "expectException" in x
+  for i, x in unit.blocks:
+    let expectInvalid = x.expectException.len > 0
     let blk =
       try:
-        rlp.decode(hexToSeqByte(x["rlp"].getStr), Block)
+        rlp.decode(x.rlp, Block)
       except CatchableError as exc:
         rejections.add rejection(i, Opt.none(Hash32), exc.msg)
         if not expectInvalid:
@@ -251,7 +246,7 @@ proc runBlockTest(
     let
       hash = blk.header.computeBlockHash
       bal = env.deliveredList(x, blk.header, opts)
-      res = waitFor env.chain.importBlock(blk, bal)
+      res = waitFor noCancel env.chain.importBlock(blk, bal)
     env.reportExecution(
       opts, blk.header.number, hash, blk.header.timestamp, bal.isSome)
     if res.isErr:
@@ -329,78 +324,124 @@ proc runBlockFile(path: string, opts: Options, taskpool: Taskpool): string =
 # Engine tests
 # ------------------------------------------------------------------------------
 
-proc call(env: Env, meth: string, params: JsonNode): JsonNode =
-  ## One JSON-RPC request through Nimbus's own method dispatch.
-  let request = $(%*{"jsonrpc": "2.0", "id": 1, "method": meth, "params": params})
-  let response = waitFor env.server.route(request)
-  try:
-    parseJson(response)
-  except CatchableError as exc:
-    %*{"error": {"code": 0, "message": "unreadable response: " & exc.msg}}
+type
+  ResponseError = object
+    code: int
+    message: string
+    data: string
 
-proc rpcError(response: JsonNode): Opt[string] =
+  Response[T] = object
+    error: Opt[ResponseError]
+    result: T
+
+proc responseError(response: Response): Opt[string] =
   ## A JSON-RPC error as `<code>: <message>`, plus `: <data>` when it has data.
-  if "error" notin response:
+  if response.error.isNone:
     return Opt.none(string)
-  let e = response["error"]
-  var text = $e{"code"}.getInt & ": " & e{"message"}.getStr
-  if e.hasKey("data") and e["data"].kind != JNull:
-    text.add ": " &
-      (if e["data"].kind == JString: e["data"].getStr else: $e["data"])
+
+  template e: auto = response.error.value
+  var text = $e.code & ": " & e.message
+  if e.data.len > 0:
+    text.add ": " & e.data
   Opt.some(text)
 
-proc expectedCode(payload: JsonNode): Opt[int] =
-  let node = payload{"errorCode"}
-  if node.isNil or node.kind == JNull:
+proc expectedCode(payload: PayloadItem): Opt[int] =
+  template node: auto = payload.errorCode
+  if node.isNone or node.get().len == 0:
     return Opt.none(int)
-  if node.kind == JInt:
-    return Opt.some(node.getInt)
-  var code: int
-  if parseInt(node.getStr, code) == node.getStr.len and code != 0:
-    return Opt.some(code)
-  Opt.none(int)
+  try:
+    var code: int
+    if parseInt(node.value, code) == node.value.len and code != 0:
+      return Opt.some(code)
+    Opt.none(int)
+  except ValueError:
+    Opt.none(int)
 
-proc forkchoice(env: Env, version: int, head: string): string =
+proc forkchoiceUpdated(env: Env,
+                       version: Version,
+                       state: ForkchoiceStateV1): Response[ForkchoiceUpdatedResponse] =
+  type ResultT = typeof(result)
+  try:
+    let res = waitFor noCancel env.engine.forkchoiceUpdated(
+                Version(version), state, Opt.none(PayloadAttributes))
+    ResultT(result: res)
+  except RpcResponseError as exc:
+    ResultT(error: Opt.some(ResponseError(
+      code: exc.code,
+      message: exc.msg,
+      data: distinctBase exc.data,
+    )))
+
+proc forkchoice(env: Env, version: uint64, head: Hash32): string =
   ## Empty when the update is answered VALID.
-  let state = %*{
-    "headBlockHash": head,
-    "safeBlockHash": zeroHash32.data.to0xHex(),
-    "finalizedBlockHash": zeroHash32.data.to0xHex(),
-  }
-  let response = env.call("engine_forkchoiceUpdatedV" & $version, %*[state, nil])
-  let error = rpcError(response)
+  let state = ForkchoiceStateV1(
+    headBlockHash: head,
+    safeBlockHash: zeroHash32,
+    finalizedBlockHash: zeroHash32,
+  )
+
+  if version == 0 or version > 4:
+    return "forkchoiceUpdated unsupported version " & $version
+
+  let
+    res = env.forkchoiceUpdated(Version(version), state)
+    error = responseError(res)
+
   if error.isSome:
     return "forkchoiceUpdated error " & error.get
-  let status = response{"result"}{"payloadStatus"}{"status"}.getStr
-  if status != "VALID":
-    return "forkchoiceUpdated status " & status
+
+  let
+    status = res.result.payloadStatus.status
+  if status != PayloadExecutionStatus.valid:
+    return "forkchoiceUpdated status " & $status
+
   ""
 
-proc reportPayload(env: Env, opts: Options, payload: JsonNode) =
+proc newPayload(env: Env, version: uint64, param: PayloadParam): Response[PayloadStatus] =
+  type ResultT = typeof(result)
+
+  if version == 0 or version > 5:
+    return ResultT(error: Opt.some(ResponseError(
+      code: METHOD_NOT_FOUND,
+      message: "newPayload unsupported version " & $version,
+    )))
+
+  try:
+    let
+      res = waitFor noCancel env.engine.newPayload(
+        Version(version), param.payload, param.versionedHashes,
+        param.parentBeaconBlockRoot, param.executionRequests)
+    ResultT(result: res)
+  except RpcResponseError as exc:
+    ResultT(error: Opt.some(ResponseError(
+      code: exc.code,
+      message: exc.msg,
+      data: distinctBase exc.data,
+    )))
+
+proc reportPayload(env: Env, opts: Options, payload: ExecutionPayload) =
   if not opts.balReport:
     return
-  try:
-    let list = payload{"blockAccessList"}.getStr
-    env.reportExecution(
-      opts,
-      fromHex[uint64](payload["blockNumber"].getStr),
-      Hash32.fromHex(payload["blockHash"].getStr),
-      EthTime(fromHex[uint64](payload["timestamp"].getStr)),
-      list.len > 2,
-    )
-  except CatchableError:
-    discard
+  template list: auto = payload.blockAccessList
+  env.reportExecution(
+    opts,
+    distinctBase payload.blockNumber,
+    payload.blockHash,
+    EthTime(payload.timestamp),
+    list.isSome and list.get.len > 2,
+  )
 
 proc runEngineTest(
-    env: Env, opts: Options, unit: RawEngineUnitEnv, genesis: Hash32,
+    env: Env, opts: Options, unit: EngineUnitEnv, genesisHash: Hash32,
     rejections: var seq[JsonNode],
 ): string =
-  let payloads = unit.engineNewPayloads.getElems()
+  template payloads: auto = unit.engineNewPayloads
+
   if payloads.len == 0:
     return "fixture has no engineNewPayloads"
 
-  let fcuVersion0 = payloads[0]{"forkchoiceUpdatedVersion"}.getStr("1").parseInt
-  let first = env.forkchoice(fcuVersion0, genesis.data.to0xHex())
+  let fcuVersion0 = distinctBase payloads[0].forkchoiceUpdatedVersion
+  let first = env.forkchoice(fcuVersion0, genesisHash)
   if first.len > 0:
     return "initial " & first
 
@@ -411,19 +452,19 @@ proc runEngineTest(
 
   for i, payload in payloads:
     let
-      version = payload["newPayloadVersion"].getStr.parseInt
-      fcuVersion = payload["forkchoiceUpdatedVersion"].getStr.parseInt
-      blockHash = payload["params"][0]{"blockHash"}.getStr
+      version = distinctBase payload.newPayloadVersion
+      fcuVersion = distinctBase payload.forkchoiceUpdatedVersion
+      blockHash = payload.params.payload.blockHash
       wantCode = payload.expectedCode()
-      validationError = payload{"validationError"}
+      validationError = payload.validationError
       expectValid =
-        wantCode.isNone and (validationError.isNil or validationError.kind == JNull)
-      response = env.call("engine_newPayloadV" & $version, payload["params"])
+        wantCode.isNone and (validationError.isNone or validationError.get().len == 0)
+      response = env.newPayload(version, payload.params)
+      error = responseError(response)
 
-    let error = rpcError(response)
     if error.isSome:
       rejections.add rejection(i, Opt.none(Hash32), error.get)
-      let got = response["error"]{"code"}.getInt
+      let got = response.error.value.code
       if wantCode.isNone:
         fail("payload " & $i & " unexpected JSON-RPC error " & error.get)
       elif wantCode.get != got:
@@ -431,25 +472,21 @@ proc runEngineTest(
           $wantCode.get)
       continue
 
-    let status = response{"result"}{"status"}.getStr
-    if status in ["VALID", "INVALID"]:
-      env.reportPayload(opts, payload["params"][0])
-    if status == "INVALID":
-      let hash =
-        try:
-          Opt.some(Hash32.fromHex(blockHash))
-        except ValueError:
-          Opt.none(Hash32)
+    let status = response.result.status
+    if status in [PayloadExecutionStatus.valid, PayloadExecutionStatus.invalid]:
+      env.reportPayload(opts, payload.params.payload)
+    if status == PayloadExecutionStatus.invalid:
       rejections.add rejection(
-        i, hash, response["result"]{"validationError"}.getStr)
+        i, Opt.some(blockHash), response.result.validationError.get())
     if wantCode.isSome:
       fail("payload " & $i & " expected JSON-RPC error " & $wantCode.get &
-        ", got status " & status)
+        ", got status " & $status)
       continue
-    let want = if expectValid: "VALID" else: "INVALID"
+
+    let want = if expectValid: PayloadExecutionStatus.valid else: PayloadExecutionStatus.invalid
     if status != want:
-      fail("payload " & $i & " status " & status & ", expected " & want &
-        (if status == "INVALID": ": " & response["result"]{"validationError"}.getStr
+      fail("payload " & $i & " status " & $status & ", expected " & $want &
+        (if status == PayloadExecutionStatus.invalid: ": " & response.result.validationError.get()
          else: ""))
       continue
     if expectValid:
@@ -465,7 +502,7 @@ proc runEngineTest(
   ""
 
 proc runEngineUnit(
-    unit: RawEngineUnitEnv, opts: Options, taskpool: Taskpool,
+    unit: EngineUnitEnv, opts: Options, taskpool: Taskpool,
     rejections: var seq[JsonNode],
 ): string =
   let genesis = unit.genesisHeader().valueOr:
@@ -480,7 +517,7 @@ proc runEngineUnit(
   env.close()
 
 proc runEngineFile(path: string, opts: Options, taskpool: Taskpool): string =
-  runFile(path, RawEngineUnitEnv, runEngineUnit)
+  runFile(path, EngineUnitEnv, runEngineUnit)
 
 # ------------------------------------------------------------------------------
 # Paths, workers and output
@@ -535,7 +572,12 @@ proc collectFiles(paths: seq[string], errors: var seq[string]): seq[string] =
 
 proc worker(opts: Options) {.thread.} =
   {.gcsafe.}:
-    var taskpool = Taskpool.new(numThreads = opts.threads)
+    var taskpool = try:
+        Taskpool.new(numThreads = opts.threads)
+      except CatchableError as exc:
+        results.send("Etaskpool: " & exc.msg)
+        return
+
     while true:
       let (ok, file) = work.tryRecv()
       if not ok:
@@ -550,7 +592,7 @@ proc worker(opts: Options) {.thread.} =
       results.send(output)
     taskpool.shutdown()
 
-proc parseOptions(): tuple[opts: Options, paths: seq[string]] =
+proc parseOptions(): tuple[opts: Options, paths: seq[string]] {.raises: [IOError].} =
   if paramCount() == 0:
     stderr.writeLine usage
     quit(2)
@@ -573,7 +615,7 @@ proc parseOptions(): tuple[opts: Options, paths: seq[string]] =
   var
     paths: seq[string]
     i = 2
-  proc count(i: int, flag: string, least = 1): int =
+  proc count(i: int, flag: string, least = 1): int {.raises: [IOError].} =
     if i > paramCount():
       stderr.writeLine flag & " needs a number"
       quit(2)
@@ -618,7 +660,7 @@ proc parseOptions(): tuple[opts: Options, paths: seq[string]] =
     quit(2)
   (opts, paths)
 
-proc main() =
+proc main() {.raises: [IOError, ResourceExhaustedError, KeyError].} =
   let (opts, paths) = parseOptions()
 
   var errors: seq[string]
@@ -655,7 +697,12 @@ proc main() =
       except CatchableError as exc:
         stderr.writeLine "error: unreadable results: " & exc.msg
         fileFailed = true
-  all.sort(proc(a, b: JsonNode): int = cmp(a["name"].getStr, b["name"].getStr))
+  all.sort(proc(a, b: JsonNode): int =
+    try:
+      cmp(a["name"].getStr, b["name"].getStr)
+    except KeyError as exc:
+      raiseAssert(exc.msg)
+  )
 
   echo $(%all)
   let failed = all.countIt(not it["pass"].getBool)
