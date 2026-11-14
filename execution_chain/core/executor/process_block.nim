@@ -239,15 +239,6 @@ proc procBlkEpilogue(
   template header(): Header =
     blk.header
 
-  # Reward beneficiary
-  vmState.mutateLedger:
-    # Clearing the account cache here helps manage its size when replaying
-    # large ranges of blocks, implicitly limiting its size using the gas limit
-    ledger.persist(
-      clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number, header.timestamp),
-      clearCache = true
-    )
-
   var
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
@@ -267,6 +258,14 @@ proc procBlkEpilogue(
   # Commit block access list tracker changes for post‑execution system calls
   if vmState.balTrackerEnabled:
     vmState.balTracker.commitCallFrame()
+
+  vmState.mutateLedger:
+    # Clearing the account cache here helps manage its size when replaying
+    # large ranges of blocks, implicitly limiting its size using the gas limit
+    ledger.persist(
+      clearEmptyAccounts = vmState.fork.clearEmptyAccounts(),
+      clearCache = true
+    )
 
   # Catch a fatal condition from the reward persist or the post-execution system
   # calls before getStateRoot below, which would otherwise assert on it.

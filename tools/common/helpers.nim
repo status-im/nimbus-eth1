@@ -132,18 +132,6 @@ func getChainConfig*(network: string): Result[ChainConfig, string] =
     c.assignTime(HardFork.Bpo2, TimeZero)
   of $TestFork.BPO1ToBPO2AtTime15k:
     c.assignTime(HardFork.Bpo2, EthTime(15000))
-  of $TestFork.BPO3:
-    c.assignTime(HardFork.Bpo3, TimeZero)
-  of $TestFork.BPO2ToBPO3AtTime15k:
-    c.assignTime(HardFork.Bpo3, EthTime(15000))
-  of $TestFork.BPO4:
-    c.assignTime(HardFork.Bpo4, TimeZero)
-  of $TestFork.BPO3ToBPO4AtTime15k:
-    c.assignTime(HardFork.Bpo4, EthTime(15000))
-  of $TestFork.BPO5:
-    c.assignTime(HardFork.Bpo5, TimeZero)
-  of $TestFork.BPO4ToBPO5AtTime15k:
-    c.assignTime(HardFork.Bpo5, EthTime(15000))
   of $TestFork.Amsterdam:
     c.assignTime(HardFork.Amsterdam, TimeZero)
   of $TestFork.BPO2ToAmsterdamAtTime15k:
@@ -153,6 +141,24 @@ func getChainConfig*(network: string): Result[ChainConfig, string] =
     c.assignTime(HardFork.Bogota, TimeZero)
   of $AmsterdamToBogotaAtTime15k:
     c.assignTime(HardFork.Bogota, EthTime(15000))
+  of $TestFork.BPO3:
+    c.assignTime(HardFork.Bpo3, TimeZero)
+  of $TestFork.AmsterdamBPOIncrease:
+    c.assignTime(HardFork.Bpo3, TimeZero)
+  of $TestFork.AmsterdamBPODecrease:
+    c.assignTime(HardFork.Bpo3, TimeZero)
+  of $TestFork.AmsterdamToBPOIncreaseAtTime15k:
+    c.assignTime(HardFork.Bpo3, EthTime(15000))
+  of $TestFork.AmsterdamToBPODecreaseAtTime15k:
+    c.assignTime(HardFork.Bpo3, EthTime(15000))
+  of $TestFork.BPO4:
+    c.assignTime(HardFork.Bpo4, TimeZero)
+  of $TestFork.BPO3ToBPO4AtTime15k:
+    c.assignTime(HardFork.Bpo4, EthTime(15000))
+  of $TestFork.BPO5:
+    c.assignTime(HardFork.Bpo5, TimeZero)
+  of $TestFork.BPO4ToBPO5AtTime15k:
+    c.assignTime(HardFork.Bpo5, EthTime(15000))
   else:
     return err("Unsupported network: " & network)
 

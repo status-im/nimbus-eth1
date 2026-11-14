@@ -11,22 +11,22 @@ import
   stew/[byteutils, endians2],
   eth/p2p/discoveryv5/node,
   eth/utp/[utp_discv5_protocol, utp_router],
-  web3/eth_json_marshal
+  ../../rpc/rpc_types
 
-export eth_json_marshal, json
+export rpc_types, json
 
 type SKey* = object
   id*: uint16
   nodeId*: NodeId
 
-proc writeValue*(w: var JsonWriter[EthJson], v: SKey) {.gcsafe, raises: [IOError].} =
+proc writeValue*(w: var JsonWriter[PortalJson], v: SKey) {.gcsafe, raises: [IOError].} =
   let hex = v.nodeId.toBytesBE().toHex()
   let numId = v.id.toBytesBE().toHex()
   let finalStr = hex & numId
   w.writeValue(finalStr)
 
 proc readValue*(
-    r: var JsonReader[EthJson], val: var SKey
+    r: var JsonReader[PortalJson], val: var SKey
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
   let str = r.parseString()
   if str.len < 64:

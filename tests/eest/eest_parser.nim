@@ -61,6 +61,18 @@ type
     statelessInputBytes*: Opt[seq[byte]]
     statelessOutputBytes*: Opt[seq[byte]]
 
+  RlpDecoded* = object
+    blockAccessList*: JsonNode
+    
+  BlockDescNode* = object
+    expectException*: string
+    rlp*: seq[byte]
+    blockAccessList*: JsonNode
+    rlp_decoded*: Opt[RlpDecoded]
+    executionWitness*: JsonNode
+    statelessInputBytes*: Opt[seq[byte]]
+    statelessOutputBytes*: Opt[seq[byte]]
+
   Numero* = distinct uint64
 
   PayloadParam* = object
@@ -87,13 +99,13 @@ type
     network*: string
     genesisBlockHeader*: GenesisHeader
     pre*: GenesisAlloc
-    postState*: JsonNode
+    # postState*: JsonString # skip post-state, not used
     lastblockhash*: Hash32
     config*: EnvConfig
 
   ## Blockchain Test Types
   BlockchainUnitEnv* = object of UnitEnv
-    blocks*: JsonNode
+    blocks*: seq[BlockDescNode]
 
   BlockchainUnitDesc* = object
     name*: string
@@ -116,9 +128,11 @@ type
 GenesisHeader.useDefaultReaderIn EthJson
 PayloadItem.useDefaultReaderIn EthJson
 EngineUnitEnv.useDefaultReaderIn EthJson
+BlockDescNode.useDefaultReaderIn EthJson
 BlockchainUnitEnv.useDefaultReaderIn EthJson
 EnvConfig.useDefaultReaderIn EthJson
 BlobSchedule.useDefaultReaderIn EthJson
+RlpDecoded.useDefaultReaderIn EthJson
 
 template wrapValueError(body: untyped) =
   try:
@@ -136,8 +150,12 @@ proc readValue*(
     r: var JsonReader[EthJson],
     value: var array[HardFork.Cancun .. HardFork.high, Opt[BlobSchedule]],
 ) {.gcsafe, raises: [SerializationError, IOError].} =
+  {.warning: "remove AmsterdamBPOInc/Dec if bpo3 already scheduled".}
   wrapValueError:
-    for key in r.readObjectFields:
+    for rawKey in r.readObjectFields:
+      let key = if rawKey == "AmsterdamBPOIncrease" or
+                   rawKey == "AmsterdamBPODecrease": "bpo3"
+                else: rawKey
       blobScheduleParser(r, key, value)
 
 proc readValue*(r: var JsonReader[EthJson], val: var GenesisStorage)

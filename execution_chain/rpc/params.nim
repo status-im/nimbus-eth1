@@ -54,12 +54,12 @@ proc toTransaction*(vmState: BaseVMState,
 
   let
     baseFee = vmState.blockCtx.baseFeePerGas
-    feeCap = GasInt args.gasPrice.get(args.maxFeePerGas.get(0.Quantity))
-    tipCap = GasInt args.gasPrice.get(args.maxPriorityFeePerGas.get(0.Quantity))
-  if feeCap > 0 or tipCap > 0:
+    feeCap = args.gasPrice.get(args.maxFeePerGas.get(0.u256))
+    tipCap = args.gasPrice.get(args.maxPriorityFeePerGas.get(0.u256))
+  if not feeCap.isZero or not tipCap.isZero:
     if tipCap > feeCap:
       return err("max priority fee per gas higher than max fee per gas")
-    if feeCap < baseFee:
+    if feeCap < baseFee.u256:
       return err("max fee per gas less than block base fee")
 
   # Set default gas & gas price if none were set
@@ -76,6 +76,11 @@ proc toTransaction*(vmState: BaseVMState,
       cap = globalGasCap,
       gasLimit = globalGasCap
 
+  # The fee cap is a full UInt256: reject a gas cost that would wrap, as no
+  # balance can cover it
+  if not feeCap.isZero and gasLimit.u256 > high(UInt256) div feeCap:
+    return err("insufficient funds for gas * price: required balance exceeds 256 bits")
+
   template versionedHashes(args: TransactionArgs): seq[VersionedHash] =
     if args.blobVersionedHashes.isSome:
       args.blobVersionedHashes.get
@@ -86,9 +91,9 @@ proc toTransaction*(vmState: BaseVMState,
     txType:               txType(args),
     chainId:              args.chainId.get(0.u256),
     nonce:                args.nonce.get(0.Quantity).AccountNonce,
-    gasPrice:             args.gasPrice.get(0.Quantity).GasInt,
-    maxPriorityFeePerGas: args.maxPriorityFeePerGas.get(0.Quantity).GasInt,
-    maxFeePerGas:         args.maxFeePerGas.get(0.Quantity).GasInt,
+    gasPrice:             args.gasPrice.get(0.u256),
+    maxPriorityFeePerGas: args.maxPriorityFeePerGas.get(0.u256),
+    maxFeePerGas:         args.maxFeePerGas.get(0.u256),
     gasLimit:             gasLimit,
     to:                   args.to,
     value:                args.value.get(0.u256),

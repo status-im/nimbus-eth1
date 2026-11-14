@@ -118,6 +118,16 @@ const
           rc[fork][op].run  = tab[op].exec
       rc
 
+  inlinedOps* = ## Ops per `fork` whose handler entry is `VmOpInlined`, i.e.
+                ## expanded by the dispatcher instead of called
+    block:
+      var rc: array[EVMFork, set[Op]]
+      for fork in EVMFork:
+        for op in Op:
+          if vmOpHandlers[fork][op].run == VmOpInlined:
+            rc[fork].incl op
+      rc
+
 # ------------------------------------------------------------------------------
 # Debugging ...
 # ------------------------------------------------------------------------------

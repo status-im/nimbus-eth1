@@ -44,8 +44,7 @@ proc dispose*(s: var Semaphore) =
 
 proc `=copy`*(
     dest: var Semaphore, src: Semaphore
-) {.error: "Copying Semaphore is forbidden".} =
-  discard
+) {.error: "Copying Semaphore is forbidden".}
 
 proc tryWait*(s: var Semaphore): bool =
   var c = s.count.load()

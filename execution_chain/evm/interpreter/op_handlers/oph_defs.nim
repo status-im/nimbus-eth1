@@ -42,6 +42,9 @@ const
   VmOpIgnore*: VmOpFn =      ## No operation, placeholder function
     proc(cpt: VmCpt): EvmResultVoid = ok()
 
+  VmOpInlined*: VmOpFn =     ## Marks an op expanded by the dispatcher
+    proc(cpt: VmCpt): EvmResultVoid = raiseAssert "inlined op"
+
   # similar to: toSeq(Fork).mapIt({it}).foldl(a+b)
   VmOpAllForks* =
     {EVMFork.low .. EVMFork.high}

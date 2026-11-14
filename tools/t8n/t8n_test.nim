@@ -718,7 +718,7 @@ const
       expExitCode: ErrorConfig.int,
     ),
     TestSpec(
-      name  : "prepareDispatch isAccountAlive bug: leaf exists and empty",
+      name  : "prepareDispatch isAccountEmpty bug: leaf exists and empty",
       base  : "testdata/00-530",
       input : t8nInput(
         "alloc.json", "txs.json", "env.json", "Amsterdam", "0",
@@ -727,7 +727,7 @@ const
       expOut: "exp.json",
     ),
     TestSpec(
-      name  : "prepareDispatch isAccountAlive bug: leaf not exists",
+      name  : "prepareDispatch isAccountEmpty bug: leaf not exists",
       base  : "testdata/00-531",
       input : t8nInput(
         "alloc.json", "txs.json", "env.json", "Amsterdam", "0",
@@ -736,7 +736,7 @@ const
       expOut: "exp.json",
     ),
     TestSpec(
-      name  : "prepareDispatch isAccountAlive bug: leaf exists and not empty",
+      name  : "prepareDispatch isAccountEmpty bug: leaf exists and not empty",
       base  : "testdata/00-532",
       input : t8nInput(
         "alloc.json", "txs.json", "env.json", "Amsterdam", "0",

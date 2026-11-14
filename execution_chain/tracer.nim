@@ -163,7 +163,7 @@ proc traceTransactionImpl(
       before.captureAccount(ledger, sender, senderName)
       before.captureAccount(ledger, recipient, recipientName)
       before.captureAccount(ledger, miner, minerName)
-      ledger.persist()
+      ledger.persist(vmState.fork.clearEmptyAccounts())
       stateDiff["beforeRoot"] = %(ledger.getStateRoot().toHex)
       stateCtx = CaptCtxRef.init(com, ledger.getStateRoot())
 
@@ -175,7 +175,7 @@ proc traceTransactionImpl(
       after.captureAccount(ledger, recipient, recipientName)
       after.captureAccount(ledger, miner, minerName)
       tracerInst.removeTracedAccounts(sender, recipient, miner)
-      ledger.persist()
+      ledger.persist(vmState.fork.clearEmptyAccounts())
       stateDiff["afterRoot"] = %(ledger.getStateRoot().toHex)
       break
 

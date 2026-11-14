@@ -36,8 +36,7 @@ type
 
 proc `=copy`(
     dest: var WriteBatch, src: WriteBatch
-) {.error: "Copying WriteBatch is forbidden".} =
-  discard
+) {.error: "Copying WriteBatch is forbidden".}
 
 # Keep write batch size _around_ 1mb, give or take some overhead - this is a
 # tradeoff between efficiency and memory usage with diminishing returns the

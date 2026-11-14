@@ -26,7 +26,7 @@ type
   # Standard call parameters.
   CallParams* = object
     vmState*          : BaseVMState       # Chain, database, state, block, fork.
-    effectiveGasPrice*: GasInt            # Gas price for this tx.
+    effectiveGasPrice*: UInt256           # Gas price for this tx.
     sender*           : addresses.Address # Sender account.
     isCreate*         : bool              # True if this is a contract creation.
     tx*               : ptr Transaction

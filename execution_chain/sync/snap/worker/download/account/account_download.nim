@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos, metrics, stew/interval_set],
-  ../../[extra_types, helpers, cache_db, mpt_build, worker_desc],
+  ../../[helpers, cache_db, mpt_build, update, worker_desc],
   ./account_fetch
 
 logScope:
@@ -27,10 +27,13 @@ declareGauge nec_snap_accounts_coverage, "" &
 
 proc accountDownloadMetricsReset*(ctx: SnapCtxRef) =
   metrics.set(nec_snap_accounts_coverage, 0)
+  ctx.resetEta()
 
 proc accountDownloadMetricsUpdate*(ctx: SnapCtxRef) =
   if ctx.accUnproc.synced():
-    metrics.set(nec_snap_accounts_coverage, 1.0 - ctx.accUnproc.totalRatio)
+    let w = 1.0 - ctx.accUnproc.totalRatio
+    metrics.set(nec_snap_accounts_coverage, w)
+    ctx.updateEta w
 
 proc accountDownloadCommit*(
     ctx: SnapCtxRef;

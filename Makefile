@@ -86,21 +86,32 @@ endif
 	dist \
 	eest \
 	eest_engine \
+	eest_engine_build \
 	eest_engine_test \
 	eest_blockchain \
+	eest_blockchain_build \
 	eest_blockchain_test \
+	eest_stateless_execution_build \
 	eest_stateless_execution_test \
+	eest_txpool \
+	eest_txpool_build \
 	eest_txpool_test \
+	eest_full_build \
 	eest_full_test \
+	eest_tool_build \
 	eest_tool_test \
-	eest_benchmark \
+	eest_benchmark_fixtures \
+	eest_benchmark_build \
 	eest_benchmark_test \
-	eest_zkevm_benchmark \
+	eest_zkevm_benchmark_fixtures \
+	eest_zkevm_benchmark_build \
 	eest_zkevm_benchmark_test \
 	t8n \
 	t8n_test \
 	evmstate \
 	evmstate_test \
+	test_runner \
+	test_runner_test \
 	stateless_guest_baremetal \
 	stateless_guest_native \
 	stateless_execution_test
@@ -231,10 +242,10 @@ endif
 eest:
 	scripts/eest_ci_cache.sh
 
-eest_benchmark:
+eest_benchmark_fixtures:
 	scripts/eest_ci_cache.sh benchmark benchmark_amsterdam
 
-eest_zkevm_benchmark:
+eest_zkevm_benchmark_fixtures:
 	scripts/eest_ci_cache.sh zkevm_benchmark
 
 # builds and runs the nimbus test suite
@@ -438,75 +449,58 @@ stateless_execution_test: | build deps
 	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "tests/test_stateless/test_stateless_execution.nim"
 	$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) $(STATELESS_GUEST_FLAGS) -o:build/$@_guest "tests/test_stateless/test_stateless_execution_guest.nim"
 
-# EEST standalone targets - binary to run individual test vector files
-eest_engine: | build deps
+# EEST standalone targets - build the module binary for each category
+eest_engine eest_blockchain eest_txpool: | build deps rocksdb
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
 		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
 		echo -e $(BUILD_END_MSG) "build/$@"
 
-eest_blockchain: | build deps
-	+ echo -e $(BUILD_MSG) "build/$@" && \
+# EEST test binary targets - build the test binary for each category (no fixtures,
+# so the fixture download can run in parallel with the build)
+eest_engine_build eest_blockchain_build eest_txpool_build eest_stateless_execution_build eest_benchmark_build eest_zkevm_benchmark_build: | build deps rocksdb
+	+ echo -e $(BUILD_MSG) "build/$(patsubst %_build,%_test,$@)" && \
 		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
-		echo -e $(BUILD_END_MSG) "build/$@"
+		$(patsubst %_build,%_test,$@) "tests/eest/$(patsubst %_build,%_test,$@).nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/$(patsubst %_build,%_test,$@)"
 
-# EEST test suite targets - to run the whole test suite for each category
-eest_engine_test: | build deps eest
-	+ echo -e $(BUILD_MSG) "build/$@" && \
+# These two aggregate suites don't follow the "eest_<category>_test.nim" naming
+eest_full_build: | build deps rocksdb
+	+ echo -e $(BUILD_MSG) "build/eest_full_test" && \
 		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
-		echo -e $(BUILD_END_MSG) "build/$@"
-	build/$@
+		eest_full_test "tests/eest/all_eest_tests.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL -d:useGcAssert -d:useSysAssert && \
+		echo -e $(BUILD_END_MSG) "build/eest_full_test"
 
-eest_txpool_test: | build deps eest
-	+ echo -e $(BUILD_MSG) "build/$@" && \
+eest_tool_build: | build deps rocksdb
+	+ echo -e $(BUILD_MSG) "build/eest_tool_test" && \
 		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
-		echo -e $(BUILD_END_MSG) "build/$@"
-	build/$@
+		eest_tool_test "tests/eest/eest_tool_tests.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
+		echo -e $(BUILD_END_MSG) "build/eest_tool_test"
 
-eest_blockchain_test: | build deps eest
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
-		echo -e $(BUILD_END_MSG) "build/$@"
-	build/$@
+# EEST test suite targets - run the built test binary for each category
+eest_engine_test: eest_engine_build | build deps eest
+	build/eest_engine_test
 
-eest_stateless_execution_test: | build deps eest
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
-		echo -e $(BUILD_END_MSG) "build/$@"
-	build/$@
+eest_blockchain_test: eest_blockchain_build | build deps eest
+	build/eest_blockchain_test
 
-eest_benchmark_test: | build deps eest_benchmark
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
-		echo -e $(BUILD_END_MSG) "build/$@"
-	build/$@
+eest_txpool_test: eest_txpool_build | build deps eest
+	build/eest_txpool_test
 
-eest_zkevm_benchmark_test: | build deps eest_zkevm_benchmark
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tests/eest/$@.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
-		echo -e $(BUILD_END_MSG) "build/$@"
-	build/$@
+eest_stateless_execution_test: eest_stateless_execution_build | build deps eest
+	build/eest_stateless_execution_test
 
-eest_full_test: | build deps eest
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tests/eest/all_eest_tests.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL -d:useGcAssert -d:useSysAssert && \
-		echo -e $(BUILD_END_MSG) "build/$@"
-	build/$@
+eest_benchmark_test: eest_benchmark_build | build deps eest_benchmark_fixtures
+	build/eest_benchmark_test
 
-eest_tool_test: | build deps eest
-	+ echo -e $(BUILD_MSG) "build/$@" && \
-		MAKE="$(MAKE)" V="$(V)" $(ENV_SCRIPT) vendor/nimbus-eth2/scripts/compile_nim_program.sh \
-		$@ "tests/eest/eest_tool_tests.nim" $(NIM_PARAMS) -d:chronicles_log_level=FATAL && \
-		echo -e $(BUILD_END_MSG) "build/$@"
-	build/$@
+eest_zkevm_benchmark_test: eest_zkevm_benchmark_build | build deps eest_zkevm_benchmark_fixtures
+	build/eest_zkevm_benchmark_test
+
+eest_full_test: eest_full_build | build deps eest
+	build/eest_full_test
+
+eest_tool_test: eest_tool_build | build deps eest
+	build/eest_tool_test
 
 # Some tools below don't use `compile_nim_program` since they don't go into the
 # `build` folder - moving them is likely a good idea but requires changing their
@@ -525,6 +519,16 @@ t8n_test: | build deps t8n
 evmstate: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) "tools/evmstate/$@.nim"
+
+# builds the EEST blocktest and enginetest runner
+test_runner: | build deps rocksdb
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c $(NIM_PARAMS) -o:build/$@ "tools/test_runner/$@.nim"
+
+# builds the EEST runner and runs its test suite
+test_runner_test: | build deps test_runner
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) $(NIMC) c -r $(NIM_PARAMS) -o:build/$@ "tools/test_runner/$@.nim"
 
 # builds and runs evm state tool test suite
 evmstate_test: | build deps evmstate

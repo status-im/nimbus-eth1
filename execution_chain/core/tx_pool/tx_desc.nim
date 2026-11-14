@@ -226,25 +226,17 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
         blobGasPrice = blobGasPrice
       return false
 
-  # For legacy transactions check whether minimum gas price and tip are
-  # high enough. These checks are optional.
-  if tx.txType < TxEip1559:
-    if tx.gasPrice < 0:
-      debug "Invalid transaction: Legacy transaction with invalid gas price",
-        gasPrice = tx.gasPrice
-      return false
-
   if tx.txType >= TxEip1559:
     # Ensure that the user was willing to at least pay the base fee
     # And to at least pay the current data gasprice
-    if tx.maxFeePerGas < xp.baseFee:
+    if tx.maxFeePerGas < xp.baseFee.u256:
       debug "Invalid transaction: maxFeePerGas lower than baseFee",
         maxFeePerGas = tx.maxFeePerGas,
         baseFee = xp.baseFee
       return false
 
     # No tip checking as tip is optional after EIP-1559
-    if tx.maxFeePerGas < 1.GasInt:
+    if tx.maxFeePerGas.isZero:
       debug "Invalid transaction: EIP-1559 transaction with maxFeePerGas lower than 1"
       return false
 

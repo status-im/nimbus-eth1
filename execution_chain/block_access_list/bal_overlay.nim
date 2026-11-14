@@ -42,8 +42,7 @@ func init*(T: type BlockAccessListOverlay, bal: ptr BlockAccessList, balIndex: i
 
 proc `=copy`(
     dest: var BlockAccessListOverlay, src: BlockAccessListOverlay
-) {.error: "Copying BlockAccessListOverlay is forbidden".} =
-  discard
+) {.error: "Copying BlockAccessListOverlay is forbidden".}
 
 proc findAccount(overlay: var BlockAccessListOverlay, address: Address): int =
   overlay.accIndexes.withValue(address, cached):

@@ -71,8 +71,12 @@ proc readValue*(
     r: var JsonReader[Fixture],
     value: var array[HardFork.Cancun .. HardFork.high, Opt[BlobSchedule]],
 ) {.gcsafe, raises: [SerializationError, IOError].} =
+  {.warning: "remove AmsterdamBPOInc/Dec if bpo3 already scheduled".}
   wrapValueError:
-    for key in r.readObjectFields:
+    for rawKey in r.readObjectFields:
+      let key = if rawKey == "AmsterdamBPOIncrease" or
+                   rawKey == "AmsterdamBPODecrease": "bpo3"
+                else: rawKey
       blobScheduleParser(r, key, value)
 
 proc readValue*(r: var JsonReader[Fixture], val: var BCFile)
@@ -343,6 +347,9 @@ proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = 
   let
     BCFile = try:
                Fixture.loadFile(filePath, BCFile, allowUnknownFields = true)
+             except JsonReaderError as exc:
+               echo exc.formatMsg(filePath)
+               quit(QuitFailure)
              except CatchableError as exc:
                echo exc.msg
                quit(QuitFailure)

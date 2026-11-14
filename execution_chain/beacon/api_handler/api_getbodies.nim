@@ -9,11 +9,12 @@
 
 import
   eth/common/blocks,
+  json_rpc/errors,
   ../web3_eth_conv,
   ../beacon_engine,
   ./api_utils
 
-{.push gcsafe, raises: [CatchableError].}
+{.push gcsafe, raises: [RpcResponseError].}
 
 const maxBodyRequest = 32
 

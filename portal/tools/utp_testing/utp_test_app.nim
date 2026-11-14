@@ -40,11 +40,13 @@ type AppConf* = object
     name: "rpc-listen-address"
   .}: IpAddress
 
-proc writeValue*(w: var JsonWriter[EthJson], v: Record) {.gcsafe, raises: [IOError].} =
+proc writeValue*(
+    w: var JsonWriter[PortalJson], v: Record
+) {.gcsafe, raises: [IOError].} =
   w.writeValue(v.toURI())
 
 proc readValue*(
-    r: var JsonReader[EthJson], val: var Record
+    r: var JsonReader[PortalJson], val: var Record
 ) {.gcsafe, raises: [IOError, JsonReaderError].} =
   val = enr.Record.fromURI(r.parseString()).valueOr:
     r.raiseUnexpectedValue("Invalid ENR")
@@ -55,7 +57,7 @@ proc installUtpHandlers(
     s: UtpDiscv5Protocol,
     t: ref Table[SKey, UtpSocket[NodeAddress]],
 ) {.raises: [].} =
-  srv.rpc(EthJson):
+  srv.rpc(PortalJson):
     proc utp_connect(
         r: enr.Record
     ): SKey {.async: (raises: [ValueError, CancelledError]).} =

@@ -29,9 +29,9 @@ import
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
   ../../execution_api/engine_client,
-  ./eest_helpers
+  ./eest_rpc_env
 
-proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[PayloadStatus, string] =
+proc sendNewPayload(env: RpcTestEnv, version: uint64, param: PayloadParam): Result[PayloadStatus, string] =
   if not env.client.isSome:
     return err("Client is not initialized")
 
@@ -68,7 +68,7 @@ proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[
   else:
     err("Unsupported NewPayload version: " & $version)
 
-proc sendFCU(env: TestEnv, version: uint64, param: PayloadParam): Result[ForkchoiceUpdatedResponse, string] =
+proc sendFCU(env: RpcTestEnv, version: uint64, param: PayloadParam): Result[ForkchoiceUpdatedResponse, string] =
   if not env.client.isSome:
     return err("Client is not initialized")
 
@@ -90,7 +90,7 @@ proc sendFCU(env: TestEnv, version: uint64, param: PayloadParam): Result[Forkcho
   else:
     err("Unsupported FCU version: " & $version)
 
-proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
+proc runTest(env: RpcTestEnv, unit: EngineUnitEnv): Result[void, string] =
   if not env.client.isSome:
     return err("Client is not initialized")
 
@@ -148,7 +148,7 @@ proc processFile*(filePath: string, statelessEnabled = false, parallelEnabled = 
       else:
         let header = testUnit.genesisBlockHeader.to(Header)
         check testUnit.genesisBlockHeader.hash == header.computeRlpHash
-        let env = prepareEnv(testUnit, header, rpcEnabled = true, statelessEnabled, parallelEnabled)
+        let env = prepareRpcEnv(testUnit, header, statelessEnabled, parallelEnabled)
 
         let testResult = env.runTest(testUnit)
         check testResult == Result[void, string].ok()

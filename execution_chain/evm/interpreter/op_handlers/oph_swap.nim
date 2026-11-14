@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -41,23 +41,17 @@ proc fnInfo(n: int): string {.compileTime.} =
   "Exchange first and " & blurb & " stack items"
 
 
-template swapImpl(cpt: VmCpt; n: static int): EvmResultVoid =
+template swapImpl*(cpt: VmCpt; n: static int): EvmResultVoid =
   cpt.stack.swap(n)
 
 const
   inxRange = toSeq(1 .. 16)
 
 # ------------------------------------------------------------------------------
-# Private, op handlers implementation
-# ------------------------------------------------------------------------------
-
-genOphHandlers fnName, fnInfo, inxRange, swapImpl
-
-# ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
 
-genOphList fnName, fnInfo, inxRange, "VmOpExecSwap", opName
+genOphList fnName, fnInfo, inxRange, "VmOpExecSwap", opName, inlined = true
 
 # ------------------------------------------------------------------------------
 # End

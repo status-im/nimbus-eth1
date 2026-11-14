@@ -13,7 +13,7 @@
 import
   std/[macros, strformat],
   chronicles,
-  stew/[byteutils],
+  stew/[byteutils, ptrops],
   ../constants,
   ../db/ledger,
   ./interpreter/[op_dispatcher],
@@ -38,11 +38,23 @@ proc runVM(
   when tracingEnabled:
     c.prepareTracer()
 
+  let
+    codeLen = c.code.len
+    code = cast[ptr UncheckedArray[byte]](c.code.bytes.baseAddr)
+
   while true:
     {.computedGoto.}
-    c.instr = c.code.next()
+    let pc = c.code.pc
+    var op = Op.Stop
+    if pc < codeLen:
+      {.push checks: off.}
+      op = Op(code[pc])
+      {.pop.}
+      c.code.pc = pc + 1
+    when tracingEnabled:
+      c.instr = op
 
-    dispatchInstr(fork, tracingEnabled, c.instr, c)
+    dispatchInstr(fork, tracingEnabled, op, c)
 
   ok()
 
@@ -74,10 +86,10 @@ proc beforeExecCall(c: Computation): bool =
         c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
         ledger.subBalance(c.msg.sender, c.msg.value)
         c.vmState.balTracker.trackAddBalanceChange(c.msg.currentTarget, c.msg.value)
-        ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
+        ledger.addBalance(c.msg.currentTarget, c.msg.value, c.fork.checkEmptyAccount())
       else:
         ledger.subBalance(c.msg.sender, c.msg.value)
-        ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
+        ledger.addBalance(c.msg.currentTarget, c.msg.value, c.fork.checkEmptyAccount())
 
     if c.fork >= FkAmsterdam:
       # EIP-7708: Emit transfer log for ETH-tx or contract call and CALL op code
@@ -103,15 +115,15 @@ proc beforeExecCreate(c: Computation): bool =
       c.vmState.balTracker.trackSubBalanceChange(c.msg.sender, c.msg.value)
       ledger.subBalance(c.msg.sender, c.msg.value)
       c.vmState.balTracker.trackAddBalanceChange(c.msg.currentTarget, c.msg.value)
-      ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       ledger.clearStorage(c.msg.currentTarget)
+      ledger.addBalance(c.msg.currentTarget, c.msg.value, c.fork.checkEmptyAccount())
       if c.fork >= FkSpurious:
         c.vmState.balTracker.trackIncNonceChange(c.msg.currentTarget)
         ledger.incNonce(c.msg.currentTarget)
     else:
       ledger.subBalance(c.msg.sender, c.msg.value)
-      ledger.addBalance(c.msg.currentTarget, c.msg.value, checkEmptyAccount = c.fork < FkParis)
       ledger.clearStorage(c.msg.currentTarget)
+      ledger.addBalance(c.msg.currentTarget, c.msg.value, c.fork.checkEmptyAccount())
       if c.fork >= FkSpurious:
         # EIP161 nonce incrementation
         ledger.incNonce(c.msg.currentTarget)
@@ -212,9 +224,6 @@ proc executeOpcodes*(c: Computation) =
       # continuation has finished
       if c.tracingEnabled:
         c.traceOpCodeEnded(c.instr, c.opIndex)
-
-    if c.instr == Return or c.instr == Revert or c.instr == SelfDestruct:
-      break blockOne
 
     c.selectVM(fork, c.tracingEnabled).isOkOr:
       handleEvmError(error)

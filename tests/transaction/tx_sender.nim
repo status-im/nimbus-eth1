@@ -69,8 +69,8 @@ type
 
   CustomTransactionData* = object
     nonce*              : Opt[uint64]
-    gasPriceOrGasFeeCap*: Opt[GasInt]
-    gasTipCap*          : Opt[GasInt]
+    gasPriceOrGasFeeCap*: Opt[UInt256]
+    gasTipCap*          : Opt[UInt256]
     gas*                : Opt[GasInt]
     blobGas*            : Opt[UInt256]
     to*                 : Opt[common.Address]
@@ -140,10 +140,10 @@ proc getTxType(tc: BaseTx, nonce: uint64): TxType =
 
 proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
   let
-    gasFeeCap = if tc.gasFee != 0.GasInt: tc.gasFee
-                else: gasPrice
-    gasTipCap = if tc.gasTip != 0.GasInt: tc.gasTip
-                else: gasTipPrice
+    gasFeeCap = (if tc.gasFee != 0.GasInt: tc.gasFee
+                 else: gasPrice).u256
+    gasTipCap = (if tc.gasTip != 0.GasInt: tc.gasTip
+                 else: gasTipPrice).u256
 
   let txType = tc.getTxType(params.nonce)
   case txType
@@ -155,7 +155,7 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
         to      : tc.recipient,
         value   : tc.amount,
         gasLimit: tc.gasLimit,
-        gasPrice: gasPrice,
+        gasPrice: gasPrice.u256,
         payload : tc.payload,
         chainId : params.chainId,
       )
@@ -342,10 +342,10 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): PooledTransaction =
   doAssert(tc.recipient.isSome, "nil recipient address")
 
   let
-    gasFeeCap = if tc.gasFee != 0.GasInt: tc.gasFee
-                else: gasPrice
-    gasTipCap = if tc.gasTip != 0.GasInt: tc.gasTip
-                else: gasTipPrice
+    gasFeeCap = (if tc.gasFee != 0.GasInt: tc.gasFee
+                 else: gasPrice).u256
+    gasTipCap = (if tc.gasTip != 0.GasInt: tc.gasTip
+                 else: gasTipPrice).u256
 
   # Collect fields for transaction
   let unsignedTx = Transaction(
@@ -378,10 +378,10 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx7594): PooledTransaction =
   doAssert(tc.recipient.isSome, "nil recipient address")
 
   let
-    gasFeeCap = if tc.gasFee != 0.GasInt: tc.gasFee
-                else: gasPrice
-    gasTipCap = if tc.gasTip != 0.GasInt: tc.gasTip
-                else: gasTipPrice
+    gasFeeCap = (if tc.gasFee != 0.GasInt: tc.gasFee
+                 else: gasPrice).u256
+    gasTipCap = (if tc.gasTip != 0.GasInt: tc.gasTip
+                 else: gasTipPrice).u256
 
   # Collect fields for transaction
   let unsignedTx = Transaction(
@@ -476,7 +476,7 @@ proc customizeTransaction*(sender: TxSender,
     modTx.nonce = custTx.nonce.get.AccountNonce
 
   if custTx.gasPriceOrGasFeeCap.isSome:
-    modTx.gasPrice = custTx.gasPriceOrGasFeeCap.get.GasInt
+    modTx.gasPrice = custTx.gasPriceOrGasFeeCap.get
 
   if custTx.gas.isSome:
     modTx.gasLimit = custTx.gas.get.GasInt
@@ -495,10 +495,10 @@ proc customizeTransaction*(sender: TxSender,
 
   if baseTx.txType in {TxEip1559, TxEip4844, TxEip7702}:
     if custTx.gasPriceOrGasFeeCap.isSome:
-      modTx.maxFeePerGas = custTx.gasPriceOrGasFeeCap.get.GasInt
+      modTx.maxFeePerGas = custTx.gasPriceOrGasFeeCap.get
 
     if custTx.gasTipCap.isSome:
-      modTx.maxPriorityFeePerGas = custTx.gasTipCap.get.GasInt
+      modTx.maxPriorityFeePerGas = custTx.gasTipCap.get
 
   if baseTx.txType == TxEip4844:
     if modTx.to.isNone:

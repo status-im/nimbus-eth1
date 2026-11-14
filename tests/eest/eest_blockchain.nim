@@ -11,7 +11,7 @@
 {.define: unittest2DisableParamFiltering.}
 
 import
-  std/[json, os],
+  std/[json, os, strutils],
   unittest2,
   chronos,
   stew/byteutils,
@@ -19,18 +19,14 @@ import
   web3/eth_api_types,
   web3/engine_api_types,
   web3/primitives,
-  json_rpc/rpcclient,
-  json_rpc/rpcserver,
   ../../execution_api/conversions,
   ../../execution_api/execution_types,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
-  ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
   ../../execution_chain/stateless/stateless_execution,
   ../../execution_chain/stateless/stateless_guest,
   ../../execution_chain/stateless/stateless_host,
-  ../../execution_api/engine_client,
   ./eest_helpers,
   ./bal_parser
 
@@ -46,13 +42,13 @@ proc fromJson(T: type ExecutionWitness, n: JsonNode): ExecutionWitness =
         res.headers.add(ByteList[MAX_BYTES_PER_HEADER].init(hexToSeqByte(item.getStr)))
   res
 
-proc parseWitness(node: JsonNode): Opt[ExecutionWitness] =
-  if "executionWitness" in node:
-    Opt.some(ExecutionWitness.fromJson(node["executionWitness"]))
+proc parseWitness(node: BlockDescNode): Opt[ExecutionWitness] =
+  if node.executionWitness != nil:
+    Opt.some(ExecutionWitness.fromJson(node.executionWitness))
   else:
     Opt.none(ExecutionWitness)
 
-proc parseBAL(node: JsonNode, parallelEnabled: bool): Opt[BlockAccessListRef] =
+proc parseBAL(node: BlockDescNode, parallelEnabled: bool): Opt[BlockAccessListRef] =
   const deepValidationExceptions =
     ["INVALID_BAL_MISSING_ACCOUNT", "INVALID_BLOCK_ACCESS_LIST"]
 
@@ -62,43 +58,32 @@ proc parseBAL(node: JsonNode, parallelEnabled: bool): Opt[BlockAccessListRef] =
         return true
     false
 
-  if "expectException" in node:
-    if doNotParseBAL(node["expectException"].getStr):
-      return Opt.none(BlockAccessListRef)
+  if node.expectException.len > 0 and doNotParseBAL(node.expectException):
+    return Opt.none(BlockAccessListRef)
 
-  if parallelEnabled and "blockAccessList" in node:
+  if parallelEnabled and node.blockAccessList.isNil.not:
     let bal = new(BlockAccessListRef)
-    bal[] = balFromJson(node["blockAccessList"])
+    bal[] = balFromJson(node.blockAccessList)
     return Opt.some(bal)
 
-  if "rlp_decoded" in node:
+  if node.rlp_decoded.isSome:
     # Only need shallow validation
-    let inner = node["rlp_decoded"]
-    if "blockAccessList" in inner:
+    if node.rlp_decoded.value.blockAccessList.isNil.not:
       let bal = new(BlockAccessListRef)
-      bal[] = balFromJson(inner["blockAccessList"])
+      bal[] = balFromJson(node.rlp_decoded.value.blockAccessList)
       return Opt.some(bal)
 
-proc parseBlocks*(node: JsonNode, parallelEnabled: bool): seq[BlockDesc] =
+proc parseBlocks*(node: openArray[BlockDescNode], parallelEnabled: bool): seq[BlockDesc] =
   for x in node:
     try:
-      let blockRLP = hexToSeqByte(x["rlp"].getStr)
-      let blk = rlp.decode(blockRLP, EthBlock)
+      let blk = rlp.decode(x.rlp, EthBlock)
       result.add BlockDesc(
         blk: blk,
         bal: parseBAL(x, parallelEnabled),
-        badBlock: "expectException" in x,
+        badBlock: x.expectException.len > 0,
         witness: parseWitness(x),
-        statelessInputBytes:
-          if "statelessInputBytes" in x:
-            Opt.some(hexToSeqByte(x["statelessInputBytes"].getStr))
-          else:
-            Opt.none(seq[byte]),
-        statelessOutputBytes:
-          if "statelessOutputBytes" in x:
-            Opt.some(hexToSeqByte(x["statelessOutputBytes"].getStr))
-          else:
-            Opt.none(seq[byte]),
+        statelessInputBytes: x.statelessInputBytes,
+        statelessOutputBytes: x.statelessOutputBytes,
       )
     except RlpError:
       # invalid rlp will not participate in block validation
@@ -335,7 +320,7 @@ proc processFile*(
         let header = testUnit.genesisBlockHeader.to(Header)
         check testUnit.genesisBlockHeader.hash == header.computeRlpHash
         let env = prepareEnv(
-          testUnit, header, rpcEnabled = false, statelessEnabled, parallelEnabled
+          testUnit, header, statelessEnabled, parallelEnabled
         )
 
         let testResult = waitFor env.runTest(

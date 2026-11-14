@@ -426,7 +426,7 @@ proc runTestOverflow() =
       txType: TxLegacy,
       nonce: 0,
       chainId: MainNet.ChainId,
-      gasPrice: 0.GasInt,
+      gasPrice: 0.u256,
       gasLimit: 30000000,
       to: Opt.some codeAddress,
       value: 0.u256,
@@ -536,7 +536,7 @@ proc runCreateCacheTests() =
         ledger.setCode(factoryAddress, factoryCode(op))
         ledger.setBalance(factoryCaller, 10_000_000.u256)
         let tx = Transaction(
-          gasLimit: 1_000_000, gasPrice: 1, to: Opt.some(factoryAddress),
+          gasLimit: 1_000_000, gasPrice: 1.u256, to: Opt.some(factoryAddress),
           payload: initcode, V: 27, R: 1.u256, S: 1.u256)
 
         vm.prefetchTransaction(tx, factoryCaller)

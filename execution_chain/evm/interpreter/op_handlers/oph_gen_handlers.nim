@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -71,7 +71,8 @@ macro genOphList*(runHandler: static[OphNumToTextFn];
                   handlerInfo: static[OphNumToTextFn];
                   inxList: static[openArray[int]];
                   varName: static[string];
-                  opCode: static[OphNumToTextFn]): untyped =
+                  opCode: static[OphNumToTextFn];
+                  inlined: static[bool] = false): untyped =
   ## Generate
   ## ::
   ##   const <varName>*: seq[VmOpExec] = @[ <records> ]
@@ -83,7 +84,7 @@ macro genOphList*(runHandler: static[OphNumToTextFn];
   ##    info: <handlerInfo(n)>,
   ##    exec: <runHandler(n)>)
   ##
-  ## for all `n` in `inxList`
+  ## for all `n` in `inxList`, with `exec: VmOpInlined` when `inlined`
   ##
   var records = nnkBracket.newTree()
   for n in inxList:
@@ -95,7 +96,7 @@ macro genOphList*(runHandler: static[OphNumToTextFn];
                   "info".asText(n.handlerInfo),
                   nnkExprColonExpr.newTree(
                     newIdentNode("exec"),
-                    newIdentNode(n.runHandler)))
+                    newIdentNode(if inlined: "VmOpInlined" else: n.runHandler)))
 
   # => const <varName>*: seq[VmOpExec] = @[ <records> ]
   result = nnkStmtList.newTree(

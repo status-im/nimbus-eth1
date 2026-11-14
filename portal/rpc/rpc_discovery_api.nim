@@ -21,13 +21,13 @@ type PongResponse* = object
   recipientIP: string
   recipientPort: uint16
 
-PongResponse.useDefaultSerializationIn EthJson
+PongResponse.useDefaultSerializationIn PortalJson
 
 proc installDiscoveryApiHandlers*(rpcServer: RpcServer, d: discv5_protocol.Protocol) =
   ## Discovery v5 JSON-RPC API such as defined here:
   ## https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
 
-  rpcServer.rpc(EthJson):
+  rpcServer.rpc(PortalJson):
     proc discv5_nodeInfo(): NodeInfo =
       return d.localNode.getNodeInfo()
 

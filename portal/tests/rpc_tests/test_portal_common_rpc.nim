@@ -75,8 +75,8 @@ procSuite "Portal Common JSON-RPC API":
   asyncTest "portal_historyNodeInfo":
     let
       tc = await setupHistoryTest(rng)
-      jsonBytes = await tc.client.call("portal_historyNodeInfo", %[], EthJson)
-      resp = EthJson.decode(jsonBytes.string, JsonNode)
+      jsonBytes = await tc.client.call("portal_historyNodeInfo", %[], PortalJson)
+      resp = PortalJson.decode(jsonBytes.string, JsonNode)
 
     check:
       resp.contains("enr")
@@ -93,8 +93,9 @@ procSuite "Portal Common JSON-RPC API":
   asyncTest "portal_historyRoutingTableInfo":
     let
       tc = await setupHistoryTest(rng)
-      jsonBytes = await tc.client.call("portal_historyRoutingTableInfo", %[], EthJson)
-      resp = EthJson.decode(jsonBytes.string, JsonNode)
+      jsonBytes =
+        await tc.client.call("portal_historyRoutingTableInfo", %[], PortalJson)
+      resp = PortalJson.decode(jsonBytes.string, JsonNode)
 
     check:
       resp.contains("localNodeId")
@@ -112,8 +113,8 @@ procSuite "Portal Common JSON-RPC API":
       testEnr = testHistoryNode.localNode.record
 
       jsonBytes =
-        await tc.client.call("portal_historyAddEnr", %[testEnr.toURI()], EthJson)
-    check EthJson.decode(jsonBytes.string, bool)
+        await tc.client.call("portal_historyAddEnr", %[testEnr.toURI()], PortalJson)
+    check PortalJson.decode(jsonBytes.string, bool)
 
     await testHistoryNode.stop()
     await tc.stop()
@@ -124,9 +125,9 @@ procSuite "Portal Common JSON-RPC API":
       # Get the local node's ENR using its node ID
       nodeId = tc.historyNode.localNode.id
       jsonBytes = await tc.client.call(
-        "portal_historyGetEnr", %[nodeId.toBytesBE().to0xHex()], EthJson
+        "portal_historyGetEnr", %[nodeId.toBytesBE().to0xHex()], PortalJson
       )
-    check EthJson.decode(jsonBytes.string, string) ==
+    check PortalJson.decode(jsonBytes.string, string) ==
       tc.historyNode.localNode.record.toURI()
 
     await tc.stop()
@@ -142,9 +143,9 @@ procSuite "Portal Common JSON-RPC API":
     discard tc.historyNode.portalProtocol.addNode(testHistoryNode.localNode.toNode())
 
     let jsonBytes = await tc.client.call(
-      "portal_historyDeleteEnr", %[testNodeId.toBytesBE().to0xHex()], EthJson
+      "portal_historyDeleteEnr", %[testNodeId.toBytesBE().to0xHex()], PortalJson
     )
-    check EthJson.decode(jsonBytes.string, bool)
+    check PortalJson.decode(jsonBytes.string, bool)
 
     await testHistoryNode.stop()
     await tc.stop()
@@ -162,8 +163,8 @@ procSuite "Portal Common JSON-RPC API":
     let params = newJArray()
     params.add(%testHistoryNode.localNode.record.toURI())
     # Note: Not adding payloadType and payload to use defaults
-    let jsonBytes = await tc.client.call("portal_historyPing", params, EthJson)
-    let resp = EthJson.decode(jsonBytes.string, JsonNode)
+    let jsonBytes = await tc.client.call("portal_historyPing", params, PortalJson)
+    let resp = PortalJson.decode(jsonBytes.string, JsonNode)
 
     check:
       resp.contains("enrSeq")
@@ -195,8 +196,8 @@ procSuite "Portal Common JSON-RPC API":
     let params = newJArray()
     params.add(%testHistoryNode.localNode.record.toURI())
     params.add(%[0]) # 0 = own ENR
-    let jsonBytes = await tc.client.call("portal_historyFindNodes", params, EthJson)
-    check EthJson.decode(jsonBytes.string, JsonNode).kind == JArray
+    let jsonBytes = await tc.client.call("portal_historyFindNodes", params, PortalJson)
+    check PortalJson.decode(jsonBytes.string, JsonNode).kind == JArray
 
     await testHistoryNode.stop()
     await tc.stop()
@@ -207,8 +208,8 @@ procSuite "Portal Common JSON-RPC API":
     # Use the local node's ID for the lookup
     let nodeId = tc.historyNode.localNode.id
     let jsonBytes = await tc.client.call(
-      "portal_historyRecursiveFindNodes", %[nodeId.toBytesBE().to0xHex()], EthJson
+      "portal_historyRecursiveFindNodes", %[nodeId.toBytesBE().to0xHex()], PortalJson
     )
-    check EthJson.decode(jsonBytes.string, JsonNode).kind == JArray
+    check PortalJson.decode(jsonBytes.string, JsonNode).kind == JArray
 
     await tc.stop()
