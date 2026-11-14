@@ -212,6 +212,7 @@ type
     syncEta*: SyncEta                ## Estimated time until all in sync
     syncTickerOk*: bool              ## Activate built in state monitor
     ticker*: Ticker                  ## Ticker function to run in background
+    loopInterval*: Opt[Duration]     ## Replaces daemon and worker idle waits
 
 # ------------------------------------------------------------------------------
 # Public helpers
