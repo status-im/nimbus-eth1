@@ -333,7 +333,7 @@ proc createAccessList*(header: Header,
       txFrame = txFrame.txFrameBegin()
       tracer  = AccessListTracer.new(accessList, sender, to, precompiles)
       vmState = BaseVMState.new(parent, header, com, txFrame, tracer)
-      res     = rpcCallEvm(args, header, vmState).valueOr:
+      res     = rpcCallEvm(args, header, vmState, DEFAULT_RPC_GAS_CAP).valueOr:
                   vmState.dispose()
                   txFrame.dispose()
                   handleError("failed to call evm: " & error)

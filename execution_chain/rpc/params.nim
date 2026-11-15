@@ -73,8 +73,8 @@ proc toTransaction*(vmState: BaseVMState,
   if globalGasCap != 0 and globalGasCap < gasLimit:
     warn "Caller gas above allowance, capping",
       requested = gasLimit,
-      cap = globalGasCap,
-      gasLimit = globalGasCap
+      cap = globalGasCap
+    gasLimit = globalGasCap
 
   # The fee cap is a full UInt256: reject a gas cost that would wrap, as no
   # balance can cover it

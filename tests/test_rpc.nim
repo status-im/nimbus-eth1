@@ -79,6 +79,14 @@ const
     Push1 "0x00"
     Return
   baseFeeAddress = address"0x00000000000000000000000000000000000000b2"
+  gasLeftCode = evmByteCode:
+    Gas
+    Push1 "0x00"
+    Mstore
+    Push1 "0x20"
+    Push1 "0x00"
+    Return
+  gasLeftAddress = address"0x00000000000000000000000000000000000000b3"
   revertCode = evmByteCode:
     Push4 "0xDEADBEEF"
     Push1 "0x00"
@@ -228,6 +236,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
   params.genesis.alloc[contractAddress] = GenesisAccount(code: contractCode)
   params.genesis.alloc[blockNumberAddress] = GenesisAccount(code: blockNumberCode)
   params.genesis.alloc[baseFeeAddress] = GenesisAccount(code: baseFeeCode)
+  params.genesis.alloc[gasLeftAddress] = GenesisAccount(code: gasLeftCode)
   params.genesis.alloc[revertAddress] = GenesisAccount(code: revertCode)
   params.genesis.alloc[signer] = GenesisAccount(balance: oneETH)
   params.genesis.alloc[create2Deployer] =
@@ -697,6 +706,17 @@ proc rpcMain*() =
       check UInt256.fromBytesBE(res) == u256(uint64(head))
       let genesis = await client.eth_call(ec, "earliest")
       check UInt256.fromBytesBE(genesis) == 0.u256
+
+    test "eth_call gas is capped at the RPC gas cap":
+      # The contract returns the gas left (GAS opcode): the gas limit minus the
+      # intrinsic gas and the GAS opcode itself.
+      const capped = (DEFAULT_RPC_GAS_CAP - 21_000 - 2).u256
+      # No gas given: the cap is the default
+      var ec = TransactionArgs(to: Opt.some(gasLeftAddress))
+      check UInt256.fromBytesBE(await client.eth_call(ec, "latest")) == capped
+
+      ec.gas = Opt.some(w3Qty(2 * DEFAULT_RPC_GAS_CAP))
+      check UInt256.fromBytesBE(await client.eth_call(ec, "latest")) == capped
 
     test "eth_call base fee depends on the call fees":
       let
