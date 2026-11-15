@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -20,6 +20,13 @@ type
     pubkey*: PublicKey
 
   RlpxTransportError* = object of CatchableError
+
+const
+  maxFrameSize* = (1 shl 24) - 1
+    ## Largest body size the 24-bit size field of a frame header can declare
+
+  frameReadChunk = 64 * 1024
+    ## First read of a frame body, doubled per read until the declared size
 
 template `^`(arr): auto =
   # passes a stack array with a matching `arrLen` variable as an open array
@@ -139,7 +146,7 @@ proc accept*(
       stream.close()
 
 proc recvMsg*(
-    transport: RlpxTransport
+    transport: RlpxTransport, maxSize: int
 ): Future[seq[byte]] {.
     async: (raises: [CancelledError, TransportError, RlpxTransportError])
 .} =
@@ -155,10 +162,19 @@ proc recvMsg*(
   # https://github.com/ethereum/devp2p/blob/5713591d0366da78a913a811c7502d9ca91d29a8/rlpx.md#framing
 
   let msgSize = msgHeader.getBodySize()
+  if msgSize > maxSize:
+    raise (ref RlpxTransportError)(msg: "RLPx frame too large: " & $msgSize)
   let remainingBytes = encryptedLength(msgSize) - 32
 
-  var encryptedBytes = newSeq[byte](remainingBytes)
-  await transport.stream.readExactly(addr encryptedBytes[0], len(encryptedBytes))
+  # Grow the buffer as the body arrives rather than allocating the declared
+  # size up front, so that a peer stalling after the header pins little memory
+  var encryptedBytes: seq[byte]
+  while encryptedBytes.len < remainingBytes:
+    let
+      pos = encryptedBytes.len
+      n = min(remainingBytes - pos, max(pos, frameReadChunk))
+    encryptedBytes.setLenUninit(pos + n)
+    await transport.stream.readExactly(addr encryptedBytes[pos], n)
 
   let decryptedMaxLength = decryptedLength(msgSize) # Padded length
   var msgBody = newSeq[byte](decryptedMaxLength)
@@ -232,7 +248,7 @@ when isMainModule:
 
   while true:
     echo "Reading message"
-    var data = waitFor client.recvMsg()
+    var data = waitFor client.recvMsg(maxFrameSize)
     var rlp = rlpFromBytes(data)
     let msgId = rlp.read(uint64)
     if msgId == 0:
