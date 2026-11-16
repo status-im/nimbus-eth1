@@ -17,9 +17,9 @@ register_matplotlib_converters()
 
 def readStats(name: str):
     df = pd.read_csv(name).convert_dtypes()
-    df.set_index("block_number", inplace=True)
+    df = df.set_index("block_number")
     df = df.assign(time=df["time"] / 1000000000)
-    df.drop(columns=["gas"], inplace=True)
+    df = df.drop(columns=["gas"])
     df.loc[:, "bps"] = df["blocks"] / df["time"]
     df.loc[:, "tps"] = df["txs"] / df["time"]
     return df
