@@ -378,7 +378,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
           raise newException(ValueError, "Block not found")
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
-        res = rpcCallEvm(args, header, api.com, txFrame).valueOr:
+        res = rpcCallEvm(args, header, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
           raise newException(ValueError, "rpcCallEvm error: " & error)
       if res.isError:
         if res.status == StatusCode.Revert and res.output.len > 0:
