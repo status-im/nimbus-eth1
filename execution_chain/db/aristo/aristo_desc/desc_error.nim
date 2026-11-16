@@ -93,6 +93,7 @@ type
     PartTrkGarbledNode
     PartTrkLeafPfxMismatch
     PartTrkLinkExpected
+    PartTrkPathLength
     PartTrkRlpError
 
     # TxFrame blobify/deblobify
