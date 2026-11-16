@@ -275,6 +275,7 @@ be available if *nimbus* is compiled with the additional make flags
 | nec_sync_consensus_finalised | block height | **F**, *increasing*  |
 | nec_sync_distance_to_sync    | block diff   | max(0, **T**-**L**)  |
 | nec_sync_eta_secs            | time seconds | estimated ETA        |
+| nec_sync_headers_eta_secs    | time seconds | headers download ETA |
 |                              |              |                      |
 | nec_sync_header_lists_staged | size | # of staged header list records      |
 | nec_sync_headers_unprocessed | size | # of accumulated header block numbers|
