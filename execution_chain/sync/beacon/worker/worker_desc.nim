@@ -177,7 +177,6 @@ type
   SyncEta* = tuple
     ## Eta calculator. The latest values of `headerTime` and `blockTime` are
     ## not supposed to be reset and used for interpolating `eta`.
-    headerTime: float                ## Nanosecs per header (inverse velocity)
     blockTime: float                 ## Nanosecs per block (inverse velocity)
     lastUpdate: chronos.Moment       ## Needed to keep samples apart, timewise
     inSync: bool                     ## Change `avg` & `latest` display

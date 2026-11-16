@@ -156,7 +156,6 @@ proc headersFinishNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
 
 proc lingerNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
-  ctx.updateEtaHeadersDone()                        # update metrics
   let state = case ctx.hdrCache.state:              # get termination state
               of locked: BeaconNotifierState.ok
               of orphan: BeaconNotifierState.reset
