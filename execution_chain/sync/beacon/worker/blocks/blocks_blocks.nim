@@ -251,7 +251,6 @@ template blocksImport*(
           trace "Ignoring block less eq. base", peer, blk=nthBn,
             B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
           ctx.updateLastBlockImported nthBn          # block already imported
-          ctx.updateEtaBlocks()
           blocks[n].reset()
           continue
 
@@ -276,7 +275,6 @@ template blocksImport*(
             trace info & ": block already in FC", peer, blk=nthBn,
               B=ctx.chain.baseNumber, L=ctx.chain.latestNumber
           ctx.updateLastBlockImported nthBn          # block imported OK
-          ctx.updateEtaBlocks()                      # metrics, eta estimate
 
           # Free block body immediately - ForkedChain only retains the header.
           # Transactions are already persisted as RLP bytes in the txFrame.

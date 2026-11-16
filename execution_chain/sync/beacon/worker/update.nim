@@ -51,7 +51,7 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
   ctx.hibernate = true
 
   # Update metrics
-  ctx.pool.syncEta.lastUpdate = Moment.now()
+  ctx.blocksEtaInit()
   metrics.set(nec_sync_last_block_imported, 0)
   metrics.set(nec_sync_head, 0)
 
@@ -343,6 +343,7 @@ proc updateBeaconState*(ctx: BeaconCtxRef; info: static[string]) =
 proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ctx.subState.topNum = bn
   metrics.set(nec_sync_last_block_imported, bn.int64)
+  ctx.blocksEtaUpdate()                             # update ETA
 
 # ------------------------------------------------------------------------------
 # Public functions, call-back handlers

@@ -17,7 +17,7 @@ import
   pkg/[chronos, eth/common, stew/interval_set],
   ../../../core/chain,
   ../../../networking/p2p,
-  ../../../utils/[prettify, utils],
+  ../../../utils/[prettify, simple_eta, utils],
   ../../sync_desc,
   ./worker_const
 
@@ -51,7 +51,7 @@ func toStr*(w: Interval[BlockNumber,uint64]): string =
 
 
 func toStr*(a: chronos.Duration): string =
-  if twoHundredYears <= a:
+  if TwoHundredYears <= a:
     return "n/a"
   var s = a.toString 2
   if s.len == 0: s="0"

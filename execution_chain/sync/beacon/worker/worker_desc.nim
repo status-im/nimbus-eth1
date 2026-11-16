@@ -16,6 +16,7 @@ import
   pkg/eth/common/block_access_lists,
   pkg/stew/[interval_set, sorted_set],
   ../../../core/chain,
+  ../../../utils/simple_eta,
   ../../[sync_desc, wire_protocol],
   ./[helpers, worker_const]
 
@@ -209,6 +210,7 @@ type
     lastSyncUpdLog*: chronos.Moment  ## Control update messages
     lastStatusLog*: chronos.Moment   ## Control periodic status messages
     syncEta*: SyncEta                ## Estimated time until all in sync
+    blocksEta*: EtaSpline            ## Data cache for blocks import ETA calc
     syncTickerOk*: bool              ## Activate built in state monitor
     ticker*: Ticker                  ## Ticker function to run in background
 
@@ -333,7 +335,7 @@ func avg*(w: SyncEta): chronos.Duration =
   elif w.inSync:
     0.nanoseconds
   else:
-    twoHundredYears
+    TwoHundredYears
 
 func latest*(w: SyncEta): chronos.Duration =
   ## Get the latest ETA entry
@@ -342,7 +344,7 @@ func latest*(w: SyncEta): chronos.Duration =
   elif w.inSync:
     0.nanoseconds
   else:
-    twoHundredYears
+    TwoHundredYears
 
 proc add*(w: var SyncEta; value: float) =
   ## Register a new ETA entry
