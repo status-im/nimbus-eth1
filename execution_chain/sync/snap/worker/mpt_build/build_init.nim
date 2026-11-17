@@ -19,10 +19,13 @@ import
 # ------------------------------------------------------------------------------
 
 proc read(r: var Rlp, T: type HashKey): T {.gcsafe, raises: [RlpError]} =
-  if r.isList:
-    HashKey.fromBytes(r.rawData).value
-  else:
-    HashKey.fromBytes(r.toBytes).value
+  ## Read a child reference of a branch or extension node: empty, a 32 byte
+  ## hash, or an embedded node of less than 32 bytes.
+  let rc =
+    if r.isList: HashKey.fromBytes(r.rawData)
+    else: HashKey.fromBytes(r.toBytes)
+  rc.valueOr:
+    raise newException(MalformedRlpError, "Invalid node link")
 
 # ------------------------------------------------------------------------------
 # Private functions: partial proof MPT constructor helpers
@@ -39,7 +42,8 @@ proc nodeStash(
       ): bool =
   ## Decode a trusted rlp-encoded node and add it to the node list.
   ##
-  let selfKey = proofNode.digestToOrPlain(HashKey, rootKey)
+  let selfKey = proofNode.digestToOrPlain(HashKey, rootKey).valueOr:
+    return false                                    # invalid node encoding
   if nodes.hasKey selfKey:                          # Already seen and listed?
     return true
 
@@ -86,6 +90,8 @@ proc nodeStash(
       var n = 0u8
       for w in rlp.items:
         if not w.isEmpty:
+          if 16 <= n:
+            return false                            # value slot must be empty
           let stopKey = w.read HashKey
           let stopLink = StopNodeRef(
             kind:    Stop,
