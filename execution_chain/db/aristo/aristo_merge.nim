@@ -28,7 +28,8 @@ import
   std/typetraits,
   eth/common/hashes,
   results,
-  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_layers, aristo_serialise, aristo_vid]
+  ./aristo_delete/delete_subtree,
+  ./[aristo_desc, aristo_fetch, aristo_get, aristo_layers, aristo_serialise, aristo_vid]
 
 proc layersPutLeaf[T](
     db: AristoTxRef, rvid: RootedVertexID, path: NibblesBuf, payload: T
@@ -44,9 +45,10 @@ proc layersPutLeaf[T](
 proc mergePayloadImpl[LeafType, T](
     db: AristoTxRef, # Database, top layer
     root: VertexID, # MPT state root
-    path: Hash32, # Leaf item to add to the database
+    leafPath: Hash32, # Leaf item to add to the database
     leaf: Opt[LeafType],
     payload: T, # Payload value
+    clearStorage = false, # When storing account, clear its storage first
     stoStatic = true, # Storage trie children get static vids
 ): Result[(LeafType, VertexRef, LeafType, int), AristoError] =
   ## Merge the argument `(root,path)` key-value-pair into the top level vertex
@@ -55,7 +57,7 @@ proc mergePayloadImpl[LeafType, T](
   ## accordingly.
   ##
   var
-    path = NibblesBuf.fromBytes(path.data)
+    path = NibblesBuf.fromBytes(leafPath.data)
     pos = 0
     cur = root
     (vtx, _) = db.getVtxRc((root, cur)).valueOr:
@@ -94,11 +96,19 @@ proc mergePayloadImpl[LeafType, T](
           # Same path - replace the current vertex with a new payload
 
           when payload is AristoAccount:
-            if AccLeafRef(vtx).account == payload:
+            if AccLeafRef(vtx).account == payload and
+                (not clearStorage or AccLeafRef(vtx).stoID.isValid == false):
               return err(MergeNoAction)
             let leafVtx = db.layersUpdate((root, cur), AccLeafRef(vtx))
             leafVtx.account = payload
-            leafVtx.stoID = AccLeafRef(vtx).stoID
+
+            if clearStorage:
+              if leafVtx.stoID.isValid:
+                ?db.delStoTreeImpl(leafVtx.stoID.vid, leafPath)
+                leafVtx.stoID.isValid = false
+                leafVtx.stoHint = 0
+            else:
+              leafVtx.stoID = AccLeafRef(vtx).stoID
 
           else:
             if StoLeafRef(vtx).stoData == payload:
@@ -258,6 +268,7 @@ proc mergeAccount*(
     db: AristoTxRef;                   # Database, top layer
     accPath: Hash32;          # Even nibbled byte path
     accRec: AristoAccount;             # Account data
+    clearStorage: bool;
       ): Result[bool,AristoError] =
   ## Merge the  key-value-pair argument `(accKey,accRec)` as an account
   ## ledger value, i.e. the the sub-tree starting at `STATE_ROOT_VID`.
@@ -267,7 +278,11 @@ proc mergeAccount*(
   ## otherwise.
   ##
   let updated = db.mergePayloadImpl(
-    STATE_ROOT_VID, accPath, db.cachedAccLeaf(accPath), accRec
+    STATE_ROOT_VID,
+    accPath,
+    db.cachedAccLeaf(accPath),
+    accRec,
+    clearStorage = clearStorage,
   ).valueOr:
     if error == MergeNoAction:
       return ok false
@@ -310,7 +325,11 @@ proc mergeSlot*(
     stoStatic = not stoID.isValid or 0 < accVtx.stoHint
     # Call merge
     updated = db.mergePayloadImpl(
-      useID.vid, stoPath, db.cachedStoLeaf(mixPath, stoPath), stoData, stoStatic
+      useID.vid,
+      stoPath,
+      db.cachedStoLeaf(mixPath, stoPath),
+      stoData,
+      stoStatic = stoStatic,
     ).valueOr:
       if error == MergeNoAction:
         assert stoID.isValid         # debugging only

@@ -340,7 +340,7 @@ suite "Aristo subtries json tests":
     proc setup(): Dbs =
       let full = newCoreDbRef(DefaultDbMemory).baseTxFrame().txFrameBegin()
       for path in [a, pathOf([0, 0, 1, 0]), pathOf([0, 0, 1, 1]), e]:
-        doAssert full.mergeAccount(path, acc).isOk()
+        doAssert full.mergeAccount(path, acc, false).isOk()
       var paths: Table[Hash32, seq[Hash32]]
       paths[a] = @[]
       paths[e] = @[]
@@ -355,7 +355,7 @@ suite "Aristo subtries json tests":
       dbs.full.deleteAccount(path).isOk() and dbs.witness.deleteAccount(path).isOk()
 
     proc insert(dbs: Dbs, path: Hash32): bool =
-      dbs.full.mergeAccount(path, acc).isOk() and dbs.witness.mergeAccount(path, acc).isOk()
+      dbs.full.mergeAccount(path, acc, false).isOk() and dbs.witness.mergeAccount(path, acc, false).isOk()
 
     proc rootsMatch(dbs: Dbs): bool =
       dbs.witness.getStateRoot().get() == dbs.full.getStateRoot().get()
@@ -472,6 +472,7 @@ suite "Aristo subtries json tests":
       ledger.clearStorage(address)
       ledger.setStorage(address, 2.u256, 8.u256)
       ledger.persist(clearEmptyAccounts = false)
+
     check:
       clearLedger.fatalError.isNone()
       clearLedger.getStateRoot() == fullLedger.getStateRoot()

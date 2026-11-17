@@ -77,7 +77,7 @@ suite "Aristo static storage vids":
   test "single slot trie: root leaf, hint 1":
     let tx = db.txFrameBegin(db.txRef)
     check:
-      tx.mergeAccount(accA, account(1)).isOk()
+      tx.mergeAccount(accA, account(1), false).isOk()
       tx.mergeSlot(accA, slot1, 11.u256).isOk()
     db.persist(tx, 1)
     check:
@@ -88,7 +88,7 @@ suite "Aristo static storage vids":
   test "children sit at static vids relative to the storage root":
     let tx = db.txFrameBegin(db.txRef)
     check:
-      tx.mergeAccount(accA, account(1)).isOk()
+      tx.mergeAccount(accA, account(1), false).isOk()
       tx.mergeSlot(accA, slot1, 11.u256).isOk()
       tx.mergeSlot(accA, slot3, 33.u256).isOk()
     db.persist(tx, 1)
@@ -103,7 +103,7 @@ suite "Aristo static storage vids":
   test "split deepens the hint, collapse keeps the probe correct":
     let tx0 = db.txFrameBegin(db.txRef)
     check:
-      tx0.mergeAccount(accA, account(1)).isOk()
+      tx0.mergeAccount(accA, account(1), false).isOk()
       tx0.mergeSlot(accA, slot1, 11.u256).isOk()
       tx0.mergeSlot(accA, slot3, 33.u256).isOk()
       tx0.mergeSlot(accA, slot2, 22.u256).isOk()
@@ -126,7 +126,7 @@ suite "Aristo static storage vids":
   test "a shallow placement lowers the hint, deep leaves stay reachable":
     let tx0 = db.txFrameBegin(db.txRef)
     check:
-      tx0.mergeAccount(accA, account(1)).isOk()
+      tx0.mergeAccount(accA, account(1), false).isOk()
       tx0.mergeSlot(accA, slot1, 11.u256).isOk()
       tx0.mergeSlot(accA, slot2, 22.u256).isOk()
     db.persist(tx0, 1)
@@ -158,7 +158,7 @@ suite "Aristo static storage vids":
       sC = path(0x20, 0x02)
     let tx = db.txFrameBegin(db.txRef)
     check:
-      tx.mergeAccount(accA, account(1)).isOk()
+      tx.mergeAccount(accA, account(1), false).isOk()
       tx.mergeSlot(accA, sA, 11.u256).isOk()
       tx.mergeSlot(accA, sB, 22.u256).isOk()
       tx.mergeSlot(accA, sC, 33.u256).isOk()
@@ -195,8 +195,8 @@ suite "Aristo static storage vids":
   test "two tries share static vids without interfering":
     let tx = db.txFrameBegin(db.txRef)
     check:
-      tx.mergeAccount(accA, account(1)).isOk()
-      tx.mergeAccount(accB, account(2)).isOk()
+      tx.mergeAccount(accA, account(1), false).isOk()
+      tx.mergeAccount(accB, account(2), false).isOk()
       tx.mergeSlot(accA, slot1, 11.u256).isOk()
       tx.mergeSlot(accA, slot3, 13.u256).isOk()
       tx.mergeSlot(accB, slot1, 21.u256).isOk()
@@ -218,14 +218,15 @@ suite "Aristo static storage vids":
   test "clear and recreate resets and rebuilds the hint":
     let tx0 = db.txFrameBegin(db.txRef)
     check:
-      tx0.mergeAccount(accA, account(1)).isOk()
+      tx0.mergeAccount(accA, account(1), false).isOk()
       tx0.mergeSlot(accA, slot1, 11.u256).isOk()
       tx0.mergeSlot(accA, slot2, 22.u256).isOk()
     db.persist(tx0, 1)
     check db.probeLevelOf(accA) == 3
 
     let tx1 = db.txFrameBegin(db.txRef)
-    check tx1.clearStorage(accA).isOk()
+    check:
+      tx0.mergeAccount(accA, account(1), true).isOk()
     db.persist(tx1, 2)
     check:
       db.probeLevelOf(accA) == -1
@@ -272,8 +273,8 @@ suite "Aristo static storage vids":
       let rdb = open(wipe = true)
       let tx = rdb.txFrameBegin(rdb.txRef)
       check:
-        tx.mergeAccount(accA, account(1)).isOk()
-        tx.mergeAccount(accB, account(2)).isOk()
+        tx.mergeAccount(accA, account(1), false).isOk()
+        tx.mergeAccount(accB, account(2), false).isOk()
         tx.mergeSlot(accA, slot1, 11.u256).isOk()
         tx.mergeSlot(accA, slot2, 12.u256).isOk()
         tx.mergeSlot(accB, slot1, 21.u256).isOk()

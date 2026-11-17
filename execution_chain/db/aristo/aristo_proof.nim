@@ -34,11 +34,6 @@ type
   NodesCache = Table[RootedVertexID, array[2, seq[byte]]]
     ## Caches up to two rlp encoded trie nodes in each value
 
-template appendNodes(chain: var seq[seq[byte]], nodePair: array[2, seq[byte]]) =
-  chain.add(nodePair[0])
-  if nodePair[1].len() > 0:
-    chain.add(nodePair[1])
-
 proc chainRlpNodes(
     db: AristoTxRef,
     rvid: RootedVertexID,

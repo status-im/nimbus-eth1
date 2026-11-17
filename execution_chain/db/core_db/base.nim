@@ -275,27 +275,18 @@ proc deleteAccount*(
 
   ok()
 
-proc clearStorage*(
-    acc: CoreDbTxRef;
-    accPath: Hash32;
-      ): CoreDbRc[void] =
-  ## Delete all data slots from the storage area associated with the
-  ## particular account indexed by the key `accPath`.
-  ##
-  acc.aTx.clearStorage(accPath).isOkOr:
-    return err(error.toError(""))
-
-  ok()
-
 proc mergeAccount*(
     acc: CoreDbTxRef;
     accPath: Hash32;
     accRec: CoreDbAccount;
+    clearStorage: bool;
       ): CoreDbRc[void] =
   ## Add or update the argument account data record `account`. Note that the
   ## `account` argument uniquely idendifies the particular account address.
   ##
-  acc.aTx.mergeAccount(accPath, accRec).isOkOr:
+  ## With `clearStorage == true`, any existing storage trie will be deleted.
+  ##
+  acc.aTx.mergeAccount(accPath, accRec, clearStorage).isOkOr:
     return err(error.toError(""))
 
   ok()

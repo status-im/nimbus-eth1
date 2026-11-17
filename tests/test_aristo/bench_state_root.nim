@@ -39,9 +39,11 @@ proc addAccounts(txFrame: AristoTxRef, n: int) =
   for _ in 0 ..< n:
     let p = path(pathCounter)
     inc pathCounter
-    doAssert txFrame.mergeAccount(
-      p, AristoAccount(balance: pathCounter.u256(), codeHash: EMPTY_CODE_HASH)
-    ).isOk()
+    doAssert txFrame
+      .mergeAccount(
+        p, AristoAccount(balance: pathCounter.u256(), codeHash: EMPTY_CODE_HASH), false
+      )
+      .isOk()
 
 proc newDb(baseAccounts: int, parallel: bool): (AristoDbRef, AristoTxRef) =
   # Base state with computed keys, persisted to the (memory) backend so the

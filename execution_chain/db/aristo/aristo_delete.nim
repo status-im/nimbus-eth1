@@ -258,40 +258,6 @@ proc deleteSlot*(
 
   ok()
 
-proc clearStorage*(
-    db: AristoTxRef;                   # Database, top layer
-    accPath: Hash32;                   # Implies storage data tree
-      ): Result[void,AristoError] =
-  ## Variant of `deleteSlot()` for purging the whole storage tree
-  ## associated to the account argument `accPath`.
-  ##
-  var accHike: Hike
-  db.fetchAccountHike(accPath, accHike).isOkOr:
-    if error == FetchAccInaccessible:
-      return ok() # Trying to delete something that doesn't exist is ok
-    return err(error)
-
-  let
-    wpAcc = accHike.legs[^1].wp
-    accVtx = AccLeafRef(wpAcc.vtx)
-    stoID = accVtx.stoID
-
-  if not stoID.isValid:
-    return ok() # Trying to delete something that doesn't exist is ok
-
-  # Mark account path Merkle keys for update, except for the vtx we update below
-  db.layersResKeys(accHike, skip = 1)
-
-  ?db.delStoTreeImpl(stoID.vid, accPath)
-
-  # De-register the deleted storage tree from the accounts record
-  let leaf = db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
-  leaf.stoID.isValid = false
-  leaf.stoHint = 0
-  db.layersPutAccLeaf(accPath, leaf)
-
-  ok()
-
 proc getCollapsedSiblings*(db: AristoTxRef): seq[RootedVertexID] =
   ## Collapsed siblings for witness generation. Persist runs per transaction,
   ## so a later insert in the block may restore a collapsed branch. The spec

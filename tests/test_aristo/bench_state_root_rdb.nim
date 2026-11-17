@@ -83,9 +83,11 @@ proc addAccounts(txFrame: AristoTxRef, n: int) =
   for _ in 0 ..< n:
     let p = path(pathCounter)
     inc pathCounter
-    doAssert txFrame.mergeAccount(
-      p, AristoAccount(balance: pathCounter.u256(), codeHash: EMPTY_CODE_HASH)
-    ).isOk()
+    doAssert txFrame
+      .mergeAccount(
+        p, AristoAccount(balance: pathCounter.u256(), codeHash: EMPTY_CODE_HASH), false
+      )
+      .isOk()
 
 proc persistFrame(db: AristoDbRef, txFrame: AristoTxRef, blockNumber: uint64) =
   txFrame.checkpoint(blockNumber, skipSnapshot = true)

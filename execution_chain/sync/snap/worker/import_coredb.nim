@@ -128,12 +128,6 @@ proc mergeStoTrie(
     ctrl: var ImportDesc;
     info: static[string];
       ): Opt[void] =
-  # Clear storage trie
-  tx.clearStorage(accPath).isOkOr:
-    error info & ": Failed clearing storage slots",
-      accPath=accPath.toStr, `error`=($$error)
-    return err()
-
   var nSlots {.used.} = 0u
   for w in adb.walkFlatSlot(accPath):
     if 0 < w.error.len:
@@ -258,7 +252,7 @@ proc importFlat(
         nonce:    w.data.account.nonce,
         balance:  w.data.account.balance,
         codeHash: codeHash)
-    tx.mergeAccount(w.accPath, accRec).isOkOr:
+    tx.mergeAccount(w.accPath, accRec, true).isOkOr:
       error info & ": Failed merging account record",
         accPath=w.accPath.toStr, `error`=($$error)
       ctrl.stats.nErrors.inc
