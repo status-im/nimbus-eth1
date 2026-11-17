@@ -311,7 +311,6 @@ proc updateBeaconState*(ctx: BeaconCtxRef; info: static[string]) =
 
   let prevState = ctx.pool.syncState
   ctx.pool.syncState = newState
-  ctx.subState.stateSince = Moment.now()
 
   case newState:
   of idle:
@@ -377,7 +376,6 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
     if b+1 < t:
       ctx.pool.minInitBuddies = 0                   # reset
       ctx.pool.syncState = BeaconState.headers      # state transition
-      ctx.subState.stateSince = Moment.now()
       ctx.hibernate = false                         # wake up
 
       # Update range
@@ -386,7 +384,6 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       ctx.subState.headHash = ctx.hdrCache.headHash
 
       # Update metrics
-      ctx.pool.syncEta.lastUpdate = ctx.subState.stateSince
       metrics.set(nec_sync_head, ctx.subState.headNum.int64)
 
       info "Activating syncer", base=b, head=ctx.chain.latestNumber,

@@ -16,7 +16,7 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../../networking/p2p,
   ./blocks/[blocks_blocks, blocks_helpers, blocks_queue, blocks_unproc],
-  ./[helpers, worker_desc]
+  ./[helpers, update, worker_desc]
 
 export
   blocks_queue, blocks_unproc
@@ -122,7 +122,7 @@ template blocksCollect*(
             chronicles.info "Imported blocks", nImported,
               nUnproc=ctx.nUnprocStr(),
               nStagedQ=ctx.blk.staged.len,
-              eta=ctx.pool.syncEta.avg.toStr,
+              eta=ctx.blkEta.toStr,
               base=ctx.chain.baseNumber,
               head=ctx.chain.latestNumber,
               target=ctx.subState.headNum,
@@ -174,7 +174,7 @@ template blocksCollect*(
         chronicles.info "Imported blocks", nImported,
           nUnproc=ctx.nUnprocStr(),
           nStagedQ=ctx.blk.staged.len,
-          eta=ctx.pool.syncEta.avg.toStr,
+          eta=ctx.blkEta.toStr,
           base=ctx.chain.baseNumber,
           head=ctx.chain.latestNumber,
           target=ctx.subState.headNum,
@@ -274,7 +274,7 @@ template blocksUnstage*(
             nUnproc=ctx.nUnprocStr(),
             nStagedQ=ctx.blk.staged.len,
             nUnstaged,
-            eta=ctx.pool.syncEta.avg.toStr,
+            eta=ctx.blkEta.toStr,
             base=ctx.chain.baseNumber,
             head=ctx.chain.latestNumber,
             target=ctx.subState.headNum,
@@ -299,7 +299,7 @@ template blocksUnstage*(
           nUnproc=ctx.nUnprocStr(),
           nStagedQ=ctx.blk.staged.len,
           nUnstaged,
-          eta=ctx.pool.syncEta.avg.toStr,
+          eta=ctx.blkEta.toStr,
           base=ctx.chain.baseNumber,
           head=ctx.chain.latestNumber,
           target=ctx.subState.headNum,

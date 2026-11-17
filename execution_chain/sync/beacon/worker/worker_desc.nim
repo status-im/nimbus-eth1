@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  std/[sets, sequtils],
+  std/sets,
   pkg/[chronos, eth/common, results],
   pkg/eth/common/block_access_lists,
   pkg/stew/[interval_set, sorted_set],
@@ -109,7 +109,6 @@ type
     topNum*: BlockNumber             ## For locally syncronising block import
     headNum*: BlockNumber            ## Copy of `ctx.hdrCache.head().number`
     headHash*: Hash32                ## Copy of `ctx.hdrCache.headHash()`
-    stateSince*: chronos.Moment      ## Time of last sync state change
     cancelRequest*: bool             ## Cancel block sync via state machine
     procFailNum*: BlockNumber        ## Block (or header) error location
     procFailCount*: uint8            ## Number of failures at location
@@ -174,16 +173,6 @@ type
     finHash: Opt[Hash32]             ## Optional finalised hash from FCU; when
                                      ## set, overrides the default finalised
                                      ## hash chosen during target activation.
-
-  SyncEta* = tuple
-    ## Eta calculator. The latest values of `headerTime` and `blockTime` are
-    ## not supposed to be reset and used for interpolating `eta`.
-    blockTime: float                 ## Nanosecs per block (inverse velocity)
-    lastUpdate: chronos.Moment       ## Needed to keep samples apart, timewise
-    inSync: bool                     ## Change `avg` & `latest` display
-    etaInx: int                      ## Round robin index for `eta[]`
-    etaRr: array[etaAvgPoints,float] ## Estimated ETA sample points
-
   BeaconCtxData* = object
     ## Globally shared data extension
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
@@ -209,7 +198,6 @@ type
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastSyncUpdLog*: chronos.Moment  ## Control update messages
     lastStatusLog*: chronos.Moment   ## Control periodic status messages
-    syncEta*: SyncEta                ## Estimated time until all in sync
     blocksEta*: EtaSpline            ## Data cache for blocks import ETA calc
     syncTickerOk*: bool              ## Activate built in state monitor
     ticker*: Ticker                  ## Ticker function to run in background
@@ -325,38 +313,6 @@ proc bpsSample*(
       stats.sum2 +=  bps * bps
       stats.total += dataSize.uint64
       return bps.uint
-
-# -------------
-
-func avg*(w: SyncEta): chronos.Duration =
-  ## Get the avaerage of the round robin register
-  if low(Moment) < w.lastUpdate:
-    nanoseconds(w.etaRr.foldl(a + b / w.etaRr.len.float, 0f).int64)
-  elif w.inSync:
-    0.nanoseconds
-  else:
-    TwoHundredYears
-
-func latest*(w: SyncEta): chronos.Duration =
-  ## Get the latest ETA entry
-  if low(Moment) < w.lastUpdate:
-    nanoseconds w.etaRr[w.etaInx].int64
-  elif w.inSync:
-    0.nanoseconds
-  else:
-    TwoHundredYears
-
-proc add*(w: var SyncEta; value: float) =
-  ## Register a new ETA entry
-  w.etaInx.inc
-  if w.etaRr.len <= w.etaInx:
-    # Wait with time stamp for at least one index cycle
-    w.lastUpdate = Moment.now()
-    w.etaInx = 0
-  elif low(Moment) < w.lastUpdate:
-    w.lastUpdate = Moment.now()
-  w.etaRr[w.etaInx] = value
-  w.inSync = false
 
 # ------------------------------------------------------------------------------
 # End

@@ -57,6 +57,10 @@ func toStr*(a: chronos.Duration): string =
   if s.len == 0: s="0"
   s
 
+func toStr*(w: Opt[Duration]): string =
+  if w.isSome: w.unsafeGet().toStr
+  else: "n/a"
+
 func toStr*(w: MeanVarStats): string =
   ## Throughput per second
   if w.samples == 0:

@@ -12,6 +12,7 @@
 
 import
   pkg/[chronos, chronicles, eth/common, stew/interval_set],
+  ../update/update_eta,
   ../[blocks, headers, helpers, worker_desc]
 
 logScope:
@@ -153,7 +154,6 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
 
     # With `int64`, there are more than 29*10^10 years range for seconds
     up = (now - t.started).toStr
-    eta = ctx.pool.syncEta.avg.toStr
 
   t.lastStats = data
   t.visited = now
@@ -169,6 +169,7 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
         D, H, T, F
 
     of headers:
+      let eta = ctx.hdrEta.toStr
       debug "Sync state headers", up, eta, nP, B, L,
         C, D, H, T, F, hQ
 
@@ -189,6 +190,7 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
         D, H, T, F
 
     of headers:
+      let eta = ctx.hdrEta.toStr
       debug "Sync state headers", up, eta, nP, B, L,
         C, D, H, T, F, hQ
 
@@ -197,6 +199,7 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
         C, D, H, T, F, hQ
 
     of blocks:
+      let eta = ctx.blkEta.toStr
       debug "Sync state blocks", up, eta, nP, B, L,
         D, I, H, T, F, bQ
 
