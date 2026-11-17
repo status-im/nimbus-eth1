@@ -120,12 +120,14 @@ template to*(h: StateRoot|StoreRoot|BlockHash; _: type HashKey): HashKey =
   ## Variant of `desc_identifiers.to()`
   h.Hash32.to(HashKey)
 
-func digestToOrPlain*(node: ProofNode, _: type HashKey, root: HashKey): HashKey=
+func digestToOrPlain*(node: ProofNode, _: type HashKey, root: HashKey): Opt[HashKey] =
   ## Variant of `desc_identifiers.digestTo()`
+  ## It returns `err()` for a `node` shorter than 32 bytes that does not start
+  ## with an RLP list header for its length.
   let key32 = HashKey.fromBytes(node.distinctBase.keccak256.data).value
   if 32 <= node.distinctBase.len or key32 == root:
-    return key32
-  HashKey.fromBytes(node.distinctBase).value
+    return ok(key32)
+  HashKey.fromBytes(node.distinctBase)
 
 func digestToOrPlain*(node: openArray[byte], _: type HashKey, root: HashKey): HashKey =
   ## Variant of `desc_identifiers.digestTo()`
