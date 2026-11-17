@@ -68,9 +68,9 @@ type
     storage: Table[UInt256, UInt256]
 
     # Changes collected but not yet persisted to txFrame
-    statementDiff: Opt[CoreDbAccount]
     storageDiff: Table[UInt256, UInt256]
     storageDels: HashSet[UInt256]
+    storeStatement: bool
     clearStorage: bool
 
   AccountRef* = ref object
@@ -578,10 +578,10 @@ proc writeDiff(ledger: LedgerRef) =
         ledger.txFrame.clearStorage(accPath).isOkOr:
           ledger.setFatalErrorOrAssert($$error)
 
-      if overlay[].statementDiff.isSome():
-        ledger.txFrame.mergeAccount(accPath, overlay[].statementDiff[]).isOkOr:
+      if overlay[].storeStatement:
+        ledger.txFrame.mergeAccount(accPath, overlay[].statement).isOkOr:
           ledger.setFatalErrorOrAssert($$error)
-        acc[].originalStatement = overlay[].statementDiff[]
+        acc[].originalStatement = overlay[].statement
 
       for slot in overlay[].storageDels:
         let slotKey = ledger.slotKey(slot)
@@ -850,11 +850,7 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
   if acc.isNil:
     return CodeBytesRef()
 
-  let codeHash =
-    if acc.overlay != nil and acc.overlay.statementDiff.isSome():
-      acc.overlay.statementDiff[].codeHash
-    else:
-      acc.originalStatement.codeHash
+  let codeHash = acc.originalStatement.codeHash
   if codeHash == EMPTY_CODE_HASH:
     return CodeBytesRef()
 
@@ -946,10 +942,7 @@ proc originalAccountEmpty*(ledger: LedgerRef, address: Address): bool =
   let acc = ledger.getAccount(address, false)
   if acc.isNil:
     return true
-  if acc.overlay != nil and acc.overlay.statementDiff.isSome():
-    acc.overlay.statementDiff[].isEmpty()
-  else:
-    acc.originalStatement.isEmpty()
+  acc.originalStatement.isEmpty()
 
 proc touch*(ledger: LedgerRef, address: Address) =
   ## Force an account to be written to the database on the next `persist` even
@@ -1281,11 +1274,11 @@ proc persist*(
         # `persistStorage` only works for accounts already in the database
         if useDiff:
           ledger.collected[acc.accPath] = acc
-          acc.overlay.statementDiff = Opt.some acc.statement
+          acc.overlay.storeStatement = true
         else:
           ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
             ledger.setFatalErrorOrAssert(info & $$error)
-          acc.originalStatement = acc.statement
+        acc.originalStatement = acc.statement
 
       if StorageChanged in acc.flags:
         if useDiff:
@@ -1438,11 +1431,8 @@ iterator dirtyAccounts*(ledger: LedgerRef): (Address, AccountRef) =
 # Public AccountRef read-only methods
 # ------------------------------------------------------------------------------
 
-func originalStatement*(acc: AccountRef): CoreDbAccount =
-  if acc.overlay.isNil:
-    acc.originalStatement
-  else:
-    acc.overlay.statementDiff.valueOr(acc.originalStatement)
+func originalStatement*(acc: AccountRef): lent CoreDbAccount =
+  acc.originalStatement
 
 func balanceChanged*(acc: AccountRef): bool =
   StatementChanged in acc.flags and acc.statement.balance != acc.originalStatement.balance
