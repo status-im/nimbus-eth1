@@ -139,7 +139,8 @@ type
     nSnap2Peers*: int                ## # of Active snap/2 peers for proto use
     failedEthBalId*: EthBalHashSet   ## Ditto for eth peers
     resetReq*: bool                  ## Restart system (problem with cache data)
-    etaSpline*: EtaSpline            ## Needed to calculate ETA
+    etaAccounts*: EtaSpline          ## Accounts download ETA
+    etaDbImport*: EtaSpline          ## Core DB import ETA
 
     # Info, debugging, and error handling stuff
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one

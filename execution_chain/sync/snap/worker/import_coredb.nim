@@ -56,7 +56,7 @@ template persistRegularly(
       ctrl.count = 0
       let w = ctrl.accPath.to(UInt256).per256
       metrics.set(nec_snap_dbimport_progress, w)
-      ctrl.ctx.updateEta w
+      ctrl.ctx.dbImportEtaUpdate w
 
     let now = Moment.now()
     if ctrl.timer + coreDbImportMsgInterval < now:
@@ -281,7 +281,7 @@ proc importFlat(
 
 proc importCoreDbMetricsReset*(ctx: SnapCtxRef) =
   metrics.set(nec_snap_dbimport_progress, 0)
-  ctx.initEta()
+  ctx.dbImportEtaInit()
 
 proc importCoreDb*(
     db: CoreDbRef;
@@ -292,8 +292,6 @@ proc importCoreDb*(
       ): Opt[CoredbImportStats] =
   ## Import the flat tables into a version of CoreDb.
   ##
-  ctx.initEta()
-
   let
     adb = ctx.pool.cacheDB
     start = Moment.now()
