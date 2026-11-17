@@ -163,13 +163,25 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
       await sleepAsync(ZeroDuration)
       awaitQuota(wire, txPoolProcessCost, "adding into txpool")
 
+func supportsEth(peer: Peer): bool =
+  peer.supports(eth71) or peer.supports(eth70) or
+    peer.supports(eth69) or peer.supports(eth68)
+
 proc peerById(wire: EthWireRef, id: NodeId): Peer =
   ## Resolve an announcing peer to a live handle. Peers still completing
   ## the rlpx handshake are acceptable fetch targets; only the dying
   ## states are excluded.
+  ## The node may have reconnected without `eth`, such a connection
+  ## cannot serve the fetch.
+  # TODO: the `supportsEth` check works around the announcer ids in
+  # `seenTransactions`, which are node ids, not connections, and are not
+  # removed on disconnect. Tracking announcements per connection, removed
+  # on disconnect, would make every candidate a live `eth` connection and
+  # also allow bounding the announcements per peer and in total.
   for p in wire.node.peers():
     if not p.isNil and p.id == id and p.connectionState notin
-        {ConnectionState.Disconnecting, ConnectionState.Disconnected}:
+        {ConnectionState.Disconnecting, ConnectionState.Disconnected} and
+        p.supportsEth:
       return p
   nil
 
