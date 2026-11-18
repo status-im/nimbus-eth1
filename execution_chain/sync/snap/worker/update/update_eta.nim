@@ -12,6 +12,7 @@
 
 import
   pkg/[chronos, metrics],
+  ../../../../utils/simple_eta,
   ../worker_desc
 
 declareGauge nec_snap_eta_secs, "" &
@@ -26,11 +27,9 @@ proc updateEta*(ctx: SnapCtxRef, y: float) =
   ctx.pool.etaSpline.eta.isErrOr:
     metrics.set(nec_snap_eta_secs, value.seconds)
     return
-  if ctx.pool.etaSpline.len < 2:
-    metrics.set(nec_snap_eta_secs, -1)
 
-proc resetEta*(ctx: SnapCtxRef) =
-  ctx.pool.etaSpline.clear()
+proc initEta*(ctx: SnapCtxRef) =
+  ctx.pool.etaSpline.init()
   metrics.set(nec_snap_eta_secs, 0)
 
 # ------------------------------------------------------------------------------

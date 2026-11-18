@@ -281,7 +281,7 @@ proc importFlat(
 
 proc importCoreDbMetricsReset*(ctx: SnapCtxRef) =
   metrics.set(nec_snap_dbimport_progress, 0)
-  ctx.resetEta()
+  ctx.initEta()
 
 proc importCoreDb*(
     db: CoreDbRef;
@@ -292,7 +292,7 @@ proc importCoreDb*(
       ): Opt[CoredbImportStats] =
   ## Import the flat tables into a version of CoreDb.
   ##
-  ctx.resetEta()
+  ctx.initEta()
 
   let
     adb = ctx.pool.cacheDB
