@@ -105,9 +105,13 @@ suite "Aristo fetch leaf-cache benchmark":
     for i in 0 ..< accountCount:
       let accPath = makeAccPath((i + 1).uint64)
       accPaths[i] = accPath
-      check wtx.mergeAccount(
-        accPath, AristoAccount(balance: (i + 1).u256, codeHash: EMPTY_CODE_HASH)
-      ).isOk()
+      check wtx
+        .mergeAccount(
+          accPath,
+          AristoAccount(balance: (i + 1).u256, codeHash: EMPTY_CODE_HASH),
+          false,
+        )
+        .isOk()
       check wtx.mergeSlot(accPath, stoPath, (i + 1).u256).isOk()
 
     wtx.checkpoint(1, skipSnapshot = true)

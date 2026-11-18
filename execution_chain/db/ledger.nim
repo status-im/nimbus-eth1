@@ -957,14 +957,14 @@ proc persist*(
         acc.persistCode(ledger)
         acc.original.code = acc.code
 
-      if NewlyCreated in acc.flags:
-        ledger.txFrame.clearStorage(acc.accPath).expect("can clear storage of account")
+      let clearStorage = NewlyCreated in acc.flags
+      if clearStorage:
         acc.original.storage.clear()
 
-      if {IsNew, StatementChanged} * acc.flags != {}:
+      if {IsNew, StatementChanged} * acc.flags != {} or clearStorage:
         # Update account before its storage, in case it's a new account
         # `persistStorage` only works for accounts already in the database
-        ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
+        ledger.txFrame.mergeAccount(acc.accPath, acc.statement, clearStorage).isOkOr:
           ledger.setFatalErrorOrAssert(info & $$error)
         acc.original.statement = acc.statement
 
