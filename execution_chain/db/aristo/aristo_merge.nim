@@ -313,7 +313,7 @@ proc mergeSlot*(
     return err(MergeStoAccMissing)
 
   let
-    accVtx = AccLeafRef(accHike.legs[^1].wp.vtx)
+    accVtx = AccLeafRef(accHike.legs[^1].vtx)
     stoID = accVtx.stoID
 
     # Provide new storage ID when needed
@@ -369,7 +369,7 @@ proc mergeSlot*(
   if not stoID.isValid or accVtx.stoHint != hint:
     # Make sure that there is an account that refers to that storage trie and
     # remembers where to start probing for its leaves
-    let leaf = db.layersUpdate((STATE_ROOT_VID, accHike.legs[^1].wp.vid), accVtx) # Dup on modify
+    let leaf = db.layersUpdate((STATE_ROOT_VID, accHike.legs[^1].vid), accVtx) # Dup on modify
     leaf.stoID = useID
     leaf.stoHint = hint
     db.layersPutAccLeaf(accPath, leaf)

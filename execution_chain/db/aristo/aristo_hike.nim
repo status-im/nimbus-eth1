@@ -13,7 +13,7 @@
 import
   eth/common/hashes,
   results,
-  "."/[aristo_desc, aristo_get, aristo_layers]
+  ./[aristo_desc, aristo_get, aristo_layers]
 
 const
   HikeAcceptableStopsNotFound* = {
@@ -33,16 +33,16 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesBuf =
   ## May be needed for partial rebuild, as well
   for n in start ..< min(hike.legs.len, maxLen):
     let leg = hike.legs[n]
-    case leg.wp.vtx.vType:
+    case leg.vtx.vType:
     of Branch:
-      result = result & NibblesBuf.nibble(leg.nibble.byte)
+      result = result & NibblesBuf.nibble(leg.nibble)
     of ExtBranch:
-      let vtx = ExtBranchRef(leg.wp.vtx)
-      result = result & vtx.pfx & NibblesBuf.nibble(leg.nibble.byte)
+      let vtx = ExtBranchRef(leg.vtx)
+      result = result & vtx.pfx & NibblesBuf.nibble(leg.nibble)
     of BoundaryNode:
       discard # BoundaryNode never successfully steps forward
     of Leaves:
-      let vtx = LeafRef(leg.wp.vtx)
+      let vtx = LeafRef(leg.vtx)
       result = result & vtx.pfx
 
 # ------------------------------------------------------------------------------
@@ -183,26 +183,23 @@ proc hikeUp*[LeafType](
   var vid = root
   while true:
     if leaf.isSome() and leaf[].isValid and path == leaf[].pfx:
-      hike.legs.add Leg(wp: VidVtxPair(vid: vid, vtx: leaf[]), nibble: -1)
+      hike.legs.add Leg(vid: vid, vtx: leaf[], nibble: 0)
       #reset(hike.tail)
       break
 
     let
       (vtx, common, next) = step(path, (root, vid), db).valueOr:
-        return err((vid,error))
-      wp = VidVtxPair(vid:vid, vtx:vtx)
+        return err((vid, error))
 
     case vtx.vType
     of Leaves:
-      hike.legs.add Leg(wp: wp, nibble: -1)
+      hike.legs.add Leg(vid: vid, vtx: vtx, nibble: 0)
       break
-
     of Branch:
-      hike.legs.add Leg(wp: wp, nibble: int8 path[0])
-
+      hike.legs.add Leg(vid: vid, vtx: vtx, nibble: path[0])
     of ExtBranch:
       let vtx = ExtBranchRef(vtx)
-      hike.legs.add Leg(wp: wp, nibble: int8 path[vtx.pfx.len])
+      hike.legs.add Leg(vid: vid, vtx: vtx, nibble: path[vtx.pfx.len])
     of BoundaryNode:
       discard # step() always fails for BoundaryNode thus this is unreachable
 

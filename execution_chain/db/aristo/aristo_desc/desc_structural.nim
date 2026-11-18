@@ -109,11 +109,6 @@ type
 
   # ----------------------
 
-  VidVtxPair* = object
-    ## Handy helper structure
-    vid*: VertexID                   ## Table lookup vertex ID (if any)
-    vtx*: VertexRef                  ## Reference to vertex
-
   SavedState* = object
     ## Last saved state
     vTop*: VertexID                   ## Top used VertexID
