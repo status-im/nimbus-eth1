@@ -17,7 +17,7 @@ import
   std/[atomics, typetraits],
   eth/common/[base, hashes],
   results,
-  "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike, aristo_vid]
+  ./[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -238,7 +238,7 @@ proc fetchAccountHike*(
     return err(FetchAccInaccessible)
 
   # Extract the account payload from the leaf
-  if accHike.legs.len == 0 or accHike.legs[^1].wp.vtx.vType != AccLeaf:
+  if accHike.legs.len == 0 or accHike.legs[^1].vtx.vType != AccLeaf:
     return err(FetchAccPathWithoutLeaf)
 
   ok()
