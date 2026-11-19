@@ -47,9 +47,6 @@ proc processGasUsed(
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   if tx.txType == TxEip8141 and callResult.isError:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.rollbackCallFrame()
-    vmState.ledger.rollback(savePoint)
     return err("invalid frame tx: " & vmState.frameCtx.error)
 
   let gasUsed = callResult.gasUsed

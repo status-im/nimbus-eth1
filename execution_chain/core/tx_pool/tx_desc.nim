@@ -34,6 +34,8 @@ import
   ./tx_tabs,
   ./tx_item
 
+from ../eip8141 import exceedsVerifyGas
+
 logScope:
   topics = "txpool"
 
@@ -410,6 +412,11 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   if xp.alreadyKnown(id):
     debug "Transaction already known", txHash = id
     return err(txErrorAlreadyKnown)
+
+  if ptx.tx.txType == TxEip8141 and ptx.tx.exceedsVerifyGas():
+    debug "Transaction rejected: Validation prefix exceeds MAX_VERIFY_GAS",
+      txHash = id
+    return err(txErrorVerifyGasExceeded)
 
 
   let
