@@ -23,6 +23,7 @@ import
   ../execution_chain/db/storage_types,
   ../execution_chain/core/chain,
   ../execution_chain/core/eip4844,
+  ../execution_chain/core/eip8141,
   ../execution_chain/core/validate,
   ../execution_chain/[conf, transaction, constants],
   ../execution_chain/core/tx_pool,
@@ -1619,3 +1620,46 @@ suite "TxPool contract code storage":
 
     xp.checkImportBlock(bundle, 0)
     check db.hasKey(codeKey.toOpenArray)
+
+suite "TxPool EIP-8141 MAX_VERIFY_GAS":
+  let
+    params = initParams()
+  params.initState(Amsterdam)
+  params.config.bogotaTime = Opt.some(0.EthTime)
+  let
+    env = initEnv(params)
+    xp = env.xp
+
+  proc frameTx(verifyGas: GasInt, senderGas = 0.GasInt): Transaction =
+    let payer = address"0x0000000000000000000000000000000000008141"
+    result = Transaction(
+      txType: TxEip8141,
+      chainId: env.com.chainId,
+      maxFeePerGas: 10.gwei.u256,
+      maxPriorityFeePerGas: 1.gwei.u256,
+      sender: payer,
+      signatures: @[FrameSignature(scheme: SCHEME_SECP256K1)],
+      frames: @[TransactionFrame(
+        mode: VERIFY_MODE,
+        flags: APPROVE_PAYMENT_FLAG + APPROVE_EXECUTION_FLAG,
+        target: Opt.some(payer),
+        gasLimit: verifyGas)])
+    if senderGas > 0:
+      result.frames.add TransactionFrame(
+        mode: SENDER_MODE,
+        target: Opt.some(payer),
+        gasLimit: senderGas)
+
+  test "validation prefix at MAX_VERIFY_GAS is admitted, one gas over is rejected":
+    let
+      atCap = frameTx(MAX_VERIFY_GAS - 2800)
+      overCap = frameTx(MAX_VERIFY_GAS - 2800 + 1)
+    check not atCap.exceedsVerifyGas()
+    check overCap.exceedsVerifyGas()
+
+    let rc = xp.addTx(atCap)
+    check rc.isOk or rc.error != txErrorVerifyGasExceeded
+    xp.checkAddTx(overCap, txErrorVerifyGasExceeded)
+
+  test "frames after the payment approval do not count":
+    check not frameTx(100_000, senderGas = 1_000_000).exceedsVerifyGas()

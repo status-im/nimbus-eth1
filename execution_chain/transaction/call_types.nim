@@ -87,7 +87,7 @@ const
   TX_PER_FRAME = 475
   TX_DATA_TOKEN_FLOOR = 16
 
-func signatureVerificationGas(sig: FrameSignature): GasInt =
+func signatureVerificationGas*(sig: FrameSignature): GasInt =
   if sig.scheme == SCHEME_SECP256K1:
     return FRAME_SIGNATURE_SCHEME_SECP256K1
 

@@ -30,6 +30,7 @@ from ./eip8037 import CREATE_ACCOUNT_STATE_GAS
 
 const
   MAX_FRAMES = 64
+  MAX_VERIFY_GAS* = 300_000.GasInt
 
 const
   APPROVE_PAYMENT_FLAG*   = 0x1
@@ -184,6 +185,22 @@ func validateTxEip8141*(tx: Transaction, intrinsic: IntrinsicGas): Result[void, 
     return err("invalid tx: Derived execution gas limit exceeds TX_MAX_GAS_LIMIT")
 
   ok()
+
+func exceedsVerifyGas*(tx: Transaction): bool =
+  var used = 0.GasInt
+  for sig in tx.signatures:
+    used += signatureVerificationGas(sig)
+    if used > MAX_VERIFY_GAS:
+      return true
+
+  for frame in tx.frames:
+    if frame.gasLimit > MAX_VERIFY_GAS - used:
+      return true
+    used += frame.gasLimit
+    if frame.mode == VERIFY_MODE and (frame.flags and APPROVE_PAYMENT_FLAG) != 0:
+      return false
+
+  false
 
 func validateSignature*(
         frameSignature: FrameSignature,

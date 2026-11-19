@@ -38,6 +38,7 @@ type
     txErrorTxInvalid
     txErrorChainIdMismatch
     txErrorOversized
+    txErrorVerifyGasExceeded
 
   TxItemRef* = ref object
     ptx   : PooledTransaction  ## Transaction data
