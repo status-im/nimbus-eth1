@@ -16,7 +16,7 @@ import
   ./types
 
 const
-  checkpointKey* = "lc_checkpoint"
+  checkpointKey = "lc_checkpoint"
   syncCommitteeLen = fixedPortionSize(altair.SyncCommittee)
 
 proc encodeCheckpoint*(cp: LightClientCheckpoint): seq[byte] =
@@ -50,7 +50,7 @@ proc decodeCheckpoint*(data: openArray[byte]): Result[LightClientCheckpoint, str
   except SerializationError as e:
     err("corrupted checkpoint: " & e.msg)
 
-proc deliverStorage*(
+proc deliverStorage(
     status: cint, data: ptr UncheckedArray[byte], len: cint, userData: pointer
 ) {.cdecl, gcsafe, raises: [].} =
   let sctx = cast[StorageContext](userData)

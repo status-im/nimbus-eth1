@@ -20,8 +20,7 @@ import
   beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/[forks, beaconstate],
-  beacon_chain/
-    [conf, beacon_clock, buildinfo, filepath, nimbus_binary_common, process_state],
+  beacon_chain/[conf, beacon_clock, buildinfo, nimbus_binary_common, process_state],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
@@ -238,8 +237,8 @@ proc run(
     lcDb: LightClientDB
 
   if config.dataDir.isSome():
-    let dataDir = config.dataDir.get()
-    secureCreatePath(dataDir).isOkOr:
+    let dataDir = string config.dataDir.get()
+    createPath(dataDir, 0o700).isOkOr:
       raise newException(
         ProxyError,
         "Couldn't create data directory " & dataDir & ": " & ioErrorMsg(error),

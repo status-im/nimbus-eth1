@@ -128,7 +128,7 @@ type VerifiedProxyConf* = object
   dataDir* {.
     desc: "Directory to persist the light client checkpoint in. Nothing is persisted when unset",
     name: "data-dir"
-  .}: Option[string]
+  .}: Option[OutDir]
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user

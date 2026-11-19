@@ -72,14 +72,22 @@ func checkpointSlot(cp: LightClientCheckpoint): Slot =
     else:
       GENESIS_SLOT
 
-suite "light client checkpoint storage":
+proc bootstrappedCheckpoint(testState: TestApiState): MemoryCheckpoint =
   let
-    testState = TestApiState.init(1.u256)
     m = MemoryCheckpoint()
+    engine = newStorageTestEngine(testState, some(TEST_TBR), TEST_LC_SLOT, m)
+  doAssert (waitFor engine.syncOnce()).isOk()
+  doAssert m.cp.isSome()
+  m
+
+suite "light client checkpoint storage":
+  let testState = TestApiState.init(1.u256)
 
   test "isCheckpointStale at the weak subjectivity boundary":
     let
-      engine = newStorageTestEngine(testState, some(TEST_TBR), TEST_LC_SLOT, m)
+      engine = newStorageTestEngine(
+        testState, some(TEST_TBR), TEST_LC_SLOT, MemoryCheckpoint()
+      )
       maxPeriods = engine.cfg.defaultLightClientDataMaxPeriods()
       period = TEST_LC_SLOT.sync_committee_period
       checkpoint = period.start_slot
@@ -90,7 +98,9 @@ suite "light client checkpoint storage":
       engine.cfg.isCheckpointStale(checkpoint, (period + maxPeriods + 1).start_slot)
 
   test "bootstrap persists a checkpoint":
-    let engine = newStorageTestEngine(testState, some(TEST_TBR), TEST_LC_SLOT, m)
+    let
+      m = MemoryCheckpoint()
+      engine = newStorageTestEngine(testState, some(TEST_TBR), TEST_LC_SLOT, m)
 
     check:
       (waitFor engine.syncOnce()).isOk()
@@ -98,7 +108,9 @@ suite "light client checkpoint storage":
       m.cp.isSome()
 
   test "restore from storage without a trusted block root":
-    let engine = newStorageTestEngine(testState, none(Eth2Digest), TEST_LC_SLOT, m)
+    let
+      m = bootstrappedCheckpoint(testState)
+      engine = newStorageTestEngine(testState, none(Eth2Digest), TEST_LC_SLOT, m)
 
     check:
       waitFor engine.restoreCheckpoint()
@@ -106,6 +118,7 @@ suite "light client checkpoint storage":
 
   test "stale checkpoint is ignored":
     let
+      m = bootstrappedCheckpoint(testState)
       maxPeriods = defaultRuntimeConfig.defaultLightClientDataMaxPeriods()
       staleSlot =
         (m.cp.get().checkpointSlot.sync_committee_period + maxPeriods + 1).start_slot
@@ -117,6 +130,7 @@ suite "light client checkpoint storage":
 
   test "checkpoint encoding round trip":
     let
+      m = bootstrappedCheckpoint(testState)
       bytes = encodeCheckpoint(m.cp.get())
       decoded = decodeCheckpoint(bytes).expect("valid checkpoint")
 
