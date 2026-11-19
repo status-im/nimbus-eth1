@@ -27,13 +27,13 @@ declareGauge nec_snap_accounts_coverage, "" &
 
 proc accountDownloadMetricsReset*(ctx: SnapCtxRef) =
   metrics.set(nec_snap_accounts_coverage, 0)
-  ctx.resetEta()
+  ctx.accEtaInit()
 
 proc accountDownloadMetricsUpdate*(ctx: SnapCtxRef) =
   if ctx.accUnproc.synced():
     let w = 1.0 - ctx.accUnproc.totalRatio
     metrics.set(nec_snap_accounts_coverage, w)
-    ctx.updateEta w
+    ctx.accEtaUpdate w
 
 proc accountDownloadCommit*(
     ctx: SnapCtxRef;

@@ -53,6 +53,9 @@ proc statusLog(ctx: BeaconCtxRef) =
     # `latestConsHeadNumber` is only updated while there is something to sync,
     # otherwise it stays behind the chain head.
     target = max(ctx.hdrCache.latestConsHeadNumber, head)
+    eta = if ctx.pool.syncState == BeaconState.headers: ctx.hdrEta.toStr
+          elif ctx.pool.syncState == BeaconState.blocks: ctx.blkEta.toStr
+          else: "n/a"
 
   info "Execution chain status",
     head,
@@ -62,7 +65,7 @@ proc statusLog(ctx: BeaconCtxRef) =
     target,
     distance=(target - head),
     syncState=($ctx.pool.syncState),
-    eta=ctx.pool.syncEta.avg.toStr,
+    eta,
     nSyncPeers=ctx.nSyncPeers(),
     nPeers=ctx.node.numPeers,
     lastFcu=ctx.lastFcuStr()

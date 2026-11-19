@@ -51,7 +51,7 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
   ctx.hibernate = true
 
   # Update metrics
-  ctx.pool.syncEta.lastUpdate = Moment.now()
+  ctx.blocksEtaInit()
   metrics.set(nec_sync_last_block_imported, 0)
   metrics.set(nec_sync_head, 0)
 
@@ -156,7 +156,6 @@ proc headersFinishNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
 
 proc lingerNext(ctx: BeaconCtxRef; info: static[string]): BeaconState =
   ## State transition handler
-  ctx.updateEtaHeadersDone()                        # update metrics
   let state = case ctx.hdrCache.state:              # get termination state
               of locked: BeaconNotifierState.ok
               of orphan: BeaconNotifierState.reset
@@ -312,7 +311,6 @@ proc updateBeaconState*(ctx: BeaconCtxRef; info: static[string]) =
 
   let prevState = ctx.pool.syncState
   ctx.pool.syncState = newState
-  ctx.subState.stateSince = Moment.now()
 
   case newState:
   of idle:
@@ -344,6 +342,7 @@ proc updateBeaconState*(ctx: BeaconCtxRef; info: static[string]) =
 proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ctx.subState.topNum = bn
   metrics.set(nec_sync_last_block_imported, bn.int64)
+  ctx.blocksEtaUpdate()                             # update ETA
 
 # ------------------------------------------------------------------------------
 # Public functions, call-back handlers
@@ -377,7 +376,6 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
     if b+1 < t:
       ctx.pool.minInitBuddies = 0                   # reset
       ctx.pool.syncState = BeaconState.headers      # state transition
-      ctx.subState.stateSince = Moment.now()
       ctx.hibernate = false                         # wake up
 
       # Update range
@@ -386,7 +384,6 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       ctx.subState.headHash = ctx.hdrCache.headHash
 
       # Update metrics
-      ctx.pool.syncEta.lastUpdate = ctx.subState.stateSince
       metrics.set(nec_sync_head, ctx.subState.headNum.int64)
 
       info "Activating syncer", base=b, head=ctx.chain.latestNumber,

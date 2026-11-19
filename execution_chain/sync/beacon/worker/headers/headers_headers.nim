@@ -15,7 +15,6 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../../networking/p2p,
-  ../update/update_eta,
   ../[helpers, worker_desc],
   ./[headers_fetch, headers_helpers, headers_unproc]
 
@@ -148,7 +147,6 @@ proc headersStashOnDisk*(
   if not srcPeer.isNil:
     srcPeer.only.nErrors.apply.hdr = 0           # reset error count
 
-  ctx.updateEtaHeaders()                         # metrics update
   ok(dTop - dBottom)
 
 # ------------------------------------------------------------------------------

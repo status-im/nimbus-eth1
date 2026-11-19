@@ -12,26 +12,43 @@
 
 import
   pkg/[chronos, metrics],
+  ../../../../utils/simple_eta,
   ../worker_desc
 
-declareGauge nec_snap_eta_secs, "" &
-  "Estimated seconds until current download or DB import terminates"
+declareGauge nec_snap_accounts_eta_secs, "" &
+  "Estimated seconds until current accounts download terminates"
+
+declareGauge nec_snap_dbimport_eta_secs, "" &
+  "Estimated seconds until current Core DB import terminates"
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+template etaInit(spline: EtaSpline, gauge: untyped): untyped =
+  spline.init()
+  metrics.set(gauge, 0)
+
+template etaUpdate(spline: EtaSpline, gauge: untyped, y: float): untyped =
+  spline.apply y
+  spline.eta.isErrOr:
+    metrics.set(gauge, value.seconds)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc updateEta*(ctx: SnapCtxRef, y: float) =
-  ctx.pool.etaSpline.apply y
-  ctx.pool.etaSpline.eta.isErrOr:
-    metrics.set(nec_snap_eta_secs, value.seconds)
-    return
-  if ctx.pool.etaSpline.len < 2:
-    metrics.set(nec_snap_eta_secs, -1)
+proc accEtaInit*(ctx: SnapCtxRef) =
+  ctx.pool.etaAccounts.etaInit nec_snap_accounts_eta_secs
 
-proc resetEta*(ctx: SnapCtxRef) =
-  ctx.pool.etaSpline.clear()
-  metrics.set(nec_snap_eta_secs, 0)
+proc accEtaUpdate*(ctx: SnapCtxRef, y: float) =
+  ctx.pool.etaAccounts.etaUpdate(nec_snap_accounts_eta_secs, y)
+
+proc dbImportEtaInit*(ctx: SnapCtxRef) =
+  ctx.pool.etaDbImport.etaInit nec_snap_dbimport_eta_secs
+
+proc dbImportEtaUpdate*(ctx: SnapCtxRef, y: float) =
+  ctx.pool.etaDbImport.etaUpdate(nec_snap_dbimport_eta_secs, y)
 
 # ------------------------------------------------------------------------------
 # End

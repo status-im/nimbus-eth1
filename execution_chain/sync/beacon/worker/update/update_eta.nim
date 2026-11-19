@@ -12,150 +12,41 @@
 
 import
   pkg/[chronos, metrics],
-  ../headers/headers_unproc,
+  ../../../../utils/simple_eta,
   ../worker_desc
 
-declareGauge nec_sync_eta_secs, "" &
-  "Estimated seconds until current consensus head is reached"
+declareGauge nec_sync_blocks_eta_secs, "" &
+  "Estimated seconds until blocks import finished"
 
 # ------------------------------------------------------------------------------
-# Private helpers
+# Public functions
 # ------------------------------------------------------------------------------
-
-proc setEtaAndMetrics(ctx: BeaconCtxRef; w: float) =
-  ctx.pool.syncEta.add w
-  if low(Moment) < ctx.pool.syncEta.lastUpdate:
-    metrics.set(nec_sync_eta_secs, seconds ctx.pool.syncEta.avg)
-  ctx.hdrCache.updateMetrics()
-
-proc dist(a, b: BlockNumber): uint64 =
-  ## Distrance from a to b, i.e. `max(0, b.int - a-int).uint`
-  if b < a: 0 else: b - a
-
-# ------------------------------------------------------------------------------
-# Public functions, metrics management (includes ETA)
-# ------------------------------------------------------------------------------
-
-proc updateEtaInit*(ctx: BeaconCtxRef) =
-  ## Initialise ETA with some high guess values so the ETA is supposed to
-  ## go down over time.
-  ##
-  ctx.pool.syncEta.reset
-  ctx.pool.syncEta.headerTime = etaHeaderTimeDefault
-  ctx.pool.syncEta.blockTime = etaBlockTimeDefault
-  if ctx.pool.standByMode == BeaconServerMode.none:
-    metrics.set(nec_sync_eta_secs, -1)              # waiting for data
-  else:
-    metrics.set(nec_sync_eta_secs, 0f)              # currently all done
-
-# --------------
 
 proc updateEtaIdle*(ctx: BeaconCtxRef) =
-  ## Metrics update while system state is idle so it can be run on a ticker.
-  ## Othewise, ETA updates are done with the syncer state handler.
-  ##
-  if ctx.pool.standByMode != BeaconServerMode.none:
-    metrics.set(nec_sync_eta_secs, 0f)              # currently all done
+  ctx.hdrCache.updateMetrics()
 
-  elif ctx.pool.syncState == BeaconState.idle and
-     low(Moment) < ctx.pool.syncEta.lastUpdate and
-     ctx.pool.syncEta.lastUpdate + etaIdleMaxDensity <= Moment.now():
+proc hdrEta*(ctx: BeaconCtxRef): Opt[Duration] =
+  ctx.hdrCache.getEta()
 
-    let toDo = dist(ctx.chain.latestNumber, ctx.hdrCache.latestConsHeadNumber)
-    if toDo == 0:
-      # No sync request at the moment
-      ctx.pool.syncEta.inSync = true
-      metrics.set(nec_sync_eta_secs, 0)
-      ctx.hdrCache.updateMetrics()
-    else:
-      # Caclculate the duration to process all the headers and all
-      # blocks, i.e
-      # * headers and blocks to be stored for the rest until known target
-      let bothTime = ctx.pool.syncEta.headerTime + ctx.pool.syncEta.blockTime
-      ctx.setEtaAndMetrics(bothTime * toDo.float)
-      ctx.pool.syncEta.inSync = false
+proc blkEta*(ctx: BeaconCtxRef): Opt[Duration] =
+  ctx.pool.blocksEta.eta()
 
 
-proc updateEtaBlocks*(ctx: BeaconCtxRef) =
+proc blocksEtaInit*(ctx: BeaconCtxRef) =
+  ## Initialise blocks import ETA.
+  ctx.pool.blocksEta.init()
+  metrics.set(nec_sync_blocks_eta_secs, 0f)
+
+proc blocksEtaUpdate*(ctx: BeaconCtxRef) =
   ## Update ETA while system is in `blocks` state.
-  ##
-  if low(Moment) < ctx.pool.syncEta.lastUpdate:
-    # There is a minimum time span beween two samples to take.
-    let
-      now = Moment.now()
-      blocksToDo = ctx.subState.headNum - ctx.subState.topNum
-    if ctx.pool.syncEta.lastUpdate + etaBlockMaxDensity <= now or
-       blocksToDo < 2:
-
-      # Make certain to cover more than one successful fetch efforts unless
-      # there are not many items to fetch.
-      let nProcessed = dist(ctx.hdrCache.antecedent.number, ctx.subState.topNum)
-      if nFetchBodiesRequest < nProcessed or
-         (0 < nProcessed and blocksToDo <= nFetchBodiesRequest):
-
-        let elapsed = now - ctx.pool.subState.stateSince
-        ctx.pool.syncEta.blockTime =
-          elapsed.nanoseconds.float / nProcessed.float
-
-        # Caclculate the duration to process all the headers and all
-        # blocks, i.e
-        # * blocks to be stored for this sprint
-        # * headers and blocks to be stored for the rest until known target
-        let
-          restToDo = dist(ctx.subState.headNum,
-                          ctx.hdrCache.latestConsHeadNumber)
-          restTime = ctx.pool.syncEta.headerTime + ctx.pool.syncEta.blockTime
-
-          blksNs = ctx.pool.syncEta.blockTime * blocksToDo.float
-          restNs = restTime * restToDo.float
-
-        ctx.setEtaAndMetrics(blksNs + restNs)
-
-
-proc updateEtaHeaders*(ctx: BeaconCtxRef) =
-  ## Eta and metrics while system is in `headers` state
-  ##
-  if low(Moment) < ctx.pool.syncEta.lastUpdate:
-    # There is a minimum time span beween two samples to take.
-    let
-      now = Moment.now()
-      headersToDo = ctx.headersUnprocTotal().float
-    if ctx.pool.syncEta.lastUpdate + etaHeaderMaxDensity <= now or
-       headersToDo < 2:
-
-      let nProcessed = dist(ctx.hdrCache.antecedent.number,ctx.subState.headNum)
-      if nFetchHeadersRequest < nProcessed or
-         (0 < nProcessed and headersToDo <= nFetchHeadersRequest):
-
-        let elapsed = now - ctx.pool.subState.stateSince
-        ctx.pool.syncEta.headerTime =
-          elapsed.nanoseconds.float / nProcessed.float
-
-        if ctx.pool.stopBase.isNone():
-          # Caclculate the duration to process all the headers and all
-          # blocks, i.e
-          # * headers to be stored for this sprint
-          # * blocks to be stored for this sprint
-          # * headers and blocks to be stored for the rest until known target
-          let
-            restToDo = dist(ctx.subState.headNum,
-                            ctx.hdrCache.latestConsHeadNumber)
-
-            blocksToDo = dist(ctx.chain.baseNumber, ctx.subState.headNum)
-            restTime = ctx.pool.syncEta.headerTime + ctx.pool.syncEta.blockTime
-
-            hdrsNs = ctx.pool.syncEta.headerTime * headersToDo.float
-            blksNs = ctx.pool.syncEta.blockTime * blocksToDo.float
-            restNs = restTime * restToDo.float
-
-          ctx.setEtaAndMetrics(hdrsNs + blksNs + restNs)
-
-        else:                                       # single run => headers only
-          ctx.setEtaAndMetrics(ctx.pool.syncEta.headerTime * headersToDo)
-
-proc updateEtaHeadersDone*(ctx: BeaconCtxRef) =
-  ## Eta and metrics while system is in `headers` state
-  metrics.set(nec_sync_eta_secs, 0f)                # songle run finished
+  let
+    nAllBlocks = 1 + ctx.subState.headNum - ctx.hdrCache.antecedent.number
+    # Note that `topNum` is at the last imported block, initialised
+    # before importing as `antecedent.number-1`.
+    nProcessed = 1 + ctx.subState.topNum - ctx.hdrCache.antecedent.number
+  ctx.pool.blocksEta.apply nProcessed.float / nAllBlocks.float
+  ctx.pool.blocksEta.eta().isErrOr:
+    metrics.set(nec_sync_blocks_eta_secs, value.seconds)
 
 # ------------------------------------------------------------------------------
 # End
