@@ -157,6 +157,13 @@ type VerifiedProxyConf* = object
     name: "op-listen-url"
   .}: UrlList
 
+  # Listening endpoint of the beacon light client API passthrough
+  beaconFrontendUrls* {.
+    desc: "URL for the listening end of the beacon light client API passthrough - http://[address]:[port]. Disabled when not set. Multiple URLs can be specified by defining the option again on the command line",
+    defaultValue: @[],
+    name: "beacon-listen-url"
+  .}: UrlList
+
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
   beaconApiUrls* {.

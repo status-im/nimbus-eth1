@@ -18,6 +18,7 @@ type
     opEngine*: RpcVerificationEngine
     frontend*: ExecutionApiFrontend
     opFrontend*: ExecutionApiFrontend
+    beaconFrontend*: BeaconApiFrontend
 
   CallBackProc* = proc(ctx: ptr Context, status: cint, res: cstring, userData: pointer) {.
     cdecl, gcsafe, raises: []

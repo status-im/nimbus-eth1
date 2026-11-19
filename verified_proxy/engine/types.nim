@@ -256,6 +256,8 @@ type
     getLightClientFinalityUpdate*: LightClientFinalityUpdateProc
     getLightClientOptimisticUpdate*: LightClientOptimisticUpdateProc
 
+  BeaconApiFrontend* = BeaconApiBackend
+
   BackendCapability* = enum
     ChainId # eth_chainId
     GetBlockByHash # eth_getBlockByHash

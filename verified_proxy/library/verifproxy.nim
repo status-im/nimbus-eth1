@@ -22,6 +22,7 @@ import
   ../engine/engine,
   ../engine/utils,
   ../engine/rpc_frontend,
+  ../engine/beacon_frontend,
   ../lc_backend,
   ../json_rpc_backend,
   ../nimbus_verified_proxy_conf,
@@ -31,8 +32,8 @@ import
   ./c_execution_backend,
   ./c_beacon_backend
 
-import ./c_frontend
-export c_frontend
+import ./c_frontend, ./c_beacon_frontend
+export c_frontend, c_beacon_frontend
 
 logScope:
   topics = "vp_main"
@@ -330,6 +331,7 @@ proc run*(
 
   ctx.engine = engine
   ctx.frontend = engine.getExecutionApiFrontend()
+  ctx.beaconFrontend = engine.getBeaconApiFrontend()
 
   opParams.isErrOr:
     let l2NetworkId = chainIdToNetworkId(l1ChainId).valueOr:

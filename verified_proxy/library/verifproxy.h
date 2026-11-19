@@ -204,6 +204,25 @@ void nvp_op_syncInterval(Context *ctx, CallBackProc cb, void *userData);
  */
 void proxyCall(Context *ctx, char* name, char* params, CallBackProc cb, void *userData);
 
+/**
+ * Pass a beacon light client request through to one of the configured beacon
+ * backends. The backend is picked at random among the eligible ones and is scored
+ * on the outcome, like execution backends. Responses are NOT verified.
+ * Endpoint names and params are the same as the ones passed to BeaconTransportProc:
+ *   "getLightClientBootstrap"        — params: {"block_root": "0x..."}
+ *   "getLightClientUpdatesByRange"   — params: {"start_period": N, "count": N}
+ *                                      (count is capped at 128)
+ *   "getLightClientOptimisticUpdate" — params: {}
+ *   "getLightClientFinalityUpdate"   — params: {}
+ * @param ctx       Context pointer.
+ * @param endpoint  Name of the light client endpoint.
+ * @param params    JSON object with the endpoint parameters.
+ * @param cb        Callback invoked with the Beacon API JSON body: {"version": ..., "data": ...},
+ *                  or an array of those for getLightClientUpdatesByRange.
+ * @param userData  pointer to user data
+ */
+void beaconCall(Context *ctx, char* endpoint, char* params, CallBackProc cb, void *userData);
+
 /* ========================================================================== */
 /*                               BASIC CHAIN DATA                              */
 /* ========================================================================== */

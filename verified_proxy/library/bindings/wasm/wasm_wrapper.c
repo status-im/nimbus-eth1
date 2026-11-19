@@ -49,6 +49,11 @@ void wasmCall(char *name, char *params, CallBackProc cb, void *userData) {
 }
 
 EMSCRIPTEN_KEEPALIVE
+void wasmBeaconCall(char *endpoint, char *params, CallBackProc cb, void *userData) {
+    beaconCall(g_ctx, endpoint, params, cb, userData);
+}
+
+EMSCRIPTEN_KEEPALIVE
 void wasmEthSync(CallBackProc cb, void *userData) {
     nvp_eth_sync(g_ctx, cb, userData);
 }

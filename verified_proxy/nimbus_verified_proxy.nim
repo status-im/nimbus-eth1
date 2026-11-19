@@ -24,6 +24,7 @@ import
   ./engine/engine,
   ./engine/genesis_params,
   ./engine/rpc_frontend,
+  ./engine/beacon_frontend,
   ./engine/header_store,
   ./engine/utils,
   ./engine/types,
@@ -31,6 +32,7 @@ import
   ./p2p_lc_backend,
   ./json_rpc_backend,
   ./json_rpc_frontend,
+  ./beacon_rest_frontend,
   ./op/op_anchor,
   ./op/op_chain_params,
   ./op/op_frontend,
@@ -182,6 +184,32 @@ proc startFrontends(
 
   servers
 
+proc startBeaconFrontends(
+    engine: RpcVerificationEngine, urls: seq[string]
+): seq[BeaconRestServer] {.raises: [ProxyError].} =
+  var servers: seq[BeaconRestServer] = @[]
+  let frontend = engine.getBeaconApiFrontend()
+
+  for url in urls:
+    let server = BeaconRestServer.init(url).valueOr:
+      error "Error initializing beacon frontend server", err = error.errMsg
+      continue
+
+    server.injectEngineFrontend(frontend, engine.cfg, engine.forkDigests)
+
+    let status = server.start()
+    if status.isErr():
+      error "Error starting beacon frontend server", err = status.error.errMsg
+      continue
+
+    info "Beacon API frontend serving", url
+    servers.add(server)
+
+  if urls.len > 0 and servers.len == 0:
+    raise newException(ProxyError, "Couldn't start any beacon frontends for verified proxy")
+
+  servers
+
 proc run(
     config: VerifiedProxyConf
 ) {.async: (raises: [ProxyError, CancelledError]), gcsafe.} =
@@ -276,6 +304,7 @@ proc run(
 
   let frontend = engine.getExecutionApiFrontend()
   let frontendServers = startFrontends(frontend, config.frontendUrls)
+  let beaconFrontendServers = startBeaconFrontends(engine, config.beaconFrontendUrls)
 
   # nil unless an OP network is configured (RpcVerificationEngine is a ref, so nil is the
   # natural "no L2 engine" state no Option wrapping needed)
@@ -335,6 +364,8 @@ proc run(
     for s in frontendServers:
       await s.stop()
     for s in opFrontendServers:
+      await s.stop()
+    for s in beaconFrontendServers:
       await s.stop()
     for c in execBackendClients:
       await c.stop()

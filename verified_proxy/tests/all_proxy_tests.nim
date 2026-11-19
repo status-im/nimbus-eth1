@@ -14,4 +14,5 @@ import
   ./test_state,
   ./test_fees,
   ./test_scoring,
-  ./test_capabilities
+  ./test_capabilities,
+  ./test_beacon_frontend

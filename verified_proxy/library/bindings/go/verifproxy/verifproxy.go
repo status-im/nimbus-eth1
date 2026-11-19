@@ -51,6 +51,10 @@ static inline void callNvp(Context *ctx, char *method, char *params, CallBackPro
     proxyCall(ctx, method, params, cb, (void *)userData);
 }
 
+static inline void callNvpBeacon(Context *ctx, char *endpoint, char *params, CallBackProc cb, uintptr_t userData) {
+    beaconCall(ctx, endpoint, params, cb, (void *)userData);
+}
+
 static inline void callNvpEthSync(Context *ctx, CallBackProc cb, uintptr_t userData) {
     nvp_eth_sync(ctx, cb, (void *)userData);
 }
@@ -105,6 +109,7 @@ const (
 	callEthSyncInterval
 	callOpSync
 	callOpSyncInterval
+	callBeacon
 )
 
 type VerifyProxyCallArgs struct {
@@ -260,6 +265,12 @@ func Start(configJson string, execTransport ExecTransportFunc, beaconTransport B
 					C.callNvpOpSync(ctxPtr, cb, h)
 				case callOpSyncInterval:
 					C.callNvpOpSyncInterval(ctxPtr, cb, h)
+				case callBeacon:
+					cEndpoint := C.CString(callArgs.method)
+					cParams := C.CString(callArgs.params)
+					C.callNvpBeacon(ctxPtr, cEndpoint, cParams, cb, h)
+					C.free(unsafe.Pointer(cEndpoint))
+					C.free(unsafe.Pointer(cParams))
 				default:
 					cMethod := C.CString(callArgs.method)
 					cParams := C.CString(callArgs.params)
@@ -317,6 +328,10 @@ func parseSyncInterval(result string, err error) (time.Duration, error) {
 
 func (ctx *Context) CallRpc(method string, params string, timeout time.Duration) (string, error) {
 	return ctx.call(VerifyProxyCallArgs{kind: callRpc, method: method, params: params}, timeout)
+}
+
+func (ctx *Context) CallBeacon(endpoint string, params string, timeout time.Duration) (string, error) {
+	return ctx.call(VerifyProxyCallArgs{kind: callBeacon, method: endpoint, params: params}, timeout)
 }
 
 func (ctx *Context) call(args VerifyProxyCallArgs, timeout time.Duration) (string, error) {

@@ -81,6 +81,8 @@ received chain id with the one configured locally. If this validation fails, the
 
 * `--beacon-api-url` - URL of the consensus light client data provider (beacon node REST API). This is used to bootstrap and follow the tip of the consensus chain. Multiple URLs can be provided by repeating the option.
 
+* `--beacon-listen-url` - (optional) serves the beacon light client REST endpoints (`/eth/v1/beacon/light_client/{bootstrap,updates,finality_update,optimistic_update}`, JSON or SSZ) by passing requests through to the configured beacon backends. Backends are picked at random and scored like execution backends. Responses are **not** verified by the proxy. Disabled unless set.
+
 #### Obtaining a trusted block root
 
 A block root may be obtained from a trusted beacon node or from a trusted provider.

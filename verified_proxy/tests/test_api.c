@@ -341,6 +341,54 @@ static void drain(Context *ctx, int max_iters) {
     }
 }
 
+static void check_beacon_call(Context *ctx) {
+    printf("\n Beacon passthrough\n");
+    CbState bootstrap_s  = {0};
+    CbState updates_s    = {0};
+    CbState finality_s   = {0};
+    CbState optimistic_s = {0};
+    CbState unknown_s    = {0};
+    CbState bad_root_s   = {0};
+    CbState no_count_s   = {0};
+    CbState bad_json_s   = {0};
+
+    beaconCall(ctx, "getLightClientBootstrap",
+               "{\"block_root\": \"0x9bcb90ec3a294591b77dd2a58e973578715cdc0e6eeeb286bc06dd120057f18b\"}",
+               collect_error_cb, &bootstrap_s);
+    beaconCall(ctx, "getLightClientUpdatesByRange", "{\"start_period\": 1711, \"count\": 1}",
+               collect_error_cb, &updates_s);
+    beaconCall(ctx, "getLightClientFinalityUpdate", "{}", collect_error_cb, &finality_s);
+    beaconCall(ctx, "getLightClientOptimisticUpdate", "{}", collect_error_cb, &optimistic_s);
+    beaconCall(ctx, "getLightClientFoo", "{}", collect_error_cb, &unknown_s);
+    beaconCall(ctx, "getLightClientBootstrap", "{\"block_root\": \"0x12\"}",
+               collect_error_cb, &bad_root_s);
+    beaconCall(ctx, "getLightClientUpdatesByRange", "{\"start_period\": 1711}",
+               collect_error_cb, &no_count_s);
+    beaconCall(ctx, "getLightClientFinalityUpdate", "{", collect_error_cb, &bad_json_s);
+    drain(ctx, 2000);
+
+    TEST("beaconCall bootstrap before sync: RET_SUCCESS",
+         bootstrap_s.called && bootstrap_s.status == RET_SUCCESS);
+    TEST("beaconCall bootstrap: versioned JSON body",
+         strncmp(bootstrap_s.res, "{\"version\":\"", 12) == 0);
+    TEST("beaconCall updates: RET_SUCCESS",
+         updates_s.called && updates_s.status == RET_SUCCESS);
+    TEST("beaconCall updates: array of versioned JSON bodies",
+         strncmp(updates_s.res, "[{\"version\":\"", 13) == 0);
+    TEST("beaconCall finality update: RET_SUCCESS",
+         finality_s.called && finality_s.status == RET_SUCCESS);
+    TEST("beaconCall optimistic update: RET_SUCCESS",
+         optimistic_s.called && optimistic_s.status == RET_SUCCESS);
+    TEST("beaconCall unknown endpoint: error returned",
+         unknown_s.called && unknown_s.status == RET_DESER_ERROR);
+    TEST("beaconCall bootstrap bad block_root: error returned",
+         bad_root_s.called && bad_root_s.status == RET_DESER_ERROR);
+    TEST("beaconCall updates missing count: error returned",
+         no_count_s.called && no_count_s.status == RET_DESER_ERROR);
+    TEST("beaconCall invalid JSON params: error returned",
+         bad_json_s.called && bad_json_s.status == RET_DESER_ERROR);
+}
+
 static void check_sync(Context *ctx) {
     printf("\n Sync\n");
     CbState before_s         = {0};
@@ -471,6 +519,7 @@ int main(void) {
 
     check_deser_errors(ctx);
     check_proxyCall_errors(ctx);
+    check_beacon_call(ctx);
     check_sync(ctx);
     check_event_loop(ctx);
 

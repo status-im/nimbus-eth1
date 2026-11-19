@@ -143,6 +143,19 @@ export default class NimbusVerifiedProxy {
     });
   }
 
+  beaconCall(endpoint, params) {
+    return new Promise((resolve, reject) => {
+      const id = this.#nextId++;
+      this.#callbacks.set(id, { resolve, reject });
+      this.#mod.ccall(
+        'wasmBeaconCall',
+        null,
+        ['string', 'string', 'number', 'number'],
+        [endpoint, params, this.#unifiedCb, id]
+      );
+    });
+  }
+
   sync() {
     return new Promise((resolve, reject) => {
       const id = this.#nextId++;
