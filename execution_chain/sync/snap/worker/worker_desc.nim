@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  std/[math, paths, sets],
+  std/[paths, sets],
   pkg/[chronos, eth/common, minilru, results],
   ../../../core/chain,
   ../../../utils/simple_eta,
