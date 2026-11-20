@@ -7,6 +7,10 @@
 
 import VerifProxyModule from './verifproxy_wasm.js';   // emcc output (-sEXPORT_ES6=1 default export)
 
+const RET_SUCCESS   = 0;
+const RET_ERROR     = -1;
+const RET_NOT_FOUND = -4;
+
 async function defaultExecutionTransport(url, name, params) {
   const r = await fetch(url, {
     method: 'POST',
@@ -40,6 +44,8 @@ export default class NimbusVerifiedProxy {
   #mod        = null;
   #execFp     = null;
   #beaconFp   = null;
+  #storageGetFp = null;
+  #storagePutFp = null;
   #intervalId = null;
   #unifiedCb  = null;
   #callbacks  = new Map();
@@ -52,7 +58,10 @@ export default class NimbusVerifiedProxy {
   // executionTransport(url, name, params) - async, must return the provider's JSON-RPC
   //   response body verbatim (the full envelope, including result or error members).
   // beaconTransport(url, endpoint, params) - async, must return the raw response body string.
-  async init(config, { executionTransport = defaultExecutionTransport, beaconTransport = defaultBeaconTransport } = {}) {
+  // storage - optional { get(key), put(key, bytes) } used to persist the light client
+  //   checkpoint (~25 KB). get resolves to a Uint8Array or null when the key is absent,
+  //   put resolves once the bytes are written. Prefer IndexedDB over localStorage.
+  async init(config, { executionTransport = defaultExecutionTransport, beaconTransport = defaultBeaconTransport, storage = null } = {}) {
     this.#mod = await VerifProxyModule({
       print:    msg => console.log('[verifproxy]', msg),
       printErr: msg => console.error('[verifproxy]', msg),
@@ -68,12 +77,12 @@ export default class NimbusVerifiedProxy {
       Promise.resolve(executionTransport(url, name, params))
         .then(result => {
           const buf = mod.stringToNewUTF8(result);
-          mod._wasmDeliverExecutionTransport(0, buf, userDataPtr);
+          mod._wasmDeliverExecutionTransport(cbPtr, RET_SUCCESS, buf, userDataPtr);
           mod._free(buf);
         })
         .catch(err => {
           const buf = mod.stringToNewUTF8(err.message);
-          mod._wasmDeliverExecutionTransport(-1, buf, userDataPtr);
+          mod._wasmDeliverExecutionTransport(cbPtr, RET_ERROR, buf, userDataPtr);
           mod._free(buf);
         });
     }, 'viii');
@@ -86,12 +95,12 @@ export default class NimbusVerifiedProxy {
       Promise.resolve(beaconTransport(url, endpoint, params))
         .then(result => {
           const buf = mod.stringToNewUTF8(result);
-          mod._wasmDeliverBeaconTransport(0, buf, userDataPtr);
+          mod._wasmDeliverBeaconTransport(cbPtr, RET_SUCCESS, buf, userDataPtr);
           mod._free(buf);
         })
         .catch(err => {
           const buf = mod.stringToNewUTF8(err.message);
-          mod._wasmDeliverBeaconTransport(-1, buf, userDataPtr);
+          mod._wasmDeliverBeaconTransport(cbPtr, RET_ERROR, buf, userDataPtr);
           mod._free(buf);
         });
     }, 'viii');
@@ -106,7 +115,7 @@ export default class NimbusVerifiedProxy {
       const body = mod.UTF8ToString(resPtr);
       mod._wasmFreeString(resPtr);
 
-      if (status === 0) {
+      if (status === RET_SUCCESS) {
         entry.resolve(body);
       } else {
         const err = new Error(body);
@@ -115,11 +124,40 @@ export default class NimbusVerifiedProxy {
       }
     }, 'viiii');
 
+    if (storage !== null) {
+      // Storage get: (ctx, key, cb, userData) - 4 pointer-sized args hence viiii
+      this.#storageGetFp = mod.addFunction((ctxPtr, keyPtr, cbPtr, userDataPtr) => {
+        const key = mod.UTF8ToString(keyPtr);
+        Promise.resolve(storage.get(key))
+          .then(value => {
+            if (value == null) {
+              mod._wasmDeliverStorage(cbPtr, RET_NOT_FOUND, 0, 0, userDataPtr);
+              return;
+            }
+            const buf = mod._malloc(value.length);
+            mod.HEAPU8.set(value, buf);
+            mod._wasmDeliverStorage(cbPtr, RET_SUCCESS, buf, value.length, userDataPtr);
+            mod._free(buf);
+          })
+          .catch(() => mod._wasmDeliverStorage(cbPtr, RET_ERROR, 0, 0, userDataPtr));
+      }, 'viiii');
+
+      // Storage put: (ctx, key, data, len, cb, userData) - 6 args hence viiiiii
+      this.#storagePutFp = mod.addFunction((ctxPtr, keyPtr, dataPtr, len, cbPtr, userDataPtr) => {
+        const key   = mod.UTF8ToString(keyPtr);
+        const value = mod.HEAPU8.slice(dataPtr, dataPtr + len);
+        Promise.resolve(storage.put(key, value))
+          .then(() => mod._wasmDeliverStorage(cbPtr, RET_SUCCESS, 0, 0, userDataPtr))
+          .catch(() => mod._wasmDeliverStorage(cbPtr, RET_ERROR, 0, 0, userDataPtr));
+      }, 'viiiiii');
+    }
+
     const ret = mod.ccall(
-      'wasmStart', 'number', ['string', 'number', 'number'],
-      [config, this.#execFp, this.#beaconFp]
+      'wasmStart', 'number', ['string', 'number', 'number', 'number', 'number'],
+      [config, this.#execFp, this.#beaconFp, this.#storageGetFp ?? 0, this.#storagePutFp ?? 0]
     );
     if (ret !== 0) throw new Error(`wasmStart failed with code ${ret}`);
+
     this.#intervalId = setInterval(() => {
       try {
         mod._wasmProcessTasks();
@@ -191,6 +229,14 @@ export default class NimbusVerifiedProxy {
     if (this.#unifiedCb !== null) {
       this.#mod.removeFunction(this.#unifiedCb);
       this.#unifiedCb = null;
+    }
+    if (this.#storageGetFp !== null) {
+      this.#mod.removeFunction(this.#storageGetFp);
+      this.#storageGetFp = null;
+    }
+    if (this.#storagePutFp !== null) {
+      this.#mod.removeFunction(this.#storagePutFp);
+      this.#storagePutFp = null;
     }
     // Reject any pending callbacks
     for (const entry of this.#callbacks.values()) {

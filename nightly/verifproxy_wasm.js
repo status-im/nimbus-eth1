@@ -6043,11 +6043,13 @@ var wasmExports = createWasm();
 
 var ___wasm_call_ctors = () => (___wasm_call_ctors = wasmExports["__wasm_call_ctors"])();
 
-var _wasmStart = Module["_wasmStart"] = (a0, a1, a2) => (_wasmStart = Module["_wasmStart"] = wasmExports["wasmStart"])(a0, a1, a2);
+var _wasmStart = Module["_wasmStart"] = (a0, a1, a2, a3, a4) => (_wasmStart = Module["_wasmStart"] = wasmExports["wasmStart"])(a0, a1, a2, a3, a4);
 
 var _NimMain = Module["_NimMain"] = () => (_NimMain = Module["_NimMain"] = wasmExports["NimMain"])();
 
-var _startVerifProxy = Module["_startVerifProxy"] = (a0, a1, a2) => (_startVerifProxy = Module["_startVerifProxy"] = wasmExports["startVerifProxy"])(a0, a1, a2);
+var _startVerifProxy = Module["_startVerifProxy"] = (a0, a1, a2, a3, a4) => (_startVerifProxy = Module["_startVerifProxy"] = wasmExports["startVerifProxy"])(a0, a1, a2, a3, a4);
+
+var _wasmDeliverStorage = Module["_wasmDeliverStorage"] = (a0, a1, a2, a3, a4) => (_wasmDeliverStorage = Module["_wasmDeliverStorage"] = wasmExports["wasmDeliverStorage"])(a0, a1, a2, a3, a4);
 
 var _wasmFreeString = Module["_wasmFreeString"] = a0 => (_wasmFreeString = Module["_wasmFreeString"] = wasmExports["wasmFreeString"])(a0);
 
@@ -6083,9 +6085,9 @@ var _wasmProcessTasks = Module["_wasmProcessTasks"] = () => (_wasmProcessTasks =
 
 var _processVerifProxyTasks = Module["_processVerifProxyTasks"] = a0 => (_processVerifProxyTasks = Module["_processVerifProxyTasks"] = wasmExports["processVerifProxyTasks"])(a0);
 
-var _wasmDeliverExecutionTransport = Module["_wasmDeliverExecutionTransport"] = (a0, a1, a2) => (_wasmDeliverExecutionTransport = Module["_wasmDeliverExecutionTransport"] = wasmExports["wasmDeliverExecutionTransport"])(a0, a1, a2);
+var _wasmDeliverExecutionTransport = Module["_wasmDeliverExecutionTransport"] = (a0, a1, a2, a3) => (_wasmDeliverExecutionTransport = Module["_wasmDeliverExecutionTransport"] = wasmExports["wasmDeliverExecutionTransport"])(a0, a1, a2, a3);
 
-var _wasmDeliverBeaconTransport = Module["_wasmDeliverBeaconTransport"] = (a0, a1, a2) => (_wasmDeliverBeaconTransport = Module["_wasmDeliverBeaconTransport"] = wasmExports["wasmDeliverBeaconTransport"])(a0, a1, a2);
+var _wasmDeliverBeaconTransport = Module["_wasmDeliverBeaconTransport"] = (a0, a1, a2, a3) => (_wasmDeliverBeaconTransport = Module["_wasmDeliverBeaconTransport"] = wasmExports["wasmDeliverBeaconTransport"])(a0, a1, a2, a3);
 
 var _wasmExecCtxUrl = Module["_wasmExecCtxUrl"] = a0 => (_wasmExecCtxUrl = Module["_wasmExecCtxUrl"] = wasmExports["wasmExecCtxUrl"])(a0);
 
