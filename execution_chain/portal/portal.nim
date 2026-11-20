@@ -89,10 +89,13 @@ proc getBlockBodyByHeader*(historyExpiry: HistoryExpiryRef, header: Header): Res
   let rpc = historyExpiry.rpcProvider.valueOr:
     return err("Portal RPC is not available")
 
-  # (waitFor rpc.historyGetBlockBody(header)).mapErr(
-  #   proc(e: PortalErrorResponse): string =
-  #     debug "Portal request failed", error = $e.message
-  #     "Portal request failed: " & $e.message
-  # )
+  when false:
+   (waitFor rpc.historyGetBlockBody(header)).mapErr(
+     proc(e: PortalErrorResponse): string =
+       debug "Portal request failed", error = $e.message
+       "Portal request failed: " & $e.message
+   )
+  else:
+    discard rpc
 
   err "TODO implement without nested waitFor"

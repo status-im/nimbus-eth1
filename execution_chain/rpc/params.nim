@@ -38,8 +38,7 @@ func txType(n: TransactionArgs): TxType =
 
 proc toTransaction*(vmState: BaseVMState,
                     args: TransactionArgs,
-                    globalGasCap: GasInt,
-                    header: Header): Result[Transaction, string] =
+                    globalGasCap: GasInt): Result[Transaction, string] =
 
   # Reject invalid combinations of pre- and post-1559 fee styles
   if args.gasPrice.isSome and

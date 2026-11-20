@@ -129,7 +129,6 @@ template accountDownload*(
       # data or contract code records already exist on the cache DB.
       let maybe = adb.getFlatAcc(w.accHash, info)
       if maybe.isSome():
-        let prvData = maybe.unsafeGet()
         trace info & ": Updating account record", peer, root, pivot=number,
           accPath=w.accHash.toStr, storageRoot=acc.storageRoot.toStr,
           codeHash=acc.codeHash.toStr, syncState=($buddy.syncState)

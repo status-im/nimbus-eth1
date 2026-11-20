@@ -198,11 +198,6 @@ proc getInfo(db: KvtDbRef): Opt[HccDbInfo] =
     discard
   err()
 
-proc delInfo(db: KvtDbRef) =
-  ## Remove info record from cache
-  discard db.del(HccDbInfoKey.toOpenArray)
-
-
 proc putHeader(db: KvtDbRef; h: Header) =
   ## Store the argument `header` indexed by block number, and the hash lookup
   ## of the parent header.
@@ -229,17 +224,6 @@ proc getHeader(db: KvtDbRef; bn: BlockNumber): Opt[Header] =
 proc getHeader(db: KvtDbRef; hash: Hash32): Opt[Header] =
   ## Variant of `getHeader()`
   db.getHeader ?db.getNumber(hash)
-
-
-proc delHeader(db: KvtDbRef; bn: BlockNumber) =
-  ## Remove header from cache, ignore non-existing entries
-  let
-    bnKey = beaconHeaderKey(bn)
-    rc = db.get(bnKey.toOpenArray)
-  discard db.del(bnKey.toOpenArray)
-  if rc.isOk:
-    let h =  decodePayload(rc.value, Header)
-    discard db.del(genericHashKey(h.parentHash).toOpenArray)
 
 # ----------------------
 
