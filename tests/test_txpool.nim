@@ -688,6 +688,23 @@ suite "TxPool test suite":
 
     xp.checkAddTx(tx, txErrorBasicValidation)
 
+  test "EIP-8141 transaction before Bogota":
+    # Otherwise valid for validateTxBasic, so only the fork check rejects it
+    let
+      sender = mx.getAccount(25).address
+      tx = Transaction(
+        txType: TxEip8141,
+        chainId: mx.chainId,
+        gasLimit: 75000,
+        maxFeePerGas: 1000.gwei.u256,
+        maxPriorityFeePerGas: 1.gwei.u256,
+        S: 1.u256,
+        sender: sender,
+      )
+
+    check validateTxBasic(
+      env.com, tx, tx.intrinsicGas(Amsterdam, sender), Amsterdam).isErr
+
   test "good tx followed by oog tx, receipt status=[true, false]":
     let
       env = initEnv(Amsterdam, {XP_ORDERED})
