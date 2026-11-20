@@ -53,7 +53,6 @@ type
     DelBranchExpexted
     DelBranchWithoutRefs
     DelLeafExpexted
-    DelVidStaleVtx
 
     # Fetch functions from `aristo_fetch.nim`
     FetchAccInaccessible
@@ -62,8 +61,6 @@ type
 
     # Get functions from `aristo_get.nim`
     GetKeyNotFound
-    GetKeyUpdateNeeded
-    GetTuvNotFound
     GetVtxNotFound
 
     # Path function `hikeUp()`
@@ -71,7 +68,6 @@ type
     HikeBranchTailEmpty
     HikeBranchUnresolvedEdge
     HikeDanglingEdge
-    HikeEmptyPath
     HikeLeafUnexpected
     HikeNoLegs
     HikeRootMissing

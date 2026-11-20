@@ -158,39 +158,32 @@ iterator stepUp*(
         break
       path = path.slice(common)
 
-
 proc hikeUp*[LeafType](
-    path: NibblesBuf;                            # Partial path
-    root: VertexID;                              # Start vertex
-    db: AristoTxRef;                             # Database
-    leaf: Opt[LeafType];
-    hike: var Hike;
-      ): Result[void,(VertexID,AristoError)] =
-  ## For the argument `path`, find and return the logest possible path in the
+    path: Hash32, root: VertexID, db: AristoTxRef, leaf: Opt[LeafType], hike: var Hike
+): Result[void, AristoError] =
+  ## For the argument `path`, find and return the longest possible path in the
   ## argument database `db` - this may result in a partial match in which case
   ## hike.tail will be non-empty.
   ##
   ## If a leaf is given, it gets used for the "last" leg of the hike.
+  ##
+  ## On error, `hike` contains the longest non-error match to the given path.
   hike.root = root
   hike.legs.setLen(0)
 
-  var path = path
   if not root.isValid:
-    return err((VertexID(0),HikeRootMissing))
-  if path.len == 0:
-    return err((VertexID(0),HikeEmptyPath))
+    return err(HikeRootMissing)
 
-  var vid = root
+  var
+    path = path.to(NibblesBuf)
+    vid = root
+
   while true:
     if leaf.isSome() and leaf[].isValid and path == leaf[].pfx:
       hike.legs.add Leg(vid: vid, vtx: leaf[], nibble: 0)
-      #reset(hike.tail)
       break
 
-    let
-      (vtx, common, next) = step(path, (root, vid), db).valueOr:
-        return err((vid, error))
-
+    let (vtx, common, next) = ?step(path, (root, vid), db)
     case vtx.vType
     of Leaves:
       hike.legs.add Leg(vid: vid, vtx: vtx, nibble: 0)
@@ -207,16 +200,6 @@ proc hikeUp*[LeafType](
     vid = next
 
   ok()
-
-proc hikeUp*[LeafType](
-    path: Hash32;
-    root: VertexID;
-    db: AristoTxRef;
-    leaf: Opt[LeafType];
-    hike: var Hike
-      ): Result[void,(VertexID,AristoError)] =
-  ## Variant of `hike()`
-  NibblesBuf.fromBytes(path.data).hikeUp(root, db, leaf, hike)
 
 # ------------------------------------------------------------------------------
 # End

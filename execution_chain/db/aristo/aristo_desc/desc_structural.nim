@@ -18,6 +18,7 @@ import
   std/[hashes as std_hashes, strutils, tables],
   stint,
   eth/common/[accounts, base, hashes],
+  eth/trie/nibbles,
   ./desc_identifiers
 
 export stint, tables, accounts, base, hashes
@@ -131,6 +132,12 @@ const
 # Public helpers (misc)
 # ------------------------------------------------------------------------------
 
+template to*(v: NibblesBuf, _: type Hash32): Hash32 =
+  Hash32(getBytes(v))
+
+template to*(v: Hash32, _: type NibblesBuf): NibblesBuf =
+  NibblesBuf.fromBytes(v.data())
+
 template init*(
     _: type AccLeafRef, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID,
     stoHintp: uint8 = 0
@@ -180,7 +187,7 @@ template isEmpty*(c: CachedStoLeaf): bool =
   c.stoData.isZero()
 
 template leafPfx(path: Hash32, pfxLen: uint8): NibblesBuf =
-  NibblesBuf.fromBytes(path.data).slice(64 - int(pfxLen))
+  path.to(NibblesBuf).slice(64 - int(pfxLen))
 
 func toLeaf*(c: CachedAccLeaf, accPath: Hash32): AccLeafRef =
   if c.isEmpty(): 
