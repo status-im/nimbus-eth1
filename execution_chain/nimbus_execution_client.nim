@@ -311,10 +311,10 @@ proc internalRestart(
     txFrame = com.db.baseTxFrame()
     ctx = nimbus.snapSyncRef.ctx
     stopOnError = true
-    stats = com.db.importCoreDb(
-                       txFrame, ctx, "Snap Import", stopOnError).valueOr:
-      fatal "CoreDb import failed. STOP"
-      quit(QuitFailure)
+
+  discard com.db.importCoreDb(txFrame, ctx, "Snap Import", stopOnError).valueOr:
+    fatal "CoreDb import failed. STOP"
+    quit(QuitFailure)
 
   # Remove snap sync cache DB
   ctx.wipeCacheDb()
