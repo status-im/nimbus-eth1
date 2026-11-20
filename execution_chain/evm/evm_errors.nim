@@ -38,6 +38,7 @@ type
     InvalidJumpDest
     OutOfBounds
     InvalidInitCode
+    CodeChangeInSystemContract
     EvmInvalidParam
 
   EvmErrorObj* = object
