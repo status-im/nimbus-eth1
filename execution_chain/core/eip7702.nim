@@ -63,11 +63,8 @@ func addressToDelegation*(auth: Address): array[EIP7702_DELEGATION_SIZE, byte] =
   assign(result.toOpenArray(0, 2), EIP7702_DELEGATION_PREFIX)
   assign(result.toOpenArray(3, 22), auth.data)
 
-template toDelegationAddress*(code: CodeBytesRef): Address =
-  Address(slice[20](code, 3, 22))
-
 func parseDelegationAddress*(code: CodeBytesRef): Opt[Address] =
   if not isDelegation(code.bytes()):
     return Opt.none(Address)
 
-  Opt.some(code.toDelegationAddress)
+  Opt.some(Address(slice[20](code, 3, 22)))
