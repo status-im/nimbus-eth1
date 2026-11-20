@@ -30,10 +30,20 @@ type
 proc getRecipientCode(vmState: BaseVMState, msg: Message): Result[CodeBytesRef, string] =
   var code = vmState.ledger.getCode(msg.currentTarget)
   if vmState.fork >= FkPrague:
-    # EIP-7002, EIP-7215, and EIP-8282 dictates that the code must be present,
-    # or else block is invalid
-    if code.len <= 0:
-      return err("No code found for system contract call")
+    if msg.currentTarget == WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS or
+       msg.currentTarget == CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS:
+
+      # EIP-7002 and EIP-7215 dictates that the code must be present, or else block is invalid
+      if code.len <= 0:
+        return err("No code found for withdrawal or consolidation requests contract")
+
+    if vmState.fork >= FkAmsterdam and (
+      msg.currentTarget == BUILDER_DEPOSIT_CONTRACT_ADDRESS or
+      msg.currentTarget == BUILDER_EXIT_CONTRACT_ADDRESS
+    ):
+      # EIP-8282 dictates that the code must be present, or else block is invalid
+      if code.len <= 0:
+        return err("No code found for builder deposit or exit requests contract")
 
     msg.delegateTo = parseDelegationAddress(code).valueOr:
       return ok(code)
