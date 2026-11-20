@@ -55,7 +55,7 @@ template applySlotChanges(
           continue
 
       let slotValue = w.changes[^1].newValue
-      if slotValue == 0:
+      if slotValue.isZero:
         adb.delFlatSlot(accPath, slotKey, info).isOkOr:
           break body                                # err()
       else:

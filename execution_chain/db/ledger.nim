@@ -411,28 +411,44 @@ proc persistStorage(acc: AccountRef, ledger: LedgerRef): Result[void, string] =
 
   # Save `overlayStorage[]` on database
   let original = acc.original
-  for slot, value in acc.overlayStorage:
+
+  template updated(slot, value): bool =
     if acc.flags * {IsNew, NewlyCreated} != {}:
-      if value.isZero:
-        continue
+      if not value.isZero:
+        original.storage[slot] = value
+        true
+      else:
+        false
     else:
+      var same = false
       original.storage.withValue(slot, v):
-        if v[] == value:
-          continue # Avoid writing A-B-A updates
+        same = v[] == value
+        if not same:
+          v[] = value
+      do:
+        original.storage[slot] = value
+      not same
 
-    let slotKey = ledger.slotKey(slot)
-    if value.isZero:
-      ledger.txFrame.deleteSlot(acc.accPath, slotKey).isOkOr:
-        return err(info & $$error)
-      original.storage.del(slot)
-    else:
-      ledger.txFrame.mergeSlot(acc.accPath, slotKey, value).isOkOr:
-        return err(info & $$error)
+  if acc.overlayStorage.len > 1:
+    var updates = newSeqOfCap[(Hash32, UInt256)](acc.overlayStorage.len())
 
-      # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
-      original.storage[slot] = value
+    for slot, value in acc.overlayStorage:
+      if updated(slot, value):
+        updates.add (ledger.slotKey(slot), value)
+
+    if updates.len > 0:
+      ledger.txFrame.mergeSlots(acc.accPath, updates).isOkOr:
+        return err(info & $$error)
+  else: # Avoid seq allocation for single-slot update
+    for slot, value in acc.overlayStorage: # Only one iteration!
+      if updated(slot, value):
+        let slotKey = ledger.slotKey(slot)
+        ledger.txFrame.mergeSlots(acc.accPath, (slotKey, value)).isOkOr:
+          return err(info & $$error)
+      break
 
   acc.overlayStorage.clear()
+
   ok()
 
 proc makeDirty(ledger: LedgerRef, address: Address, acc: AccountRef, cloneStorage = true): AccountRef =
@@ -957,14 +973,14 @@ proc persist*(
         acc.persistCode(ledger)
         acc.original.code = acc.code
 
-      if NewlyCreated in acc.flags:
-        ledger.txFrame.clearStorage(acc.accPath).expect("can clear storage of account")
+      let clearStorage = NewlyCreated in acc.flags
+      if clearStorage:
         acc.original.storage.clear()
 
-      if {IsNew, StatementChanged} * acc.flags != {}:
+      if {IsNew, StatementChanged} * acc.flags != {} or clearStorage:
         # Update account before its storage, in case it's a new account
         # `persistStorage` only works for accounts already in the database
-        ledger.txFrame.mergeAccount(acc.accPath, acc.statement).isOkOr:
+        ledger.txFrame.mergeAccount(acc.accPath, acc.statement, clearStorage).isOkOr:
           ledger.setFatalErrorOrAssert(info & $$error)
         acc.original.statement = acc.statement
 

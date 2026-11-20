@@ -275,27 +275,18 @@ proc deleteAccount*(
 
   ok()
 
-proc clearStorage*(
-    acc: CoreDbTxRef;
-    accPath: Hash32;
-      ): CoreDbRc[void] =
-  ## Delete all data slots from the storage area associated with the
-  ## particular account indexed by the key `accPath`.
-  ##
-  acc.aTx.clearStorage(accPath).isOkOr:
-    return err(error.toError(""))
-
-  ok()
-
 proc mergeAccount*(
     acc: CoreDbTxRef;
     accPath: Hash32;
     accRec: CoreDbAccount;
+    clearStorage: bool;
       ): CoreDbRc[void] =
   ## Add or update the argument account data record `account`. Note that the
   ## `account` argument uniquely idendifies the particular account address.
   ##
-  acc.aTx.mergeAccount(accPath, accRec).isOkOr:
+  ## With `clearStorage == true`, any existing storage trie will be deleted.
+  ##
+  acc.aTx.mergeAccount(accPath, accRec, clearStorage).isOkOr:
     return err(error.toError(""))
 
   ok()
@@ -421,13 +412,13 @@ proc fetchSlot*(
     return err(error.toError(""))
   ok res
 
-proc deleteSlot*(
-    acc: CoreDbTxRef;
-    accPath: Hash32;
-    stoPath: Hash32;
-      ):  CoreDbRc[void] =
-  ## Like `delete()` but with cascaded index `(accPath,slot)`.
-  acc.aTx.deleteSlot(accPath, stoPath).isOkOr:
+proc mergeSlots*(
+    acc: CoreDbTxRef,
+    accPath: Hash32,
+    slots: varargs[(Hash32, UInt256)]
+      ): CoreDbRc[void] =
+  ## Update the given storage slots - 0 removes the slot from the trie
+  acc.aTx.mergeSlots(accPath, slots).isOkOr:
     return err(error.toError(""))
 
   ok()
@@ -438,7 +429,7 @@ proc mergeSlot*(
     stoPath: Hash32;
     stoData: UInt256;
       ): CoreDbRc[void] =
-  ## Like `merge()` but with cascaded index `(accPath,slot)`.
+  ## Update the given storage slot - 0 removes the slot from the trie
   acc.aTx.mergeSlot(accPath, stoPath, stoData).isOkOr:
     return err(error.toError(""))
 

@@ -62,4 +62,43 @@ suite "Snap Data Edge Cases":
           check dbx.finalise() == 0
           check dbx.isComplete()
 
-# End
+suite "Snap Proof Node Edge Cases":
+  let root = StateRoot(sample[0][2].to(Hash32))
+
+  func branchNode(child: seq[byte], value = seq[byte].default): seq[byte] =
+    ## A 17-item branch node with `child` at index 0 and the value slot `value`
+    var w = initRlpList 17
+    w.appendRawBytes child
+    for _ in 1 .. 15:
+      w.append ""
+    w.append value
+    w.finish()
+
+  test "Proof node of one byte is rejected":
+    check root.validate(low(ItemKey), seq[SnapAccount].default,
+      @[ProofNode(@[0x80'u8])]).isErr
+
+  test "Proof node shorter than 32 bytes with a wrong list prefix is rejected":
+    # `c3` would announce a 3 byte list payload, there are only two bytes
+    check root.validate(low(ItemKey), seq[SnapAccount].default,
+      @[ProofNode(@[0xc3'u8, 0x80, 0x80])]).isErr
+
+  test "Branch node with a 5 byte blob child is rejected":
+    check root.validate(low(ItemKey), seq[SnapAccount].default,
+      @[ProofNode(branchNode(@[0x85'u8, 1, 2, 3, 4, 5]))]).isErr
+
+  test "Branch node with an embedded child list of 33 bytes is rejected":
+    var child = initRlpList 1
+    child.append newSeq[byte](31)                   # list payload 32 bytes
+    let enc = child.finish()
+    check enc.len == 33
+    check root.validate(low(ItemKey), seq[SnapAccount].default,
+      @[ProofNode(branchNode(enc))]).isErr
+
+  test "Branch node with a non-empty value slot is rejected":
+    let
+      node = branchNode(rlp.encode(zeroHash32), @(zeroHash32.data))
+      nodeRoot = StateRoot(node.keccak256)
+    check NodeTrieRef.init(
+      nodeRoot, low(ItemKey), @[ProofNode(node)], high(ItemKey).to(Hash32)
+        ).isNil

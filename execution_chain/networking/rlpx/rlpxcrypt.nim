@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -21,7 +21,7 @@ export results
 const
   RlpHeaderLength* = 16
   RlpMacLength* = 16
-  maxUInt24 = (not uint32(0)) shl 8
+  maxUInt24 = (not uint32(0)) shr 8
 
 type
   Keccak256 = keccak.Keccak256

@@ -326,7 +326,6 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
 
 proc generateBlock(env: var TestEnv) =
   let
-    com = env.com
     xp  = env.txPool
     am =  env.am
     acc = am[].getAccount(signer).tryGet()

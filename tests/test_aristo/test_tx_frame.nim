@@ -34,6 +34,11 @@ proc makeAccount(i: uint64): (Hash32, AristoAccount) =
 proc makeHashedAccount(i: uint64): (Hash32, AristoAccount) =
   (keccak256(i.toBytesBE()), AristoAccount(balance: i.u256 + 1, codeHash: EMPTY_CODE_HASH))
 
+proc makeSlot(i: uint64): Hash32 =
+  # Keccak-hashed so the slot paths don't share a long leading-zero prefix,
+  # which a separate storage-trie bug mishandles (see test_static_storage).
+  keccak256(i.toBytesBE())
+
 const
   acc1 = makeAccount(1)
   acc2 = makeAccount(2)
@@ -46,7 +51,7 @@ template checkSpilledAncestors(db: AristoDbRef) =
     let tx = db.txFrameBegin(parent)
     for i in n * 100 ..< (n + 1) * 100:
       let acc = makeHashedAccount(i)
-      check tx.mergeAccount(acc[0], acc[1]).isOk()
+      check tx.mergeAccount(acc[0], acc[1], false).isOk()
     tx.checkpoint(n + 1, skipSnapshot = false)
     frames.add tx
     parent = tx
@@ -57,13 +62,13 @@ template checkSpilledAncestors(db: AristoDbRef) =
   let
     tx4 = db.txFrameBegin(frames[2])
     acc = makeHashedAccount(300)
-  check tx4.mergeAccount(acc[0], acc[1]).isOk()
+  check tx4.mergeAccount(acc[0], acc[1], false).isOk()
   let root = tx4.fetchStateRoot()
 
   let expected = db.txFrameBegin(db.baseTxFrame())
   for i in 0'u64 .. 300:
     let acc = makeHashedAccount(i)
-    check expected.mergeAccount(acc[0], acc[1]).isOk()
+    check expected.mergeAccount(acc[0], acc[1], false).isOk()
 
   check:
     root.isOk()
@@ -86,11 +91,11 @@ suite "Aristo TxFrame":
       tx2c = db.txFrameBegin(tx1)
 
     check:
-      tx0.mergeAccount(acc1[0], acc1[1]).isOk()
-      tx1.mergeAccount(acc2[0], acc2[1]).isOk()
+      tx0.mergeAccount(acc1[0], acc1[1], false).isOk()
+      tx1.mergeAccount(acc2[0], acc2[1], false).isOk()
       tx2.deleteAccount(acc2[0]).isOk()
       tx2b.deleteAccount(acc1[0]).isOk()
-      tx2c.mergeAccount(acc2[0], acc3[1]).isOk()
+      tx2c.mergeAccount(acc2[0], acc3[1], false).isOk()
 
     check:
       tx0.fetchAccount(acc1[0]).isOk()
@@ -115,20 +120,55 @@ suite "Aristo TxFrame":
       # we find the vtx should be one below tx2c!
       (
         tx2c.level -
-        tx2c.layersGetVtx((STATE_ROOT_VID, acc1Hike.legs[^1].wp.vid)).value()[1]
+        tx2c.layersGetVtx((STATE_ROOT_VID, acc1Hike.legs[^1].vid)).value()[1]
       ) == 1
+
+    # Write some storage slots on acc1, then clear them via
+    # mergeAccount(clearStorage = true), both with and without an
+    # accompanying account change.
+    let
+      slot1 = makeSlot(1)
+      slot2 = makeSlot(2)
+      stx0 = db.txFrameBegin(tx1)
+      stxA = db.txFrameBegin(stx0) # Clear with an account change
+      stxB = db.txFrameBegin(stx0) # Clear without an account change
+      acc1Cleared = AristoAccount(
+        balance: acc1[1].balance + 1.u256, codeHash: EMPTY_CODE_HASH)
+
+    check:
+      stx0.mergeSlot(acc1[0], slot1, 1.u256).isOk()
+      stx0.mergeSlot(acc1[0], slot2, 2.u256).isOk()
+
+      # With an accompanying account change
+      stxA.mergeAccount(acc1[0], acc1Cleared, clearStorage = true).isOk()
+      stxA.fetchAccount(acc1[0]).get() == acc1Cleared
+      stxA.fetchSlot(acc1[0], slot1).get() == 0'u256
+      stxA.fetchSlot(acc1[0], slot2).get() == 0'u256
+
+      # Without an accompanying account change
+      stxB.mergeAccount(acc1[0], acc1[1], clearStorage = true).isOk()
+      stxB.fetchAccount(acc1[0]).get() == acc1[1]
+      stxB.fetchSlot(acc1[0], slot1).get() == 0'u256
+      stxB.fetchSlot(acc1[0], slot2).get() == 0'u256
+
+      # The parent frame still sees the slots
+      stx0.fetchSlot(acc1[0], slot1).get() == 1'u256
+      stx0.fetchSlot(acc1[0], slot2).get() == 2'u256
 
     tx0.checkpoint(1, skipSnapshot = false)
     tx1.checkpoint(2, skipSnapshot = false)
     tx2.checkpoint(3, skipSnapshot = false)
     tx2b.checkpoint(3, skipSnapshot = false)
     tx2c.checkpoint(3, skipSnapshot = false)
+    stx0.checkpoint(2, skipSnapshot = false)
+    stxA.checkpoint(3, skipSnapshot = false)
+    stxB.checkpoint(3, skipSnapshot = false)
 
     check:
       # Even after checkpointing, we should maintain the same relative levels
       (
         tx2c.level -
-        tx2c.layersGetVtx((STATE_ROOT_VID, acc1Hike.legs[^1].wp.vid)).value()[1]
+        tx2c.layersGetVtx((STATE_ROOT_VID, acc1Hike.legs[^1].vid)).value()[1]
       ) == 1
 
     let batch = db.putBegFn().expect("working batch")
@@ -146,14 +186,39 @@ suite "Aristo TxFrame":
         tx.fetchAccount(acc1[0]).isOk()
         tx.fetchAccount(acc2[0]).isErr() # Doesn't exist in tx2
 
+      # Write some storage slots on acc1, then clear them via
+      # mergeAccount(clearStorage = true), both with and without an
+      # accompanying account change.
+      let
+        slot1 = makeSlot(1)
+        slot2 = makeSlot(2)
+        acc1Cleared = AristoAccount(
+          balance: acc1[1].balance + 1.u256, codeHash: EMPTY_CODE_HASH)
+
+      check:
+        tx.mergeSlot(acc1[0], slot1, 1.u256).isOk()
+        tx.mergeSlot(acc1[0], slot2, 2.u256).isOk()
+
+        # With an accompanying account change
+        tx.mergeAccount(acc1[0], acc1Cleared, clearStorage = true).isOk()
+        tx.fetchAccount(acc1[0]).get() == acc1Cleared
+        tx.fetchSlot(acc1[0], slot1).get() == 0'u256
+        tx.fetchSlot(acc1[0], slot2).get() == 0'u256
+
+        # Without an accompanying account change
+        tx.mergeSlot(acc1[0], slot1, 3.u256).isOk()
+        tx.mergeAccount(acc1[0], acc1Cleared, clearStorage = true).isOk()
+        tx.fetchAccount(acc1[0]).get() == acc1Cleared
+        tx.fetchSlot(acc1[0], slot1).get() == 0'u256
+
   test "Frames using moveParentHashKeys parameter":
     let
       tx0 = db.txFrameBegin(db.baseTxFrame())
       tx1 = db.txFrameBegin(tx0)
 
     check:
-      tx0.mergeAccount(acc1[0], acc1[1]).isOk()
-      tx1.mergeAccount(acc2[0], acc2[1]).isOk()
+      tx0.mergeAccount(acc1[0], acc1[1], false).isOk()
+      tx1.mergeAccount(acc2[0], acc2[1], false).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
@@ -181,8 +246,8 @@ suite "Aristo TxFrame":
       tx1 = db.txFrameBegin(tx0)
 
     check:
-      tx0.mergeAccount(acc1[0], acc1[1]).isOk()
-      tx1.mergeAccount(acc2[0], acc2[1]).isOk()
+      tx0.mergeAccount(acc1[0], acc1[1], false).isOk()
+      tx1.mergeAccount(acc2[0], acc2[1], false).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
@@ -230,8 +295,8 @@ suite "Aristo TxFrame":
       tx1 = db.txFrameBegin(tx0)
 
     check:
-      tx0.mergeAccount(acc1[0], acc1[1]).isOk()
-      tx1.mergeAccount(acc2[0], acc2[1]).isOk()
+      tx0.mergeAccount(acc1[0], acc1[1], false).isOk()
+      tx1.mergeAccount(acc2[0], acc2[1], false).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
@@ -260,8 +325,8 @@ suite "Aristo TxFrame":
       tx1 = db.txFrameBegin(tx0)
 
     check:
-      tx0.mergeAccount(acc1[0], acc1[1]).isOk()
-      tx1.mergeAccount(acc2[0], acc2[1]).isOk()
+      tx0.mergeAccount(acc1[0], acc1[1], false).isOk()
+      tx1.mergeAccount(acc2[0], acc2[1], false).isOk()
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
@@ -298,13 +363,13 @@ suite "Aristo TxFrame":
 
     for i in 1..<10:
       let acc = makeAccount(i.uint64)
-      check tx1.mergeAccount(acc[0], acc[1]).isOk()
+      check tx1.mergeAccount(acc[0], acc[1], false).isOk()
     tx1.checkpoint(1, skipSnapshot = false)
 
     let tx2 = db.txFrameBegin(tx1)
     for i in 1..<10:
       let acc = makeAccount(i.uint64)
-      check tx2.mergeAccount(acc[0], acc[1]).isOk()
+      check tx2.mergeAccount(acc[0], acc[1], false).isOk()
     tx2.checkpoint(2, skipSnapshot = false)
 
     discard tx2.fetchStateRoot().get()
@@ -319,28 +384,28 @@ suite "Aristo TxFrame":
     let tx1 = db.txFrameBegin(db.baseTxFrame())
     for i in 1..<100:
       let acc = makeAccount(i.uint64)
-      check tx1.mergeAccount(acc[0], acc[1]).isOk()
+      check tx1.mergeAccount(acc[0], acc[1], false).isOk()
     tx1.checkpoint(1, skipSnapshot = false)
 
     # level 2
     let tx2 = db.txFrameBegin(tx1)
     for i in 100..<200:
       let acc = makeAccount(i.uint64)
-      check tx2.mergeAccount(acc[0], acc[1]).isOk()
+      check tx2.mergeAccount(acc[0], acc[1], false).isOk()
     tx2.checkpoint(2, skipSnapshot = false)
 
     # level 3
     let tx3 = db.txFrameBegin(tx2)
     for i in 200..<300:
       let acc = makeAccount(i.uint64)
-      check tx3.mergeAccount(acc[0], acc[1]).isOk()
+      check tx3.mergeAccount(acc[0], acc[1], false).isOk()
     tx3.checkpoint(3, skipSnapshot = false)
 
     # level 2
     let tx4 = db.txFrameBegin(tx1)
     for i in 300..<400:
       let acc = makeAccount(i.uint64)
-      check tx4.mergeAccount(acc[0], acc[1]).isOk()
+      check tx4.mergeAccount(acc[0], acc[1], false).isOk()
     tx4.checkpoint(2, skipSnapshot = false)
 
     block:
@@ -361,7 +426,7 @@ suite "Aristo TxFrame":
 
     for i in 1..<10:
       let acc = makeAccount(i.uint64)
-      check tx1.mergeAccount(acc[0], acc[1]).isOk()
+      check tx1.mergeAccount(acc[0], acc[1], false).isOk()
     tx1.checkpoint(1, skipSnapshot = false)
 
     let
@@ -381,7 +446,7 @@ suite "Aristo TxFrame":
 
     for i in 1..<10:
       let acc = makeAccount(i.uint64)
-      check tx1.mergeAccount(acc[0], acc[1]).isOk()
+      check tx1.mergeAccount(acc[0], acc[1], false).isOk()
 
     tx1.checkpoint(1, skipSnapshot = false)
 
@@ -432,7 +497,7 @@ suite "Aristo TxFrame":
 
   test "A detached frame is disposed once a child takes its snapshot":
     let tx1 = db.txFrameBegin(db.baseTxFrame())
-    check tx1.mergeAccount(acc1[0], acc1[1]).isOk()
+    check tx1.mergeAccount(acc1[0], acc1[1], false).isOk()
     tx1.checkpoint(1, skipSnapshot = false)
     tx1.detach()
     check:
@@ -440,7 +505,7 @@ suite "Aristo TxFrame":
       tx1.fetchAccount(acc1[0]).isOk()
 
     let tx2 = db.txFrameBegin(tx1)
-    check tx2.mergeAccount(acc2[0], acc2[1]).isOk()
+    check tx2.mergeAccount(acc2[0], acc2[1], false).isOk()
     tx2.checkpoint(2, skipSnapshot = false)
     check:
       tx1.level == disposedLevel
@@ -451,17 +516,17 @@ suite "Aristo TxFrame":
     db.maxSnapshots = 1
 
     let tx1 = db.txFrameBegin(db.baseTxFrame())
-    check tx1.mergeAccount(acc1[0], acc1[1]).isOk()
+    check tx1.mergeAccount(acc1[0], acc1[1], false).isOk()
     tx1.checkpoint(1, skipSnapshot = false)
     tx1.detach()
 
     let tx2 = db.txFrameBegin(db.baseTxFrame())
-    check tx2.mergeAccount(acc2[0], acc2[1]).isOk()
+    check tx2.mergeAccount(acc2[0], acc2[1], false).isOk()
     tx2.checkpoint(1, skipSnapshot = false)
     check tx1.level == disposedLevel
 
     let tx3 = db.txFrameBegin(db.baseTxFrame())
-    check tx3.mergeAccount(acc3[0], acc3[1]).isOk()
+    check tx3.mergeAccount(acc3[0], acc3[1], false).isOk()
     tx3.checkpoint(1, skipSnapshot = false)
     check:
       tx2.level != disposedLevel

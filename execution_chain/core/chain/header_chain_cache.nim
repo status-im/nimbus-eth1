@@ -61,11 +61,12 @@
 
 import
   std/sequtils,
-  pkg/[chronicles, metrics, stew/endians2],
+  pkg/[chronicles, chronos, metrics, stew/endians2],
   pkg/eth/[common, rlp],
-  "../.."/[common, db/core_db, db/storage_types],
-  ../../db/[kvt, kvt_cf],
+  ../../common,
+  ../../db/[core_db, kvt, kvt_cf, storage_types],
   ../../db/kvt/[kvt_utils],
+  ../../utils/simple_eta,
   ./forked_chain,
   ./forked_chain/[chain_branch, chain_desc, block_quarantine]
 
@@ -84,6 +85,9 @@ declareGauge nec_sync_consensus_finalised, "" &
 declareGauge nec_sync_distance_to_sync, "" &
   "Distance from execution head to consensus head"
 
+declareGauge nec_sync_headers_eta_secs, "" &
+  "Estimated seconds until headers download has finished"
+
 type
   HccDbInfo = object
     ## For database table storage and clean up
@@ -98,6 +102,7 @@ type
     ante: Header                # antecedent, bottom of header chain
     head: Header                # top end of header chain, highest block number
     headHash: Hash32
+    etaData: EtaSpline          # ETA data collector
 
   # -----------------
 
@@ -137,7 +142,6 @@ const
   MsgPfx = "Header Cache: "
     ## Message prefix used when logging or raising an exception
 
-const
   HccDbInfoKey = 0.beaconHeaderKey
 
   MinBnKey = beaconHeaderKey(low BlockNumber)
@@ -194,11 +198,6 @@ proc getInfo(db: KvtDbRef): Opt[HccDbInfo] =
     discard
   err()
 
-proc delInfo(db: KvtDbRef) =
-  ## Remove info record from cache
-  discard db.del(HccDbInfoKey.toOpenArray)
-
-
 proc putHeader(db: KvtDbRef; h: Header) =
   ## Store the argument `header` indexed by block number, and the hash lookup
   ## of the parent header.
@@ -225,17 +224,6 @@ proc getHeader(db: KvtDbRef; bn: BlockNumber): Opt[Header] =
 proc getHeader(db: KvtDbRef; hash: Hash32): Opt[Header] =
   ## Variant of `getHeader()`
   db.getHeader ?db.getNumber(hash)
-
-
-proc delHeader(db: KvtDbRef; bn: BlockNumber) =
-  ## Remove header from cache, ignore non-existing entries
-  let
-    bnKey = beaconHeaderKey(bn)
-    rc = db.get(bnKey.toOpenArray)
-  discard db.del(bnKey.toOpenArray)
-  if rc.isOk:
-    let h =  decodePayload(rc.value, Header)
-    discard db.del(genericHashKey(h.parentHash).toOpenArray)
 
 # ----------------------
 
@@ -292,6 +280,16 @@ proc tryFcParent(hc: HeaderChainRef; hdr: Header): HeaderChainMode =
 
   return orphan                                     # maybe on the wrong branch
 
+proc collectUpdateEta(hc: HeaderChainRef) =
+  let
+    base = if hc.session.stopNum.isSome: hc.session.stopNum.unsafeGet()
+           else: min(hc.chain.baseNumber(), hc.session.ante.number)
+    full = 1 + hc.session.head.number - base
+    current = 1 + hc.session.head.number - hc.session.ante.number
+  hc.session.etaData.apply current.float / full.float
+  hc.session.etaData.eta().isErrOr:
+    metrics.set(nec_sync_headers_eta_secs, value.seconds)
+
 # ------------------------------------------------------------------------------
 # Private fork choice call back function
 # ------------------------------------------------------------------------------
@@ -339,6 +337,10 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
         # Note that `tryUpdatePendingFCU()` will reset `pendingFCU`.
         discard hc.chain.tryUpdatePendingFCU(f, h.number)
 
+      # Initialise ETA
+      hc.session.etaData.init()
+      hc.session.etaData.apply 0f
+
       # Inform client app about that a new session has started.
       hc.notify()
 
@@ -380,11 +382,14 @@ proc clear*(hc: HeaderChainRef) =
   hc.session.reset                        # clear session state object
   hc.persistClear()                       # clear database
   metrics.set(nec_sync_dangling, 0)       # ditto
+  metrics.set(nec_sync_headers_eta_secs, 0)
 
 proc stop*(hc: HeaderChainRef) =
   ## Stop updating the client cache. Will automatically be called by the
   ## destructor `destroy()`.
   ##
+  metrics.set(nec_sync_dangling, 0)
+  metrics.set(nec_sync_headers_eta_secs, 0)
   hc.chain.com.headerChainUpdate = HeaderChainUpdateCB(nil)
   hc.chain.com.resolveFinHash = ResolveFinHashCB(nil)
   hc.notify = HeaderChainNotifyCB(nil)
@@ -604,6 +609,9 @@ proc put*(
     hc.session.ante = rev[revTopInx]
     metrics.set(nec_sync_dangling, hc.session.ante.number.int64)
 
+    # Update ETA
+    hc.collectUpdateEta()
+
     # Save updates. persist to DB
     hc.persistInfo()
 
@@ -661,7 +669,7 @@ proc updateBlindStop*(hc: HeaderChainRef, stop: Header): bool =
   ## Accumulate the top down header chain against a fixed stop header
   ## parent, rather than stop the FC module.
   ##
-  ## The function returns false unless the `antecedent` is large enough.
+  ## The function returns `false` unless the `antecedent` is large enough.
   ## If blind mode is needed, this function should be called immediately
   ## after notification that a new session has started before any headers
   ## are `put()` on the chain cache.
@@ -737,6 +745,19 @@ func latestFinHash*(hc: HeaderChainRef): Hash32 =
   ## Getter: hash of last `CL` head update (aka forkchoice update).
   hc.finHash
 
+func getEta*(hc: HeaderChainRef): Opt[Duration] =
+  ## ETA for the current session (if any.) The function is intended
+  ## for logging.
+  case hc.session.mode:
+  of collecting:
+    hc.session.etaData.eta().isErrOr:
+      return ok(value)
+  of ready, closed:
+    return ok(ZeroDuration)
+  else:
+    discard
+  err()
+
 proc updateMetrics*(hc: HeaderChainRef) =
   ## Update/adjust some metrics, i.p. `nec_sync_distance_to_sync`. If there
   ## is no session and the latest execution head exceeds the `consHead.number`
@@ -749,6 +770,7 @@ proc updateMetrics*(hc: HeaderChainRef) =
   elif hc.session.mode == HeaderChainMode(0):
     metrics.set(nec_sync_consensus_head, hc.chain.latestNumber.int64)
     metrics.set(nec_sync_distance_to_sync, 0)
+    metrics.set(nec_sync_headers_eta_secs, 0)
 
 proc headTargetUpdate*(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## Emulate request from `CL` (mainly for fringe action purposes)

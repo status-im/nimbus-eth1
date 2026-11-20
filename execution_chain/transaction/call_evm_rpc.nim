@@ -61,7 +61,7 @@ proc rpcCallEvm*(
     vmState.dispose()
 
   let
-    tx = ? toTransaction(vmState, args, globalGasCap, header)
+    tx = ? toTransaction(vmState, args, globalGasCap)
     intrinsic = tx.intrinsicGas(vmState.hardFork, args.sender)
     params = tx.callParams(args.sender, vmState, intrinsic)
 
@@ -72,7 +72,7 @@ proc rpcCallEvm*(
 ): Result[CallResult, string] =
   # TODO: globalGasCap should configurable by user
   let
-    tx = ? toTransaction(vmState, args, globalGasCap, header)
+    tx = ? toTransaction(vmState, args, globalGasCap)
     intrinsic = tx.intrinsicGas(vmState.hardFork, args.sender)
     params = tx.callParams(args.sender, vmState, intrinsic)
   ok(runComputation(params, CallResult))
@@ -83,7 +83,7 @@ proc rpcEstimateGas*(
   # Binary search the gas requirement, as it may be higher than the amount used
   let
     fork = vmState.fork
-    tx = toTransaction(vmState, args, gasCap, header).valueOr:
+    tx = toTransaction(vmState, args, gasCap).valueOr:
       return err(OutputResult(error: error))
     intrinsic = tx.intrinsicGas(vmState.hardFork, args.sender)
     params = tx.callParams(args.sender, vmState, intrinsic)

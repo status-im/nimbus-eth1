@@ -12,7 +12,6 @@
 
 import
   pkg/chronos,
-  ../update/update_eta,
   ../[helpers, worker_desc]
 
 # ------------------------------------------------------------------------------
@@ -79,7 +78,6 @@ proc bdySampleSize*(
     size: int;
       ): uint =
   result = buddy.only.thPutStats.bdy.bpsSample(elapsed, size)
-  buddy.ctx.updateEtaBlocks()
 
 # -------------
 
@@ -95,7 +93,6 @@ proc balSampleSize*(
     size: int;
       ): uint =
   result = buddy.only.thPutStats.bal.bpsSample(elapsed, size)
-  buddy.ctx.updateEtaBlocks()
 
 # ------------------------------------------------------------------------------
 # End

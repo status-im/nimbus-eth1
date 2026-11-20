@@ -26,8 +26,7 @@ import
   eth/common/hashes, eth/trie/nibbles,
   results,
   ./aristo_constants,
-  ./aristo_desc/[desc_error, desc_identifiers, desc_structural],
-  ./aristo_desc/desc_backend
+  ./aristo_desc/[desc_backend, desc_error, desc_identifiers, desc_structural]
 
 when compileOption("threads"):
   import taskpools, ../../concurrency/lru
@@ -174,8 +173,9 @@ type
 
   Leg* = object
     ## For constructing a `VertexPath`
-    wp*: VidVtxPair                ## Vertex ID and data ref
-    nibble*: int8                  ## Next vertex selector for `Branch` (if any)
+    vid*: VertexID                   ## Table lookup vertex ID (if any)
+    vtx*: VertexRef                  ## Reference to vertex
+    nibble*: byte                    ## Next vertex selector for `Branch` (if any)
 
   Hike* = object
     ## Trie traversal path
@@ -293,3 +293,6 @@ proc getStaticLevel*(db: AristoDbRef): int =
   db.staticLevel.store(level, moRelaxed)
 
   level
+
+func replaceSuffix*(v: Hash32, suffix: NibblesBuf): Hash32 =
+  v.to(NibblesBuf).replaceSuffix(suffix).to(Hash32)

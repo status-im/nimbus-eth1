@@ -83,13 +83,14 @@ func build_stateless_input*(
   # Encode transactions to bytes and collect the versioned hashes.
   var
     transactions = newSeqOfCap[gloas.Transaction](blk.transactions.len)
-    versioned_hashes: seq[Digest]
+    versioned_hashes: VersionedHashes
   for tx in blk.transactions:
     transactions.add(gloas.Transaction.init(rlp.encode(tx)))
 
     if tx.txType == TxEip4844:
       for versioned_hash in tx.versionedHashes:
-        versioned_hashes.add(Digest(data: versioned_hash.data))
+        if not versioned_hashes.add(Digest(data: versioned_hash.data)):
+          return err("Block has more versioned hashes than MAX_BLOB_COMMITMENTS_PER_BLOCK")
 
   var withdrawals = newSeqOfCap[capella.Withdrawal](blk.withdrawals.get.len)
   for withdrawal in blk.withdrawals.get:

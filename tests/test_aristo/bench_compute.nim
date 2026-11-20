@@ -37,7 +37,9 @@ suite "Aristo compute benchmark":
       check:
         txFrame.mergeAccount(
           cast[Hash32](i),
-          AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
+          AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH),
+          false,
+        ) == Result[bool, AristoError].ok(true)
     txFrame.checkpoint(1, skipSnapshot = true)
 
     let batch = db.putBegFn()[]
@@ -57,7 +59,9 @@ suite "Aristo compute benchmark":
         check:
           txFrame.mergeAccount(
             cast[Hash32](i * i),
-            AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH)) == Result[bool, AristoError].ok(true)
+            AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH),
+            false,
+          ) == Result[bool, AristoError].ok(true)
 
       txFrame.checkpoint(1, skipSnapshot = false)
 

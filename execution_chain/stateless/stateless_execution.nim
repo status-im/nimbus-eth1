@@ -151,7 +151,7 @@ template statelessProcessBlock*(
 ): Result[void, string] =
   statelessProcessBlock(witness, id, chainConfigForNetwork(id), blk)
 
-template append(w: var RlpWriter, tx: gloas.Transaction) =
+template append*(w: var RlpWriter, tx: gloas.Transaction) =
   w.appendRawBytes(distinctBase tx)
 
 # https://github.com/ethereum/execution-specs/blob/4e7a7177242c3ab3dbc3525c3395933e907d7416/src/ethereum/forks/amsterdam/execution_engine/validation_helpers.py#L1
@@ -332,7 +332,7 @@ proc executeNewPayload(input: StatelessInput): Result[void, string] =
       Hash32(input.new_payload_request.executionPayload.block_hash.data):
     return err("Invalid block hash")
 
-  ?is_valid_versioned_hashes(input.new_payload_request.versionedHashes, blk)
+  ?is_valid_versioned_hashes(input.new_payload_request.versionedHashes.asSeq, blk)
 
   statelessProcessBlock(input.witness, com, blk)
 

@@ -56,7 +56,7 @@ template persistRegularly(
       ctrl.count = 0
       let w = ctrl.accPath.to(UInt256).per256
       metrics.set(nec_snap_dbimport_progress, w)
-      ctrl.ctx.updateEta w
+      ctrl.ctx.dbImportEtaUpdate w
 
     let now = Moment.now()
     if ctrl.timer + coreDbImportMsgInterval < now:
@@ -128,12 +128,6 @@ proc mergeStoTrie(
     ctrl: var ImportDesc;
     info: static[string];
       ): Opt[void] =
-  # Clear storage trie
-  tx.clearStorage(accPath).isOkOr:
-    error info & ": Failed clearing storage slots",
-      accPath=accPath.toStr, `error`=($$error)
-    return err()
-
   var nSlots {.used.} = 0u
   for w in adb.walkFlatSlot(accPath):
     if 0 < w.error.len:
@@ -229,7 +223,6 @@ proc importFlat(
       return ctrl.stats
 
   # Merge flat tables into CoreDb/Aristo.
-  var count = 0
   for w in adb.walkFlatAcc():
     if 0 < w.error.len:
       error info & ": Error walking accounts",
@@ -253,12 +246,11 @@ proc importFlat(
 
     # Import account record
     var
-      accUpdateOk = false
       accRec = CoreDbAccount(
         nonce:    w.data.account.nonce,
         balance:  w.data.account.balance,
         codeHash: codeHash)
-    tx.mergeAccount(w.accPath, accRec).isOkOr:
+    tx.mergeAccount(w.accPath, accRec, true).isOkOr:
       error info & ": Failed merging account record",
         accPath=w.accPath.toStr, `error`=($$error)
       ctrl.stats.nErrors.inc
@@ -287,7 +279,7 @@ proc importFlat(
 
 proc importCoreDbMetricsReset*(ctx: SnapCtxRef) =
   metrics.set(nec_snap_dbimport_progress, 0)
-  ctx.resetEta()
+  ctx.dbImportEtaInit()
 
 proc importCoreDb*(
     db: CoreDbRef;
@@ -298,8 +290,6 @@ proc importCoreDb*(
       ): Opt[CoredbImportStats] =
   ## Import the flat tables into a version of CoreDb.
   ##
-  ctx.resetEta()
-
   let
     adb = ctx.pool.cacheDB
     start = Moment.now()

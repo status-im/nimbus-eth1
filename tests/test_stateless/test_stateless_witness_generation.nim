@@ -190,11 +190,13 @@ suite "Stateless: Witness Generation - collapses undone later in the block":
       ledger.setStorage(contract, slot, value)
       ledger.persist(clearEmptyAccounts = false)
 
+  const
+    contract = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
+
   setup:
     let
       memDB = newCoreDbRef DefaultDbMemory
       preState = LedgerRef.init(memDB.baseTxFrame(), false)
-      contract = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
 
   test "Storage collapse onto a branch, restored by a re-insert":
     # Storage trie:

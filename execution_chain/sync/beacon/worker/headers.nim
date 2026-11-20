@@ -16,6 +16,7 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ./headers/[headers_headers, headers_helpers, headers_queue, headers_unproc],
+  ./update/update_eta,
   ./[helpers, worker_desc]
 
 export
@@ -139,7 +140,7 @@ template headersCollect*(buddy: BeaconPeerRef; info: static[string]) =
               nUnproc=ctx.nUnprocStr(),
               dangling=ctx.hdrCache.antecedent.number,
               nStagedQ=ctx.hdr.staged.len,
-              eta=ctx.pool.syncEta.avg.toStr,
+              eta=ctx.hdrEta.toStr,
               base=ctx.chain.baseNumber,
               head=ctx.chain.latestNumber,
               target=ctx.hdrCache.head.number,
@@ -186,7 +187,7 @@ template headersCollect*(buddy: BeaconPeerRef; info: static[string]) =
           nUnproc=ctx.nUnprocStr(),
           dangling=ctx.hdrCache.antecedent.number,
           nStagedQ=ctx.hdr.staged.len,
-          eta=ctx.pool.syncEta.avg.toStr,
+          eta=ctx.hdrEta.toStr,
           base=ctx.chain.baseNumber,
           head=ctx.chain.latestNumber,
           target=ctx.hdrCache.head.number,
@@ -285,7 +286,7 @@ proc headersUnstage*(buddy: BeaconPeerRef; info: static[string]): bool =
       dangling=ctx.hdrCache.antecedent.number,
       nStagedQ=ctx.hdr.staged.len,
       nUnstaged,
-      eta=ctx.pool.syncEta.avg.toStr,
+      eta=ctx.hdrEta.toStr,
       base=ctx.chain.baseNumber,
       head=ctx.chain.latestNumber,
       target=ctx.hdrCache.head.number,

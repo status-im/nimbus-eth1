@@ -404,7 +404,7 @@ proc computeKeyImpl(
     of BoundaryNode:
       # Boundary node from a witness (no branch): pfx and childKey (absent branch
       # hash) are sufficient to get the extension RLP. putSubtrie sets the key,
-      # a branch collapse in deleteImpl does not.
+      # a branch collapse in deleteLeaf does not.
       let ev = BoundaryNodeRef(vtx)
       rlpEncodeExt(ev.pfx, ev.childKey).digestTo(HashKey)
     of Branches:

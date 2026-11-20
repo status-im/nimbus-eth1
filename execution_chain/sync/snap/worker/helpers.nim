@@ -17,7 +17,7 @@ import
   pkg/[chronos, stew/interval_set],
   ../../../core/chain,
   ../../../networking/p2p,
-  ../../../utils/[prettify, utils],
+  ../../../utils/[prettify, simple_eta, utils],
   ../../sync_desc,
   ./[extra_types, worker_const]
 
@@ -70,9 +70,9 @@ func toStr*(w: float, precision: static[int] = 7): string =
 func pcStr*(w: float): string =
   ## Shortcut for `toPC(6)`
   if w == 0f:
-    "0.0"
+    "0%"
   elif w == 1f:
-    "1.0"
+    "100%"
   else:
     w.toPC(6)
 
@@ -146,7 +146,7 @@ func lenStr*(w: ItemKeyRange): string =
 # --------------
 
 func toStr*(a: chronos.Duration): string =
-  if twoHundredYears <= a:
+  if TwoHundredYears <= a:
     return "n/a"
   var s = a.toString 2
   if s.len == 0: s="0s"

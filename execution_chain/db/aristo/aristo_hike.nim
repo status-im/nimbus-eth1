@@ -13,7 +13,7 @@
 import
   eth/common/hashes,
   results,
-  "."/[aristo_desc, aristo_get, aristo_layers]
+  ./[aristo_desc, aristo_get, aristo_layers]
 
 const
   HikeAcceptableStopsNotFound* = {
@@ -33,16 +33,16 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesBuf =
   ## May be needed for partial rebuild, as well
   for n in start ..< min(hike.legs.len, maxLen):
     let leg = hike.legs[n]
-    case leg.wp.vtx.vType:
+    case leg.vtx.vType:
     of Branch:
-      result = result & NibblesBuf.nibble(leg.nibble.byte)
+      result = result & NibblesBuf.nibble(leg.nibble)
     of ExtBranch:
-      let vtx = ExtBranchRef(leg.wp.vtx)
-      result = result & vtx.pfx & NibblesBuf.nibble(leg.nibble.byte)
+      let vtx = ExtBranchRef(leg.vtx)
+      result = result & vtx.pfx & NibblesBuf.nibble(leg.nibble)
     of BoundaryNode:
       discard # BoundaryNode never successfully steps forward
     of Leaves:
-      let vtx = LeafRef(leg.wp.vtx)
+      let vtx = LeafRef(leg.vtx)
       result = result & vtx.pfx
 
 # ------------------------------------------------------------------------------
@@ -158,51 +158,41 @@ iterator stepUp*(
         break
       path = path.slice(common)
 
-
 proc hikeUp*[LeafType](
-    path: NibblesBuf;                            # Partial path
-    root: VertexID;                              # Start vertex
-    db: AristoTxRef;                             # Database
-    leaf: Opt[LeafType];
-    hike: var Hike;
-      ): Result[void,(VertexID,AristoError)] =
-  ## For the argument `path`, find and return the logest possible path in the
+    path: Hash32, root: VertexID, db: AristoTxRef, leaf: Opt[LeafType], hike: var Hike
+): Result[void, AristoError] =
+  ## For the argument `path`, find and return the longest possible path in the
   ## argument database `db` - this may result in a partial match in which case
   ## hike.tail will be non-empty.
   ##
   ## If a leaf is given, it gets used for the "last" leg of the hike.
+  ##
+  ## On error, `hike` contains the longest non-error match to the given path.
   hike.root = root
   hike.legs.setLen(0)
 
-  var path = path
   if not root.isValid:
-    return err((VertexID(0),HikeRootMissing))
-  if path.len == 0:
-    return err((VertexID(0),HikeEmptyPath))
+    return err(HikeRootMissing)
 
-  var vid = root
+  var
+    path = path.to(NibblesBuf)
+    vid = root
+
   while true:
     if leaf.isSome() and leaf[].isValid and path == leaf[].pfx:
-      hike.legs.add Leg(wp: VidVtxPair(vid: vid, vtx: leaf[]), nibble: -1)
-      #reset(hike.tail)
+      hike.legs.add Leg(vid: vid, vtx: leaf[], nibble: 0)
       break
 
-    let
-      (vtx, common, next) = step(path, (root, vid), db).valueOr:
-        return err((vid,error))
-      wp = VidVtxPair(vid:vid, vtx:vtx)
-
+    let (vtx, common, next) = ?step(path, (root, vid), db)
     case vtx.vType
     of Leaves:
-      hike.legs.add Leg(wp: wp, nibble: -1)
+      hike.legs.add Leg(vid: vid, vtx: vtx, nibble: 0)
       break
-
     of Branch:
-      hike.legs.add Leg(wp: wp, nibble: int8 path[0])
-
+      hike.legs.add Leg(vid: vid, vtx: vtx, nibble: path[0])
     of ExtBranch:
       let vtx = ExtBranchRef(vtx)
-      hike.legs.add Leg(wp: wp, nibble: int8 path[vtx.pfx.len])
+      hike.legs.add Leg(vid: vid, vtx: vtx, nibble: path[vtx.pfx.len])
     of BoundaryNode:
       discard # step() always fails for BoundaryNode thus this is unreachable
 
@@ -210,16 +200,6 @@ proc hikeUp*[LeafType](
     vid = next
 
   ok()
-
-proc hikeUp*[LeafType](
-    path: Hash32;
-    root: VertexID;
-    db: AristoTxRef;
-    leaf: Opt[LeafType];
-    hike: var Hike
-      ): Result[void,(VertexID,AristoError)] =
-  ## Variant of `hike()`
-  NibblesBuf.fromBytes(path.data).hikeUp(root, db, leaf, hike)
 
 # ------------------------------------------------------------------------------
 # End
