@@ -285,6 +285,9 @@ func validateTxBasic*(
     if tx.txType == TxEip7702 and fork < Prague:
       return err("invalid tx: EIP-7702 Tx type detected before Prague")
 
+    if tx.txType == TxEip8141 and fork < Bogota:
+      return err("invalid tx: EIP-8141 Tx type detected before Bogota")
+
   if fork >= Shanghai and tx.contractCreation:
     if fork >= Amsterdam:
       if tx.payload.len > EIP7954_MAX_INITCODE_SIZE:
