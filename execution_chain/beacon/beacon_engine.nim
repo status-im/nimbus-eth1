@@ -35,23 +35,25 @@ type
     blobsBundle*: BlobsBundle
     executionRequests*: Opt[seq[seq[byte]]]
 
-  # Payload assembly runs in a background worker so that the engine API can
-  # answer forkchoiceUpdated before the (CPU-heavy) block packing happens.
-  # The LRU stores the pending/finished build futures; getPayload serves the
-  # newest finished one.
+  # forkchoiceUpdated assembles an empty payload and schedules the full build
+  # in a background worker. getPayload serves the newest finished full build,
+  # else the empty payload, without waiting, and stops pending builds.
   PayloadBuildFut* = Future[Result[ExecutionBundle, string]]
     .Raising([CancelledError])
 
   PayloadBuildTask = object
     headHash: Hash32
     attrs   : PayloadAttributes
+    builds  : PayloadBuilds
     fut     : PayloadBuildFut # same future object as stored in `queue`
 
   # Every fcU with payload attributes schedules a fresh build, so one
   # payloadId can have several. The single worker completes them in
   # scheduling order, oldest first.
   PayloadBuilds = ref object
-    futs: seq[PayloadBuildFut]
+    empty  : Opt[ExecutionBundle]
+    futs   : seq[PayloadBuildFut]
+    stopped: bool
 
   BeaconEngineRef* = ref object
     txPool: TxPoolRef
@@ -211,8 +213,9 @@ proc buildLoop(ben: BeaconEngineRef) {.async: (raises: [CancelledError]).} =
     # with networking, so give pending I/O (e.g. the forkchoiceUpdated
     # response that scheduled this build) a chance to flush first.
     discard await idleAsync().withTimeout(10.milliseconds)
-    if task.fut.finished:
-      # Completed by stop() while still queued
+    if task.builds.stopped:
+      task.fut.complete(Result[ExecutionBundle, string].err(
+        "payload build stopped"))
       continue
     let res = ben.generateExecutionBundle(task.headHash, task.attrs)
     if res.isOk:
@@ -251,12 +254,6 @@ proc new*(_: type BeaconEngineRef,
 proc stop*(ben: BeaconEngineRef) {.async: (raises: []).} =
   if not ben.buildLoopFut.isNil:
     await ben.buildLoopFut.cancelAndWait()
-  # Unblock any getPayload waiter whose build will never run
-  for builds in ben.queue.values:
-    for fut in builds.futs:
-      if not fut.finished:
-        fut.complete(Result[ExecutionBundle, string].err(
-          "beacon engine shutting down"))
 
 # ------------------------------------------------------------------------------
 # Private functions, payload building
@@ -277,14 +274,20 @@ func latestBuilt(builds: PayloadBuilds): int =
 
 proc startPayloadBuild*(ben: BeaconEngineRef, id: Bytes8,
                         headHash: Hash32, attrs: PayloadAttributes) =
-  ## Schedule a background build for `id` and return immediately; the
-  ## assembled payload is retrieved via `getPayloadBundle`. A repeated fcU
+  ## Assemble an empty payload for a new `id` and schedule a background full
+  ## build; payloads are retrieved via `getPayloadBundle`. A repeated fcU
   ## for the same `id` schedules a rebuild, so the payload picks up
   ## transactions that arrived since the previous build.
   let
     fut = PayloadBuildFut.init("beacon_engine.startPayloadBuild")
     builds = ben.queue.get(id).valueOr:
       let fresh = PayloadBuilds()
+      let res = ben.generateExecutionBundle(
+        headHash, attrs, txs = Opt.some(newSeq[TxItemRef]()))
+      if res.isOk:
+        fresh.empty = Opt.some(res.value)
+      else:
+        error "Failed to create empty payload", err = res.error
       ben.queue.put(id, fresh)
       fresh
 
@@ -293,10 +296,11 @@ proc startPayloadBuild*(ben: BeaconEngineRef, id: Bytes8,
   if last > 0:
     builds.futs = builds.futs[last .. ^1]
   builds.futs.add fut
+  builds.stopped = false
 
   try:
-    ben.buildQueue.addLastNoWait(
-      PayloadBuildTask(headHash: headHash, attrs: attrs, fut: fut))
+    ben.buildQueue.addLastNoWait(PayloadBuildTask(
+      headHash: headHash, attrs: attrs, builds: builds, fut: fut))
   except AsyncQueueFullError:
     raiseAssert "unbounded queue cannot be full"
 
@@ -307,30 +311,17 @@ func payloadBuildFinished*(ben: BeaconEngineRef, id: Bytes8): Opt[bool] =
     return Opt.none(bool)
   Opt.some(builds.futs[^1].finished)
 
-proc getPayloadBundle*(ben: BeaconEngineRef, id: Bytes8):
-    Future[Opt[ExecutionBundle]] {.async: (raises: [CancelledError]).} =
-  ## Serve the newest finished build for `id` without waiting for a rebuild
-  ## still in flight. Only when nothing has finished yet, wait for the oldest
-  ## outstanding build, i.e. the one scheduled by the first fcU.
+proc getPayloadBundle*(ben: BeaconEngineRef, id: Bytes8): Opt[ExecutionBundle] =
+  ## Serve the newest finished build for `id`, else the empty payload, without
+  ## waiting for a build still in flight. Builds still pending for `id` are
+  ## stopped until the next fcU schedules a rebuild.
   let builds = ben.queue.get(id).valueOr:
     return Opt.none(ExecutionBundle)
-  while true:
-    let last = builds.latestBuilt()
-    if last >= 0:
-      return Opt.some(builds.futs[last].value.value)
-
-    var oldest: PayloadBuildFut
-    for fut in builds.futs:
-      if not fut.finished:
-        oldest = fut
-        break
-    if oldest.isNil:
-      # Every build for `id` failed
-      return Opt.none(ExecutionBundle)
-
-    # `join` is multi-waiter safe: cancelling this getPayload call does
-    # not cancel the shared build future.
-    await oldest.join()
+  builds.stopped = true
+  let last = builds.latestBuilt()
+  if last >= 0:
+    return Opt.some(builds.futs[last].value.value)
+  builds.empty
 
 # ------------------------------------------------------------------------------
 # Public functions
