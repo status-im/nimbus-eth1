@@ -77,6 +77,7 @@ type
     Debug                         ## enable debug_ set of RPC API
     Admin                         ## enable admin_ set of RPC API
     Testing                       ## enable testing_ set of RPC API
+    Trace                         ## enable trace_ set of RPC API
 
   ExecutionClientConf* = object
     ## Main configuration for the execution client - when updating, coordinate
@@ -790,6 +791,7 @@ proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
     of "debug": result.incl RpcFlag.Debug
     of "admin": result.incl RpcFlag.Admin
     of "testing": result.incl RpcFlag.Testing
+    of "trace": result.incl RpcFlag.Trace
     else:
       error "Unknown RPC API: ", name=item
       quit QuitFailure
