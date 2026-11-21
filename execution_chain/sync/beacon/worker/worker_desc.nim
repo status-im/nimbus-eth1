@@ -201,6 +201,7 @@ type
     blocksEta*: EtaSpline            ## Data cache for blocks import ETA calc
     syncTickerOk*: bool              ## Activate built in state monitor
     ticker*: Ticker                  ## Ticker function to run in background
+    loopInterval*: Opt[Duration]     ## Replaces daemon and worker idle waits
 
 # ------------------------------------------------------------------------------
 # Public helpers
