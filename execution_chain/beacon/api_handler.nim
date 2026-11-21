@@ -13,7 +13,8 @@ import
   ./api_handler/api_getbodies,
   ./api_handler/api_newpayload,
   ./api_handler/api_forkchoice,
-  ./api_handler/api_getblobs
+  ./api_handler/api_getblobs,
+  ./api_handler/api_getinclusionlist
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -35,4 +36,5 @@ export
   getBlobsV1,
   getBlobsV2,
   getBlobsV3,
-  getBlobsV4
+  getBlobsV4,
+  getInclusionList

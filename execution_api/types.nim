@@ -19,3 +19,4 @@ type
     beaconRoot*       : Opt[Hash32]
     versionedHashes*  : Opt[seq[Hash32]]
     executionRequests*: Opt[seq[seq[byte]]]
+    inclusionList*    : Opt[InclusionList]
