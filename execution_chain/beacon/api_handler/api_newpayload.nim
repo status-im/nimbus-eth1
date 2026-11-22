@@ -46,11 +46,11 @@ template validateVersion(com, timestamp, payloadVersion, apiVersion, payload) =
       raise unsupportedFork("newPayloadV5 expect payload timestamp fall within Amsterdam")
 
   elif apiVersion == Version.V4:
-    if not com.isPragueOrLater(timestamp):
-      raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague or Osaka")
+    if not com.isPragueOrLater(timestamp) or com.isAmsterdamOrLater(timestamp):
+      raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague..Osaka")
 
   elif apiVersion == Version.V3:
-    if not com.isCancunOrLater(timestamp):
+    if not com.isCancunOrLater(timestamp) or com.isPragueOrLater(timestamp):
       raise unsupportedFork("newPayloadV3 expect payload timestamp fall within Cancun")
 
   if com.isAmsterdamOrLater(timestamp):
