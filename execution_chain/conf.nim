@@ -57,6 +57,7 @@ const
   defaultOptimisticStatePrefetch* = false
   defaultBalStatePrefetch* = false
   defaultBalStatePrefetchWorkers* = 0
+  defaultBalStatePrefetchThreads* = 0
   defaultBalParallelExecution* = false
   defaultBalPruning* = true
 
@@ -416,6 +417,14 @@ type
       desc: "Number of background worker tasks used for block access list " &
         "state prefetching (0 = use number equal to the taskpool threads count)"
       name: "debug-bal-state-prefetch-workers".}: int
+
+    balStatePrefetchThreads* {.
+      hidden
+      defaultValue: defaultBalStatePrefetchThreads
+      desc: "Number of threads in a dedicated thread pool for block access " &
+        "list state prefetching (0 = run the prefetch workers on the shared " &
+        "taskpool)"
+      name: "debug-bal-state-prefetch-threads".}: int
 
     balParallelExecutionFlag* {.
       hidden

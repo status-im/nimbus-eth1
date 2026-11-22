@@ -30,8 +30,8 @@ export
   utils
 
 when compileOption("threads"):
-  import taskpools
-  export taskpools
+  import taskpools, ../concurrency/side_taskpool
+  export taskpools, side_taskpool
 
 type
   HeaderChainUpdateCB* = proc(hdr: Header; fin: Hash32) {.gcsafe, raises: [].}
@@ -115,6 +115,8 @@ type
 
       taskpoolUsable: bool
         ## Cached evaluation of `not taskpool.isNil() and taskpool.numThreads > 1`
+
+      balPrefetchPool*: SideTaskpool
 
     parallelSenderRecovery*: bool
       ## Recover the transaction senders of a block in parallel on background

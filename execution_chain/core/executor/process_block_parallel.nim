@@ -261,7 +261,17 @@ template withBalPrefetchParallel*(
 
   let
     ctxPtr = ctx.addr
-    n = vmState.com.taskpool.numThreads
+    sidePool = vmState.com.balPrefetchPool
+    pool =
+      if sidePool.isNil():
+        vmState.com.taskpool
+      else:
+        sidePool.taskpool
+    n =
+      if sidePool.isNil():
+        pool.numThreads
+      else:
+        sidePool.numWorkers
     configured = vmState.com.balStatePrefetchWorkers
     numWorkers =
       if configured <= 0:
@@ -271,7 +281,7 @@ template withBalPrefetchParallel*(
 
   var futs = newSeq[Flowvar[bool]](numWorkers)
   for i in 0 ..< numWorkers:
-    futs[i] = vmState.com.taskpool.spawn balPrefetchWorker(ctxPtr)
+    futs[i] = pool.spawn balPrefetchWorker(ctxPtr)
 
   try:
     body

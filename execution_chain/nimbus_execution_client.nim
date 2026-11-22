@@ -422,6 +422,13 @@ proc setupCommonRef*(
     parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures,
     emptyStateDb = emptyStateDb)
 
+  when compileOption("threads"):
+    if com.balStatePrefetch and config.balStatePrefetchThreads > 0:
+      com.balPrefetchPool = SideTaskpool.new(config.balStatePrefetchThreads)
+      if com.balPrefetchPool.isNil():
+        warn "Failed to create the BAL state prefetch thread pool",
+          threads = config.balStatePrefetchThreads
+
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
       extraData=config.extraData,
