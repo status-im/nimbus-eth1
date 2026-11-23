@@ -1423,6 +1423,12 @@ proc rpcMain*() =
 
       check res.current.contractsInConfig(cancunSystemContracts)
 
+    test "eth_config object for Shanghai has an empty blob schedule":
+      let config = com.populateConfigObject(Shanghai)
+      check config.blobSchedule.max.uint64 == 0
+      check config.blobSchedule.target.uint64 == 0
+      check config.blobSchedule.baseFeeUpdateFraction.uint64 == 0
+
     env.close()
 
   suite "Remote Procedure Calls - Amsterdam":
