@@ -16,6 +16,7 @@ import
   web3/eth_api_types,
   ../transaction,
   ../transaction/call_common,
+  ../common/evmforks,
   ../evm/types,
   ../constants
 
@@ -39,6 +40,18 @@ func txType(n: TransactionArgs): TxType =
 proc toTransaction*(vmState: BaseVMState,
                     args: TransactionArgs,
                     globalGasCap: GasInt): Result[Transaction, string] =
+
+  if args.accessList.isSome and vmState.fork < FkBerlin:
+    return err("Invalid request: accessList field before Berlin")
+
+  if (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome) and vmState.fork < FkLondon:
+    return err("Invalid request: maxFeePerGas or maxPriorityFeePerGas field before London")
+
+  if args.blobVersionedHashes.isSome and vmState.fork < FkCancun:
+    return err("Invalid request: blobVersionedHashes field before Cancun")
+
+  if args.authorizationList.isSome and vmState.fork < FkPrague:
+    return err("Invalid request: authorizationList field before Prague")
 
   # Reject invalid combinations of pre- and post-1559 fee styles
   if args.gasPrice.isSome and
