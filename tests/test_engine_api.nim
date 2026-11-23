@@ -28,6 +28,7 @@ import
   ../execution_chain/core/tx_pool,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/beacon/beacon_engine,
+  ../execution_chain/beacon/payload_conv,
   ../execution_chain/beacon/api_handler,
   ../execution_chain/beacon/web3_eth_conv,
   ../execution_api/engine_client,
@@ -409,6 +410,54 @@ proc runUnknownPayloadTest(env: TestEnv): Result[void, string] =
   if $engineApiUnknownPayload notin res.error:
     return err("expect error code " & $engineApiUnknownPayload &
       ", got: " & res.error)
+
+  ok()
+
+proc runZeroFinalizedHashSyncTest(env: TestEnv): Result[void, string] =
+  var notified = false
+  let hc = HeaderChainRef.init(env.chain)
+  hc.start(proc() = notified = true)
+  defer: hc.destroy()
+
+  let
+    client = env.client
+    header = ? client.latestHeader()
+    update = ForkchoiceState(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+    )
+    fcuRes = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
+    bundle = ? client.getPayload(Version.V1, fcuRes.payloadId.get)
+
+  # Block 2 on top of block 1, which is never sent to the EL.
+  var payload = bundle.executionPayload
+  payload.parentHash = payload.blockHash
+  payload.blockNumber = w3Qty(2'u64)
+  payload.blockHash =
+    payload.blockHeader(Opt.none(Hash32), Opt.none(Hash32)).computeBlockHash
+
+  let npRes = ? client.newPayloadV1(payload)
+  if npRes.status != PayloadExecutionStatus.syncing:
+    return err("newPayload should return syncing, got: " & $npRes.status)
+
+  let fcuRes2 = ? client.forkchoiceUpdated(Version.V1, ForkchoiceState(
+    headBlockHash: payload.blockHash
+  ))
+  if fcuRes2.payloadStatus.status != PayloadExecutionStatus.syncing:
+    return err("forkchoiceUpdated should return syncing, got: " &
+      $fcuRes2.payloadStatus.status)
+
+  if not notified:
+    return err("No header chain session was started")
+  if hc.state != collecting:
+    return err("Header chain should be collecting, got: " & $hc.state)
+  if hc.head.number != 2:
+    return err("Header chain head should be block 2, got: " & $hc.head.number)
 
   ok()
 
@@ -842,6 +891,11 @@ const testList = [
     name: "getPayload with unknown payloadId",
     fork: MergeFork,
     testProc: runUnknownPayloadTest
+  ),
+  TestSpec(
+    name: "Zero finalized hash starts sync to a head with a missing parent",
+    fork: MergeFork,
+    testProc: runZeroFinalizedHashSyncTest
   ),
   TestSpec(
     name: "newPayloadV4",
