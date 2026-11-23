@@ -143,7 +143,7 @@ const
 
 proc snapRd(r: var Rlp, T: type SnapRootHash): T {.gcsafe, raises: [RlpError]} =
   ## RLP mixin, decoding
-  if r.isEmpty():
+  if r.isBlob() and r.isEmpty():
     r.skipElem()
     EMPTY_ROOT_HASH.T                       # optimised snap encoding
   else:
@@ -151,22 +151,21 @@ proc snapRd(r: var Rlp, T: type SnapRootHash): T {.gcsafe, raises: [RlpError]} =
 
 proc snapRd(r: var Rlp, T: type SnapCodeHash): T {.gcsafe, raises: [RlpError]} =
   ## RLP mixin, decoding
-  if r.isEmpty():
+  if r.isBlob() and r.isEmpty():
     r.skipElem()
     EMPTY_CODE_HASH.T                       # optimised snap encoding
   else:
     r.read(Hash32).T
 
-
 proc snapApp(w: var RlpWriter, val: SnapRootHash) =
   if Hash32(val) == EMPTY_ROOT_HASH:
-    w.startList 0                           # optimised snap encoding
+    w.append default(seq[byte])             # optimised snap encoding
   else:
     w.append Hash32(val)
 
 proc snapApp(w: var RlpWriter, val: SnapCodeHash) =
   if Hash32(val) == EMPTY_CODE_HASH:
-    w.startList 0                           # optimised snap encoding
+    w.append default(seq[byte])             # optimised snap encoding
   else:
     w.append Hash32(val)
 
