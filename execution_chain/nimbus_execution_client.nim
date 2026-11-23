@@ -428,7 +428,7 @@ proc setupCommonRef*(
         if config.balStatePrefetchThreads > 0:
           config.balStatePrefetchThreads
         else:
-          2 * max(1, numThreads)
+          max(2 * numThreads, 16)
       com.balPrefetchPool = SideTaskpool.new(prefetchThreads)
       if com.balPrefetchPool.isNil():
         warn "Failed to create the BAL state prefetch thread pool",

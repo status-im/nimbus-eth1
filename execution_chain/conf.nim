@@ -422,7 +422,8 @@ type
       hidden
       defaultValue: defaultBalStatePrefetchThreads
       desc: "Number of threads in a dedicated thread pool for block access " &
-        "list state prefetching (0 = twice the number of taskpool threads)"
+        "list state prefetching (0 = twice the number of taskpool threads, " &
+        "at least 16)"
       name: "debug-bal-state-prefetch-threads".}: int
 
     balParallelExecutionFlag* {.
