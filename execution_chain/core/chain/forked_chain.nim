@@ -667,6 +667,7 @@ proc init*(
       baseDistance:     baseDistance,
       persistBatchSize: persistBatchSize,
       dynamicBatchSize: dynamicBatchSize,
+      eagerStateRoot:   eagerStateRoot,
       quarantine:       Quarantine.init(),
       fcuHead:          fcuHead,
       fcuSafe:          fcuSafe,
