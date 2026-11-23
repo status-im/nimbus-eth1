@@ -431,8 +431,7 @@ proc validateTransaction*(
   let
     code = ledger.getCode(sender)
     delegated = code.isDelegation()
-  if (vmState.hardFork < Prague and code.len > 0) or
-     (vmState.hardFork >= Prague and code.len > 0 and not delegated):
+  if code.len > 0 and not (delegated and vmState.hardFork >= Prague):
     return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeLen={code.len}")
 
   if tx.txType == TxEip4844:
