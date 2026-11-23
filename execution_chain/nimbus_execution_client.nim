@@ -429,8 +429,13 @@ proc setupCommonRef*(
           config.balStatePrefetchWorkers
         else:
           2 * max(1, numThreads)
-      com.balPrefetchPool = DetachedTaskpool.new(threads)
-      info "BAL state prefetch thread pool started", threads
+      com.balPrefetchPool =
+        try:
+          DetachedTaskpool.new(threads)
+        except CatchableError as exc:
+          fatal "Cannot start BAL state prefetch taskpool", err = exc.msg
+          quit QuitFailure
+      info "BAL state prefetch taskpool started", threads
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",

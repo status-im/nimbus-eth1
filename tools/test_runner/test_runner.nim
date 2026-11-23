@@ -580,7 +580,12 @@ proc worker(opts: Options) {.thread.} =
       except CatchableError as exc:
         results.send("Etaskpool: " & exc.msg)
         return
-    balPrefetchPool = DetachedTaskpool.new(2 * opts.threads)
+    balPrefetchPool = try:
+        DetachedTaskpool.new(2 * opts.threads)
+      except CatchableError as exc:
+        results.send("Etaskpool: " & exc.msg)
+        taskpool.shutdown()
+        return
 
     while true:
       let (ok, file) = work.tryRecv()

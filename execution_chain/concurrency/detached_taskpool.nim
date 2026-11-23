@@ -20,13 +20,16 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[atomics, os, typedthreads],
-  taskpools
+  std/typedthreads,
+  taskpools,
+  ./semaphore
 
 type
   DetachedTaskpoolObj = object
     pool: Taskpool
-    running: Atomic[bool]
+    error: string
+    started: Semaphore
+    stop: Semaphore
     thread: Thread[(ptr DetachedTaskpoolObj, int)]
 
   DetachedTaskpool* = ptr DetachedTaskpoolObj
@@ -36,23 +39,38 @@ proc ownerThread(args: (ptr DetachedTaskpoolObj, int)) {.thread.} =
   try:
     p[].pool = Taskpool.new(numThreads = numWorkers + 1)
   except CatchableError as exc:
-    raiseAssert exc.msg
-  p[].running.store(true, moRelease)
+    p[].error = exc.msg
+  p[].started.signal()
 
-  while p[].running.load(moAcquire):
-    sleep(50)
+  if not p[].pool.isNil():
+    p[].stop.wait()
+    p[].pool.shutdown()
 
-  p[].pool.shutdown()
+proc dispose(p: DetachedTaskpool) =
+  p[].started.dispose()
+  p[].stop.dispose()
+  reset(p[].error)
+  deallocShared(p)
 
-proc new*(T: type DetachedTaskpool, numWorkers: int): T =
+proc new*(
+    T: type DetachedTaskpool, numWorkers: int
+): T {.raises: [CatchableError].} =
   let p = createShared(DetachedTaskpoolObj)
+  p[].started.init()
+  p[].stop.init()
   try:
     createThread(p[].thread, ownerThread, (p, numWorkers))
   except ResourceExhaustedError as exc:
-    raiseAssert exc.msg
+    p.dispose()
+    raise exc
 
-  while not p[].running.load(moAcquire):
-    sleep(1)
+  p[].started.wait()
+
+  if p[].pool.isNil():
+    joinThread(p[].thread)
+    let msg = p[].error
+    p.dispose()
+    raise newException(CatchableError, msg)
 
   p
 
@@ -63,7 +81,7 @@ func numWorkers*(p: DetachedTaskpool): int =
   p[].pool.numThreads - 1
 
 proc shutdown*(p: var DetachedTaskpool) =
-  p[].running.store(false, moRelease)
+  p[].stop.signal()
   joinThread(p[].thread)
-  deallocShared(p)
+  p.dispose()
   p = nil

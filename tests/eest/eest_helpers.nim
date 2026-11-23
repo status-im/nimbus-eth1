@@ -50,7 +50,11 @@ proc getSharedTaskpool(): Taskpool =
 
 proc getSharedBalPrefetchPool(): DetachedTaskpool =
   if sharedBalPrefetchPool.isNil:
-    sharedBalPrefetchPool = DetachedTaskpool.new(2 * getSharedTaskpool().numThreads)
+    try:
+      sharedBalPrefetchPool = DetachedTaskpool.new(2 * getSharedTaskpool().numThreads)
+    except CatchableError as exc:
+      debugEcho "Failed to start BAL prefetch taskpool: ", exc.msg
+      quit(QuitFailure)
   sharedBalPrefetchPool
 
 proc newForkedChain*(
