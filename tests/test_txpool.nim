@@ -1181,6 +1181,18 @@ suite "TxPool test suite":
     check LedgerRef.init(chain.latestTxFrame).getBalance(acc.address) ==
       balanceBefore - paid - amount
 
+  test "tx whose sender cannot pay for it is rejected":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      # `initEnv` funds accounts 0 ..< 30 only
+      unfunded = TxSender.new(initParams(), 31)
+      tc = BaseTx(txType: Opt.some(TxLegacy), gasLimit: 75000)
+
+    xp.checkAddTx(unfunded.makeTx(tc, unfunded.getAccount(30), 0), txErrorTxInvalid)
+    xp.checkAddTx(mx.makeTx(tc, mx.getAccount(0), 0))
+
 suite "TxPool BAL post-Amsterdam":
   # Regression test for PR #4148: tx_packer left an outer beginCallFrame in
   # vmExecGrabItem with no matching commit/rollback, so per-tx BAL changes

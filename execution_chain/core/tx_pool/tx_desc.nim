@@ -448,6 +448,19 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   if not xp.classifyValid(ptx.tx, sender):
     return err(txErrorTxInvalid)
 
+  # A max gas fee of 2^256 or more cannot be covered by any balance
+  let cost = ptx.tx.gasCost().valueOr:
+    debug "Invalid transaction: max gas fee exceeds 256 bits",
+      txHash = id
+    return err(txErrorTxInvalid)
+
+  # The balance must cover the max gas fee and then the value
+  let balance = xp.vmState.ledger.getBalance(sender)
+  if balance < cost or balance - cost < ptx.tx.value:
+    debug "Invalid transaction: sender cannot pay for it",
+      txHash = id, sender, balance
+    return err(txErrorTxInvalid)
+
   if xp.idTab.len >= MAX_POOL_SIZE:
     xp.removeExpiredTxs()
 
