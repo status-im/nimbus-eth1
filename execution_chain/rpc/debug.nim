@@ -291,10 +291,10 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
 
         var txNode = newJObject()
         txNode["hash"] = newJString($item.id)
-        txNode["nonce"] = newJInt(item.nonce.int64)
-        txNode["accountNonce"] = newJInt(accountNonce.int64)
+        txNode["nonce"] = %item.nonce
+        txNode["accountNonce"] = %accountNonce
         txNode["type"] = newJString($item.tx.txType)
-        txNode["gasLimit"] = newJInt(item.tx.gasLimit.int64)
+        txNode["gasLimit"] = %item.tx.gasLimit
         txNode["maxFeePerGas"] = newJString($item.tx.maxFeePerGasNorm)
         txNode["maxPriorityFeePerGas"] = newJString($item.tx.maxPriorityFeePerGasNorm)
         txNode["effectiveTip"] = newJString($tip)
@@ -314,7 +314,7 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       var res = newJObject()
       res["totalTxs"] = newJInt(txPool.len.int64)
       res["senderCount"] = newJInt(txPool.senderCount.int64)
-      res["baseFee"] = newJInt(poolBaseFee.int64)
+      res["baseFee"] = %poolBaseFee
       res["senders"] = senders
       res
 
