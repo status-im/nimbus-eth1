@@ -41,7 +41,6 @@ import
     test_rpc,
     test_sender_recovery_cache,
     test_snap,
-    test_transaction_json,
     test_transactions_receipts_storage,
     test_txpool,
     test_tx_frame_blobify,

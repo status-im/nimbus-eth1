@@ -63,7 +63,7 @@ type
 
   RlpDecoded* = object
     blockAccessList*: JsonNode
-    
+
   BlockDescNode* = object
     expectException*: string
     rlp*: seq[byte]
@@ -123,6 +123,25 @@ type
   EngineFixture* = object
     units*: seq[EngineUnitDesc]
 
+  ## Transaction Test Types
+  TransactionResultDesc* = object
+    network*: string
+    intrinsicGas*: Opt[Numero]
+    exception*: string
+    hash*: Opt[Hash32]
+    sender*: Opt[Address]
+
+  TransactionUnitEnv* = object
+    txbytes*: seq[byte]
+    result*: TransactionResultDesc
+
+  TransactionUnitDesc* = object
+    name*: string
+    unit*: TransactionUnitEnv
+
+  TransactionFixture* = object
+    units*: seq[TransactionUnitDesc]
+
 GenesisHeader.useDefaultReaderIn EthJson
 PayloadItem.useDefaultReaderIn EthJson
 EngineUnitEnv.useDefaultReaderIn EthJson
@@ -131,6 +150,7 @@ BlockchainUnitEnv.useDefaultReaderIn EthJson
 EnvConfig.useDefaultReaderIn EthJson
 BlobSchedule.useDefaultReaderIn EthJson
 RlpDecoded.useDefaultReaderIn EthJson
+TransactionUnitEnv.useDefaultReaderIn EthJson
 
 template wrapValueError(body: untyped) =
   try:
@@ -216,6 +236,25 @@ proc readValue*(
     parseObject(r, key):
       val.units.add BlockchainUnitDesc(name: key, unit: r.readValue(BlockchainUnitEnv))
 
+proc readValue*(r: var JsonReader[EthJson], val: var TransactionResultDesc)
+       {.raises: [IOError, SerializationError].} =
+  r.parseObject(network):
+    val.network = network
+    r.parseObject(key):
+      case key
+      of "intrinsicGas": val.intrinsicGas = Opt.some(r.readValue(Numero))
+      of "exception": val.exception = r.readValue(string)
+      of "hash": val.hash = Opt.some(r.readValue(Hash32))
+      of "sender": val.sender = Opt.some(r.readValue(Address))
+      else: discard r.readValue(JsonString)
+
+proc readValue*(
+    r: var JsonReader[EthJson], val: var TransactionFixture
+) {.gcsafe, raises: [IOError, SerializationError].} =
+  wrapValueError:
+    parseObject(r, key):
+      val.units.add TransactionUnitDesc(name: key, unit: r.readValue(TransactionUnitEnv))
+
 func to*(x: Opt[Quantity], _: type Opt[uint64]): Opt[uint64] =
   if x.isSome:
     Opt.some(x.value.uint64)
@@ -267,3 +306,6 @@ proc parseFixture*(fileName: string, _: type EngineFixture): EngineFixture =
 
 proc parseFixture*(fileName: string, _: type BlockchainFixture): BlockchainFixture =
   parseAnyFixture(fileName, BlockchainFixture)
+
+proc parseFixture*(fileName: string, _: type TransactionFixture): TransactionFixture =
+  parseAnyFixture(fileName, TransactionFixture)
