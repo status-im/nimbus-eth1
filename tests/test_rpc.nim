@@ -683,6 +683,17 @@ proc rpcMain*() =
       expect RpcResponseError:
         discard await client.eth_sendTransaction(args)
 
+    test "eth_signTransaction without nonce uses the pending nonce":
+      let
+        args = TransactionArgs(
+          `from`: Opt.some(signer),
+          to: Opt.some(contractAddress),
+          gas: Opt.some(w3Qty(100000'u)),
+          value: Opt.some(100.u256))
+        pending = await client.eth_getTransactionCount(signer, blockId("pending"))
+        signedTx = rlp.decode(await client.eth_signTransaction(args), Transaction)
+      check signedTx.nonce == AccountNonce(pending)
+
     test "eth_call":
       let ec = TransactionArgs(
         `from`: Opt.some(signer),
