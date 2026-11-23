@@ -62,7 +62,8 @@ func taskpool*(p: DetachedTaskpool): Taskpool =
 func numWorkers*(p: DetachedTaskpool): int =
   p[].pool.numThreads - 1
 
-proc shutdown*(p: DetachedTaskpool) =
+proc shutdown*(p: var DetachedTaskpool) =
   p[].running.store(false, moRelease)
   joinThread(p[].thread)
   deallocShared(p)
+  p = nil

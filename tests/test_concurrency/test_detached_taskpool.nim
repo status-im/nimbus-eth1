@@ -23,7 +23,7 @@ proc addTask(counter: ptr Atomic[int], v: int): int {.nimcall.} =
 suite "DetachedTaskpool":
   test "Spawn from the root thread of another taskpool":
     var shared = Taskpool.new(numThreads = 2)
-    let detached = DetachedTaskpool.new(4)
+    var detached = DetachedTaskpool.new(4)
     check detached.numWorkers == 4
 
     var counter: Atomic[int]
@@ -40,4 +40,5 @@ suite "DetachedTaskpool":
       counter.load() == 99 * 100 div 2
 
     detached.shutdown()
+    check detached.isNil()
     shared.shutdown()

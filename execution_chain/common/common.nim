@@ -490,6 +490,8 @@ when compileOption("threads"):
     com.taskpoolUsable = not taskpool.isNil() and taskpool.numThreads > 1
 
   proc shutdownTaskpool*(com: CommonRef) =
+    if not com.balPrefetchPool.isNil():
+      com.balPrefetchPool.shutdown()
     if not com.taskpool.isNil():
       com.taskpool.shutdown()
       com.taskpool = nil
