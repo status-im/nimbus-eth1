@@ -144,7 +144,8 @@ type
 
 proc tryUpdatePendingFCU*(c: ForkedChainRef, finHash: Hash32, number: uint64): bool =
   c.pendingFCU = zeroHash32
-  if number > c.latestFinalized.number:
+  # The CL may also move finality back to an earlier block
+  if finHash != c.latestFinalized.hash:
     c.latestFinalized = FcuHashAndNumber(number: number, hash: finHash)
     nec_finalized_block_number.set(number.int64)
 
