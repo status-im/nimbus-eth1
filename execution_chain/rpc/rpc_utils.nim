@@ -19,7 +19,7 @@ import
   ../utils/utils,
   ../transaction,
   ../transaction/call_evm_rpc,
-  ../core/eip4844,
+  ../core/[eip4844, eip7691],
   ../core/chain/forked_chain,
   ../evm/types,
   ../evm/state,
@@ -398,9 +398,9 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
   configObject.forkId = com.forkId(
     com.activationTime(fork).get(EthTime(0))
   ).hash
-  configObject.blobSchedule.max = Number com.maxBlobsPerBlock(fork)
-  configObject.blobSchedule.target = Number com.targetBlobsPerBlock(fork)
-  configObject.blobSchedule.baseFeeUpdateFraction = Number com.baseFeeUpdateFraction(fork)
+  configObject.blobSchedule.max = Number com.getMaxBlobsPerBlock(fork)
+  configObject.blobSchedule.target = Number com.getTargetBlobsPerBlock(fork)
+  configObject.blobSchedule.baseFeeUpdateFraction = Number com.getBlobBaseFeeUpdateFraction(fork)
 
   # Precompiles
   let
