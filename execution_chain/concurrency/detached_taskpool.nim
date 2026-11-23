@@ -27,7 +27,6 @@ import
 type
   DetachedTaskpoolObj = object
     pool: Taskpool
-    error: string
     started: Semaphore
     stop: Semaphore
     thread: Thread[(ptr DetachedTaskpoolObj, int)]
@@ -38,8 +37,8 @@ proc ownerThread(args: (ptr DetachedTaskpoolObj, int)) {.thread.} =
   let (p, numWorkers) = args
   try:
     p[].pool = Taskpool.new(numThreads = numWorkers + 1)
-  except CatchableError as exc:
-    p[].error = exc.msg
+  except CatchableError:
+    discard
   p[].started.signal()
 
   if not p[].pool.isNil():
@@ -49,7 +48,6 @@ proc ownerThread(args: (ptr DetachedTaskpoolObj, int)) {.thread.} =
 proc dispose(p: DetachedTaskpool) =
   p[].started.dispose()
   p[].stop.dispose()
-  reset(p[].error)
   deallocShared(p)
 
 proc new*(
@@ -68,9 +66,8 @@ proc new*(
 
   if p[].pool.isNil():
     joinThread(p[].thread)
-    let msg = p[].error
     p.dispose()
-    raise newException(CatchableError, msg)
+    raise newException(CatchableError, "Failed to create the taskpool threads")
 
   p
 
