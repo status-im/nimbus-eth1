@@ -416,7 +416,6 @@ proc setupCommonRef*(
     optimisticStatePrefetch = config.parallelSenderRecovery and
         config.optimisticStatePrefetch and not disableParallelFeatures,
     balStatePrefetch = config.balStatePrefetch and not disableParallelFeatures,
-    balStatePrefetchWorkers = config.balStatePrefetchWorkers,
     balParallelExecution = config.balParallelExecution and
         not config.statelessProvider and not disableParallelFeatures,
     parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures,
@@ -426,9 +425,9 @@ proc setupCommonRef*(
     if com.balStatePrefetch:
       let threads =
         if config.balStatePrefetchWorkers > 0:
-          config.balStatePrefetchWorkers
+          min(config.balStatePrefetchWorkers, maxBalStatePrefetchWorkers)
         else:
-          2 * max(1, numThreads)
+          2 * numThreads
       com.balPrefetchPool =
         try:
           DetachedTaskpool.new(threads)
