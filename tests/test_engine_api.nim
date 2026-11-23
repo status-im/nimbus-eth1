@@ -185,6 +185,16 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc exchangeCapabilitiesTest(env: TestEnv): Result[void, string] =
+  let
+    none = ? env.client.exchangeCapabilities(@[])
+    one = ? env.client.exchangeCapabilities(@["engine_newPayloadV1"])
+  if "engine_getPayloadV1" notin none:
+    return err("Expect EL methods, got: " & $none)
+  if one != none:
+    return err("Expect the same methods for any CL list, got: " & $one)
+  ok()
+
 proc makeSignedTx(env: TestEnv, nonce: AccountNonce = 0): Transaction =
   # A valid, includable legacy tx from the funded test signer.
   let tx = Transaction(
@@ -866,6 +876,11 @@ const testList = [
     name: "Basic cycle",
     fork: MergeFork,
     testProc: runBasicCycleTest
+  ),
+  TestSpec(
+    name: "exchangeCapabilities returns the EL methods",
+    fork: MergeFork,
+    testProc: exchangeCapabilitiesTest
   ),
   TestSpec(
     name: "Payload rebuild for identical FCU",
