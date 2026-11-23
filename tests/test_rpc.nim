@@ -771,6 +771,18 @@ proc rpcMain*() =
       except RpcResponseError as exc:
         check exc.code == -32000
 
+    test "eth_call gas below the calldata floor is an error":
+      # 1000 zero bytes: intrinsic gas 25000, calldata floor 31000
+      var ec = TransactionArgs(
+        to: Opt.some(extraAddress),
+        gas: Opt.some(w3Qty(25_000'u)),
+        input: Opt.some(newSeq[byte](1000)))
+      expect RpcResponseError:
+        discard await client.eth_call(ec, "latest")
+
+      ec.gas = Opt.some(w3Qty(31_000'u))
+      check (await client.eth_call(ec, "latest")).len == 0
+
     test "eth_call contract creation returns the created code":
       # PUSH4 0xdeadbeef PUSH1 0 MSTORE PUSH1 4 PUSH1 28 RETURN
       let ec = TransactionArgs(

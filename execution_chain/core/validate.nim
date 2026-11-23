@@ -300,7 +300,7 @@ func validateTxBasic*(
     return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
 
   let
-    minGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
+    minGasLimit = intrinsic.minGasLimit
 
   if minGasLimit > tx.gasLimit:
     return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
