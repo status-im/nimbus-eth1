@@ -42,9 +42,7 @@ proc addBeaconSyncProtocol(desc: BeaconSyncRef; PROTO: type) =
     peer.state(PROTO).initialized
 
   proc initWorker(worker: SyncPeerRef[BeaconCtxData,BeaconPeerData]) =
-    when PROTO is eth68:
-      worker.only.pivotHash = worker.peer.state(PROTO).bestHash
-    elif PROTO is eth69:
+    when PROTO is eth69:
       worker.only.pivotHash = worker.peer.state(PROTO).latestHash
     elif PROTO is eth70:
       worker.only.pivotHash = worker.peer.state(PROTO).latestHash
@@ -128,7 +126,6 @@ proc config*(
   desc.addBeaconSyncProtocol(eth71)
   desc.addBeaconSyncProtocol(eth70)
   desc.addBeaconSyncProtocol(eth69)
-  desc.addBeaconSyncProtocol(eth68)
 
   desc.ctx.pool.chain = chain
   desc.ctx.pool.standByMode = if standBy: BeaconServerMode.standBy

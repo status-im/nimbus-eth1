@@ -57,20 +57,6 @@ proc new*(_: type EthWireRef,
 # Public functions: eth wire protocol handlers
 # ------------------------------------------------------------------------------
 
-proc getStatus68*(ctx: EthWireRef): Eth68State =
-  let
-    com = ctx.chain.com
-    bestBlock = ctx.chain.latestHeader
-    txFrame = ctx.chain.baseTxFrame
-    forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
-
-  Eth68State(
-    totalDifficulty: txFrame.headTotalDifficulty,
-    genesisHash: com.genesisHash,
-    bestBlockHash: ctx.chain.latestHash,
-    forkId: forkId,
-  )
-
 proc getStatus69*(ctx: EthWireRef): Eth69State =
   let
     com = ctx.chain.com
@@ -84,26 +70,6 @@ proc getStatus69*(ctx: EthWireRef): Eth69State =
     latest: bestBlock.number,
     latestHash: ctx.chain.latestHash,
   )
-
-proc getReceipts*(ctx: EthWireRef,
-                  hashes: openArray[Hash32]):
-                    seq[seq[Receipt]] =
-  var
-    list: seq[seq[Receipt]]
-    totalBytes = 0
-
-  for blockHash in hashes:
-    var receiptList = ctx.chain.receiptsByBlockHash(blockHash).valueOr:
-      continue
-
-    totalBytes += getEncodedLength(receiptList)
-    list.add(receiptList.to(seq[Receipt]))
-
-    if list.len >= MAX_RECEIPTS_SERVE or
-       totalBytes > SOFT_RESPONSE_LIMIT:
-      break
-
-  move(list)
 
 proc getStoredReceipts*(ctx: EthWireRef,
                   hashes: openArray[Hash32]):
