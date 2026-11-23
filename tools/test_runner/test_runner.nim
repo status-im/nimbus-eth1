@@ -87,10 +87,9 @@ proc versionLine(): string =
 # Environment
 # ------------------------------------------------------------------------------
 
-var balPrefetchPool {.threadvar.}: DetachedTaskpool
-
 proc prepareEnv(
-    unit: UnitEnv, genesis: Header, opts: Options, taskpool: Taskpool
+    unit: UnitEnv, genesis: Header, opts: Options, taskpool: Taskpool,
+    balPrefetchPool: DetachedTaskpool,
 ): Result[Env, string] =
   var config = getChainConfig(unit.network).valueOr:
     return err("unsupported fork " & unit.network & ": " & error)
@@ -271,11 +270,11 @@ proc runBlockTest(
 
 proc runBlockUnit(
     unit: BlockchainUnitEnv, opts: Options, taskpool: Taskpool,
-    rejections: var seq[JsonNode],
+    balPrefetchPool: DetachedTaskpool, rejections: var seq[JsonNode],
 ): string =
   let genesis = unit.genesisHeader().valueOr:
     return error
-  let env = prepareEnv(unit, genesis, opts, taskpool).valueOr:
+  let env = prepareEnv(unit, genesis, opts, taskpool, balPrefetchPool).valueOr:
     return error
   result = env.runBlockTest(unit, opts, rejections)
   env.close()
@@ -314,13 +313,16 @@ template runFile(path: string, T: type, runUnit: untyped): string =
         else:
           try:
             let unit = EthJson.decode($node, T)
-            runUnit(unit, opts, taskpool, rejections)
+            runUnit(unit, opts, taskpool, balPrefetchPool, rejections)
           except CatchableError as exc:
             "cannot read the fixture: " & exc.msg
     output.add fixtureResult(name, network, error, rejections)
   "R" & $output
 
-proc runBlockFile(path: string, opts: Options, taskpool: Taskpool): string =
+proc runBlockFile(
+    path: string, opts: Options, taskpool: Taskpool,
+    balPrefetchPool: DetachedTaskpool,
+): string =
   runFile(path, BlockchainUnitEnv, runBlockUnit)
 
 # ------------------------------------------------------------------------------
@@ -506,11 +508,11 @@ proc runEngineTest(
 
 proc runEngineUnit(
     unit: EngineUnitEnv, opts: Options, taskpool: Taskpool,
-    rejections: var seq[JsonNode],
+    balPrefetchPool: DetachedTaskpool, rejections: var seq[JsonNode],
 ): string =
   let genesis = unit.genesisHeader().valueOr:
     return error
-  let env = prepareEnv(unit, genesis, opts, taskpool).valueOr:
+  let env = prepareEnv(unit, genesis, opts, taskpool, balPrefetchPool).valueOr:
     return error
   result =
     try:
@@ -519,7 +521,10 @@ proc runEngineUnit(
       "malformed fixture: " & exc.msg
   env.close()
 
-proc runEngineFile(path: string, opts: Options, taskpool: Taskpool): string =
+proc runEngineFile(
+    path: string, opts: Options, taskpool: Taskpool,
+    balPrefetchPool: DetachedTaskpool,
+): string =
   runFile(path, EngineUnitEnv, runEngineUnit)
 
 # ------------------------------------------------------------------------------
@@ -580,7 +585,7 @@ proc worker(opts: Options) {.thread.} =
       except CatchableError as exc:
         results.send("Etaskpool: " & exc.msg)
         return
-    balPrefetchPool = try:
+    var balPrefetchPool = try:
         DetachedTaskpool.new(2 * opts.threads)
       except CatchableError as exc:
         results.send("Etaskpool: " & exc.msg)
@@ -594,8 +599,8 @@ proc worker(opts: Options) {.thread.} =
       let output =
         try:
           case opts.mode
-          of BlockTest: runBlockFile(file, opts, taskpool)
-          of EngineTest: runEngineFile(file, opts, taskpool)
+          of BlockTest: runBlockFile(file, opts, taskpool, balPrefetchPool)
+          of EngineTest: runEngineFile(file, opts, taskpool, balPrefetchPool)
         except CatchableError as exc:
           "E" & file & ": " & exc.msg
       results.send(output)

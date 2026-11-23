@@ -423,11 +423,11 @@ proc setupCommonRef*(
 
   when compileOption("threads"):
     if com.balStatePrefetch:
-      let threads =
-        if config.balStatePrefetchWorkers > 0:
-          min(config.balStatePrefetchWorkers, maxBalStatePrefetchWorkers)
-        else:
-          2 * numThreads
+      let
+        configured = config.balStatePrefetchWorkers
+        threads = min(
+          if configured > 0: configured else: 2 * numThreads,
+          maxBalStatePrefetchWorkers)
       com.balPrefetchPool =
         try:
           DetachedTaskpool.new(threads)

@@ -22,11 +22,12 @@
 import
   std/typedthreads,
   taskpools,
-  ./semaphore
+  ./[semaphore, shared_types]
 
 type
   DetachedTaskpoolObj = object
     pool: Taskpool
+    error: SharedString
     started: Semaphore
     stop: Semaphore
     thread: Thread[(ptr DetachedTaskpoolObj, int)]
@@ -37,8 +38,8 @@ proc ownerThread(args: (ptr DetachedTaskpoolObj, int)) {.thread.} =
   let (p, numWorkers) = args
   try:
     p[].pool = Taskpool.new(numThreads = numWorkers + 1)
-  except CatchableError:
-    discard
+  except CatchableError as exc:
+    p[].error = SharedString.init(exc.msg)
   p[].started.signal()
 
   if not p[].pool.isNil():
@@ -46,13 +47,16 @@ proc ownerThread(args: (ptr DetachedTaskpoolObj, int)) {.thread.} =
     p[].pool.shutdown()
 
 proc dispose(p: DetachedTaskpool) =
+  p[].error.dispose()
   p[].started.dispose()
   p[].stop.dispose()
   deallocShared(p)
 
 proc new*(
     T: type DetachedTaskpool, numWorkers: int
-): T {.raises: [CatchableError].} =
+): T {.raises: [ResourceExhaustedError].} =
+  doAssert numWorkers > 0
+
   let p = createShared(DetachedTaskpoolObj)
   p[].started.init()
   p[].stop.init()
@@ -66,8 +70,9 @@ proc new*(
 
   if p[].pool.isNil():
     joinThread(p[].thread)
+    let msg = p[].error.toString()
     p.dispose()
-    raise newException(CatchableError, "Failed to create the taskpool threads")
+    raise newException(ResourceExhaustedError, msg)
 
   p
 
