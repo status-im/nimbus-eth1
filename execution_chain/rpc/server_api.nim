@@ -526,10 +526,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, "Account locked, please unlock it first")
 
       let
-        txFrame = api.frameFromTag(blockId("latest")).valueOr:
-          raise newException(ValueError, "Latest Block not found")
-        accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
-        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId).valueOr:
+        nonce = api.txPool.getPendingNonce(address)
+        tx = unsignedTx(data, api.chain, nonce, api.com.chainId).valueOr:
           raise newException(ValueError, error)
         eip155 = api.com.isEIP155(api.chain.latestNumber)
         signedTx = signTransaction(tx, acc.privateKey, eip155)
@@ -550,11 +548,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, "Account locked, please unlock it first")
 
       let
-        txFrame = api.frameFromTag(blockId("latest")).valueOr:
-          raise newException(ValueError, "Latest Block not found")
-        accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
-
-        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId).valueOr:
+        nonce = api.txPool.getPendingNonce(address)
+        tx = unsignedTx(data, api.chain, nonce, api.com.chainId).valueOr:
           raise newException(ValueError, error)
         eip155 = api.com.isEIP155(api.chain.latestNumber)
         signedTx = signTransaction(tx, acc.privateKey, eip155)
