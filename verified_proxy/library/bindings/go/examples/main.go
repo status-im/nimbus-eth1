@@ -26,7 +26,7 @@ const configJSON = `{
 }`
 
 func main() {
-	ctx, err := verifproxy.Start(configJSON, nil, nil)
+	ctx, err := verifproxy.Start(configJSON, nil, nil, nil)
 	if err != nil {
 		log.Fatalf("start: %v", err)
 	}

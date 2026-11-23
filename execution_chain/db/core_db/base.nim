@@ -412,13 +412,13 @@ proc fetchSlot*(
     return err(error.toError(""))
   ok res
 
-proc deleteSlot*(
-    acc: CoreDbTxRef;
-    accPath: Hash32;
-    stoPath: Hash32;
-      ):  CoreDbRc[void] =
-  ## Like `delete()` but with cascaded index `(accPath,slot)`.
-  acc.aTx.deleteSlot(accPath, stoPath).isOkOr:
+proc mergeSlots*(
+    acc: CoreDbTxRef,
+    accPath: Hash32,
+    slots: varargs[(Hash32, UInt256)]
+      ): CoreDbRc[void] =
+  ## Update the given storage slots - 0 removes the slot from the trie
+  acc.aTx.mergeSlots(accPath, slots).isOkOr:
     return err(error.toError(""))
 
   ok()
@@ -429,7 +429,7 @@ proc mergeSlot*(
     stoPath: Hash32;
     stoData: UInt256;
       ): CoreDbRc[void] =
-  ## Like `merge()` but with cascaded index `(accPath,slot)`.
+  ## Update the given storage slot - 0 removes the slot from the trie
   acc.aTx.mergeSlot(accPath, stoPath, stoData).isOkOr:
     return err(error.toError(""))
 

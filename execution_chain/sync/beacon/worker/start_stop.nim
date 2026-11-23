@@ -57,7 +57,7 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.blocksStagedQueueInit()
   ctx.headersUnprocInit()
   ctx.blocksUnprocInit()
-  ctx.updateEtaInit()
+  ctx.blocksEtaInit()
   ctx.setLastPeerSeen()
 
   # Start in suspended mode

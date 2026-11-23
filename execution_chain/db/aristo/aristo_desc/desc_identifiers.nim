@@ -15,17 +15,14 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, strutils, hashes],
+  std/[sequtils, strutils, hashes],
   eth/common/[base, hashes],
   eth/keccak/rapidhash,
-  eth/rlp, eth/trie/nibbles,
+  eth/rlp,
   stew/byteutils,
-  chronicles,
-  results,
-  stint
+  results
 
-export
-  nibbles, base, hashes, rlp
+export base, hashes, rlp
 
 type
   VertexID* = distinct uint64
@@ -83,12 +80,6 @@ type
     ##
     buf: array[32, byte] # Either Hash32 or blob data, depending on `len`
     len: int8 # length in the case of blobs, or 32 when it's a hash
-
-# ------------------------------------------------------------------------------
-# Chronicles formatters
-# ------------------------------------------------------------------------------
-
-chronicles.formatIt(VertexID): $it
 
 # ------------------------------------------------------------------------------
 # Public helpers: `VertexID` scalar data model
@@ -238,9 +229,6 @@ func append*(w: var RlpWriter; key: HashKey) =
 
 func `$`*(vids: seq[VertexID]): string =
   "[" & vids.mapIt($it).join(",") & "]"
-
-func `$`*(vids: HashSet[VertexID]): string =
-  "{" & vids.toSeq.sorted.mapIt($it).join(",") & "}"
 
 func `$`*(key: HashKey): string =
   toHex(key.data)

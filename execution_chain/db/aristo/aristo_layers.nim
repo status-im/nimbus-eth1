@@ -187,8 +187,8 @@ func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: BranchRef) =
 func layersResKeys*(db: AristoTxRef; hike: Hike, skip: int) =
   ## Reset all cached keys along the given hike
   for i in (skip + 1)..hike.legs.len:
-    if hike.legs[^i].wp.vtx.vType in Branches:
-      db.layersResKey((hike.root, hike.legs[^i].wp.vid), BranchRef(hike.legs[^i].wp.vtx))
+    if hike.legs[^i].vtx.vType in Branches:
+      db.layersResKey((hike.root, hike.legs[^i].vid), BranchRef(hike.legs[^i].vtx))
 
 func layersPutAccLeaf*(db: AristoTxRef; accPath: Hash32; leafVtx: AccLeafRef) =
   db.accLeaves[accPath] = leafVtx

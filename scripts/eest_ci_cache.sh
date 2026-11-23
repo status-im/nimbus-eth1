@@ -15,7 +15,7 @@ FIXTURES_DIR="${REPO_DIR}/tests/fixtures"
 
 # --- Mainnet Release ---
 EEST_MAINNET_NAME="mainnet"
-EEST_MAINNET_VERSION="v21.0.2"
+EEST_MAINNET_VERSION="v21.0.3"
 EEST_MAINNET_DIR="${FIXTURES_DIR}/eest_mainnet"
 EEST_MAINNET_ARCHIVE="fixtures.tar.gz"
 EEST_MAINNET_URL="https://github.com/ethereum/execution-specs/releases/download/tests%40${EEST_MAINNET_VERSION}/${EEST_MAINNET_ARCHIVE}"
@@ -91,19 +91,9 @@ download_and_extract() {
 
   rm -rf "${dest_dir}/.meta"
 
-  mv "${dest_dir}/blockchain_tests/static/state_tests/"* "${dest_dir}/blockchain_tests" 2>/dev/null || true
-  rm -rf "${dest_dir}/blockchain_tests/static"
-
-  mv "${dest_dir}/blockchain_tests_engine/static/state_tests/"* "${dest_dir}/blockchain_tests_engine" 2>/dev/null || true
-  rm -rf "${dest_dir}/blockchain_tests_engine/static"
-
-  mv "${dest_dir}/state_tests/static/state_tests/"* "${dest_dir}/state_tests" 2>/dev/null || true
-  rm -rf "${dest_dir}/state_tests/static"
-
   # Remove unused tests
   rm -rf "${dest_dir}/blockchain_tests_engine_x"
   rm -rf "${dest_dir}/blockchain_tests_sync"
-  rm -rf "${dest_dir}/transaction_tests"
 
   rm -f "${archive}"
 

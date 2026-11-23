@@ -21,7 +21,7 @@
 import
   eth/common/[base, hashes],
   results,
-  "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike]
+  ./[aristo_desc, aristo_fetch, aristo_get, aristo_hike]
 
 # ------------------------------------------------------------------------------
 # Public functions, moving and right boundary proof
@@ -41,30 +41,30 @@ iterator rightPairs*(
     let vtx = db.getVtx((root, next))
     if not vtx.isValid:
       break
-    hike.legs.add(Leg(nibble: -1, wp: VidVtxPair(vid: next, vtx: vtx)))
+    hike.legs.add(Leg(nibble: cast[uint8](-1), vid: next, vtx: vtx))
     reset(next)
 
     block nextLeg:
       while hike.legs.len > 0:
         var x = hike.legs[^1]
 
-        case x.wp.vtx.vType
+        case x.vtx.vType
         of BoundaryNode:
           discard # BoundaryNode never appears in hike legs (step always fails for it)
         of Branches:
-          let vtx = BranchRef(x.wp.vtx)
-          for i in uint8(x.nibble + 1) ..< 16u8:
+          let vtx = BranchRef(x.vtx)
+          for i in (x.nibble + 1) .. 15'u8:
             let b = vtx.bVid(i)
             if b.isValid():
-              hike.legs[^1].nibble = int8(i)
+              hike.legs[^1].nibble = i
 
               next = b
               break nextLeg
 
           hike.legs.setLen(hike.legs.len - 1)
         of Leaves:
-          let vtx = LeafRef(hike.legs[^1].wp.vtx)
-          yield (Hash32(hike.legsTo(NibblesBuf).getBytes()), vtx)
+          let vtx = LeafRef(hike.legs[^1].vtx)
+          yield (hike.legsTo(NibblesBuf).to(Hash32), vtx)
           hike.legs.setLen(hike.legs.len - 1)
 
 iterator rightPairsStorage*(

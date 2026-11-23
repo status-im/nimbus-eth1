@@ -27,13 +27,13 @@ declareGauge nec_snap_accounts_coverage, "" &
 
 proc accountDownloadMetricsReset*(ctx: SnapCtxRef) =
   metrics.set(nec_snap_accounts_coverage, 0)
-  ctx.resetEta()
+  ctx.accEtaInit()
 
 proc accountDownloadMetricsUpdate*(ctx: SnapCtxRef) =
   if ctx.accUnproc.synced():
     let w = 1.0 - ctx.accUnproc.totalRatio
     metrics.set(nec_snap_accounts_coverage, w)
-    ctx.updateEta w
+    ctx.accEtaUpdate w
 
 proc accountDownloadCommit*(
     ctx: SnapCtxRef;
@@ -129,7 +129,6 @@ template accountDownload*(
       # data or contract code records already exist on the cache DB.
       let maybe = adb.getFlatAcc(w.accHash, info)
       if maybe.isSome():
-        let prvData = maybe.unsafeGet()
         trace info & ": Updating account record", peer, root, pivot=number,
           accPath=w.accHash.toStr, storageRoot=acc.storageRoot.toStr,
           codeHash=acc.codeHash.toStr, syncState=($buddy.syncState)

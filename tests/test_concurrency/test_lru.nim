@@ -563,7 +563,7 @@ suite "ConcurrentLruCache Tests":
 
     # absent key: body must not run and no pointer is exposed
     ran = false
-    lru.withGet(99, v):
+    lru.withGet(99, _):
       ran = true
     check not ran
 
@@ -590,7 +590,7 @@ suite "ConcurrentLruCache Tests":
     # value since it runs after the read lock is released
     var found = false
     missed = false
-    lru.withGet(2, v):
+    lru.withGet(2, _):
       found = true
     do:
       missed = true
@@ -684,7 +684,7 @@ suite "ConcurrentLruCache Tests":
 
     # absent key: the body must not run
     ran = false
-    lru.withGetByHash(lru.toKeyHash(8), 8, v):
+    lru.withGetByHash(lru.toKeyHash(8), 8, _):
       ran = true
     check not ran
 
@@ -1254,7 +1254,7 @@ suite "ConcurrentLruCache Tests (threadSafe = false)":
 
     # absent key: body must not run
     var ran = false
-    lru.withGet(123, v):
+    lru.withGet(123, _):
       ran = true
     check not ran
 
@@ -1391,7 +1391,7 @@ suite "ConcurrentLruCache with move-only values Tests":
       check seen2
 
       var ranMissing = false
-      lru.withGet(99, v):
+      lru.withGet(99, _):
         ranMissing = true
       check not ranMissing
 

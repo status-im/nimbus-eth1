@@ -18,14 +18,23 @@ EMSCRIPTEN_KEEPALIVE
 int wasmStart(
     char *configJson,
     ExecutionTransportProc executionTransport,
-    BeaconTransportProc beaconTransport
+    BeaconTransportProc beaconTransport,
+    StorageGetProc storageGet,
+    StoragePutProc storagePut
 ) {
     NimMain();
-    g_ctx = startVerifProxy(configJson, executionTransport, beaconTransport);
+    g_ctx = startVerifProxy(configJson, executionTransport, beaconTransport, storageGet, storagePut);
 
     if (g_ctx == NULL) return -1;
 
     return 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasmDeliverStorage(
+    StorageDeliveryCallback cb, int status, const uint8_t *data, int len, void *userData
+) {
+    cb(status, data, len, userData);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -75,13 +84,17 @@ int wasmProcessTasks(void) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-void wasmDeliverExecutionTransport(int status, char *result, void *userData) {
-    deliverExecutionTransport(status, result, userData);
+void wasmDeliverExecutionTransport(
+    TransportDeliveryCallback cb, int status, char *result, void *userData
+) {
+    cb(status, result, userData);
 }
 
 EMSCRIPTEN_KEEPALIVE
-void wasmDeliverBeaconTransport(int status, char *result, void *userData) {
-    deliverBeaconTransport(status, result, userData);
+void wasmDeliverBeaconTransport(
+    TransportDeliveryCallback cb, int status, char *result, void *userData
+) {
+    cb(status, result, userData);
 }
 
 EMSCRIPTEN_KEEPALIVE const char *wasmExecCtxUrl(void *u) { return execCtxUrl(u); }

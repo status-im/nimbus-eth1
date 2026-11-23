@@ -91,7 +91,7 @@ proc getKeyRc*(
     db: AristoTxRef; rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[((HashKey, VertexRef), int),AristoError] =
   ## Cascaded attempt to fetch a Merkle hash from the cache layers or the
   ## backend. This function will never return a `VOID_HASH_KEY` but rather
-  ## some `GetKeyNotFound` or `GetKeyUpdateNeeded` error.
+  ## some `GetKeyNotFound` error.
   ##
   block body:
     let key = db.layersGetKey(rvid).valueOr:

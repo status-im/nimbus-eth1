@@ -26,6 +26,8 @@ package verifproxy
 extern GO_EXPORT void goCallbackWrapper(Context *ctx, int status, char *result, void *userData);
 extern GO_EXPORT void goExecTransportWrapper(Context *ctx, TransportDeliveryCallback cb, void *ud);
 extern GO_EXPORT void goBeaconTransportWrapper(Context *ctx, TransportDeliveryCallback cb, void *ud);
+extern GO_EXPORT void goStorageGetWrapper(Context *ctx, char *key, StorageDeliveryCallback cb, void *ud);
+extern GO_EXPORT void goStoragePutWrapper(Context *ctx, char *key, uint8_t *data, int len, StorageDeliveryCallback cb, void *ud);
 
 __attribute__((weak)) void cGoCallback(Context *ctx, int status, char *result, void *userData) {
     goCallbackWrapper(ctx, status, result, userData);
@@ -39,12 +41,25 @@ __attribute__((weak)) void cGoBeaconTransport(Context *ctx, TransportDeliveryCal
     goBeaconTransportWrapper(ctx, cb, ud);
 }
 
+__attribute__((weak)) void cGoStorageGet(Context *ctx, const char *key, StorageDeliveryCallback cb, void *ud) {
+    goStorageGetWrapper(ctx, (char *)key, cb, ud);
+}
+
+__attribute__((weak)) void cGoStoragePut(Context *ctx, const char *key, const uint8_t *data, int len, StorageDeliveryCallback cb, void *ud) {
+    goStoragePutWrapper(ctx, (char *)key, (uint8_t *)data, len, cb, ud);
+}
+
 static void callDeliveryCb(TransportDeliveryCallback cb, int status, char *res, void *ud) {
     cb(status, res, ud);
 }
 
-static inline Context *callStartVerifProxy(char *configJson, ExecutionTransportProc exec, BeaconTransportProc beacon) {
-    return startVerifProxy(configJson, exec, beacon);
+static void callStorageCb(StorageDeliveryCallback cb, int status, uint8_t *data, int len, void *ud) {
+    cb(status, data, len, ud);
+}
+
+static inline Context *callStartVerifProxy(char *configJson, ExecutionTransportProc exec, BeaconTransportProc beacon,
+                                           StorageGetProc storageGet, StoragePutProc storagePut) {
+    return startVerifProxy(configJson, exec, beacon, storageGet, storagePut);
 }
 
 static inline void callNvp(Context *ctx, char *method, char *params, CallBackProc cb, uintptr_t userData) {
@@ -81,6 +96,13 @@ import (
 
 type ExecTransportFunc func(url, method, params string) (json.RawMessage, error)
 type BeaconTransportFunc func(url, endpoint, params string) (json.RawMessage, error)
+
+// Storage persists the light client checkpoint across restarts. Get reports
+// found=false when the key has no value.
+type Storage interface {
+	Get(key string) (value []byte, found bool, err error)
+	Put(key string, value []byte) error
+}
 
 func DefaultExecTransport(url, method, params string) (json.RawMessage, error) {
 	return SendRPC(url, method, params)
@@ -120,6 +142,7 @@ type Context struct {
 	executeTaskChan chan VerifyProxyCallArgs
 	execTransport   ExecTransportFunc
 	beaconTransport BeaconTransportFunc
+	storage         Storage
 }
 
 var (
@@ -200,6 +223,40 @@ func goBeaconTransportWrapper(cCtx *C.Context, cb C.TransportDeliveryCallback, u
 	C.callDeliveryCb(cb, C.RET_SUCCESS, cResp, ud)
 }
 
+//export goStorageGetWrapper
+func goStorageGetWrapper(cCtx *C.Context, key *C.char, cb C.StorageDeliveryCallback, ud unsafe.Pointer) {
+	goCtx := lookupCtx(cCtx)
+
+	value, found, err := goCtx.storage.Get(C.GoString(key))
+	if err != nil {
+		C.callStorageCb(cb, C.RET_ERROR, nil, 0, ud)
+		return
+	}
+	if !found {
+		C.callStorageCb(cb, C.RET_NOT_FOUND, nil, 0, ud)
+		return
+	}
+	if len(value) == 0 {
+		C.callStorageCb(cb, C.RET_SUCCESS, nil, 0, ud)
+		return
+	}
+	cValue := C.CBytes(value)
+	defer C.free(cValue)
+	C.callStorageCb(cb, C.RET_SUCCESS, (*C.uint8_t)(cValue), C.int(len(value)), ud)
+}
+
+//export goStoragePutWrapper
+func goStoragePutWrapper(cCtx *C.Context, key *C.char, data *C.uint8_t, length C.int, cb C.StorageDeliveryCallback, ud unsafe.Pointer) {
+	goCtx := lookupCtx(cCtx)
+
+	value := C.GoBytes(unsafe.Pointer(data), length)
+	if err := goCtx.storage.Put(C.GoString(key), value); err != nil {
+		C.callStorageCb(cb, C.RET_ERROR, nil, 0, ud)
+		return
+	}
+	C.callStorageCb(cb, C.RET_SUCCESS, nil, 0, ud)
+}
+
 func (ctx *Context) Stop() error {
 	if ctx == nil {
 		return errEmptyContext
@@ -208,7 +265,7 @@ func (ctx *Context) Stop() error {
 	return nil
 }
 
-func Start(configJson string, execTransport ExecTransportFunc, beaconTransport BeaconTransportFunc) (*Context, error) {
+func Start(configJson string, execTransport ExecTransportFunc, beaconTransport BeaconTransportFunc, storage Storage) (*Context, error) {
 	if execTransport == nil {
 		execTransport = DefaultExecTransport
 	}
@@ -221,6 +278,7 @@ func Start(configJson string, execTransport ExecTransportFunc, beaconTransport B
 		executeTaskChan: make(chan VerifyProxyCallArgs, 64),
 		execTransport:   execTransport,
 		beaconTransport: beaconTransport,
+		storage:         storage,
 	}
 
 	cConfigJson := C.CString(configJson)
@@ -235,7 +293,14 @@ func Start(configJson string, execTransport ExecTransportFunc, beaconTransport B
 
 		startOnce.Do(func() { C.NimMain() })
 
-		ctxPtr := C.callStartVerifProxy(cConfigJson, C.ExecutionTransportProc(C.cGoExecTransport), C.BeaconTransportProc(C.cGoBeaconTransport))
+		var storageGet C.StorageGetProc
+		var storagePut C.StoragePutProc
+		if goCtx.storage != nil {
+			storageGet = C.StorageGetProc(C.cGoStorageGet)
+			storagePut = C.StoragePutProc(C.cGoStoragePut)
+		}
+
+		ctxPtr := C.callStartVerifProxy(cConfigJson, C.ExecutionTransportProc(C.cGoExecTransport), C.BeaconTransportProc(C.cGoBeaconTransport), storageGet, storagePut)
 
 		if ctxPtr == nil {
 			wg.Done()
