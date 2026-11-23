@@ -316,45 +316,48 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## This function prepares a new session and notifies some registered
   ## client app.
   ##
-  if f != zeroHash32:                               # finalised hash is set
+  ## Before the chain has finalised, the `CL` sends a zero finalised hash `f`.
+  ## A session is started the same, only the finalised hash bookkeeping is
+  ## skipped.
+  ##
+  if hc.chain.baseNumber() + 1 < h.number and       # otherwise useless
+     hc.session.mode == closed:
+    # Set new session environment
+    hc.session = HccSession(                        # start new session
+      mode:     collecting,
+      ante:     h,
+      head:     h,
+      headHash: h.computeBlockHash())
 
-    if hc.chain.baseNumber() + 1 < h.number and     # otherwise useless
-       hc.session.mode == closed:
-      # Set new session environment
-      hc.session = HccSession(                      # start new session
-        mode:     collecting,
-        ante:     h,
-        head:     h,
-        headHash: h.computeBlockHash())
+    hc.kvt.putHeader(h)
+    metrics.set(nec_sync_dangling, h.number.int64)
 
-      hc.kvt.putHeader(h)
-      metrics.set(nec_sync_dangling, h.number.int64)
-
-      # Update `FC` module
+    # Update `FC` module
+    if f != zeroHash32:                             # finalised hash is set
       hc.chain.pendingFCU = f
       if f == hc.session.headHash:
         hc.session.finNum = Opt.some(h.number)      # needed by snap sync
         # Note that `tryUpdatePendingFCU()` will reset `pendingFCU`.
         discard hc.chain.tryUpdatePendingFCU(f, h.number)
 
-      # Initialise ETA
-      hc.session.etaData.init()
-      hc.session.etaData.apply 0f
+    # Initialise ETA
+    hc.session.etaData.init()
+    hc.session.etaData.apply 0f
 
-      # Inform client app about that a new session has started.
-      hc.notify()
+    # Inform client app about that a new session has started.
+    hc.notify()
 
-    # For logging and metrics. Note that the syncer becomes idle when it
-    # catches up with importing blocks and this handler is not called,
-    # any more. This happens if there is no need to catch up wholesale.
-    # So, the `nec_sync_consensus_head` will just stay with its latest
-    # value unless updated by `updateMetrics()`.
-    hc.consHead = h
-    hc.finHash = f
-    metrics.set(nec_sync_consensus_head, h.number.int64)
-    if hc.chain.latestNumber <= h.number:
-      metrics.set(nec_sync_distance_to_sync,
-        (h.number - hc.chain.latestNumber).int64)
+  # For logging and metrics. Note that the syncer becomes idle when it
+  # catches up with importing blocks and this handler is not called,
+  # any more. This happens if there is no need to catch up wholesale.
+  # So, the `nec_sync_consensus_head` will just stay with its latest
+  # value unless updated by `updateMetrics()`.
+  hc.consHead = h
+  hc.finHash = f
+  metrics.set(nec_sync_consensus_head, h.number.int64)
+  if hc.chain.latestNumber <= h.number:
+    metrics.set(nec_sync_distance_to_sync,
+      (h.number - hc.chain.latestNumber).int64)
 
 # ------------------------------------------------------------------------------
 # Public constructor/destructor et al.
