@@ -87,6 +87,8 @@ proc versionLine(): string =
 # Environment
 # ------------------------------------------------------------------------------
 
+var balPrefetchPool {.threadvar.}: DetachedTaskpool
+
 proc prepareEnv(
     unit: UnitEnv, genesis: Header, opts: Options, taskpool: Taskpool
 ): Result[Env, string] =
@@ -113,6 +115,7 @@ proc prepareEnv(
   com.taskpool = taskpool
   com.db.mpt.taskpool = taskpool
   com.db.mpt.parallelStateRootComputation = true
+  com.balPrefetchPool = balPrefetchPool
 
   let env = Env(chain: ForkedChainRef.init(com))
 
@@ -577,6 +580,7 @@ proc worker(opts: Options) {.thread.} =
       except CatchableError as exc:
         results.send("Etaskpool: " & exc.msg)
         return
+    balPrefetchPool = DetachedTaskpool.new(2 * opts.threads)
 
     while true:
       let (ok, file) = work.tryRecv()
@@ -590,6 +594,7 @@ proc worker(opts: Options) {.thread.} =
         except CatchableError as exc:
           "E" & file & ": " & exc.msg
       results.send(output)
+    balPrefetchPool.shutdown()
     taskpool.shutdown()
 
 proc parseOptions(): tuple[opts: Options, paths: seq[string]] {.raises: [IOError].} =

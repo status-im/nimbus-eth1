@@ -33,7 +33,9 @@ type
   TestEnv* = ref object
     chain*: ForkedChainRef
 
-var sharedTaskpool: Taskpool
+var
+  sharedTaskpool: Taskpool
+  sharedBalPrefetchPool: DetachedTaskpool
 
 proc getSharedTaskpool(): Taskpool =
   ## Lazily create the single taskpool shared by the full test suite
@@ -45,6 +47,11 @@ proc getSharedTaskpool(): Taskpool =
       debugEcho "Failed to start taskpool: ", exc.msg
       quit(QuitFailure)
   sharedTaskpool
+
+proc getSharedBalPrefetchPool(): DetachedTaskpool =
+  if sharedBalPrefetchPool.isNil:
+    sharedBalPrefetchPool = DetachedTaskpool.new(2 * getSharedTaskpool().numThreads)
+  sharedBalPrefetchPool
 
 proc newForkedChain*(
     unit: UnitEnv,
@@ -81,6 +88,7 @@ proc newForkedChain*(
     let taskpool = getSharedTaskpool()
     com.taskpool = taskpool
     com.db.mpt.taskpool = taskpool
+    com.balPrefetchPool = getSharedBalPrefetchPool()
 
   ForkedChainRef.init(com, persistBatchSize = 1)
 
