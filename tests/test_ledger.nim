@@ -459,20 +459,18 @@ proc runLedgerBasicOperationsTests() =
       privateAccess(OriginalValueRef)
       var x = AccountRef(
         overlayStorage: Table[UInt256, UInt256](),
-        original: OriginalValueRef(
-          storage: Table[UInt256, UInt256]()
-        )
+        original: OriginalValueRef()
       )
 
       x.overlayStorage[10.u256] = 11.u256
       x.overlayStorage[11.u256] = 12.u256
 
-      x.original.storage[10.u256] = 11.u256
-      x.original.storage[11.u256] = 12.u256
+      x.original.txStorage[10.u256] = 11.u256
+      x.original.txStorage[11.u256] = 12.u256
 
       var y = x.clone(cloneStorage = true)
       y.overlayStorage[12.u256] = 13.u256
-      y.original.storage[12.u256] = 13.u256
+      y.original.txStorage[12.u256] = 13.u256
 
       check 12.u256 notin x.overlayStorage
       check 12.u256 in y.overlayStorage
@@ -480,11 +478,11 @@ proc runLedgerBasicOperationsTests() =
       check x.overlayStorage.len == 2
       check y.overlayStorage.len == 3
 
-      check 12.u256 in x.original.storage
-      check 12.u256 in y.original.storage
+      check 12.u256 in x.original.txStorage
+      check 12.u256 in y.original.txStorage
 
-      check x.original.storage.len == 3
-      check y.original.storage.len == 3
+      check x.original.txStorage.len == 3
+      check y.original.txStorage.len == 3
 
     test "Ledger various operations":
       var ledger = LedgerRef.init(memDB.baseTxFrame())
@@ -564,10 +562,12 @@ proc runLedgerBasicOperationsTests() =
       block:
         # Pre-state: bob holds code that is not in the database, as when a
         # witness omits it
-        let pre = LedgerRef.init(memDB.baseTxFrame())
-        pre.holdCode = true
-        pre.setCode(bob, code)
-        pre.persist(clearEmptyAccounts = false)
+        let frame = memDB.baseTxFrame()
+        frame
+          .mergeAccount(
+            bob.computeAccPath, CoreDbAccount(codeHash: keccak256(code)), true
+          )
+          .expect("ok")
 
       # A rolled back write must not serve the code
       let reverted = LedgerRef.init(memDB.baseTxFrame(), false, stateless = true)
@@ -697,6 +697,32 @@ proc runLedgerBasicOperationsTests() =
       check ledger.contractCollision(addr4) == false
       ledger.setNonce(addr4, 1)
       check ledger.contractCollision(addr4) == true
+
+    test "clearStorage flag does not leak into the next block":
+      var ledger = LedgerRef.init(memDB.baseTxFrame())
+      let target = initAddr(0x99)
+
+      # Block 1: create the account (NewlyCreated) with a committed storage value.
+      ledger.clearStorage(target) # marks the account NewlyCreated
+      ledger.setStorage(target, 1.u256, 100.u256)
+      ledger.persist(clearEmptyAccounts = false, hold = true)
+      ledger.persist(clearEmptyAccounts = false) # end of block -> persistHeld
+
+      # Block 2: the account is served from the warm cache. A new slot is
+      # written (as by a system call) and the slot committed in block 1 must
+      # still be readable.
+      ledger.setStorage(target, 2.u256, 200.u256)
+      check ledger.getStorage(target, 1.u256) == 100.u256
+      check ledger.getStorage(target, 2.u256) == 200.u256
+      ledger.persist(clearEmptyAccounts = false)
+
+      # A third block: the committed values are stable and the state root is
+      # unaffected by the flag having been consumed.
+      let stateRoot = ledger.getStateRoot()
+      let fresh = LedgerRef.init(memDB.baseTxFrame())
+      check: fresh.getStateRoot() == stateRoot
+      check: ledger.getStorage(target, 1.u256) == 100.u256
+      check: ledger.getStorage(target, 2.u256) == 200.u256
 
     test "Ledger storage iterator":
       var ledger = LedgerRef.init(memDB.baseTxFrame(), storeSlotHash = true)
