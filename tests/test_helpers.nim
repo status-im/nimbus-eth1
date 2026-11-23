@@ -15,27 +15,6 @@ import
   ../execution_chain/networking/[netkeys, p2p],
   ./eest/path_handler
 
-const
-  nameToFork* = {
-    "Frontier"         : Frontier,
-    "Homestead"        : Homestead,
-    "EIP150"           : Tangerine,
-    "EIP158"           : Spurious,
-    "Byzantium"        : Byzantium,
-    "Constantinople"   : Constantinople,
-    "ConstantinopleFix": Petersburg,
-    "Istanbul"         : Istanbul,
-    "Berlin"           : Berlin,
-    "London"           : London,
-    "Merge"            : MergeFork,
-    "Shanghai"         : Shanghai,
-    "Cancun"           : Cancun,
-    "Prague"           : Prague,
-    "Osaka"            : Osaka,
-    "Amsterdam"        : Amsterdam,
-    "Bogota"           : Bogota,
-  }.toTable
-
 func skipNothing*(folder: string, name: string): bool = false
 
 var status = initOrderedTable[string, OrderedTable[string, Status]]()
@@ -109,7 +88,7 @@ func getHexadecimalInt*(j: JsonNode): int64 =
   result = cast[int64](data)
 
 proc setupEthNode*(
-    config: ExecutionClientConf, 
+    config: ExecutionClientConf,
     params: NetworkParams,
     rng: var HmacDrbgContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
