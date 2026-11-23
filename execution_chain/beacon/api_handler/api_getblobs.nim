@@ -76,7 +76,7 @@ proc getBlobsV4*(ben: BeaconEngineRef,
   if versionedHashes.len > 128:
     raise tooLargeRequest("the number of requested blobs is too large")
 
-  if ben.latestFork < Amsterdam:
+  if ben.latestFork < Osaka:
     raise unsupportedFork(
       "getBlobsV4 called before Amsterdam has been activated")
 
