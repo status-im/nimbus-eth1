@@ -17,47 +17,33 @@ import
 type
   SideTaskpoolObj = object
     pool: Taskpool
-    numWorkers: int
-    ready: Atomic[bool]
-    failed: Atomic[bool]
-    stop: Atomic[bool]
-    thread: Thread[ptr SideTaskpoolObj]
+    running: Atomic[bool]
+    thread: Thread[(ptr SideTaskpoolObj, int)]
 
   SideTaskpool* = ptr SideTaskpoolObj
 
-proc ownerThread(p: ptr SideTaskpoolObj) {.thread.} =
-  var tp: Taskpool
+proc ownerThread(args: (ptr SideTaskpoolObj, int)) {.thread.} =
+  let (p, numWorkers) = args
   try:
-    tp = Taskpool.new(numThreads = p[].numWorkers + 1)
-  except CatchableError:
-    p[].failed.store(true, moRelease)
-    p[].ready.store(true, moRelease)
-    return
+    p[].pool = Taskpool.new(numThreads = numWorkers + 1)
+  except CatchableError as exc:
+    raiseAssert exc.msg
+  p[].running.store(true, moRelease)
 
-  p[].pool = tp
-  p[].ready.store(true, moRelease)
-
-  while not p[].stop.load(moAcquire):
+  while p[].running.load(moAcquire):
     sleep(50)
 
-  tp.shutdown()
+  p[].pool.shutdown()
 
 proc new*(T: type SideTaskpool, numWorkers: int): T =
   let p = createShared(SideTaskpoolObj)
-  p[].numWorkers = numWorkers
   try:
-    createThread(p[].thread, ownerThread, p)
-  except ResourceExhaustedError:
-    deallocShared(p)
-    return nil
+    createThread(p[].thread, ownerThread, (p, numWorkers))
+  except ResourceExhaustedError as exc:
+    raiseAssert exc.msg
 
-  while not p[].ready.load(moAcquire):
+  while not p[].running.load(moAcquire):
     sleep(1)
-
-  if p[].failed.load(moAcquire):
-    joinThread(p[].thread)
-    deallocShared(p)
-    return nil
 
   p
 
@@ -65,11 +51,9 @@ func taskpool*(p: SideTaskpool): Taskpool =
   p[].pool
 
 func numWorkers*(p: SideTaskpool): int =
-  p[].numWorkers
+  p[].pool.numThreads - 1
 
 proc shutdown*(p: SideTaskpool) =
-  if p.isNil():
-    return
-  p[].stop.store(true, moRelease)
+  p[].running.store(false, moRelease)
   joinThread(p[].thread)
   deallocShared(p)

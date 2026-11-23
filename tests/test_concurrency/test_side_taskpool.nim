@@ -24,9 +24,7 @@ suite "SideTaskpool":
   test "Spawn from the root thread of another taskpool":
     var shared = Taskpool.new(numThreads = 2)
     let side = SideTaskpool.new(4)
-    check:
-      not side.isNil()
-      side.numWorkers == 4
+    check side.numWorkers == 4
 
     var counter: Atomic[int]
     var futs = newSeq[Flowvar[int]](100)
