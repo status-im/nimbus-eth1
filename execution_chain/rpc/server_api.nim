@@ -403,18 +403,19 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
           return nil
         tx = api.chain.txByBlockHashAndIndex(blockHash, txid).valueOr:
           return nil
-        receipt = api.chain.receiptByBlockHashAndIndex(blockHash, txid).valueOr:
+        receipts = api.chain.receiptsByBlockHash(blockHash).valueOr:
           return nil
-        prevGasUsed =
-          if txid == 0:
-            0'u64
-          else:
-            let prev = api.chain.receiptByBlockHashAndIndex(blockHash, txid - 1).valueOr:
-              return nil
-            prev.cumulativeGasUsed
 
-      return populateReceipt(receipt, receipt.cumulativeGasUsed - prevGasUsed,
-                            tx, txid, header, api.com)
+      if txid >= receipts.len.uint64:
+        return nil
+
+      var firstLogIndex = 0'u64
+      for i in 0'u64 ..< txid:
+        firstLogIndex += receipts[i].logs.len.uint64
+
+      let prevGasUsed = if txid == 0: 0'u64 else: receipts[txid - 1].cumulativeGasUsed
+      return populateReceipt(receipts[txid], receipts[txid].cumulativeGasUsed - prevGasUsed,
+                            tx, txid, firstLogIndex, header, api.com)
 
     proc eth_estimateGas(
         args: TransactionArgs, blockTag: Opt[BlockTag]
@@ -699,13 +700,16 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         prevGasUsed = GasInt(0)
         recs: seq[ReceiptObject]
         index = 0'u64
+        logIndex = 0'u64
 
       try:
         for receipt in receipts:
           let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
           prevGasUsed = receipt.cumulativeGasUsed
-          recs.add populateReceipt(receipt, gasUsed, blk.transactions[index], index, blk.header, api.com)
+          recs.add populateReceipt(receipt, gasUsed, blk.transactions[index], index,
+                                   logIndex, blk.header, api.com)
           inc index
+          logIndex += receipt.logs.len.uint64
         return Opt.some(recs)
       except CatchableError:
         return Opt.none(seq[ReceiptObject])
