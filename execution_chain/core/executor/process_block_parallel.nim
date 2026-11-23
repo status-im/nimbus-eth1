@@ -261,12 +261,12 @@ template withBalPrefetchParallel*(
 
   let
     ctxPtr = ctx.addr
-    sidePool = vmState.com.balPrefetchPool
+    balPrefetchPool = vmState.com.balPrefetchPool
     (pool, n) =
-      if sidePool.isNil():
+      if balPrefetchPool.isNil():
         (vmState.com.taskpool, vmState.com.taskpool.numThreads)
       else:
-        (sidePool.taskpool, sidePool.numWorkers)
+        (balPrefetchPool.taskpool, balPrefetchPool.numWorkers)
     configured = vmState.com.balStatePrefetchWorkers
     numWorkers =
       if configured <= 0:

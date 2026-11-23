@@ -8,6 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+## A taskpool owned by a dedicated thread. nim-taskpools keeps its worker
+## context in a threadvar, so `Taskpool.new` makes the calling thread the root
+## of the new pool and a thread can only be the root of one pool. The main
+## thread is already the root of the shared taskpool, so this pool is created
+## and shut down on its own thread while other threads submit work to it.
+##
+## TODO: Fix nim-taskpools so that multiple taskpools can be created from the
+## same thread, if possible, and then remove this type.
+
 {.push raises: [], gcsafe.}
 
 import
@@ -15,14 +24,14 @@ import
   taskpools
 
 type
-  SideTaskpoolObj = object
+  DetachedTaskpoolObj = object
     pool: Taskpool
     running: Atomic[bool]
-    thread: Thread[(ptr SideTaskpoolObj, int)]
+    thread: Thread[(ptr DetachedTaskpoolObj, int)]
 
-  SideTaskpool* = ptr SideTaskpoolObj
+  DetachedTaskpool* = ptr DetachedTaskpoolObj
 
-proc ownerThread(args: (ptr SideTaskpoolObj, int)) {.thread.} =
+proc ownerThread(args: (ptr DetachedTaskpoolObj, int)) {.thread.} =
   let (p, numWorkers) = args
   try:
     p[].pool = Taskpool.new(numThreads = numWorkers + 1)
@@ -35,8 +44,8 @@ proc ownerThread(args: (ptr SideTaskpoolObj, int)) {.thread.} =
 
   p[].pool.shutdown()
 
-proc new*(T: type SideTaskpool, numWorkers: int): T =
-  let p = createShared(SideTaskpoolObj)
+proc new*(T: type DetachedTaskpool, numWorkers: int): T =
+  let p = createShared(DetachedTaskpoolObj)
   try:
     createThread(p[].thread, ownerThread, (p, numWorkers))
   except ResourceExhaustedError as exc:
@@ -47,13 +56,13 @@ proc new*(T: type SideTaskpool, numWorkers: int): T =
 
   p
 
-func taskpool*(p: SideTaskpool): Taskpool =
+func taskpool*(p: DetachedTaskpool): Taskpool =
   p[].pool
 
-func numWorkers*(p: SideTaskpool): int =
+func numWorkers*(p: DetachedTaskpool): int =
   p[].pool.numThreads - 1
 
-proc shutdown*(p: SideTaskpool) =
+proc shutdown*(p: DetachedTaskpool) =
   p[].running.store(false, moRelease)
   joinThread(p[].thread)
   deallocShared(p)

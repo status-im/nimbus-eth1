@@ -429,7 +429,7 @@ proc setupCommonRef*(
           config.balStatePrefetchWorkers
         else:
           2 * max(1, numThreads)
-      com.balPrefetchPool = SideTaskpool.new(threads)
+      com.balPrefetchPool = DetachedTaskpool.new(threads)
       info "BAL state prefetch thread pool started", threads
 
   if config.extraData.len > 32:

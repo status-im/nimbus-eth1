@@ -14,22 +14,22 @@ import
   std/atomics,
   unittest2,
   taskpools,
-  ../../execution_chain/concurrency/side_taskpool
+  ../../execution_chain/concurrency/detached_taskpool
 
 proc addTask(counter: ptr Atomic[int], v: int): int {.nimcall.} =
   discard counter[].fetchAdd(v, moRelaxed)
   v * 2
 
-suite "SideTaskpool":
+suite "DetachedTaskpool":
   test "Spawn from the root thread of another taskpool":
     var shared = Taskpool.new(numThreads = 2)
-    let side = SideTaskpool.new(4)
-    check side.numWorkers == 4
+    let detached = DetachedTaskpool.new(4)
+    check detached.numWorkers == 4
 
     var counter: Atomic[int]
     var futs = newSeq[Flowvar[int]](100)
     for i in 0 ..< futs.len:
-      futs[i] = side.taskpool.spawn addTask(counter.addr, i)
+      futs[i] = detached.taskpool.spawn addTask(counter.addr, i)
 
     var total = 0
     for f in futs.mitems():
@@ -39,5 +39,5 @@ suite "SideTaskpool":
       total == 2 * (99 * 100 div 2)
       counter.load() == 99 * 100 div 2
 
-    side.shutdown()
+    detached.shutdown()
     shared.shutdown()
