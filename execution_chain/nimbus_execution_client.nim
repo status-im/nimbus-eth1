@@ -423,11 +423,18 @@ proc setupCommonRef*(
     emptyStateDb = emptyStateDb)
 
   when compileOption("threads"):
-    if com.balStatePrefetch and config.balStatePrefetchThreads > 0:
-      com.balPrefetchPool = SideTaskpool.new(config.balStatePrefetchThreads)
+    if com.balStatePrefetch:
+      let prefetchThreads =
+        if config.balStatePrefetchThreads > 0:
+          config.balStatePrefetchThreads
+        else:
+          2 * max(1, numThreads)
+      com.balPrefetchPool = SideTaskpool.new(prefetchThreads)
       if com.balPrefetchPool.isNil():
         warn "Failed to create the BAL state prefetch thread pool",
-          threads = config.balStatePrefetchThreads
+          threads = prefetchThreads
+      else:
+        info "BAL state prefetch thread pool started", threads = prefetchThreads
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
