@@ -295,6 +295,10 @@ proc runJwtAuth(noisy = defined(debug); keyFile = jwtKeyFile) =
       check getStatus("http://" & $server.localAddress & "/engine/v1/capabilities",
                       []) == 403
 
+    test "iat beyond the int64 range is forbidden":
+      let headers = secret.value.getHttpAuthReqHeader(high(uint64))
+      check getStatus("http://" & $server.localAddress, headers.toList) == 403
+
     waitFor server.closeWait()
 
 # ------------------------------------------------------------------------------
