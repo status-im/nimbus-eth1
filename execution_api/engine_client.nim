@@ -82,6 +82,14 @@ proc forkchoiceUpdatedV4*(client: RpcClient,
   wrapTrySimpleRes:
     client.engine_forkchoiceUpdatedV4(update, payloadAttributes, custodyColumns)
 
+proc forkchoiceUpdatedV5*(client: RpcClient,
+      update: ForkchoiceState,
+      payloadAttributes = Opt.none(PayloadAttributes),
+      custodyColumns = Opt.none(FixedBytes[16])):
+        Result[ForkchoiceUpdatedResponse, string] =
+  wrapTrySimpleRes:
+    client.engine_forkchoiceUpdatedV5(update, payloadAttributes, custodyColumns)
+
 proc forkchoiceUpdated*(client: RpcClient,
                         version: Version,
                         update: ForkchoiceState,
@@ -93,7 +101,8 @@ proc forkchoiceUpdated*(client: RpcClient,
   of Version.V2: return client.forkchoiceUpdatedV2(update, attr)
   of Version.V3: return client.forkchoiceUpdatedV3(update, attr)
   of Version.V4: return client.forkchoiceUpdatedV4(update, attr, custodyColumns)
-  of Version.V5, Version.V6: discard
+  of Version.V5: return client.forkchoiceUpdatedV5(update, attr, custodyColumns)
+  of Version.V6: discard
 
 proc getPayloadV1*(client: RpcClient, payloadId: Bytes8): Result[ExecutionPayloadV1, string] =
   wrapTrySimpleRes:
@@ -216,6 +225,17 @@ proc newPayloadV5*(client: RpcClient,
     client.engine_newPayloadV5(payload, versionedHashes,
       parentBeaconBlockRoot, executionRequests)
 
+proc newPayloadV6*(client: RpcClient,
+      payload: ExecutionPayloadV4,
+      versionedHashes: seq[VersionedHash],
+      parentBeaconBlockRoot: Hash32,
+      executionRequests: seq[seq[byte]],
+      inclusionList: InclusionList):
+        Result[PayloadStatusV2, string] =
+  wrapTrySimpleRes:
+    client.engine_newPayloadV6(payload, versionedHashes,
+      parentBeaconBlockRoot, executionRequests, inclusionList)
+
 proc newPayloadV1*(client: RpcClient,
       payload: ExecutionPayload):
         Result[PayloadStatus, string] =
@@ -257,6 +277,17 @@ proc newPayloadV5*(client: RpcClient,
     client.engine_newPayloadV5(payload, versionedHashes,
       parentBeaconBlockRoot, executionRequests)
 
+proc newPayloadV6*(client: RpcClient,
+      payload: ExecutionPayload,
+      versionedHashes: Opt[seq[VersionedHash]],
+      parentBeaconBlockRoot: Opt[Hash32],
+      executionRequests: Opt[seq[seq[byte]]],
+      inclusionList: Opt[InclusionList]):
+        Result[PayloadStatus, string] =
+  wrapTrySimpleRes:
+    client.engine_newPayloadV6(payload, versionedHashes,
+      parentBeaconBlockRoot, executionRequests, inclusionList)
+
 proc newPayload*(client: RpcClient,
                  version: Version,
                  payload: ExecutableData): Result[PayloadStatus, string] =
@@ -279,7 +310,12 @@ proc newPayload*(client: RpcClient,
       payload.versionedHashes,
       payload.beaconRoot,
       payload.executionRequests)
-  of Version.V6: discard
+  of Version.V6:
+    return client.newPayloadV6(payload.basePayload,
+      payload.versionedHashes,
+      payload.beaconRoot,
+      payload.executionRequests,
+      payload.inclusionList)
 
 proc getPayloadBodiesByHashV2*(client: RpcClient, hashes: seq[Hash32]): Result[seq[Opt[ExecutionPayloadBodyV2]], string] =
   wrapTrySimpleRes:

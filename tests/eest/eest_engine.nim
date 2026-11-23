@@ -58,6 +58,13 @@ proc sendNewPayload(env: RpcTestEnv, version: uint64, param: PayloadParam): Resu
       param.versionedHashes,
       param.parentBeaconBlockRoot,
       param.executionRequests)
+  elif version == 6:
+    env.client.get().newPayloadV6(
+      param.payload,
+      param.versionedHashes,
+      param.parentBeaconBlockRoot,
+      param.executionRequests,
+      param.inclusionList)
   else:
     err("Unsupported NewPayload version: " & $version)
 
@@ -71,13 +78,15 @@ proc sendFCU(env: RpcTestEnv, version: uint64, param: PayloadParam): Result[Fork
   )
 
   if version == 1:
-    env.client.get().forkchoiceUpdatedV1(update)
+    env.client.get().forkchoiceUpdated(Version.V1, update)
   elif version == 2:
-    env.client.get().forkchoiceUpdatedV2(update)
+    env.client.get().forkchoiceUpdated(Version.V2, update)
   elif version == 3:
-    env.client.get().forkchoiceUpdatedV3(update)
+    env.client.get().forkchoiceUpdated(Version.V3, update)
   elif version == 4:
-    env.client.get().forkchoiceUpdatedV4(update)
+    env.client.get().forkchoiceUpdated(Version.V4, update)
+  elif version == 5:
+    env.client.get().forkchoiceUpdated(Version.V5, update)
   else:
     err("Unsupported FCU version: " & $version)
 
@@ -108,6 +117,10 @@ proc runTest(env: RpcTestEnv, unit: EngineUnitEnv): Result[void, string] =
     else:
       if enp.validationError.isSome:
         return err("Expect validation error: " & enp.validationError.value & ", but got none")
+
+    if enp.inclusionListSatisfied != status.inclusionListSatisfied:
+      return err("Expect inclusionListSatisfied: " & $enp.inclusionListSatisfied &
+        ", but got: " & $status.inclusionListSatisfied)
 
     let y = env.sendFCU(enp.forkchoiceUpdatedVersion.uint64, enp.params).valueOr:
       return err(error)

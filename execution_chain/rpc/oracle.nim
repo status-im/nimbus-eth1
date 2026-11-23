@@ -9,7 +9,6 @@
 
 import
   std/[hashes, algorithm],
-  eth/eip1559,
   stew/keyed_queue,
   stew/endians2,
   results,
@@ -17,6 +16,7 @@ import
   ../common/common,
   ../core/eip4844,
   ../core/eip7691,
+  ../core/gaslimit,
   ../core/chain/forked_chain
 
 from ./rpc_types import
@@ -83,13 +83,13 @@ func toBytes(list: openArray[float64]): seq[byte] =
     result.add(cast[uint64](x).toBytesLE)
 
 func calcBaseFee(com: CommonRef, bc: BlockContent): UInt256 =
-  if com.isLondonOrLater(bc.blockNumber + 1, bc.header.timestamp):
-    calcEip1599BaseFee(
-      bc.header.gasLimit,
-      bc.header.gasUsed,
-      bc.header.baseFeePerGas.get(0.u256))
-  else:
-    0.u256
+  # TODO: EIP-8198: where nextHeader info came from?
+  let nextHeader = Header(
+    number: bc.header.number + 1,
+    timestamp: bc.header.timestamp,
+    slotNumber: bc.header.slotNumber
+  )
+  com.calcBaseFee(bc.header, nextHeader)
 
 # processBlock takes a blockFees structure with the blockNumber, the header and optionally
 # the block field filled in, retrieves the block from the backend if not present yet and
