@@ -93,7 +93,6 @@ proc setupManager(pm: PeerManagerRef, boot: BootstrapNodes) =
       pm.state = Running
       pm.reconnectFut = pm.runReconnectLoop()
 
-  po.addProtocol eth68
   po.addProtocol eth69
   po.addProtocol eth70
   po.addProtocol eth71

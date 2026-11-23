@@ -292,7 +292,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     client = setupClient(server.localAddress[0].port)
     rng    = newRng()
     am     = new AccountsManager
-    node   = setupEthNode(conf, params, rng[], eth68, eth69)
+    node   = setupEthNode(conf, params, rng[], eth69)
     nimbus = NimbusNode(
       ethNode: node,
     )

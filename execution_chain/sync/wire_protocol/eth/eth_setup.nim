@@ -33,7 +33,6 @@ proc addEthHandlerCapability*(
   node.addCapability(eth71, wire)
   node.addCapability(eth70, wire)
   node.addCapability(eth69, wire)
-  node.addCapability(eth68, wire)
   wire
 
 # ------------------------------------------------------------------------------
