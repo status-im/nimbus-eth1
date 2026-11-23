@@ -471,6 +471,25 @@ proc runZeroFinalizedHashSyncTest(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc payloadIdTargetGasLimitTest(env: TestEnv): Result[void, string] =
+  let
+    header = ? env.client.latestHeader()
+    update = ForkchoiceState(headBlockHash: header.computeBlockHash)
+  var attr = PayloadAttributes(
+    timestamp:             w3Qty(getTime().toUnix + 1),
+    withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+    parentBeaconBlockRoot: Opt.some(default(Hash32)),
+    slotNumber:            Opt.some(w3Qty(1'u64)),
+    targetGasLimit:        Opt.some(w3Qty(60_000_000'u64)),
+  )
+  let first = ? env.client.forkchoiceUpdated(Version.V4, update, Opt.some(attr))
+  attr.targetGasLimit = Opt.some(w3Qty(100_000_000'u64))
+  let second = ? env.client.forkchoiceUpdated(Version.V4, update, Opt.some(attr))
+
+  if first.payloadId == second.payloadId:
+    return err("Expect distinct payloadIds for distinct targetGasLimits")
+  ok()
+
 proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
   # Regression: when two VALID sibling payloads exist at the same height, the
   # payload built for a forkchoiceUpdated carrying attributes must sit on the
@@ -911,6 +930,11 @@ const testList = [
     name: "Zero finalized hash starts sync to a head with a missing parent",
     fork: MergeFork,
     testProc: runZeroFinalizedHashSyncTest
+  ),
+  TestSpec(
+    name: "payloadId depends on targetGasLimit",
+    fork: Amsterdam,
+    testProc: payloadIdTargetGasLimitTest
   ),
   TestSpec(
     name: "newPayloadV4",
