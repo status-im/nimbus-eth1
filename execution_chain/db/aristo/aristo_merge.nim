@@ -88,7 +88,7 @@ proc mergeLeaf[LeafType, T](
     for i in 1..vids.len:
       db.layersResKey((root, vids[^i]), vtxs[^i])
 
-  while pos < path.len:
+  while pos <= path.len:
     var psuffix = path.slice(pos)
     let n = psuffix.sharedPrefixLen(vtx.pfx)
     case vtx.vType

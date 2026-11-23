@@ -194,6 +194,16 @@ suite "Aristo compute":
     let w = txFrame.computeKey((root, root)).value.to(Hash32)
     check w == samples[^1][^1][2]
 
+  test "Update leaf whose path differs from a sibling only in the last nibble":
+    let
+      txFrame = AristoDbRef.init().txRef
+      p1 = hash32"0000000000000000000000000000000000000000000000000000000000000001"
+      p2 = hash32"0000000000000000000000000000000000000000000000000000000000000002"
+
+    for (path, balance) in [(p1, 1), (p2, 1), (p1, 2)]:
+      let acc = AristoAccount(balance: balance.u256, codeHash: EMPTY_CODE_HASH)
+      check txFrame.mergeAccount(path, acc, false).isOk()
+
   test "Max size RLP encoding of all MPT node types":
     ## This test exercises the RlpArrayBufWriter stack-allocated buffer paths in
     ## aristo_compute.nim by constructing a trie that produces the largest
