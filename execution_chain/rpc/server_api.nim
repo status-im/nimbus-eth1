@@ -198,6 +198,9 @@ template sign(privateKey: PrivateKey, message: string): seq[byte] =
   let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
   @(sign(privateKey, msgData.toBytes()).toRaw())
 
+func newGenericException(msg: sink string): ref RpcResponseError =
+  new(RpcResponseError, SERVER_ERROR, msg)
+
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
   server.rpc(EthJson):
     proc eth_getBalance(data: Address, blockTag: Opt[BlockTag]): UInt256 {.raises: [ValueError].} =
@@ -367,7 +370,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
       txHash
 
-    proc eth_call(args: TransactionArgs, blockTag: Opt[BlockTag]): seq[byte] {.raises: [RpcResponseError, ValueError].} =
+    proc eth_call(args: TransactionArgs, blockTag: Opt[BlockTag]): seq[byte] {.raises: [RpcResponseError].} =
       ## Executes a new message call immediately without creating a transaction on the block chain.
       ##
       ## call: the transaction call object.
@@ -375,11 +378,11 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       ## Returns the return value of executed contract.
       let
         header = api.headerFromTag(blockTag.get(defaultTag)).valueOr:
-          raise newException(ValueError, "Block not found")
+          raise newGenericException("Block not found")
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
         res = rpcCallEvm(args, header, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
-          raise newException(ValueError, "rpcCallEvm error: " & error)
+          raise newGenericException("rpcCallEvm error: " & error)
       if res.isError:
         if res.status == StatusCode.Revert and res.output.len > 0:
           raise (ref RpcResponseError)(
@@ -387,7 +390,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
             msg: res.error,
             data: EthJson.encode(res.output.to0xHex()).JsonString,
           )
-        raise newException(ValueError, res.error)
+        raise newGenericException(res.error)
       res.output
 
     proc eth_getTransactionReceipt(data: Hash32): ReceiptObject =
@@ -418,7 +421,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     proc eth_estimateGas(
         args: TransactionArgs, blockTag: Opt[BlockTag]
-    ): Quantity {.raises: [RpcResponseError, ValueError].} =
+    ): Quantity {.raises: [RpcResponseError].} =
       ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
       ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
       ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
@@ -427,20 +430,22 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       ## blockTag: integer block number, block hash, or the string "latest", "earliest" or "pending", see the default block parameter.
       ## Returns the amount of gas used.
       let header = api.headerFromTag(blockTag.get(defaultTag)).valueOr:
-        raise newException(ValueError, "Block not found")
+        raise newGenericException("Block not found")
       if header.number < api.chain.baseNumber:
-        raise newException(ValueError, "Historical data not available")
+        raise newGenericException("Historical data not available")
       let
         headerHash = header.computeBlockHash
         txFrame = api.chain.txFrame(headerHash)
-        # TODO: change 0 to configureable gas cap
         gasUsed = rpcEstimateGas(args, header, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
-          let data = EthJson.encode(error.output.to0xHex()).JsonString
-          raise (ref RpcResponseError)(
-            code: 3,
-            msg: error.error,
-            data: data,
-          )
+          if error.output.len == 0:
+            raise newGenericException(error.error)
+          else:
+            let data = EthJson.encode(error.output.to0xHex()).JsonString
+            raise (ref RpcResponseError)(
+              code: 3,
+              msg: error.error,
+              data: data,
+            )
       Quantity(gasUsed)
 
     proc eth_gasPrice(): Quantity {.raises: [ValueError].} =
@@ -712,14 +717,12 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     proc eth_createAccessList(
       args: TransactionArgs, quantityTag: Opt[BlockTag]
-    ): AccessListResult {.raises: [ValueError].} =
+    ): AccessListResult {.raises: [RpcResponseError].} =
       ## Generates an access list for a transaction.
-      try:
-        let header = api.headerFromTag(quantityTag.get(defaultTag)).valueOr:
-          raise newException(ValueError, "Block not found")
-        return createAccessList(header, api.com, api.chain, args)
-      except CatchableError as exc:
-        return AccessListResult(error: Opt.some("createAccessList error: " & exc.msg))
+      let header = api.headerFromTag(quantityTag.get(defaultTag)).valueOr:
+        raise newGenericException("Block not found")
+      result = createAccessList(header, api.com, api.chain, args).valueOr:
+        raise newGenericException(error)
 
     proc eth_baseFee(): UInt256 {.raises: [ValueError].} =
       ## Returns the base fee per gas of the next block in wei.
