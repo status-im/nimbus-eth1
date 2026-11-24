@@ -1201,6 +1201,20 @@ proc rpcMain*() =
           l.logIndex.get() == w3Qty(i.uint64)
         inc i
 
+    test "receipt logIndex is the position of the log in the block":
+      let recs = (await fixtureClient.eth_getBlockReceipts(
+        blockId(getBlockHeader4514995().number))).get
+
+      var logIndex = 0'u64
+      for rec in recs:
+        let single = await fixtureClient.eth_getTransactionReceipt(rec.transactionHash)
+        check single.logs.len == rec.logs.len
+        for i, log in rec.logs:
+          check log.logIndex.get == w3Qty(logIndex)
+          check single.logs[i].logIndex == log.logIndex
+          inc logIndex
+      check logIndex == 54
+
     test "eth_getLogs by blockhash, filter logs at specific positions":
       let testHeader = getBlockHeader4514995()
       let testHash = testHeader.computeBlockHash

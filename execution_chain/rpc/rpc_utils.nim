@@ -218,7 +218,9 @@ proc populateBlockObject*(blockHash: Hash32,
   result.slotNumber = header.slotNumber
 
 proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
-                      txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
+                      txIndex, firstLogIndex: uint64, header: Header,
+                      com: CommonRef): ReceiptObject =
+  ## `firstLogIndex` is the number of logs in the receipts before `rec`
   let
     sender = tx.recoverSenderCached()
     receipt = rec.to(Receipt)
@@ -238,7 +240,7 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
   if tx.contractCreation and sender.isSome:
     res.contractAddress = Opt.some(tx.creationAddress(sender[]))
 
-  for log in receipt.logs:
+  for i, log in receipt.logs:
     # TODO: Work everywhere with either `Hash32` as topic or `array[32, byte]`
     var topics: seq[Bytes32]
     for topic in log.topics:
@@ -246,9 +248,7 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
 
     let logObject = FilterLog(
       removed: false,
-      # TODO: Not sure what is difference between logIndex and TxIndex and how
-      # to calculate it.
-      logIndex: Opt.some(res.transactionIndex),
+      logIndex: Opt.some(Quantity(firstLogIndex + i.uint64)),
       # Note: the next 4 fields cause a lot of duplication of data, but the spec
       # is what it is. Not sure if other clients actually add this.
       transactionIndex: Opt.some(res.transactionIndex),
