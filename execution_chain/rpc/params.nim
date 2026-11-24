@@ -52,6 +52,9 @@ proc toTransaction*(vmState: BaseVMState,
   if args.authorizationList.isSome and vmState.fork < FkPrague:
     return err("authorizationList field before Prague")
 
+  if (args.frames.isSome or args.signatures.isSome) and vmState.fork < FkBogota:
+    return err("frames or signatures field before Bogota")
+
   # Reject invalid combinations of pre- and post-1559 fee styles
   if args.gasPrice.isSome and
     (args.maxFeePerGas.isSome or args.maxPriorityFeePerGas.isSome):
