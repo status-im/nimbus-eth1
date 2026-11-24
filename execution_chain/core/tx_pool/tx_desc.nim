@@ -423,7 +423,6 @@ proc addTxImpl(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     intrinsic,
     xp.hardFork,
     validateFork = true).isOkOr:
-    debugEcho "EEE: ", error
     debug "Invalid transaction: Basic validation failed",
       txHash = id,
       error = error
