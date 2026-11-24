@@ -1009,6 +1009,28 @@ suite "ForkedChainRef tests":
     check chain.heads.len == 1
     check chain.validate info & " (9)"
 
+  test "forkChoice moves finality back to an earlier block":
+    const info = "finality moves back"
+    let com = env.newCom()
+    let chain = ForkedChainRef.init(com)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, blk5)
+    checkImportBlock(chain, blk6)
+    checkImportBlock(chain, blk7)
+
+    # As `resolveFinHash` does for a finalized hash already in memory
+    check chain.tryUpdatePendingFCU(blk6.blockHash, blk6.header.number)
+    checkForkChoice(chain, blk7, blk6)
+    check chain.finalizedHeader.number == 6'u64
+
+    check chain.tryUpdatePendingFCU(blk1.blockHash, blk1.header.number)
+    checkForkChoice(chain, blk7, blk1)
+    check chain.finalizedHeader.number == 1'u64
+    check chain.validate info & " (1)"
+
   test "newBase move forward, auto mode":
     const info = "newBase move forward, auto mode"
     let com = env.newCom()
