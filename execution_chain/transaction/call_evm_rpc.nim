@@ -43,6 +43,12 @@ proc callVMState(
 
   vmState
 
+func checkGasLimit(tx: Transaction, intrinsic: IntrinsicGas): Result[void, string] =
+  if tx.gasLimit < intrinsic.minGasLimit:
+    return err("insufficient gas for intrinsic cost or calldata floor: have " &
+      $tx.gasLimit & ", want " & $intrinsic.minGasLimit)
+  ok()
+
 proc rpcCallEvm*(
     args: TransactionArgs,
     header: Header,
@@ -63,7 +69,8 @@ proc rpcCallEvm*(
   let
     tx = ? toTransaction(vmState, args, globalGasCap)
     intrinsic = tx.intrinsicGas(vmState.hardFork, args.sender)
-    params = tx.callParams(args.sender, vmState, intrinsic)
+  ? tx.checkGasLimit(intrinsic)
+  let params = tx.callParams(args.sender, vmState, intrinsic)
 
   ok(runComputation(params, CallResult))
 
@@ -74,7 +81,8 @@ proc rpcCallEvm*(
   let
     tx = ? toTransaction(vmState, args, globalGasCap)
     intrinsic = tx.intrinsicGas(vmState.hardFork, args.sender)
-    params = tx.callParams(args.sender, vmState, intrinsic)
+  ? tx.checkGasLimit(intrinsic)
+  let params = tx.callParams(args.sender, vmState, intrinsic)
   ok(runComputation(params, CallResult))
 
 proc rpcEstimateGas*(
@@ -133,7 +141,7 @@ proc rpcEstimateGas*(
     hi = gasCap
 
   let
-    minGasLimit = max(intrinsic.execution, intrinsic.floorDataGas)
+    minGasLimit = intrinsic.minGasLimit
 
   # Create a helper to check if a gas allowance results in an executable transaction
   proc executable(gasLimit: GasInt): Result[CallResult, OutputResult] =

@@ -375,6 +375,8 @@ proc exec(ctx: TransContext,
     ledger = vmState.ledger
     output = ExecOutput()
 
+  ledger.persist(vmState.fork.clearEmptyAccounts())
+
   ledger.postState(output.alloc)
   output.result = ExecutionResult(
     stateRoot   : ledger.getStateRoot(),

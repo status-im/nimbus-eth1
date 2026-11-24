@@ -109,7 +109,7 @@ proc getDispatcher(
   var protoFamilySeen = "" # does not match anything
   for localProtocol in node.protocols:
     #
-    # One must pick only one for each proto family (e.g. eth/69, eth/68). The
+    # One must pick only one for each proto family (e.g. eth/71, eth/70). The
     # protocol families are grouped together in `node.protocols[]` so that only
     # the previous family needs to be checked for avoiding duplicates.
     if localProtocol.capability.name != protoFamilySeen:

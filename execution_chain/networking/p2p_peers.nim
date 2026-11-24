@@ -64,7 +64,7 @@ type
     dispatcher*: DispatcherRef[PeerRef[Network], Network]
     lastReqId*: Opt[uint64]
     connectionState*: ConnectionState
-    peerStates*: array[MAX_PROTOCOLS, RootRef] # e.g. Eth69State or Eth68State
+    peerStates*: array[MAX_PROTOCOLS, RootRef] # e.g. Eth69PeerState
     perMsgId*: seq[PerMsgId]
     disconnectPeer*: DisconnectPeer[PeerRef[Network]]
     snappyEnabled*: bool
