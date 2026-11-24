@@ -719,14 +719,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
       args: TransactionArgs, quantityTag: Opt[BlockTag]
     ): AccessListResult {.raises: [RpcResponseError].} =
       ## Generates an access list for a transaction.
-      #try:
-      block xzy:
-        let header = api.headerFromTag(quantityTag.get(defaultTag)).valueOr:
-          raise newGenericException("Block not found")
-        result = createAccessList(header, api.com, api.chain, args).valueOr:
-          raise newGenericException(error)
-      #except CatchableError as exc:
-        #return AccessListResult(error: Opt.some("createAccessList error: " & exc.msg))
+      let header = api.headerFromTag(quantityTag.get(defaultTag)).valueOr:
+        raise newGenericException("Block not found")
+      result = createAccessList(header, api.com, api.chain, args).valueOr:
+        raise newGenericException(error)
 
     proc eth_baseFee(): UInt256 {.raises: [ValueError].} =
       ## Returns the base fee per gas of the next block in wei.
