@@ -204,9 +204,12 @@ func firstBalIndex(sc: SlotChanges): BlockAccessIndex =
   sc.changes[0].blockAccessIndex
 
 proc balPrefetchWorker*(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
+  template isCancelled(): bool =
+    ctx[].cancelled.load(moAcquire)
+
   let len = ctx[].balPtr[].len
   while true:
-    if ctx[].cancelled.load(moAcquire):
+    if isCancelled():
       break
 
     let i = ctx[].nextIndex.fetchAdd(1, moRelaxed)
@@ -238,9 +241,13 @@ proc balPrefetchWorker*(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
       proc(a, b: SlotChanges): int =
         cmp(firstBalIndex(a), firstBalIndex(b)),
     ):
+      if isCancelled():
+        return true
       discard ctx[].txFrame.fetchSlot(accPath, computeSlotKey(slotChanges.slot))
 
     for stoRead in accChanges[].storageReads:
+      if isCancelled():
+        return true
       discard ctx[].txFrame.fetchSlot(accPath, computeSlotKey(stoRead))
 
   true
