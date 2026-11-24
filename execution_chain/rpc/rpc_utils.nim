@@ -332,13 +332,13 @@ proc createAccessList*(header: Header,
       txFrame = txFrame.txFrameBegin()
       tracer  = AccessListTracer.new(accessList, sender, to, precompiles)
       vmState = BaseVMState.new(parent, header, com, txFrame, tracer)
-      callRes = rpcCallEvm(args, header, vmState, DEFAULT_RPC_GAS_CAP)
+      res     = rpcCallEvm(args, header, vmState, DEFAULT_RPC_GAS_CAP).valueOr:
+                  vmState.dispose()
+                  txFrame.dispose()
+                  return err(error)
 
     vmState.dispose()
     txFrame.dispose()
-
-    let res = callRes.valueOr:
-      return err(error)
 
     if res.isError:
       handleError("failed to apply transaction: " & res.error)

@@ -58,22 +58,14 @@ template withBalPrefetch(
   else:
     body
 
-proc processTransactions(
+proc processTransactions*(
     vmState: BaseVMState,
     header: Header,
     transactions: seq[Transaction],
     blockAccessList = Opt.none(BlockAccessListRef),
     skipReceipts = false,
-    collectLogs = false,
+    collectLogs = false
 ): Result[void, string] =
-  if header.txRoot == EMPTY_ROOT_HASH:
-    if transactions.len > 0:
-        return err("Transactions in block with empty txRoot")
-    return ok()
-
-  if transactions.len == 0:
-    return err("Transactions missing from body")
-
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.receiptBlooms.setLen(vmState.receipts.len)
   vmState.cumulativeGasUsed = 0
@@ -112,7 +104,7 @@ proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    skipValidation, skipReceipts, skipUncles: bool,
+    skipValidation, skipReceipts, skipUncles: bool
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -132,11 +124,11 @@ proc procBlkPreamble(
     if blk.transactions.calcTxRoot != header.txRoot:
       return err("Mismatched txRoot")
 
-  if vmState.fork >= FkOsaka:
+  if com.isOsakaOrLater(header.timestamp):
     if rlp.getEncodedLength(blk) > MAX_RLP_BLOCK_SIZE:
       return err("Post-Osaka block exceeded MAX_RLP_BLOCK_SIZE")
 
-  if vmState.fork >= FkPrague:
+  if com.isPragueOrLater(header.timestamp):
     if header.requestsHash.isNone:
       return err("Post-Prague block header must have requestsHash")
 
@@ -145,7 +137,7 @@ proc procBlkPreamble(
     if header.requestsHash.isSome:
       return err("Pre-Prague block header must not have requestsHash")
 
-  if vmState.fork >= FkCancun:
+  if com.isCancunOrLater(header.timestamp):
     if header.parentBeaconBlockRoot.isNone:
       return err("Post-Cancun block header must have parentBeaconBlockRoot")
 
@@ -154,7 +146,7 @@ proc procBlkPreamble(
     if header.parentBeaconBlockRoot.isSome:
       return err("Pre-Cancun block header must not have parentBeaconBlockRoot")
 
-  if vmState.fork >= FkAmsterdam:
+  if com.isAmsterdamOrLater(header.timestamp):
     if header.blockAccessListHash.isNone:
       return err("Post-Amsterdam block header must have blockAccessListHash")
     if header.slotNumber.isNone:
@@ -169,28 +161,23 @@ proc procBlkPreamble(
   if vmState.balTrackerEnabled:
     vmState.balTracker.commitCallFrame()
 
-  ok()
+  if header.txRoot != EMPTY_ROOT_HASH:
+    if blk.transactions.len == 0:
+      return err("Transactions missing from body")
 
-proc procBlkEpilogue(
-    vmState: BaseVMState,
-    blk: Block,
-    blockAccessList: Opt[BlockAccessListRef],
-    skipValidation, skipReceipts, skipUncles, skipStateRootCheck, skipPostExecBalCheck:
-      bool,
-): Result[void, string] =
-  template header(): Header =
-    blk.header
+    let collectLogs = header.requestsHash.isSome and not skipValidation
+    ?processTransactions(
+      vmState, header, blk.transactions, blockAccessList, skipReceipts, collectLogs
+    )
+  elif blk.transactions.len > 0:
+    return err("Transactions in block with empty txRoot")
 
   # Setup block access list tracker for post‑execution system calls
   if vmState.balTrackerEnabled:
     vmState.balTracker.setBlockAccessIndex(blk.transactions.len() + 1)
     vmState.balTracker.beginCallFrame()
 
-  # EIP-3675: no reward for miner in POA/POS
-  if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
-    vmState.calculateReward(blk.header, blk.uncles)
-
-  if vmState.fork >= FkShanghai:
+  if com.isShanghaiOrLater(header.timestamp):
     if header.withdrawalsRoot.isNone:
       return err("Post-Shanghai block header must have withdrawalsRoot")
     if blk.withdrawals.isNone:
@@ -209,7 +196,7 @@ proc procBlkEpilogue(
     if blk.withdrawals.isSome:
       return err("Pre-Shanghai block body must not have withdrawals")
 
-  if vmState.fork >= FkAmsterdam:
+  if com.isAmsterdamOrLater(header.timestamp):
     let blockGasUsed = max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
     if blockGasUsed != header.gasUsed:
       # TODO replace logging with better error
@@ -235,6 +222,20 @@ proc procBlkEpilogue(
   elif blk.uncles.len > 0:
     return err("Uncles in block with empty uncle hash")
 
+  ok()
+
+proc procBlkEpilogue(
+    vmState: BaseVMState,
+    blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
+    skipValidation: bool,
+    skipReceipts: bool,
+    skipStateRootCheck: bool,
+    skipPostExecBalCheck: bool
+): Result[void, string] =
+  template header(): Header =
+    blk.header
+
   var
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
@@ -247,7 +248,7 @@ proc procBlkEpilogue(
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
 
-    if vmState.fork >= FkAmsterdam:
+    if vmState.com.isAmsterdamOrLater(header.timestamp):
       builderDepositReqs = ?processBuilderDepositRequests(vmState)
       builderExitReqs = ?processBuilderExitRequests(vmState)
 
@@ -259,7 +260,8 @@ proc procBlkEpilogue(
     # Clearing the account cache here helps manage its size when replaying
     # large ranges of blocks, implicitly limiting its size using the gas limit
     ledger.persist(
-      clearEmptyAccounts = vmState.fork.clearEmptyAccounts(), clearCache = true
+      clearEmptyAccounts = vmState.fork.clearEmptyAccounts(),
+      clearCache = true
     )
 
   # Catch a fatal condition from the reward persist or the post-execution system
@@ -267,7 +269,7 @@ proc procBlkEpilogue(
   vmState.ledger.abortOnFatalError()
 
   if not skipValidation:
-    if not skipPostExecBalCheck and vmState.fork >= FkAmsterdam:
+    if not skipPostExecBalCheck and vmState.com.isAmsterdamOrLater(header.timestamp):
       doAssert vmState.balTrackerEnabled
 
       let
@@ -332,7 +334,7 @@ proc procBlkEpilogue(
       let
         depositReqs =
           ?parseDepositLogs(vmState.blockLogs)
-        requestsHash = if vmState.fork >= FkAmsterdam:
+        requestsHash = if vmState.com.isAmsterdamOrLater(header.timestamp):
             calcRequestsHash(
               [
                 (DEPOSIT_REQUEST_TYPE, depositReqs),
@@ -385,14 +387,13 @@ proc processBlock*(
       blk, blockAccessList, skipValidation, skipReceipts, skipUncles
     )
 
-    let collectLogs = blk.header.requestsHash.isSome and not skipValidation
-    ?processTransactions(
-      vmState, blk.header, blk.transactions, blockAccessList, skipReceipts, collectLogs
-    )
+    # EIP-3675: no reward for miner in POA/POS
+    if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
+      vmState.calculateReward(blk.header, blk.uncles)
 
     ?vmState.procBlkEpilogue(
       blk, blockAccessList, skipValidation, skipReceipts, skipStateRootCheck,
-      skipUncles, skipPostExecBalCheck,
+      skipPostExecBalCheck,
     )
 
   ok()

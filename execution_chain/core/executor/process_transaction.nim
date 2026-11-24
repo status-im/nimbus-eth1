@@ -33,8 +33,9 @@ export results, call_types
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc processGasUsed(
+proc commitOrRollbackDependingOnGasUsed(
     vmState: BaseVMState;
+    savePoint: LedgerSpRef;
     tx: Transaction;
     callResult: var TxResult;
       ): Result[void, string] =
@@ -50,10 +51,16 @@ proc processGasUsed(
       vmState.blockExecutionGasUsed + callResult.blockExecutionGasUsed,
       vmState.blockStateGasUsed + callResult.blockStateGasUsed)
     if vmState.blockCtx.gasLimit < limit2d:
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.rollbackCallFrame()
+      vmState.ledger.rollback(savePoint)
       return err(&"invalid tx: block gas limit reached (2D). gasLimit={vmState.blockCtx.gasLimit}, executionGas={vmState.blockExecutionGasUsed}+{callResult.blockExecutionGasUsed}, stateGas={vmState.blockStateGasUsed}+{callResult.blockStateGasUsed}")
   else:
     let limit = vmState.cumulativeGasUsed + gasUsed
     if vmState.blockCtx.gasLimit < limit:
+      if vmState.balTrackerEnabled:
+        vmState.balTracker.rollbackCallFrame()
+      vmState.ledger.rollback(savePoint)
       return err(&"invalid tx: block gasLimit reached. gasLimit={vmState.blockCtx.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
 
   # Accept transaction and collect mining fee.
@@ -66,8 +73,10 @@ proc processGasUsed(
 
   if vmState.balTrackerEnabled:
     vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
+    vmState.balTracker.commitCallFrame()
 
   vmState.ledger.addBalance(vmState.coinbase(), txFee, vmState.fork.checkEmptyAccount())
+  vmState.ledger.commit(savePoint)
   vmState.cumulativeGasUsed += gasUsed
   vmState.blockExecutionGasUsed += callResult.blockExecutionGasUsed
   vmState.blockStateGasUsed += callResult.blockStateGasUsed
@@ -160,19 +169,11 @@ proc processTransaction*(
   vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
   let
-    tmp = processGasUsed(
-      vmState, tx, callResult)
+    tmp = commitOrRollbackDependingOnGasUsed(
+      vmState, savePoint, tx, callResult)
     res = if tmp.isErr:
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.rollbackCallFrame()
-      vmState.ledger.rollback(savePoint)
-
       err(tmp.error)
     else:
-      if vmState.balTrackerEnabled:
-        vmState.balTracker.commitCallFrame()
-      vmState.ledger.commit(savePoint)
-
       ok(move(callResult))
 
   if persist:
