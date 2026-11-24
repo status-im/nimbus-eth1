@@ -812,7 +812,7 @@ proc rpcMain*() =
         discard await client.eth_estimateGas(ec)
         check false
       except RpcResponseError as exc:
-        check exc.data == JsonString("\"0x\"")
+        check exc.data == JsonString("")
 
     test "eth_estimateGas":
       let ec = TransactionArgs(
@@ -892,12 +892,12 @@ proc rpcMain*() =
           check false
         except RpcResponseError as exc:
           check exc.code == -32000
-          check EthJson.decode(exc.data.string, string) == "rpcCallEvm error: " & msg
+          check exc.msg == "rpcCallEvm error: " & msg
         try:
           discard await client.call("eth_estimateGas", %[args, %"latest"], EthJson)
           check false
         except RpcResponseError as exc:
-          check exc.code == 3
+          check exc.code == -32000
           check exc.msg == msg
 
       let
