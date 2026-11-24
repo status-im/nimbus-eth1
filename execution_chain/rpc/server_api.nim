@@ -198,7 +198,7 @@ template sign(privateKey: PrivateKey, message: string): seq[byte] =
   let msgData = "\x19Ethereum Signed Message:\n" & $message.len & message
   @(sign(privateKey, msgData.toBytes()).toRaw())
 
-func newGenericException(msg: sink string): RpcResponseError =
+func newGenericException(msg: sink string): ref RpcResponseError =
   new(RpcResponseError, SERVER_ERROR, msg)
 
 proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
@@ -420,7 +420,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
                             tx, txid, header, api.com)
 
     proc eth_estimateGas(
-        args: TransactionArgs, blockTag: Opt[BlockTag]): Quantity {.raises: [RpcResponseError].} =
+        args: TransactionArgs, blockTag: Opt[BlockTag]
+    ): Quantity {.raises: [RpcResponseError].} =
       ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
       ## The transaction will not be added to the blockchain. Note that the estimate may be significantly more than
       ## the amount of gas actually used by the transaction, for a variety of reasons including EVM mechanics and node performance.
@@ -721,14 +722,16 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     proc eth_createAccessList(
       args: TransactionArgs, quantityTag: Opt[BlockTag]
-    ): AccessListResult {.raises: [ValueError].} =
+    ): AccessListResult {.raises: [RpcResponseError].} =
       ## Generates an access list for a transaction.
-      try:
+      #try:
+      block xzy:
         let header = api.headerFromTag(quantityTag.get(defaultTag)).valueOr:
-          raise newException(ValueError, "Block not found")
-        return createAccessList(header, api.com, api.chain, args)
-      except CatchableError as exc:
-        return AccessListResult(error: Opt.some("createAccessList error: " & exc.msg))
+          raise newGenericException("Block not found")
+        result = createAccessList(header, api.com, api.chain, args).valueOr:
+          raise newGenericException(error)
+      #except CatchableError as exc:
+        #return AccessListResult(error: Opt.some("createAccessList error: " & exc.msg))
 
     proc eth_baseFee(): UInt256 {.raises: [ValueError].} =
       ## Returns the base fee per gas of the next block in wei.

@@ -284,12 +284,12 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
 proc createAccessList*(header: Header,
                        com: CommonRef,
                        chain: ForkedChainRef,
-                       args: TransactionArgs): AccessListResult =
+                       args: TransactionArgs): Result[AccessListResult, string] =
 
   template handleError(msg: string) =
-    return AccessListResult(
+    return ok(AccessListResult(
       error: Opt.some(msg),
-    )
+    ))
 
   var args = args
 
@@ -299,8 +299,7 @@ proc createAccessList*(header: Header,
 
   let
     txFrame = chain.txFrame(header.computeBlockHash)
-    parent  = txFrame.getBlockHeader(header.parentHash).valueOr:
-      handleError(error)
+    parent  = ? txFrame.getBlockHeader(header.parentHash)
     vmState = BaseVMState.new(parent, header, com, txFrame)
     fork    = com.toEVMFork(forkDeterminationInfo(header.number, header.timestamp))
     sender  = args.sender
@@ -336,7 +335,7 @@ proc createAccessList*(header: Header,
       res     = rpcCallEvm(args, header, vmState, DEFAULT_RPC_GAS_CAP).valueOr:
                   vmState.dispose()
                   txFrame.dispose()
-                  handleError("failed to call evm: " & error)
+                  return err(error)
 
     vmState.dispose()
     txFrame.dispose()
@@ -345,10 +344,10 @@ proc createAccessList*(header: Header,
       handleError("failed to apply transaction: " & res.error)
 
     if tracer.equal(prevTracer):
-      return AccessListResult(
+      return ok(AccessListResult(
         accessList: accessList,
         gasUsed: Quantity res.gasUsed,
-      )
+      ))
 
     prevTracer = tracer
 
