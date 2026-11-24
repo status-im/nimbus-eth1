@@ -25,7 +25,7 @@ proc dumpCacheStats(keySize, vtxSize, branchSize: int) =
   block vtx:
     var misses, hits: uint64
     echo "vtxLru(", vtxSize, ")"
-    echo "   state    vtype       miss        hit      total hitrate"
+    echo "   state     vtype       miss        hit      total hitrate"
     for state in RdbStateType:
       for vtype in RdbVertexType:
         let
@@ -36,7 +36,7 @@ proc dumpCacheStats(keySize, vtxSize, branchSize: int) =
           hitRate = float64(hit * 100) / (float64(hit + miss))
         misses += miss
         hits += hit
-        echo &"{state:>8} {vtype:>8} {miss:>10} {hit:>10} {miss+hit:>10} {hitRate:>6.2f}%"
+        echo &"{state:>8} {vtype:>9} {miss:>10} {hit:>10} {miss+hit:>10} {hitRate:>6.2f}%"
     let hitRate = float64(hits * 100) / (float64(hits + misses))
     echo &"     all      all {misses:>10} {hits:>10} {misses+hits:>10} {hitRate:>6.2f}%"
 

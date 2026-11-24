@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[typetraits, sequtils, sets],
+  std/typetraits,
   json_rpc/rpcserver,
   metrics,
   chronos/timer,
@@ -38,8 +38,7 @@ template apiTiming(meth: static string, body: untyped): untyped =
   nec_engine_api_request_count.inc(1, labelValues = [meth])
   res
 
-const supportedMethods: HashSet[string] =
-  toHashSet([
+const supportedMethods = [
     "engine_newPayloadV1",
     "engine_newPayloadV2",
     "engine_newPayloadV3",
@@ -66,7 +65,7 @@ const supportedMethods: HashSet[string] =
     "engine_getBlobsV2",
     "engine_getBlobsV3",
     "engine_getBlobsV4"
-  ])
+  ]
 
 # I'm trying to keep the handlers below very thin, and move the
 # bodies up to the various procs above. Once we have multiple
@@ -75,7 +74,7 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
   server.rpc(EthJson):
     proc engine_exchangeCapabilities(methods: seq[string]): seq[string] =
       apiTiming("engine_exchangeCapabilities"):
-        methods.filterIt(supportedMethods.contains(it))
+        @supportedMethods
 
     proc engine_newPayloadV1(payload: ExecutionPayloadV1): PayloadStatus {.async: (raises: [CancelledError, RpcResponseError]).} =
       apiTiming("engine_newPayloadV1"):

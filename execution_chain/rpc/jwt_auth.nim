@@ -87,6 +87,8 @@ proc verifyTokenHS256(token: string, key: JwtSharedKey): Result[void, JwtError] 
 
     error = jwtIatPayloadInvJson
     let jwtPayload = jsonPayload.decodeJwtIatPayload()
+    if jwtPayload.iat > uint64(high(int64)):
+      return err(jwtTimeValidationError)
     time = jwtPayload.iat.int64
   except CatchableError as e:
     discard e

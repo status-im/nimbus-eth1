@@ -526,10 +526,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, "Account locked, please unlock it first")
 
       let
-        txFrame = api.frameFromTag(blockId("latest")).valueOr:
-          raise newException(ValueError, "Latest Block not found")
-        accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
-        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId).valueOr:
+        nonce = api.txPool.getPendingNonce(address)
+        tx = unsignedTx(data, api.chain, nonce, api.com.chainId).valueOr:
           raise newException(ValueError, error)
         eip155 = api.com.isEIP155(api.chain.latestNumber)
         signedTx = signTransaction(tx, acc.privateKey, eip155)
@@ -550,11 +548,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
         raise newException(ValueError, "Account locked, please unlock it first")
 
       let
-        txFrame = api.frameFromTag(blockId("latest")).valueOr:
-          raise newException(ValueError, "Latest Block not found")
-        accRec = txFrame.fetchAccount(address.computeAccPath).valueOr(emptyDbAccount)
-
-        tx = unsignedTx(data, api.chain, accRec.nonce + 1, api.com.chainId).valueOr:
+        nonce = api.txPool.getPendingNonce(address)
+        tx = unsignedTx(data, api.chain, nonce, api.com.chainId).valueOr:
           raise newException(ValueError, error)
         eip155 = api.com.isEIP155(api.chain.latestNumber)
         signedTx = signTransaction(tx, acc.privateKey, eip155)
@@ -736,12 +731,12 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManag
 
     proc eth_blobBaseFee(): Quantity {.raises: [ValueError].} =
       ## Returns the base fee per blob gas in wei.
-      let header = api.headerFromTag(blockId("latest")).valueOr:
-        raise newException(ValueError, "Block not found")
-      if header.excessBlobGas.isNone:
-        raise newException(ValueError, "excessBlobGas missing from latest header")
-      let blobBaseFee =
-        getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toHardFork(header))
+      let
+        parent = api.headerFromTag(blockId("latest")).valueOr:
+          raise newException(ValueError, "Block not found")
+        fork = api.com.toHardFork(parent)
+        excessBlobGas = api.com.calcExcessBlobGas(parent, fork)
+        blobBaseFee = getBlobBaseFee(excessBlobGas, api.com, fork)
       if blobBaseFee > high(uint64).u256:
         raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
       return w3Qty blobBaseFee.truncate(uint64)

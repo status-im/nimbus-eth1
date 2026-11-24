@@ -17,14 +17,6 @@ import
   ../../../networking/p2p_types
 
 type
-  Status68Packet* = object
-    version*: uint64
-    networkId*: NetworkId
-    totalDifficulty*: DifficultyInt
-    bestHash*: Hash32
-    genesisHash*: Hash32
-    forkId*: ForkId
-
   # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#status-0x00
   Status69Packet* = object
     version*: uint64
@@ -66,12 +58,6 @@ type
     hash*: Hash32
     number*: base.BlockNumber
 
-  Eth68State* = object
-    totalDifficulty*: DifficultyInt
-    genesisHash*: Hash32
-    bestBlockHash*: Hash32
-    forkId*: ForkId
-
   Eth69State* = object
     genesisHash*: Hash32
     forkId*: ForkId
@@ -81,9 +67,6 @@ type
 
   EthPeerState* = ref object of RootRef
     initialized*: bool
-
-  Eth68PeerState* = ref object of EthPeerState
-    bestHash*: Hash32
 
   Eth69PeerState* = ref object of EthPeerState
     earliest*: uint64

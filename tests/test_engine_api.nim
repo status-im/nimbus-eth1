@@ -28,6 +28,7 @@ import
   ../execution_chain/core/tx_pool,
   ../execution_chain/db/core_db/memory_only,
   ../execution_chain/beacon/beacon_engine,
+  ../execution_chain/beacon/payload_conv,
   ../execution_chain/beacon/api_handler,
   ../execution_chain/beacon/web3_eth_conv,
   ../execution_api/engine_client,
@@ -182,6 +183,16 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
   if bn != 1:
     return err("Expect returned block number: 1, got: " & $bn)
 
+  ok()
+
+proc exchangeCapabilitiesTest(env: TestEnv): Result[void, string] =
+  let
+    none = ? env.client.exchangeCapabilities(@[])
+    one = ? env.client.exchangeCapabilities(@["engine_newPayloadV1"])
+  if "engine_getPayloadV1" notin none:
+    return err("Expect EL methods, got: " & $none)
+  if one != none:
+    return err("Expect the same methods for any CL list, got: " & $one)
   ok()
 
 proc makeSignedTx(env: TestEnv, nonce: AccountNonce = 0): Transaction =
@@ -410,6 +421,73 @@ proc runUnknownPayloadTest(env: TestEnv): Result[void, string] =
     return err("expect error code " & $engineApiUnknownPayload &
       ", got: " & res.error)
 
+  ok()
+
+proc runZeroFinalizedHashSyncTest(env: TestEnv): Result[void, string] =
+  var notified = false
+  let hc = HeaderChainRef.init(env.chain)
+  hc.start(proc() = notified = true)
+  defer: hc.destroy()
+
+  let
+    client = env.client
+    header = ? client.latestHeader()
+    update = ForkchoiceState(
+      headBlockHash: header.computeBlockHash
+    )
+    time = getTime().toUnix
+    attr = PayloadAttributes(
+      timestamp:             w3Qty(time + 1),
+      prevRandao:            default(Bytes32),
+      suggestedFeeRecipient: default(Address),
+    )
+    fcuRes = ? client.forkchoiceUpdated(Version.V1, update, Opt.some(attr))
+    bundle = ? client.getPayload(Version.V1, fcuRes.payloadId.get)
+
+  # Block 2 on top of block 1, which is never sent to the EL.
+  var payload = bundle.executionPayload
+  payload.parentHash = payload.blockHash
+  payload.blockNumber = w3Qty(2'u64)
+  payload.blockHash =
+    payload.blockHeader(Opt.none(Hash32), Opt.none(Hash32)).computeBlockHash
+
+  let npRes = ? client.newPayloadV1(payload)
+  if npRes.status != PayloadExecutionStatus.syncing:
+    return err("newPayload should return syncing, got: " & $npRes.status)
+
+  let fcuRes2 = ? client.forkchoiceUpdated(Version.V1, ForkchoiceState(
+    headBlockHash: payload.blockHash
+  ))
+  if fcuRes2.payloadStatus.status != PayloadExecutionStatus.syncing:
+    return err("forkchoiceUpdated should return syncing, got: " &
+      $fcuRes2.payloadStatus.status)
+
+  if not notified:
+    return err("No header chain session was started")
+  if hc.state != collecting:
+    return err("Header chain should be collecting, got: " & $hc.state)
+  if hc.head.number != 2:
+    return err("Header chain head should be block 2, got: " & $hc.head.number)
+
+  ok()
+
+proc payloadIdTargetGasLimitTest(env: TestEnv): Result[void, string] =
+  let
+    header = ? env.client.latestHeader()
+    update = ForkchoiceState(headBlockHash: header.computeBlockHash)
+  var attr = PayloadAttributes(
+    timestamp:             w3Qty(getTime().toUnix + 1),
+    withdrawals:           Opt.some(newSeq[WithdrawalV1]()),
+    parentBeaconBlockRoot: Opt.some(default(Hash32)),
+    slotNumber:            Opt.some(w3Qty(1'u64)),
+    targetGasLimit:        Opt.some(w3Qty(60_000_000'u64)),
+  )
+  let first = ? env.client.forkchoiceUpdated(Version.V4, update, Opt.some(attr))
+  attr.targetGasLimit = Opt.some(w3Qty(100_000_000'u64))
+  let second = ? env.client.forkchoiceUpdated(Version.V4, update, Opt.some(attr))
+
+  if first.payloadId == second.payloadId:
+    return err("Expect distinct payloadIds for distinct targetGasLimits")
   ok()
 
 proc runSiblingHeadPayloadTest(env: TestEnv): Result[void, string] =
@@ -819,6 +897,11 @@ const testList = [
     testProc: runBasicCycleTest
   ),
   TestSpec(
+    name: "exchangeCapabilities returns the EL methods",
+    fork: MergeFork,
+    testProc: exchangeCapabilitiesTest
+  ),
+  TestSpec(
     name: "Payload rebuild for identical FCU",
     fork: MergeFork,
     testProc: runPayloadRebuildTest
@@ -842,6 +925,16 @@ const testList = [
     name: "getPayload with unknown payloadId",
     fork: MergeFork,
     testProc: runUnknownPayloadTest
+  ),
+  TestSpec(
+    name: "Zero finalized hash starts sync to a head with a missing parent",
+    fork: MergeFork,
+    testProc: runZeroFinalizedHashSyncTest
+  ),
+  TestSpec(
+    name: "payloadId depends on targetGasLimit",
+    fork: Amsterdam,
+    testProc: payloadIdTargetGasLimitTest
   ),
   TestSpec(
     name: "newPayloadV4",

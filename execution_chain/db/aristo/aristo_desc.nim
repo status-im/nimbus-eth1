@@ -293,3 +293,6 @@ proc getStaticLevel*(db: AristoDbRef): int =
   db.staticLevel.store(level, moRelaxed)
 
   level
+
+func replaceSuffix*(v: Hash32, suffix: NibblesBuf): Hash32 =
+  v.to(NibblesBuf).replaceSuffix(suffix).to(Hash32)

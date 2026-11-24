@@ -64,7 +64,7 @@ iterator rightPairs*(
           hike.legs.setLen(hike.legs.len - 1)
         of Leaves:
           let vtx = LeafRef(hike.legs[^1].vtx)
-          yield (Hash32(hike.legsTo(NibblesBuf).getBytes()), vtx)
+          yield (hike.legsTo(NibblesBuf).to(Hash32), vtx)
           hike.legs.setLen(hike.legs.len - 1)
 
 iterator rightPairsStorage*(

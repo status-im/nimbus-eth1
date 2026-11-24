@@ -63,6 +63,9 @@ type
 func isError*(cr: CallResult): bool =
   cr.error.len > 0
 
+func minGasLimit*(intrinsic: IntrinsicGas): GasInt =
+  max(intrinsic.execution, intrinsic.floorDataGas)
+
 func selfTransfer(tx: Transaction, sender: Address): bool =
   tx.to.isSome and tx.to.value == sender
 

@@ -81,7 +81,7 @@ suite "Aristo compute":
         checkpoint("k = " & k.toHex & ", v = " & $v)
 
         check:
-          txFrame.mergeAccount(k, v, false) == Result[bool, AristoError].ok(true)
+          txFrame.mergeAccount(k, v, false) == Result[void, AristoError].ok()
 
         # Check state against expected value
         let w = txFrame.computeKey((root, root)).expect("no errors")
@@ -121,7 +121,7 @@ suite "Aristo compute":
         checkpoint("k = " & k.toHex & ", v = " & $v)
 
         check:
-          txFrame.mergeAccount(k, v, false) == Result[bool, AristoError].ok(true)
+          txFrame.mergeAccount(k, v, false) == Result[void, AristoError].ok()
 
         # Check state against expected value
         let w = txFrame.computeKey((root, root)).expect("no errors")
@@ -159,7 +159,7 @@ suite "Aristo compute":
 
     for (k, v, r) in samples[^1]:
       check:
-        txFrame.mergeAccount(k, v, false) == Result[bool, AristoError].ok(true)
+        txFrame.mergeAccount(k, v, false) == Result[void, AristoError].ok()
     txFrame.checkpoint(1, skipSnapshot = true)
 
     let batch = db.putBegFn()[]
@@ -182,7 +182,7 @@ suite "Aristo compute":
 
     for (k, v, r) in samples[^1]:
       check:
-        txFrame.mergeAccount(k, v, false) == Result[bool, AristoError].ok(true)
+        txFrame.mergeAccount(k, v, false) == Result[void, AristoError].ok()
     txFrame.checkpoint(1, skipSnapshot = true)
 
     let batch = db.putBegFn()[]
@@ -193,6 +193,16 @@ suite "Aristo compute":
 
     let w = txFrame.computeKey((root, root)).value.to(Hash32)
     check w == samples[^1][^1][2]
+
+  test "Update leaf whose path differs from a sibling only in the last nibble":
+    let
+      txFrame = AristoDbRef.init().txRef
+      p1 = hash32"0000000000000000000000000000000000000000000000000000000000000001"
+      p2 = hash32"0000000000000000000000000000000000000000000000000000000000000002"
+
+    for (path, balance) in [(p1, 1), (p2, 1), (p1, 2)]:
+      let acc = AristoAccount(balance: balance.u256, codeHash: EMPTY_CODE_HASH)
+      check txFrame.mergeAccount(path, acc, false).isOk()
 
   test "Max size RLP encoding of all MPT node types":
     ## This test exercises the RlpArrayBufWriter stack-allocated buffer paths in
@@ -239,7 +249,7 @@ suite "Aristo compute":
       hash32"1000000000000000000000000000000000000000000000000000000000000001"
     check:
       txFrame.mergeAccount(accPathWithStorage, maxAccount, false) ==
-        Result[bool, AristoError].ok(true)
+        Result[void, AristoError].ok()
 
     # Attach a storage slot with the largest possible UInt256 value.
     # This maximises the storage leaf node RLP encoding.
@@ -275,7 +285,7 @@ suite "Aristo compute":
           hash32"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       )
       check:
-        txFrame.mergeAccount(accPath, acc, false) == Result[bool, AristoError].ok(true)
+        txFrame.mergeAccount(accPath, acc, false) == Result[void, AristoError].ok()
 
     # Insert two more accounts that share a long common prefix to force the
     # creation of an extension node. When two paths share leading nibbles but
@@ -295,9 +305,9 @@ suite "Aristo compute":
       hash32"ABCDEF0123456789000000000000000000000000000000000000000000000002"
 
     check txFrame.mergeAccount(extPath1, extAcc, false) ==
-      Result[bool, AristoError].ok(true)
+      Result[void, AristoError].ok()
     check txFrame.mergeAccount(extPath2, extAcc, false) ==
-      Result[bool, AristoError].ok(true)
+      Result[void, AristoError].ok()
 
     # Now compute the state root key. This forces RLP serialization of every
     # node in the trie through the RlpArrayBufWriter code paths.
@@ -336,7 +346,7 @@ suite "Aristo compute short benchmark":
           cast[Hash32](i),
           AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH),
           false,
-        ) == Result[bool, AristoError].ok(true)
+        ) == Result[void, AristoError].ok()
     txFrame.checkpoint(1, skipSnapshot = true)
 
     let batch = db.putBegFn()[]
@@ -358,7 +368,7 @@ suite "Aristo compute short benchmark":
             cast[Hash32](i * i),
             AristoAccount(balance: i.u256(), codeHash: EMPTY_CODE_HASH),
             false,
-          ) == Result[bool, AristoError].ok(true)
+          ) == Result[void, AristoError].ok()
 
       txFrame.checkpoint(1, skipSnapshot = false)
 

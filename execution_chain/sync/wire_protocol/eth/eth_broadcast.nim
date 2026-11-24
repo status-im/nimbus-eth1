@@ -164,8 +164,7 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
       awaitQuota(wire, txPoolProcessCost, "adding into txpool")
 
 func supportsEth(peer: Peer): bool =
-  peer.supports(eth71) or peer.supports(eth70) or
-    peer.supports(eth69) or peer.supports(eth68)
+  peer.supports(eth71) or peer.supports(eth70) or peer.supports(eth69)
 
 proc peerById(wire: EthWireRef, id: NodeId): Peer =
   ## Resolve an announcing peer to a live handle. Peers still completing

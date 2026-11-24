@@ -367,6 +367,15 @@ suite "ForkedChainRef tests":
     check chain.wdWritten(blk2) == 2
     check chain.validate info & " (9)"
 
+  test "eagerStateRoot checks the state root of finalized blocks":
+    var badBlk = blk1
+    badBlk.header.stateRoot = blk2.header.stateRoot
+    let
+      eager = ForkedChainRef.init(env.newCom(), eagerStateRoot = true)
+      lazy = ForkedChainRef.init(env.newCom())
+    check (waitFor eager.importBlock(badBlk, finalized = true)).isErr
+    check (waitFor lazy.importBlock(badBlk, finalized = true)).isOk
+
   # --------------------------------------------------------------------------
   # Re-org handling: these exercise the per-block verdicts the devp2p block
   # syncer relies on when a re-org arrives mid-sync. The syncer hands every

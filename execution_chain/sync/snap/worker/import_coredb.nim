@@ -223,7 +223,6 @@ proc importFlat(
       return ctrl.stats
 
   # Merge flat tables into CoreDb/Aristo.
-  var count = 0
   for w in adb.walkFlatAcc():
     if 0 < w.error.len:
       error info & ": Error walking accounts",
@@ -247,7 +246,6 @@ proc importFlat(
 
     # Import account record
     var
-      accUpdateOk = false
       accRec = CoreDbAccount(
         nonce:    w.data.account.nonce,
         balance:  w.data.account.balance,

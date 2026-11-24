@@ -9,6 +9,7 @@
 
 import
   ./[
+    eest_transaction_test,
     eest_engine_test,
     eest_blockchain_test,
     eest_stateless_execution_test,

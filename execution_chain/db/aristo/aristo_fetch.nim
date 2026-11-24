@@ -90,7 +90,7 @@ proc retrieveStatic[LeafType](
   # hit the node we're looking for or at least a branch from which we can
   # shorten the lookup. Level 0 is the trie root itself, which is `root` both
   # for the account trie and for a storage trie keyed by its `stoID`.
-  var path = NibblesBuf.fromBytes(leafPath.data)
+  var path = leafPath.to(NibblesBuf)
   var next: VertexID
 
   for sl in countdown(startLevel, 0):
@@ -355,7 +355,7 @@ proc fetchSlot*(
     return ok 0'u256
 
   var
-    path = NibblesBuf.fromBytes(stoPath.data)
+    path = stoPath.to(NibblesBuf)
     next = VertexID(0)
 
   if db.db.stoStatic and startLevel.isSome and STO_PROBE_MIN_LEVEL <= startLevel[]:

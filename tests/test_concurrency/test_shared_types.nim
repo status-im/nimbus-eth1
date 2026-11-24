@@ -240,7 +240,7 @@ suite "SharedTable Tests":
     # Missing key: only the do-block runs.
     var foundRan = false
     var inserted = false
-    t.withValue(2, v):
+    t.withValue(2, _):
       foundRan = true
     do:
       inserted = true
@@ -288,7 +288,7 @@ suite "SharedTable with move-only values Tests":
 
     # withValue on a missing key must not run the body.
     var ranMissing = false
-    t.withValue(99, v):
+    t.withValue(99, _):
       ranMissing = true
     check not ranMissing
 

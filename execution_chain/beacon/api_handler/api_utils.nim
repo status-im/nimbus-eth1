@@ -44,6 +44,8 @@ func computePayloadId*(blockHash: common.Hash32,
     ctx.update(distinctBase params.parentBeaconBlockRoot.value)
   if params.slotNumber.isSome:
     ctx.update(toBytesBE distinctBase params.slotNumber.get)
+  if params.targetGasLimit.isSome:
+    ctx.update(toBytesBE distinctBase params.targetGasLimit.get)
   ctx.finish dest.data
   ctx.clear()
   (distinctBase result)[0..7] = dest.data[0..7]

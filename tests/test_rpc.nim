@@ -292,7 +292,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     client = setupClient(server.localAddress[0].port)
     rng    = newRng()
     am     = new AccountsManager
-    node   = setupEthNode(conf, params, rng[], eth68, eth69)
+    node   = setupEthNode(conf, params, rng[], eth69)
     nimbus = NimbusNode(
       ethNode: node,
     )
@@ -326,7 +326,6 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
 
 proc generateBlock(env: var TestEnv) =
   let
-    com = env.com
     xp  = env.txPool
     am =  env.am
     acc = am[].getAccount(signer).tryGet()
@@ -684,6 +683,17 @@ proc rpcMain*() =
       expect RpcResponseError:
         discard await client.eth_sendTransaction(args)
 
+    test "eth_signTransaction without nonce uses the pending nonce":
+      let
+        args = TransactionArgs(
+          `from`: Opt.some(signer),
+          to: Opt.some(contractAddress),
+          gas: Opt.some(w3Qty(100000'u)),
+          value: Opt.some(100.u256))
+        pending = await client.eth_getTransactionCount(signer, blockId("pending"))
+        signedTx = rlp.decode(await client.eth_signTransaction(args), Transaction)
+      check signedTx.nonce == AccountNonce(pending)
+
     test "eth_call":
       let ec = TransactionArgs(
         `from`: Opt.some(signer),
@@ -771,6 +781,18 @@ proc rpcMain*() =
         check false
       except RpcResponseError as exc:
         check exc.code == -32000
+
+    test "eth_call gas below the calldata floor is an error":
+      # 1000 zero bytes: intrinsic gas 25000, calldata floor 31000
+      var ec = TransactionArgs(
+        to: Opt.some(extraAddress),
+        gas: Opt.some(w3Qty(25_000'u)),
+        input: Opt.some(newSeq[byte](1000)))
+      expect RpcResponseError:
+        discard await client.eth_call(ec, "latest")
+
+      ec.gas = Opt.some(w3Qty(31_000'u))
+      check (await client.eth_call(ec, "latest")).len == 0
 
     test "eth_call contract creation returns the created code":
       # PUSH4 0xdeadbeef PUSH1 0 MSTORE PUSH1 4 PUSH1 28 RETURN
@@ -1400,6 +1422,12 @@ proc rpcMain*() =
       check res.current.activationTime.uint64 == 0'u64
 
       check res.current.contractsInConfig(cancunSystemContracts)
+
+    test "eth_config object for Shanghai has an empty blob schedule":
+      let config = com.populateConfigObject(Shanghai)
+      check config.blobSchedule.max.uint64 == 0
+      check config.blobSchedule.target.uint64 == 0
+      check config.blobSchedule.baseFeeUpdateFraction.uint64 == 0
 
     env.close()
 

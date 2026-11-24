@@ -116,7 +116,7 @@ proc systemCall*(params: SysCallParams, T: type): T =
 
   if c.isSuccess:
     c.execCallOrCreate()
-    vmState.ledger.persist(c.fork.clearEmptyAccounts())
+    vmState.ledger.persist(c.fork.clearEmptyAccounts(), hold = true)
   else:
     # execCallOrCreate normally disposes the computation, dispose here too
     # otherwise the EVM stack leaks.

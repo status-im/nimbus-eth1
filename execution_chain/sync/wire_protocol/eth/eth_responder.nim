@@ -17,10 +17,10 @@ import
   ./[eth_broadcast, eth_handler, eth_requester, eth_trace_config, eth_types]
 
 logScope:
-  topics = "eth68/69"
+  topics = "eth"
 
 const
-  prettyEthProtoName* = "[eth/68:71]"
+  prettyEthProtoName* = "[eth/69:71]"
 
   # Pickeled tracer texts
   trEthRecvReceived* =
@@ -64,24 +64,6 @@ const
     ">> " & prettyEthProtoName & " Sending NewBlock"
   trEthSendNewBlockHashes* =
     ">> " & prettyEthProtoName & " Sending NewBlockHashes"
-
-proc status68UserHandler(peer: Peer; packet: Status68Packet) {.
-    async: (raises: [CancelledError, EthP2PError]).} =
-  trace trEthRecvReceived & "Status (0x00)", peer,
-    networkId = packet.networkId,
-    totalDifficulty = packet.totalDifficulty,
-    bestHash = packet.bestHash.short,
-    genesisHash = packet.genesisHash.short,
-    forkHash = packet.forkId.hash.toHex,
-    forkNext = packet.forkId.next
-
-proc status68Thunk(peer: Peer; data: Rlp) {.
-    async: (raises: [CancelledError, EthP2PError]).} =
-  eth68.rlpxWithPacketHandler(Status68Packet, peer, data,
-                               [version, networkId,
-                                totalDifficulty, bestHash,
-                                genesisHash, forkId]):
-    await status68UserHandler(peer, packet)
 
 proc status69UserHandler(peer: Peer; packet: Status69Packet) {.
     async: (raises: [CancelledError, EthP2PError]).} =
@@ -251,10 +233,7 @@ proc getReceiptsUserHandler[PROTO](response: Responder; hashes: seq[Hash32]) {.
   let peer = response.peer
   trace trEthRecvReceived & "GetReceipts (0x0f)", peer, hashes = hashes.len
   let ctx = peer.networkState(PROTO)
-  let rec = when PROTO is eth69:
-              ctx.getStoredReceipts(hashes)
-            else:
-              ctx.getReceipts(hashes)
+  let rec = ctx.getStoredReceipts(hashes)
   if rec.len > 0:
     trace trEthSendReplying & "with Receipts (0x10)", peer, sent = rec.len,
           requested = hashes.len
@@ -294,11 +273,8 @@ proc receiptsThunk[PROTO](peer: Peer; data: Rlp) {.
   when PROTO is eth70 or PROTO is eth71:
     PROTO.rlpxWithFutureHandler(StoredReceipts70Packet,
       ReceiptsMsg, peer, data, [lastBlockIncomplete, receipts])
-  elif PROTO is eth69:
-    PROTO.rlpxWithFutureHandler(StoredReceiptsPacket, ReceiptsPacket,
-      ReceiptsMsg, peer, data, [receipts])
   else:
-    PROTO.rlpxWithFutureHandler(ReceiptsPacket,
+    PROTO.rlpxWithFutureHandler(StoredReceiptsPacket, ReceiptsPacket,
       ReceiptsMsg, peer, data, [receipts])
 
 proc blockRangeUpdateUserHandler[PROTO](peer: Peer; packet: BlockRangeUpdatePacket) {.
@@ -350,64 +326,6 @@ proc blockAccessListsThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
   PROTO.rlpxWithFutureHandler(BlockAccessListsPacket,
     BlockAccessListsMsg, peer, data, [accessLists])
-
-proc eth68PeerConnected(peer: Peer) {.async: (
-    raises: [CancelledError, EthP2PError]).} =
-  let
-    network = peer.network
-    ctx = peer.networkState(eth68)
-    status = ctx.getStatus68()
-    packet = Status68Packet(
-      version: eth68.protocolVersion,
-      networkId : network.networkId,
-      totalDifficulty: status.totalDifficulty,
-      bestHash: status.bestBlockHash,
-      genesisHash: status.genesisHash,
-      forkId: status.forkId,
-    )
-
-  trace trEthSendSending & "Status (0x00)", peer,
-     td = status.totalDifficulty,
-     bestHash = short(status.bestBlockHash),
-     networkId = network.networkId,
-     genesis = short(status.genesisHash),
-     forkHash = status.forkId.hash.toHex,
-     forkNext = status.forkId.next
-
-  let m = await peer.status68(packet, timeout = chronos.seconds(10))
-  when trEthTraceHandshakesOk:
-    trace "Handshake: Local and remote networkId", local = network.networkId,
-          remote = m.networkId
-    trace "Handshake: Local and remote genesisHash",
-          local = short(status.genesisHash), remote = short(m.genesisHash)
-    trace "Handshake: Local and remote forkId", local = (
-        status.forkId.hash.toHex & "/" & $status.forkId.next),
-          remote = (m.forkId.hash.toHex & "/" & $m.forkId.next)
-  if m.networkId != network.networkId:
-    trace "Peer for a different network (networkId)", peer,
-          expectNetworkId = network.networkId, gotNetworkId = m.networkId
-    raise newException(UselessPeerError, "Eth handshake for different network")
-  if m.genesisHash != status.genesisHash:
-    trace "Peer for a different network (genesisHash)", peer,
-          expectGenesis = short(status.genesisHash),
-          gotGenesis = short(m.genesisHash)
-    raise newException(UselessPeerError, "Eth handshake for different network")
-
-  let header = ctx.chain.latestHeader()
-  if not ctx.chain.com.compatibleForkId(m.forkId, header.number, header.timestamp):
-    trace "Peer with incompatible fork ID", peer,
-          localForkId = (status.forkId.hash.toHex & "/" & $status.forkId.next),
-          remoteForkId = (m.forkId.hash.toHex & "/" & $m.forkId.next)
-    raise newException(UselessPeerError, "Eth handshake with incompatible fork ID")
-
-  trace "Peer matches our network", peer
-
-  peer.state(eth68).initialized = true
-  peer.state(eth68).bestHash = m.bestHash
-
-  # Announce our pooled tx hashes to the new peer; only enqueues an
-  # action, the actual sends run in a background worker.
-  await ctx.scheduleTxAnnounceToNewPeer(peer)
 
 proc eth69OrLaterPeerConnected[PROTO](peer: Peer) {.async: (
     raises: [CancelledError, EthP2PError]).} =
@@ -493,20 +411,6 @@ template registerCommonThunk(protocol: ProtocolInfo, PROTO: type) =
   registerMsg(protocol, GetPooledTransactionsMsg, "getPooledTransactions",
               getPooledTransactionsThunk[PROTO], PooledTransactionsRequest)
 
-proc eth68Registration() =
-  let
-    protocol = eth68.initProtocol()
-
-  setEventHandlers(protocol, eth68PeerConnected, nil)
-  registerMsg(protocol, StatusMsg, "status",
-              status68Thunk, Status68Packet)
-  registerCommonThunk(protocol, eth68)
-  registerMsg(protocol, ReceiptsMsg, "receipts",
-              receiptsThunk[eth68], ReceiptsPacket)
-  registerMsg(protocol, GetReceiptsMsg, "getReceipts",
-              getReceiptsThunk[eth68], ReceiptsRequest)
-  registerProtocol(protocol)
-
 proc eth69Registration() =
   let
     protocol = eth69.initProtocol()
@@ -560,7 +464,6 @@ proc eth71Registration() =
 
   registerProtocol(protocol)
 
-eth68Registration()
 eth69Registration()
 eth70Registration()
 eth71Registration()

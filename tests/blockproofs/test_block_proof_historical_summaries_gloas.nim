@@ -25,6 +25,23 @@ import
 # transition, as only the shape of the block matters for the proofs. The
 # block_roots and the historical summary that anchors them are built here.
 
+proc historicalSummariesAt(
+    blockRoots: array[SLOTS_PER_HISTORICAL_ROOT, Eth2Digest], era: int
+): HistoricalSummaries =
+  ## Summaries in which `blockRoots` is the summary of `era`, with
+  ## placeholders for the eras before it.
+  var summaries: HistoricalSummaries
+  for _ in 0 ..< era:
+    discard summaries.add(HistoricalSummary())
+  discard
+    summaries.add(HistoricalSummary(block_summary_root: hash_tree_root(blockRoots)))
+  summaries
+
+proc historicalSummaries(
+    blockRoots: array[SLOTS_PER_HISTORICAL_ROOT, Eth2Digest]
+): HistoricalSummaries =
+  historicalSummariesAt(blockRoots, 0)
+      
 suite "History Block Proofs - Historical Summaries - Gloas":
   setup:
     let
@@ -50,9 +67,6 @@ suite "History Block Proofs - Historical Summaries - Gloas":
         "0x2222222222222222222222222222222222222222222222222222222222222222"
       )
 
-    const slotsToTest =
-      [1'u64, 2, 3, SLOTS_PER_HISTORICAL_ROOT div 2, SLOTS_PER_HISTORICAL_ROOT - 1]
-
     proc confirmingBlock(slot: uint64): gloas.BeaconBlock =
       ## Block that confirms `confirmedBlockHash` while committing to a payload
       ## of its own.
@@ -63,24 +77,10 @@ suite "History Block Proofs - Historical Summaries - Gloas":
       blck.body.signed_execution_payload_bid.message.block_hash = committedBlockHash
       blck
 
-    proc historicalSummariesAt(
-        blockRoots: array[SLOTS_PER_HISTORICAL_ROOT, Eth2Digest], era: int
-    ): HistoricalSummaries =
-      ## Summaries in which `blockRoots` is the summary of `era`, with
-      ## placeholders for the eras before it.
-      var summaries: HistoricalSummaries
-      for _ in 0 ..< era:
-        discard summaries.add(HistoricalSummary())
-      discard
-        summaries.add(HistoricalSummary(block_summary_root: hash_tree_root(blockRoots)))
-      summaries
-
-    proc historicalSummaries(
-        blockRoots: array[SLOTS_PER_HISTORICAL_ROOT, Eth2Digest]
-    ): HistoricalSummaries =
-      historicalSummariesAt(blockRoots, 0)
-
   test "BlockProofHistoricalSummariesGloas for Execution BlockHeader":
+    const slotsToTest =
+      [1'u64, 2, 3, SLOTS_PER_HISTORICAL_ROOT div 2, SLOTS_PER_HISTORICAL_ROOT - 1]
+
     for slot in slotsToTest:
       let beaconBlock = confirmingBlock(slot)
 

@@ -19,7 +19,6 @@ import
   ../../execution_chain/db/opts,
   ../../execution_chain/db/aristo/[
     aristo_blobify,
-    aristo_delete,
     aristo_desc,
     aristo_fetch,
     aristo_get,
@@ -89,8 +88,7 @@ suite "Aristo static storage vids":
     let tx = db.txFrameBegin(db.txRef)
     check:
       tx.mergeAccount(accA, account(1), false).isOk()
-      tx.mergeSlot(accA, slot1, 11.u256).isOk()
-      tx.mergeSlot(accA, slot3, 33.u256).isOk()
+      tx.mergeSlots(accA, (slot1, 11.u256), (slot3, 33.u256)).isOk()
     db.persist(tx, 1)
     let root = db.stoRoot(accA)
     check:
@@ -115,7 +113,7 @@ suite "Aristo static storage vids":
       db.slotBothWays(accA, slot3) == 33.u256
 
     let tx1 = db.txFrameBegin(db.txRef)
-    check tx1.deleteSlot(accA, slot2).isOk()
+    check tx1.mergeSlot(accA, slot2, 0'u256).isOk()
     db.persist(tx1, 2)
     check:
       db.probeLevelOf(accA) == 1
@@ -180,7 +178,7 @@ suite "Aristo static storage vids":
       db.probeLevelOf(accA) == 3
 
     let tx1 = db.txFrameBegin(db.txRef)
-    check tx1.deleteSlot(accA, sA).isOk()
+    check tx1.mergeSlot(accA, sA, 0'u256).isOk()
     db.persist(tx1, 2)
 
     # the promoted branch absorbs the freed nibble into its prefix and keeps its

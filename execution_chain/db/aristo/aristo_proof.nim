@@ -121,7 +121,7 @@ proc makeAccountProof*(
   var
     nodesCache: NodesCache
     proof: seq[seq[byte]]
-  let exists = ?db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data, nodesCache, proof)
+  let exists = ?db.makeProof(STATE_ROOT_VID, accPath.to(NibblesBuf), nodesCache, proof)
   ok((proof, exists))
 
 proc makeStorageProof*(
@@ -139,7 +139,7 @@ proc makeStorageProof*(
   var
     nodesCache: NodesCache
     proof: seq[seq[byte]]
-  let exists = ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
+  let exists = ?db.makeProof(vid, stoPath.to(NibblesBuf), nodesCache, proof)
   ok((proof, exists))
 
 proc makeStorageProofs*(
@@ -157,7 +157,7 @@ proc makeStorageProofs*(
     var nodesCache: NodesCache
     for i, stoPath in stoPaths:
       discard
-        ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proofs[i])
+        ?db.makeProof(vid, stoPath.to(NibblesBuf), nodesCache, proofs[i])
 
   ok(proofs)
 
@@ -184,7 +184,7 @@ proc makeStorageMultiProof(
   if vid.isValid():
     for stoPath in stoPaths:
       var proof: seq[seq[byte]]
-      discard ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
+      discard ?db.makeProof(vid, stoPath.to(NibblesBuf), nodesCache, proof)
       for node in proof:
         multiProof.inclHashed(node)
 
@@ -209,7 +209,7 @@ proc makeMultiProof*(
 
   for accPath, stoPaths in paths:
     var accProof: seq[seq[byte]]
-    let exists = ?db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data, nodesCache, accProof)
+    let exists = ?db.makeProof(STATE_ROOT_VID, accPath.to(NibblesBuf), nodesCache, accProof)
     for node in accProof:
       proofNodes.inclHashed(node)
 
@@ -342,7 +342,7 @@ proc verifyProof*(
     return err(PartTrkEmptyProof)
 
   handleTrackRlpNodesResult():
-    let nibbles = NibblesBuf.fromBytes(path.data)
+    let nibbles = path.to(NibblesBuf)
     trackRlpNodes(chain, 0, root.to(HashKey), nibbles, start = true)
 
 proc verifyProof*(
@@ -355,7 +355,7 @@ proc verifyProof*(
     return err(PartTrkEmptyProof)
 
   handleTrackRlpNodesResult():
-    let nibbles = NibblesBuf.fromBytes(path.data)
+    let nibbles = path.to(NibblesBuf)
     trackRlpNodes(nodes, visitedNodes, root.to(HashKey), nibbles, start = true)
 
 proc verifyProof*(

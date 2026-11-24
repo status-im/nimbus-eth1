@@ -13,12 +13,6 @@ import
   ../../../networking/rlpx,
   ./eth_types
 
-defineProtocol(PROTO = eth68,
-               version = 68,
-               rlpxName = "eth",
-               PeerStateType = Eth68PeerState,
-               NetworkStateType = EthWireRef)
-
 defineProtocol(PROTO = eth69,
                version = 69,
                rlpxName = "eth",
@@ -65,21 +59,6 @@ func to*(rec: StoredReceipts70Packet, _: type ReceiptsPacket): ReceiptsPacket =
   for x in rec.receipts:
     result.receipts.add x.to(seq[Receipt])
 
-proc status68*(peer: Peer; packet: Status68Packet;
-             timeout: Duration = milliseconds(10000'i64)):
-              Future[Status68Packet] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  let
-    sendingFut = eth68.rlpxSendMessage(peer, StatusMsg,
-                    packet.version,
-                    packet.networkId,
-                    packet.totalDifficulty,
-                    packet.bestHash,
-                    packet.genesisHash,
-                    packet.forkId)
-
-    responseFut = eth68.nextMsg(peer, Status68Packet, StatusMsg)
-  handshakeImpl[Status68Packet](peer, sendingFut, responseFut, timeout)
-
 proc status69OrLater*[PROTO](peer: Peer; packet: Status69Packet;
              timeout: Duration = milliseconds(10000'i64)):
               Future[Status69Packet] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
@@ -102,10 +81,8 @@ proc transactions*(peer: Peer; transactions: openArray[Transaction]): Future[
     eth71.rlpxSendMessage(peer, TransactionMsg, transactions)
   elif peer.supports(eth70):
     eth70.rlpxSendMessage(peer, TransactionMsg, transactions)
-  elif peer.supports(eth69):
-    eth69.rlpxSendMessage(peer, TransactionMsg, transactions)
   else:
-    eth68.rlpxSendMessage(peer, TransactionMsg, transactions)
+    eth69.rlpxSendMessage(peer, TransactionMsg, transactions)
 
 proc getBlockHeaders*(peer: Peer; request: BlockHeadersRequest;
                       timeout: Duration = milliseconds(10000'i64)): Future[
@@ -115,10 +92,8 @@ proc getBlockHeaders*(peer: Peer; request: BlockHeadersRequest;
     eth71.rlpxSendRequest(peer, timeout, GetBlockHeadersMsg, request)
   elif peer.supports(eth70):
     eth70.rlpxSendRequest(peer, timeout, GetBlockHeadersMsg, request)
-  elif peer.supports(eth69):
-    eth69.rlpxSendRequest(peer, timeout, GetBlockHeadersMsg, request)
   else:
-    eth68.rlpxSendRequest(peer, timeout, GetBlockHeadersMsg, request)
+    eth69.rlpxSendRequest(peer, timeout, GetBlockHeadersMsg, request)
 
 proc blockHeaders*(responder: Responder;
                    headers: openArray[Header]): Future[void] {.
@@ -127,10 +102,8 @@ proc blockHeaders*(responder: Responder;
     eth71.rlpxSendMessage(responder, BlockHeadersMsg, headers)
   elif responder.supports(eth70):
     eth70.rlpxSendMessage(responder, BlockHeadersMsg, headers)
-  elif responder.supports(eth69):
-    eth69.rlpxSendMessage(responder, BlockHeadersMsg, headers)
   else:
-    eth68.rlpxSendMessage(responder, BlockHeadersMsg, headers)
+    eth69.rlpxSendMessage(responder, BlockHeadersMsg, headers)
 
 proc getBlockBodies*(peer: Peer; packet: BlockBodiesRequest;
                      timeout: Duration = milliseconds(10000'i64)): Future[
@@ -140,10 +113,8 @@ proc getBlockBodies*(peer: Peer; packet: BlockBodiesRequest;
     eth71.rlpxSendRequest(peer, timeout, GetBlockBodiesMsg, packet.blockHashes)
   elif peer.supports(eth70):
     eth70.rlpxSendRequest(peer, timeout, GetBlockBodiesMsg, packet.blockHashes)
-  elif peer.supports(eth69):
-    eth69.rlpxSendRequest(peer, timeout, GetBlockBodiesMsg, packet.blockHashes)
   else:
-    eth68.rlpxSendRequest(peer, timeout, GetBlockBodiesMsg, packet.blockHashes)
+    eth69.rlpxSendRequest(peer, timeout, GetBlockBodiesMsg, packet.blockHashes)
 
 proc blockBodies*(responder: Responder;
                   bodies: openArray[BlockBody]): Future[void] {.
@@ -152,10 +123,8 @@ proc blockBodies*(responder: Responder;
     eth71.rlpxSendMessage(responder, BlockBodiesMsg, bodies)
   elif responder.supports(eth70):
     eth70.rlpxSendMessage(responder, BlockBodiesMsg, bodies)
-  elif responder.supports(eth69):
-    eth69.rlpxSendMessage(responder, BlockBodiesMsg, bodies)
   else:
-    eth68.rlpxSendMessage(responder, BlockBodiesMsg, bodies)
+    eth69.rlpxSendMessage(responder, BlockBodiesMsg, bodies)
 
 proc newPooledTransactionHashes*(peer: Peer; txTypes: seq[byte];
                                  txSizes: openArray[uint64];
@@ -167,11 +136,8 @@ proc newPooledTransactionHashes*(peer: Peer; txTypes: seq[byte];
   elif peer.supports(eth70):
     eth70.rlpxSendMessage(peer, NewPooledTransactionHashesMsg,
       txTypes, txSizes, txHashes)
-  elif peer.supports(eth69):
-    eth69.rlpxSendMessage(peer, NewPooledTransactionHashesMsg,
-      txTypes, txSizes, txHashes)
   else:
-    eth68.rlpxSendMessage(peer, NewPooledTransactionHashesMsg,
+    eth69.rlpxSendMessage(peer, NewPooledTransactionHashesMsg,
       txTypes, txSizes, txHashes)
 
 proc getPooledTransactions*(peer: Peer; packet: PooledTransactionsRequest;
@@ -182,10 +148,8 @@ proc getPooledTransactions*(peer: Peer; packet: PooledTransactionsRequest;
     eth71.rlpxSendRequest(peer, timeout, GetPooledTransactionsMsg, packet.txHashes)
   elif peer.supports(eth70):
     eth70.rlpxSendRequest(peer, timeout, GetPooledTransactionsMsg, packet.txHashes)
-  elif peer.supports(eth69):
-    eth69.rlpxSendRequest(peer, timeout, GetPooledTransactionsMsg, packet.txHashes)
   else:
-    eth68.rlpxSendRequest(peer, timeout, GetPooledTransactionsMsg, packet.txHashes)
+    eth69.rlpxSendRequest(peer, timeout, GetPooledTransactionsMsg, packet.txHashes)
 
 proc pooledTransactions*(responder: Responder;
                          transactions: openArray[PooledTransaction]): Future[
@@ -194,19 +158,15 @@ proc pooledTransactions*(responder: Responder;
     eth71.rlpxSendMessage(responder, PooledTransactionsMsg, transactions)
   elif responder.supports(eth70):
     eth70.rlpxSendMessage(responder, PooledTransactionsMsg, transactions)
-  elif responder.supports(eth69):
-    eth69.rlpxSendMessage(responder, PooledTransactionsMsg, transactions)
   else:
-    eth68.rlpxSendMessage(responder, PooledTransactionsMsg, transactions)
+    eth69.rlpxSendMessage(responder, PooledTransactionsMsg, transactions)
 
 proc getReceipts*(peer: Peer; packet: ReceiptsRequest;
                   timeout: Duration = milliseconds(10000'i64)): Future[
     Opt[ReceiptsPacket]] {.async: (raises: [CancelledError, EthP2PError],
                                    raw: true).} =
-  if peer.supports(eth69):
-    eth69.rlpxSendRequest(peer, timeout, GetReceiptsMsg, packet.blockHashes)
-  else:
-    eth68.rlpxSendRequest(peer, timeout, GetReceiptsMsg, packet.blockHashes)
+  doAssert(peer.supports(eth69), "'getReceipts' function without 'firstBlockReceiptIndex' only available for eth/69")
+  eth69.rlpxSendRequest(peer, timeout, GetReceiptsMsg, packet.blockHashes)
 
 proc getReceipts*(peer: Peer; firstBlockReceiptIndex: uint64; packet: ReceiptsRequest;
                   timeout: Duration = milliseconds(10000'i64)): Future[
@@ -220,12 +180,6 @@ proc getReceipts*(peer: Peer; firstBlockReceiptIndex: uint64; packet: ReceiptsRe
   else:
     eth70.rlpxSendRequest(peer, timeout, GetReceiptsMsg,
       firstBlockReceiptIndex, packet.blockHashes)
-
-proc receipts*(responder: Responder;
-               receipts: openArray[seq[Receipt]]): Future[void] {.
-    async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  doAssert(responder.supports(eth68), "'receipts' function with 'Receipt' param only available for eth/68")
-  eth68.rlpxSendMessage(responder, ReceiptsMsg, receipts)
 
 proc receipts*(responder: Responder;
                receipts: openArray[seq[StoredReceipt]]): Future[void] {.

@@ -147,6 +147,25 @@ suite "snap wire encoding":
       body.storageRoot.to(Hash32) == EMPTY_ROOT_HASH
       body.codeHash.to(Hash32) == EMPTY_CODE_HASH
 
+  test "AccBody: empty storage root and code hash are encoded as the empty string":
+    let body = AccBody(
+      nonce: 1, balance: 2.u256,
+      storageRoot: EMPTY_ROOT_HASH.SnapRootHash,
+      codeHash: EMPTY_CODE_HASH.SnapCodeHash)
+    check rlp.encode(body) == @[0xc4'u8, 0x01, 0x02, 0x80, 0x80]
+
+  test "AccBody: empty string for storage root and code hash is accepted, empty list is rejected":
+    let body = rlp.decode(@[0xc4'u8, 0x01, 0x02, 0x80, 0x80], AccBody)
+    check:
+      body.nonce == 1
+      body.balance == 2.u256
+      body.storageRoot.to(Hash32) == EMPTY_ROOT_HASH
+      body.codeHash.to(Hash32) == EMPTY_CODE_HASH
+    expect RlpError:
+      discard rlp.decode(@[0xc4'u8, 0x01, 0x02, 0xc0, 0x80], AccBody)
+    expect RlpError:
+      discard rlp.decode(@[0xc4'u8, 0x01, 0x02, 0x80, 0xc0], AccBody)
+
   test "AccBody: additional list elements are rejected":
     expect RlpError:
       discard rlp.decode(

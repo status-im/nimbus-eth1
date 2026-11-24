@@ -41,7 +41,7 @@ template validateVersion(attr, com, apiVersion) =
     if version != apiVersion:
       raise invalidAttr("forkChoiceUpdatedV3 expect PayloadAttributesV3" &
       " but got PayloadAttributes" & $version)
-    if not com.isCancunOrLater(timestamp):
+    if not com.isCancunOrLater(timestamp) or com.isAmsterdamOrLater(timestamp):
       raise unsupportedFork(
         "forkchoiceUpdatedV3 get invalid payloadAttributes timestamp")
   else:
@@ -146,8 +146,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
   if custodyColumns.isSome:
     # https://github.com/ethereum/execution-apis/blob/742d45db810b31265c8d3c075af324953330d1ed/src/engine/amsterdam.md#engine_forkchoiceupdatedv4
-    if not com.isAmsterdamOrLater(header.timestamp):
-      raise invalidParams("custodyColumns must not appear before Amsterdam")
+    if apiVersion < Version.V4:
+      raise invalidParams("custodyColumns not supported by forkChoiceUpdated " & $apiVersion)
 
     if custodyColumns.value.len != 16:
       raise invalidParams("custodyColumns length must be 16 bytes")
