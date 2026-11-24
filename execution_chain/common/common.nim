@@ -30,8 +30,8 @@ export
   utils
 
 when compileOption("threads"):
-  import taskpools
-  export taskpools
+  import taskpools, ../concurrency/detached_taskpool
+  export taskpools, detached_taskpool
 
 type
   HeaderChainUpdateCB* = proc(hdr: Header; fin: Hash32) {.gcsafe, raises: [].}
@@ -116,6 +116,9 @@ type
       taskpoolUsable: bool
         ## Cached evaluation of `not taskpool.isNil() and taskpool.numThreads > 1`
 
+      balPrefetchPool*: DetachedTaskpool
+        ## Dedicated thread pool for block access list state prefetching
+
     parallelSenderRecovery*: bool
       ## Recover the transaction senders of a block in parallel on background
       ## threads.
@@ -127,11 +130,6 @@ type
     balStatePrefetch*: bool
       ## Use the supplied block access list to prefetch the accounts and storage
       ## slots of a block on background threads.
-
-    balStatePrefetchWorkers*: int
-      ## Number of background worker tasks used for block access list state
-      ## prefetching. 0 means use the same number of workers as the number of
-      ## available taskpool threads.
 
     balParallelExecution*: bool
       ## Execute the transactions of a block in parallel on background threads
@@ -224,7 +222,6 @@ proc init(com         : CommonRef,
           statelessWitnessValidation: bool,
           optimisticStatePrefetch: bool,
           balStatePrefetch: bool,
-          balStatePrefetchWorkers: int,
           balParallelExecution: bool,
           parallelSenderRecovery: bool,
           emptyStateDb: bool) =
@@ -270,7 +267,6 @@ proc init(com         : CommonRef,
   com.statelessWitnessValidation = statelessWitnessValidation
   com.optimisticStatePrefetch = optimisticStatePrefetch
   com.balStatePrefetch = balStatePrefetch
-  com.balStatePrefetchWorkers = balStatePrefetchWorkers
   com.balParallelExecution = balParallelExecution
   com.parallelSenderRecovery = parallelSenderRecovery
 
@@ -298,7 +294,6 @@ proc new*(
     statelessWitnessValidation = false;
     optimisticStatePrefetch = false;
     balStatePrefetch = false;
-    balStatePrefetchWorkers = 0;
     balParallelExecution = false;
     parallelSenderRecovery = false;
     emptyStateDb = false;
@@ -317,7 +312,6 @@ proc new*(
     statelessWitnessValidation,
     optimisticStatePrefetch,
     balStatePrefetch,
-    balStatePrefetchWorkers,
     balParallelExecution,
     parallelSenderRecovery,
     emptyStateDb)
@@ -332,7 +326,6 @@ proc new*(
     statelessWitnessValidation = false;
     optimisticStatePrefetch = false;
     balStatePrefetch = false;
-    balStatePrefetchWorkers = 0;
     balParallelExecution = false;
     parallelSenderRecovery = false;
     emptyStateDb = false;
@@ -351,7 +344,6 @@ proc new*(
     statelessWitnessValidation,
     optimisticStatePrefetch,
     balStatePrefetch,
-    balStatePrefetchWorkers,
     balParallelExecution,
     parallelSenderRecovery,
     emptyStateDb)
@@ -370,7 +362,6 @@ proc refresh*(com: CommonRef) =
     statelessWitnessValidation = com.statelessWitnessValidation,
     optimisticStatePrefetch = com.optimisticStatePrefetch,
     balStatePrefetch = com.balStatePrefetch,
-    balStatePrefetchWorkers = com.balStatePrefetchWorkers,
     balParallelExecution = com.balParallelExecution,
     parallelSenderRecovery = com.parallelSenderRecovery,
     emptyStateDb = false)
@@ -488,6 +479,8 @@ when compileOption("threads"):
     com.taskpoolUsable = not taskpool.isNil() and taskpool.numThreads > 1
 
   proc shutdownTaskpool*(com: CommonRef) =
+    if not com.balPrefetchPool.isNil():
+      com.balPrefetchPool.shutdown()
     if not com.taskpool.isNil():
       com.taskpool.shutdown()
       com.taskpool = nil
@@ -519,7 +512,7 @@ func balStatePrefetchEnabled*(
     blockAccessList: Opt[BlockAccessListRef]): bool =
   when compileOption("threads"):
     if com.balStatePrefetch:
-      assert com.taskpoolUsable
+      assert not com.balPrefetchPool.isNil()
       blockAccessList.isSome() and com.isAmsterdamOrLater(timestamp)
     else:
       false

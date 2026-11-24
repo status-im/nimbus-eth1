@@ -416,11 +416,25 @@ proc setupCommonRef*(
     optimisticStatePrefetch = config.parallelSenderRecovery and
         config.optimisticStatePrefetch and not disableParallelFeatures,
     balStatePrefetch = config.balStatePrefetch and not disableParallelFeatures,
-    balStatePrefetchWorkers = config.balStatePrefetchWorkers,
     balParallelExecution = config.balParallelExecution and
         not config.statelessProvider and not disableParallelFeatures,
     parallelSenderRecovery = config.parallelSenderRecovery and not disableParallelFeatures,
     emptyStateDb = emptyStateDb)
+
+  when compileOption("threads"):
+    if com.balStatePrefetch:
+      let
+        configured = config.balStatePrefetchWorkers
+        threads = min(
+          if configured > 0: configured else: 2 * numThreads,
+          maxBalStatePrefetchWorkers)
+      com.balPrefetchPool =
+        try:
+          DetachedTaskpool.new(threads)
+        except CatchableError as exc:
+          fatal "Cannot start BAL state prefetch taskpool", err = exc.msg
+          quit QuitFailure
+      info "BAL state prefetch taskpool started", threads
 
   if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",

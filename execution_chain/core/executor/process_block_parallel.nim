@@ -204,9 +204,12 @@ func firstBalIndex(sc: SlotChanges): BlockAccessIndex =
   sc.changes[0].blockAccessIndex
 
 proc balPrefetchWorker*(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
+  template isCancelled(): bool =
+    ctx[].cancelled.load(moAcquire)
+
   let len = ctx[].balPtr[].len
   while true:
-    if ctx[].cancelled.load(moAcquire):
+    if isCancelled():
       break
 
     let i = ctx[].nextIndex.fetchAdd(1, moRelaxed)
@@ -238,9 +241,13 @@ proc balPrefetchWorker*(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
       proc(a, b: SlotChanges): int =
         cmp(firstBalIndex(a), firstBalIndex(b)),
     ):
+      if isCancelled():
+        return true
       discard ctx[].txFrame.fetchSlot(accPath, computeSlotKey(slotChanges.slot))
 
     for stoRead in accChanges[].storageReads:
+      if isCancelled():
+        return true
       discard ctx[].txFrame.fetchSlot(accPath, computeSlotKey(stoRead))
 
   true
@@ -261,17 +268,12 @@ template withBalPrefetchParallel*(
 
   let
     ctxPtr = ctx.addr
-    n = vmState.com.taskpool.numThreads
-    configured = vmState.com.balStatePrefetchWorkers
-    numWorkers =
-      if configured <= 0:
-        n
-      else:
-        min(configured, n)
+    pool = vmState.com.balPrefetchPool
+    numWorkers = min(pool.numWorkers, balRef[].len)
 
   var futs = newSeq[Flowvar[bool]](numWorkers)
   for i in 0 ..< numWorkers:
-    futs[i] = vmState.com.taskpool.spawn balPrefetchWorker(ctxPtr)
+    futs[i] = pool.taskpool.spawn balPrefetchWorker(ctxPtr)
 
   try:
     body
