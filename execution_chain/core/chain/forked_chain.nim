@@ -673,7 +673,7 @@ proc init*(
       fcuSafe:          fcuSafe,
       baseQueue:        initDeque[BlockRef](),
       importLock:       newAsyncLock(),
-      badBlocks:        LruCache[Hash32, (Block, Opt[BlockAccessListRef])].init(16),
+      badBlocks:        LruCache[Hash32, (Block, Opt[BlockAccessListRef])].init(100),
     )
 
   # updateFinalized will stop ancestor lineage
