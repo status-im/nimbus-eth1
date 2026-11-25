@@ -391,8 +391,8 @@ proc processBlock*(
     )
 
     ?vmState.procBlkEpilogue(
-      blk, blockAccessList, skipValidation, skipReceipts, skipStateRootCheck,
-      skipUncles, skipPostExecBalCheck,
+      blk, blockAccessList, skipValidation, skipReceipts,
+      skipUncles, skipStateRootCheck, skipPostExecBalCheck,
     )
 
   ok()
