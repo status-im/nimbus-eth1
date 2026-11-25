@@ -73,9 +73,9 @@ proc init*(T: type BeaconRestServer, url: string): EngineResult[BeaconRestServer
 proc injectEngineFrontend*(server: BeaconRestServer, engine: RpcVerificationEngine) =
   let frontend = engine.getBeaconApiFrontend()
 
-  server.router.api2(
-    MethodGet, "/eth/v1/beacon/light_client/bootstrap/{block_root}"
-  ) do(block_root: Eth2Digest) -> RestApiResponse:
+  server.router.api2(MethodGet, "/eth/v1/beacon/light_client/bootstrap/{block_root}") do(
+    block_root: Eth2Digest
+  ) -> RestApiResponse:
     let contentType = preferredContentType(jsonMediaType, sszMediaType).valueOr:
       return RestApiResponse.jsonError(Http406, ContentNotAcceptableError)
     let blockRoot = block_root.valueOr:
@@ -99,9 +99,7 @@ proc injectEngineFrontend*(server: BeaconRestServer, engine: RpcVerificationEngi
       return RestApiResponse.jsonError(Http400, MissingCountValueError)
     let numUpdates = count.get().valueOr:
       return RestApiResponse.jsonError(Http400, InvalidCountError, $error)
-    let updates = (
-      await frontend.getLightClientUpdatesByRange(startPeriod, numUpdates)
-    ).valueOr:
+    let updates = (await frontend.getLightClientUpdatesByRange(startPeriod, numUpdates)).valueOr:
       return backendError(error)
 
     let entries = engine.versioned(updates)
@@ -110,9 +108,7 @@ proc injectEngineFrontend*(server: BeaconRestServer, engine: RpcVerificationEngi
     else:
       RestApiResponse.jsonResponseVersioned(entries)
 
-  server.router.api2(
-    MethodGet, "/eth/v1/beacon/light_client/finality_update"
-  ) do() -> RestApiResponse:
+  server.router.api2(MethodGet, "/eth/v1/beacon/light_client/finality_update") do() -> RestApiResponse:
     let contentType = preferredContentType(jsonMediaType, sszMediaType).valueOr:
       return RestApiResponse.jsonError(Http406, ContentNotAcceptableError)
     let update = (await frontend.getLightClientFinalityUpdate()).valueOr:
@@ -121,9 +117,7 @@ proc injectEngineFrontend*(server: BeaconRestServer, engine: RpcVerificationEngi
       return RestApiResponse.jsonError(Http404, LCFinUpdateUnavailable)
     versionedResponse(versioned, contentType)
 
-  server.router.api2(
-    MethodGet, "/eth/v1/beacon/light_client/optimistic_update"
-  ) do() -> RestApiResponse:
+  server.router.api2(MethodGet, "/eth/v1/beacon/light_client/optimistic_update") do() -> RestApiResponse:
     let contentType = preferredContentType(jsonMediaType, sszMediaType).valueOr:
       return RestApiResponse.jsonError(Http406, ContentNotAcceptableError)
     let update = (await frontend.getLightClientOptimisticUpdate()).valueOr:

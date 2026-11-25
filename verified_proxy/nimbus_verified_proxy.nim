@@ -207,7 +207,8 @@ proc startBeaconFrontends(
     servers.add(server)
 
   if urls.len > 0 and servers.len == 0:
-    raise newException(ProxyError, "Couldn't start any beacon frontends for verified proxy")
+    raise
+      newException(ProxyError, "Couldn't start any beacon frontends for verified proxy")
 
   servers
 

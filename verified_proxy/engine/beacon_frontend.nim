@@ -67,8 +67,7 @@ proc getBeaconApiFrontend*(engine: RpcVerificationEngine): BeaconApiFrontend =
     ): Future[EngineResult[seq[ForkedLightClientUpdate]]] {.
         async: (raises: [CancelledError])
     .} =
-      trace "Received query",
-        meth = "getLightClientUpdatesByRange", startPeriod, count
+      trace "Received query", meth = "getLightClientUpdatesByRange", startPeriod, count
       let
         (backend, backendIdx) = ?engine.beaconBackendFor(BeaconUpdates)
         cappedCount = min(count, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
@@ -87,9 +86,9 @@ proc getBeaconApiFrontend*(engine: RpcVerificationEngine): BeaconApiFrontend =
         (await backend.getLightClientFinalityUpdate()).tagBackend(backendIdx)
       )
 
-    optimisticProc = proc(): Future[
-        EngineResult[ForkedLightClientOptimisticUpdate]
-    ] {.async: (raises: [CancelledError]).} =
+    optimisticProc = proc(): Future[EngineResult[ForkedLightClientOptimisticUpdate]] {.
+        async: (raises: [CancelledError])
+    .} =
       trace "Received query", meth = "getLightClientOptimisticUpdate"
       let (backend, backendIdx) = ?engine.beaconBackendFor(BeaconOptimistic)
       return engine.penalize(

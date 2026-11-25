@@ -9,6 +9,7 @@
 {.push raises: [].}
 
 import
+  std/options,
   unittest2,
   chronos,
   stint,
@@ -21,7 +22,7 @@ import
 
 let beaconFrontendEngineConf = RpcVerificationEngineConf(
   chainId: 1.u256,
-  trustedBlockRoot: TEST_TBR,
+  trustedBlockRoot: some(TEST_TBR),
   maxBlockWalk: 1,
   headerStoreLen: 16,
   accountCacheLen: 1,
@@ -136,7 +137,8 @@ suite "beacon frontend passthrough":
     engine.registerBackend(backend, fullBeaconCapabilities)
     let frontend = engine.getBeaconApiFrontend()
 
-    let res = waitFor frontend.getLightClientUpdatesByRange(SyncCommitteePeriod(0), 1000)
+    let res =
+      waitFor frontend.getLightClientUpdatesByRange(SyncCommitteePeriod(0), 1000)
 
     check:
       res.isOk()

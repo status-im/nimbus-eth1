@@ -103,7 +103,9 @@ proc beaconUpdates*(
   beaconCallbackToC(ctx, cb, userData):
     ctx.beaconFrontend.getLightClientUpdatesByRange(startPeriod, count)
 
-proc beaconFinality*(ctx: ptr Context, cb: CallBackProc, userData: pointer) {.raises: [].} =
+proc beaconFinality*(
+    ctx: ptr Context, cb: CallBackProc, userData: pointer
+) {.raises: [].} =
   beaconCallbackToC(ctx, cb, userData):
     ctx.beaconFrontend.getLightClientFinalityUpdate()
 
