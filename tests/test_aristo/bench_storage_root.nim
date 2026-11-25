@@ -9,7 +9,7 @@
 # distributed except according to those terms.
 
 import
-  std/[algorithm, cpuinfo, monotimes, os, strformat, strutils, times],
+  std/[cpuinfo, monotimes, os, strformat, strutils, times],
   ../../execution_chain/db/aristo/[
     aristo_compute, aristo_merge, aristo_desc, aristo_init/memory_only,
     aristo_tx_frame,
@@ -17,16 +17,21 @@ import
 
 const
   baseAccounts = 100_000
-  deepContracts = 128
-  deepSlots = 4096
-  giantSlots = 500_000
-  warmup = 10
-
-let
-  numThreads = parseInt(getEnv("THREADS", $countProcessors()))
-  only = getEnv("SCENARIO", "")
+  accountsPerBlock = 200
+  smallContracts = 128
+  smallContractSlots = 4096
+  largeContract = smallContracts
+  largeContractSlots = 500_000
+  blocks = 40
+  warmupBlocks = 10
 
 type
+  Scenario = object
+    name: string
+    contracts: int
+    slotsPerContract: int
+    largeContractWrites: int
+
   Bench = object
     db: AristoDbRef
     tx: AristoTxRef
@@ -35,16 +40,22 @@ type
     rng: uint64
     root: Hash32
 
-  Stats = tuple[mean, p50, p95, max: float]
+const scenarios = [
+  Scenario(name: "128 small x 1 slot", contracts: 128, slotsPerContract: 1),
+  Scenario(name: "128 small x 2 slots", contracts: 128, slotsPerContract: 2),
+  Scenario(name: "128 small x 4 slots", contracts: 128, slotsPerContract: 4),
+  Scenario(name: "128 small x 16 slots", contracts: 128, slotsPerContract: 16),
+  Scenario(name: "16 small x 2 slots", contracts: 16, slotsPerContract: 2),
+  Scenario(name: "large x 5000 slots", largeContractWrites: 5000),
+  Scenario(
+    name: "large x 5000 slots + 128 small x 4 slots",
+    contracts: 128,
+    slotsPerContract: 4,
+    largeContractWrites: 5000,
+  ),
+]
 
-  Scenario = object
-    name: string
-    blocks: int
-    deep: int
-    deepWrites: int
-    giantWrites: int
-    pending: int
-    spinMs: int
+let numThreads = parseInt(getEnv("THREADS", $countProcessors()))
 
 proc mix(x: uint64): uint64 =
   var z = x + 0x9E3779B97F4A7C15'u64
@@ -80,6 +91,13 @@ proc addAccounts(b: var Bench, n: int) =
       .isOk()
     inc b.accounts
 
+proc addContract(b: var Bench, contract, slots: int) =
+  doAssert b.tx
+    .mergeAccount(accPath(contract), AristoAccount(codeHash: EMPTY_CODE_HASH), false)
+    .isOk()
+  for slot in 0 ..< slots:
+    doAssert b.tx.mergeSlot(accPath(contract), slotPath(contract, slot), 1.u256).isOk()
+
 proc writeSlots(b: var Bench, contract, slots, count: int) =
   for _ in 0 ..< count:
     doAssert b.tx
@@ -97,16 +115,10 @@ proc init(T: type Bench, parallel: bool): T =
     result.db.taskpool = Taskpool.new(numThreads = numThreads)
   result.tx = result.db.txRef
   result.addAccounts(baseAccounts)
-  for contract in 0 .. deepContracts:
-    doAssert result.tx
-      .mergeAccount(accPath(contract), AristoAccount(codeHash: EMPTY_CODE_HASH), false)
-      .isOk()
-    let slots = if contract == deepContracts: giantSlots else: deepSlots
-    for slot in 0 ..< slots:
-      doAssert result.tx
-        .mergeSlot(accPath(contract), slotPath(contract, slot), 1.u256)
-        .isOk()
-  doAssert result.tx.computeStateRoot(skipLayers = false).isOk()
+  for contract in 0 ..< smallContracts:
+    result.addContract(contract, smallContractSlots)
+  result.addContract(largeContract, largeContractSlots)
+  doAssert result.tx.computeStateRoot().isOk()
   result.tx.checkpoint(1, skipSnapshot = true)
   let batch = result.db.putBegFn()[]
   result.db.persist(batch, result.tx)
@@ -115,101 +127,44 @@ proc init(T: type Bench, parallel: bool): T =
   result.blk = 1
   result.db.parallelStateRootComputation = parallel
 
-proc spin(ms: int): bool {.gcsafe, raises: [].} =
-  let start = getMonoTime()
-  var x = 0'u64
-  while (getMonoTime() - start).inMilliseconds < ms:
-    for i in 0 ..< 1000:
-      x = mix(x + uint64(i))
-  x != 0
-
-proc stats(xs: seq[float]): Stats =
-  var sorted = xs
-  sorted.sort()
-  var sum = 0.0
-  for x in sorted:
-    sum += x
-  (sum / float(sorted.len), sorted[sorted.len div 2], sorted[sorted.len * 95 div 100],
-    sorted[^1])
-
-proc run(b: var Bench, s: Scenario): Stats =
-  var times: seq[float]
-  for _ in 0 ..< s.blocks:
+proc msPerBlock(b: var Bench, s: Scenario): float =
+  var total = 0.0
+  for i in 0 ..< blocks:
     b.tx = b.db.txFrameBegin(b.tx)
     inc b.blk
-    b.addAccounts(200)
-    if s.deep == deepContracts:
-      for contract in 0 ..< deepContracts:
-        b.writeSlots(contract, deepSlots, s.deepWrites)
-    else:
-      for _ in 0 ..< s.deep:
-        b.writeSlots(b.rand(deepContracts), deepSlots, s.deepWrites)
-    if s.giantWrites > 0:
-      b.writeSlots(deepContracts, giantSlots, s.giantWrites)
+    b.addAccounts(accountsPerBlock)
+    for contract in 0 ..< s.contracts:
+      b.writeSlots(contract, smallContractSlots, s.slotsPerContract)
+    b.writeSlots(largeContract, largeContractSlots, s.largeContractWrites)
 
-    var futs: seq[Flowvar[bool]]
-    if not b.db.taskpool.isNil():
-      for _ in 0 ..< s.pending:
-        futs.add b.db.taskpool.spawn spin(s.spinMs)
-
-    let t0 = getMonoTime()
-    let res = b.tx.computeStateRoot(skipLayers = false)
-    times.add (getMonoTime() - t0).inNanoseconds.float / 1e6
-    doAssert res.isOk()
-    b.root = res[].to(Hash32)
-
-    for f in futs.mitems():
-      discard sync(f)
+    let start = getMonoTime()
+    b.root = b.tx.computeStateRoot().expect("state root").to(Hash32)
+    if i >= warmupBlocks:
+      total += (getMonoTime() - start).inNanoseconds.float / 1e6
     b.tx.checkpoint(b.blk, skipSnapshot = false)
-  stats(times[warmup .. ^1])
-
-let scenarios = [
-  Scenario(name: "128 deep x 1 slot", blocks: 40, deep: 128, deepWrites: 1),
-  Scenario(name: "128 deep x 2 slots", blocks: 40, deep: 128, deepWrites: 2),
-  Scenario(name: "128 deep x 4 slots", blocks: 40, deep: 128, deepWrites: 4),
-  Scenario(name: "128 deep x 16 slots", blocks: 40, deep: 128, deepWrites: 16),
-  Scenario(name: "16 deep x 2 slots", blocks: 40, deep: 16, deepWrites: 2),
-  Scenario(name: "giant 5000", blocks: 110, giantWrites: 5000),
-  Scenario(
-    name: "giant 5000 + 128 deep x 4", blocks: 110, deep: 128, deepWrites: 4,
-    giantWrites: 5000,
-  ),
-  Scenario(
-    name: "128 deep x 2, 8 pending 20ms", blocks: 40, deep: 128, deepWrites: 2,
-    pending: 8, spinMs: 20,
-  ),
-  Scenario(
-    name: "128 deep x 2, 2 pending 100ms", blocks: 40, deep: 128, deepWrites: 2,
-    pending: 2, spinMs: 100,
-  ),
-  Scenario(
-    name: "128 deep x 2, 32 pending 5ms", blocks: 40, deep: 128, deepWrites: 2,
-    pending: 32, spinMs: 5,
-  ),
-]
+  total / float(blocks - warmupBlocks)
 
 var
-  results: array[2, seq[Stats]]
-  roots: array[2, Hash32]
+  results: array[bool, seq[float]]
+  roots: array[bool, Hash32]
 
 for parallel in [false, true]:
   var b = Bench.init(parallel)
   for s in scenarios:
-    if only.len == 0 or only in s.name:
-      results[int(parallel)].add b.run(s)
-  roots[int(parallel)] = b.root
+    results[parallel].add b.msPerBlock(s)
+  roots[parallel] = b.root
   if parallel:
     b.db.taskpool.shutdown()
 
-doAssert roots[0] == roots[1], "serial and parallel roots differ"
+doAssert roots[false] == roots[true], "serial and parallel roots differ"
 
 echo &"threads: {numThreads}"
-var n = 0
-for s in scenarios:
-  if only.len == 0 or only in s.name:
-    let
-      serial = results[0][n]
-      par = results[1][n]
-    echo &"{s.name:<30} serial {serial.mean:8.2f} ms | parallel mean {par.mean:8.2f}" &
-      &" p50 {par.p50:8.2f} p95 {par.p95:8.2f} max {par.max:8.2f}"
-    inc n
+echo &"small contract: {smallContractSlots} slots"
+echo &"large contract: {largeContractSlots} slots"
+echo &"state root time per block, each block also adds {accountsPerBlock} accounts"
+for i, s in scenarios:
+  let
+    serial = results[false][i]
+    parallel = results[true][i]
+  echo &"{s.name:<42} serial {serial:8.2f} ms | parallel {parallel:8.2f} ms" &
+    &" | {serial / parallel:5.2f}x"
