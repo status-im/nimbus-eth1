@@ -464,7 +464,7 @@ proc headerFromTag*(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, s
     of "latest", "pending":
       # No pending block is assembled outside of payload building, so resolve
       # "pending" to the head like erigon does instead of rejecting it.
-      ok(chain.latestHeader)
+      ok(chain.headHeader)
     of "finalized":
       ok(chain.finalizedHeader)
     of "safe":
@@ -485,7 +485,7 @@ proc blockFromTag*(chain: ForkedChainRef, blockTag: BlockTag, noHash: bool = fal
     let tag = blockTag.alias.toLowerAscii
     case tag
     of "latest", "pending":
-      chain.latestBlock
+      chain.headBlock
     of "finalized":
       chain.finalizedBlock
     of "safe":

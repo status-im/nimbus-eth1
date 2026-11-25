@@ -1026,6 +1026,24 @@ proc memoryTxHashesForBlock*(c: ForkedChainRef, blockHash: Hash32): Opt[seq[Hash
 proc latestBlock*(c: ForkedChainRef): Result[Block, string] =
   c.latest.txFrame.getEthBlock(c.latest.hash)
 
+func headHeader*(c: ForkedChainRef): Header =
+  c.hashToBlock.withValue(c.fcuHead.hash, loc):
+    return loc[].header
+
+  c.latest.header
+
+proc headBlock*(c: ForkedChainRef): Result[Block, string] =
+  # Both lookup share the same txFrame because
+  # it will go to the same kvt db, no layers anymore
+  let
+    txFrame = c.latest.txFrame
+    head = txFrame.getEthBlock(c.fcuHead.hash)
+
+  if head.isOk:
+    head
+  else:
+    txFrame.getEthBlock(c.latest.hash)
+
 proc getBadBlocks*(c: ForkedChainRef): seq[(Block, Opt[BlockAccessListRef])] =
   var blks: seq[(Block, Opt[BlockAccessListRef])]
   for badBlock in c.badBlocks.values():
