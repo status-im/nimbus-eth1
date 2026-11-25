@@ -22,7 +22,7 @@ import
   ../execution_chain/db/ledger,
   ../execution_chain/db/storage_types,
   ../execution_chain/core/chain,
-  ../execution_chain/core/eip4844,
+  ../execution_chain/core/[eip4844, eip7702],
   ../execution_chain/core/validate,
   ../execution_chain/[conf, transaction, constants],
   ../execution_chain/core/tx_pool,
@@ -54,6 +54,8 @@ const
   triggerCode = hexToSeqByte(
     "0x3373fffffffffffffffffffffffffffffffffffffffe1460cb5760115f54807fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff146101f457600182026001905f5b5f82111560685781019083028483029004916001019190604d565b909390049250505036603814608857366101f457346101f4575f5260205ff35b34106101f457600154600101600155600354806003026004013381556001015f35815560010160203590553360601b5f5260385f601437604c5fa0600101600355005b6003546002548082038060101160df575060105b5f5b8181146101835782810160030260040181604c02815460601b8152601401816001015481526020019060020154807fffffffffffffffffffffffffffffffff00000000000000000000000000000000168252906010019060401c908160381c81600701538160301c81600601538160281c81600501538160201c81600401538160181c81600301538160101c81600201538160081c81600101535360010160e1565b910180921461019557906002556101a0565b90505f6002555f6003555b5f54807fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff14156101cd57505f5b6001546002828201116101e25750505f6101e8565b01600290035b5f555f600155604c025ff35b5f5ffd"
   )
+  AccountEOA = 28
+  AccountEOAInvalid = 17
 
 type
   TestEnv = object
@@ -64,7 +66,7 @@ type
 
   CustomTx = CustomTransactionData
 
-proc initState(params: NetworkParams, envFork: HardFork) =
+proc initState(sender: TxSender, params: NetworkParams, envFork: HardFork) =
   doAssert envFork >= MergeFork
 
   let cc = params.config
@@ -76,6 +78,15 @@ proc initState(params: NetworkParams, envFork: HardFork) =
 
   if envFork >= Cancun:
     cc.cancunTime = Opt.some(0.EthTime)
+    let
+      account = sender.getAccount(AccountEOA).address
+      delegated = address"000000000000000000000000000000000000aaaa"
+
+    params.genesis.alloc[account] = GenesisAccount(
+      balance: 1000000000000000000.u256, # 1 ether
+      nonce: 0,
+      code: @(addressToDelegation(delegated)),
+    )
 
   if envFork >= Prague:
     cc.pragueTime = Opt.some(0.EthTime)
@@ -88,6 +99,25 @@ proc initState(params: NetworkParams, envFork: HardFork) =
       code: triggerCode
     )
 
+    let
+      account = sender.getAccount(AccountEOA).address
+      delegated = address"000000000000000000000000000000000000aaaa"
+
+    params.genesis.alloc[account] = GenesisAccount(
+      balance: 1000000000000000000.u256, # 1 ether
+      nonce: 0,
+      code: @(addressToDelegation(delegated)),
+    )
+
+    let
+      invalidAccount = sender.getAccount(AccountEOAInvalid).address
+
+    params.genesis.alloc[invalidAccount] = GenesisAccount(
+      balance: 1000000000000000000.u256, # 1 ether
+      nonce: 0,
+      code: contractCode,
+    )
+
   if envFork >= Osaka:
     cc.osakaTime = Opt.some(0.EthTime)
 
@@ -98,10 +128,8 @@ proc initState(params: NetworkParams, envFork: HardFork) =
 
   params.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
 
-proc initEnv(params: NetworkParams, flags: set[TxPoolFlags] = {}): TestEnv =
+proc initEnv(sender: TxSender, params: NetworkParams, flags: set[TxPoolFlags] = {}): TestEnv =
   let
-    # create the sender first, because it will modify networkParams
-    sender = TxSender.new(params, 30)
     com    = CommonRef.new(newCoreDbRef DefaultDbMemory, params)
     chain  = ForkedChainRef.init(com)
 
@@ -123,9 +151,10 @@ proc initParams(): NetworkParams =
 proc initEnv(envFork: HardFork, flags: set[TxPoolFlags] = {}): TestEnv =
   let
     params = initParams()
+    sender = TxSender.new(params, 30)
 
-  params.initState(envFork)
-  initEnv(params, flags)
+  initState(sender, params, envFork)
+  initEnv(sender, params, flags)
 
 template checkAddTx(xp, tx, errorCode) =
   let prevCount = xp.len
@@ -932,13 +961,14 @@ suite "TxPool test suite":
     let
       params = initParams()
       timestamp = EthTime.now()
+      sender = TxSender.new(params, 30)
 
-    params.initState(Prague)
+    initState(sender, params, Prague)
     # set osaka transition time
     params.config.osakaTime = Opt.some(timestamp + 2)
 
     let
-      env = initEnv(params)
+      env = initEnv(sender, params)
       xp = env.xp
       mx = env.sender
       acc = mx.getAccount(0)
@@ -1181,6 +1211,53 @@ suite "TxPool test suite":
     check LedgerRef.init(chain.latestTxFrame).getBalance(acc.address) ==
       balanceBefore - paid - amount
 
+  test "Cancun EOA Check":
+    let
+      env = initEnv(Cancun)
+      xp = env.xp
+      mx = env.sender
+      chain = env.chain
+      acc = mx.getAccount(AccountEOA)
+
+    let ptx = mx.makeTx(BaseTx(
+      txType: Opt.some(TxEip1559),
+      gasLimit: 55000,
+      recipient: Opt.none(Address),
+      amount: 0.u256,
+    ), acc, 0)
+
+    xp.checkAddTx(ptx)
+    xp.checkImportBlock(0, 1)
+
+  test "Prague EOA Check":
+    let
+      env = initEnv(Prague)
+      xp = env.xp
+      mx = env.sender
+      chain = env.chain
+      acc = mx.getAccount(AccountEOA)
+      accInvalid = mx.getAccount(AccountEOAInvalid)
+
+    let ptx = mx.makeTx(BaseTx(
+      txType: Opt.some(TxEip1559),
+      gasLimit: 55000,
+      recipient: Opt.none(Address),
+      amount: 0.u256,
+    ), acc, 0)
+
+    xp.checkAddTx(ptx)
+    xp.checkImportBlock(1, 0)
+
+    let ptxInvalid = mx.makeTx(BaseTx(
+      txType: Opt.some(TxEip1559),
+      gasLimit: 55000,
+      recipient: Opt.none(Address),
+      amount: 0.u256,
+    ), accInvalid, 0)
+
+    xp.checkAddTx(ptxInvalid)
+    xp.checkImportBlock(0, 1)
+
 suite "TxPool BAL post-Amsterdam":
   # Regression test for PR #4148: tx_packer left an outer beginCallFrame in
   # vmExecGrabItem with no matching commit/rollback, so per-tx BAL changes
@@ -1248,15 +1325,16 @@ suite "TxPool EIP-7934 block RLP size limit":
 
   let
     params = initParams()
+    sender = TxSender.new(params, 30)
 
-  params.initState(Amsterdam)
+  initState(sender, params, Amsterdam)
   # The RLP cap (~8 MiB) only binds if the block gas limit allows more
   # calldata than fits; post-Amsterdam the EIP-7976 floor cost is
   # ~64 gas per calldata byte, so that takes ~540M+ block gas.
   params.genesis.gasLimit = 1_000_000_000
 
   let
-    env = initEnv(params)
+    env = initEnv(sender, params)
     xp = env.xp
     mx = env.sender
 

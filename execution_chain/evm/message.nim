@@ -47,12 +47,11 @@ proc getRecipientCode*(vmState: BaseVMState, msg: Message): CodeBytesRef =
   if vmState.fork < FkPrague:
     return code
 
-  let delegateTo = parseDelegationAddress(code).valueOr:
+  msg.delegateTo = parseDelegationAddress(code).valueOr:
     return code
 
   # If the `call.to` has a delegation, mark it and let the caller load the
   # target code: from Amsterdam the delegated account access must be charged
   # before its code is read.
   msg.flags.incl MsgFlags.Delegated
-  msg.delegateTo = delegateTo
   code
