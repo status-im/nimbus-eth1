@@ -11,7 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[atomics, strformat],
+  std/[atomics, locks, strformat],
   chronicles,
   results,
   eth/common/[base_rlp, hashes_rlp],
@@ -30,7 +30,9 @@ type
     tasksCompleted*: int
     tasksTotal*: int
 
-  ConcurrentVertexBufQueue* = ConcurrentQueue[3, (RootedVertexID, VertexBuf)]
+  ConcurrentVertexBufQueue* = object
+    queue: ConcurrentQueue[3, (RootedVertexID, VertexBuf)]
+    pushLock: Lock
 
   KeyWriteBuf* = SharedSeq[(RootedVertexID, HashKey, uint32)]
 
@@ -42,6 +44,26 @@ proc `=copy`(
 # tradeoff between efficiency and memory usage with diminishing returns the
 # larger it is..
 const batchSize = 32 * 1024 * 1024 div (sizeof(RootedVertexID) + sizeof(VertexBuf))
+
+proc init(q: var ConcurrentVertexBufQueue) =
+  q.queue.init()
+  q.pushLock.initLock()
+
+proc dispose(q: var ConcurrentVertexBufQueue) =
+  q.queue.dispose()
+  q.pushLock.deinitLock()
+
+template isEmpty(q: var ConcurrentVertexBufQueue): bool =
+  q.queue.isEmpty()
+
+template tryPop(
+    q: var ConcurrentVertexBufQueue, v: var (RootedVertexID, VertexBuf)
+): bool =
+  q.queue.tryPop(v)
+
+proc push(q: var ConcurrentVertexBufQueue, v: (RootedVertexID, VertexBuf)) =
+  withLock(q.pushLock):
+    q.queue.push(v)
 
 func progress(batch: WriteBatch, parallel: static bool): string =
   when parallel:
@@ -235,6 +257,9 @@ template childVid(vp: VertexRef): VertexID =
   of BoundaryNode, StoLeaf:
     default(VertexID)
 
+template isStorageRoot(rvid: RootedVertexID): bool =
+  rvid.vid == rvid.root and rvid.root != STATE_ROOT_VID
+
 proc computeKeyImpl(
     txRef: AristoTxRef,
     rvid: RootedVertexID,
@@ -349,6 +374,53 @@ when compileOption("threads"):
         vtxBufQueue,
       )
 
+  func allChildBranchesPending(
+      vtx: BranchRef, keyvtxs: array[16, ((HashKey, VertexRef), int)]
+  ): bool =
+    for nibble in 0'u8 ..< 16:
+      if not vtx.bVid(nibble).isValid or keyvtxs[nibble][0][0].isValid or
+          not keyvtxs[nibble][0][1].childVid.isValid:
+        return false
+    true
+
+  proc spawnStoChildren(
+      txRef: AristoTxRef,
+      root: VertexID,
+      vtx: BranchRef,
+      keyvtxs: var array[16, ((HashKey, VertexRef), int)],
+      batch: var WriteBatch,
+      skipLayers: bool,
+      keyBuf: ptr KeyWriteBuf,
+      vtxBufQueue: ptr ConcurrentVertexBufQueue,
+  ): Result[void, AristoError] =
+    var
+      futs: array[16, Flowvar[Result[(HashKey, int), AristoError]]]
+      keyBufs: array[16, KeyWriteBuf]
+
+    for nibble in 0'u8 ..< 16:
+      futs[nibble] = txRef.db.taskpool.spawn computeKeyImplTask(
+        txRef.addr,
+        (root, vtx.bVid(nibble)),
+        batch.addr,
+        keyvtxs[nibble][0][1].addr,
+        keyvtxs[nibble][1],
+        skipLayers,
+        keyBufs[nibble].addr,
+        vtxBufQueue,
+      )
+
+    var res = Result[void, AristoError].ok()
+    for nibble in 0'u8 ..< 16:
+      let childRes = sync(futs[nibble])
+      if childRes.isOk:
+        (keyvtxs[nibble][0][0], keyvtxs[nibble][1]) = childRes[]
+      else:
+        res = Result[void, AristoError].err(childRes.error)
+      for item in keyBufs[nibble]:
+        keyBuf[].add(item)
+      keyBufs[nibble].dispose()
+    res
+
 proc computeKeyImpl(
     txRef: AristoTxRef,
     rvid: RootedVertexID,
@@ -387,7 +459,7 @@ proc computeKeyImpl(
                   keyvtxl[0][1],
                   keyvtxl[1],
                   skipLayers = skipLayers,
-                  spawnTpTasks = false,
+                  spawnTpTasks = spawnTpTasks,
                   parallel,
                   snapshotFrame,
                   keyBuf,
@@ -413,6 +485,12 @@ proc computeKeyImpl(
       let vtx = BranchRef(vtx)
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
       ?txRef.getKeys(rvid.root, vtx, keyvtxs, skipLayers, parallel)
+
+      when parallel and not spawnTpTasks:
+        if rvid.isStorageRoot and vtx.allChildBranchesPending(keyvtxs):
+          ?txRef.spawnStoChildren(
+            rvid.root, vtx, keyvtxs, batch, skipLayers, keyBuf, vtxBufQueue
+          )
 
       when spawnTpTasks:
         var
