@@ -15,4 +15,5 @@ import
   ./test_fees,
   ./test_scoring,
   ./test_lc_storage,
-  ./test_capabilities
+  ./test_capabilities,
+  ./test_beacon_frontend

@@ -22,6 +22,7 @@ import
   ../engine/engine,
   ../engine/utils,
   ../engine/rpc_frontend,
+  ../engine/beacon_frontend,
   ../lc_backend,
   ../json_rpc_backend,
   ../nimbus_verified_proxy_conf,
@@ -341,6 +342,7 @@ proc run*(
 
   ctx.engine = engine
   ctx.frontend = engine.getExecutionApiFrontend()
+  ctx.beaconFrontend = engine.getBeaconApiFrontend()
 
   opParams.isErrOr:
     let l2NetworkId = chainIdToNetworkId(l1ChainId).valueOr:

@@ -83,6 +83,29 @@ test('basic', async () => {
   }
 });
 
+test('beacon passthrough', async () => {
+  const proxy = await startProxy(testConfig);
+  try {
+    const bootstrap = JSON.parse(await proxy.call('getLightClientBootstrap',
+      '{"block_root": "0x9bcb90ec3a294591b77dd2a58e973578715cdc0e6eeeb286bc06dd120057f18b"}'));
+    assert.ok(bootstrap.version && bootstrap.data);
+
+    const updates = JSON.parse(await proxy.call('getLightClientUpdatesByRange',
+      '{"start_period": 1711, "count": 1}'));
+    assert.ok(Array.isArray(updates) && updates.length > 0 && updates[0].version);
+
+    for (const endpoint of ['getLightClientFinalityUpdate', 'getLightClientOptimisticUpdate']) {
+      assert.ok(JSON.parse(await proxy.call(endpoint, '{}')).version, endpoint);
+    }
+
+    await assert.rejects(proxy.call('getLightClientFoo', '{}'));
+    await assert.rejects(proxy.call('getLightClientBootstrap', '{"block_root": "0x12"}'));
+    await assert.rejects(proxy.call('getLightClientUpdatesByRange', '{"start_period": 1711}'));
+  } finally {
+    proxy.destroy();
+  }
+});
+
 test('restart', async () => {
   const first = await startProxy(testConfig);
   try {
