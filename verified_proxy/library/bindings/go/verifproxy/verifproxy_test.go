@@ -241,6 +241,27 @@ func TestVerifProxyNilContext(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestVerifProxyBeaconPassthrough(t *testing.T) {
+	ctx, err := verifproxy.Start(testConfig, execTransport, beaconTransport, nil)
+	require.NoError(t, err)
+	defer ctx.Stop()
+
+	for endpoint, params := range map[string]string{
+		"getLightClientBootstrap":        `{"block_root": "0x9bcb90ec3a294591b77dd2a58e973578715cdc0e6eeeb286bc06dd120057f18b"}`,
+		"getLightClientUpdatesByRange":   `{"start_period": 1711, "count": 1}`,
+		"getLightClientFinalityUpdate":   `{}`,
+		"getLightClientOptimisticUpdate": `{}`,
+	} {
+		result, err := ctx.CallRpc(endpoint, params, callTimeout)
+		require.NoError(t, err, endpoint)
+		require.True(t, json.Valid([]byte(result)), endpoint)
+		require.Contains(t, result, `"version":`, endpoint)
+	}
+
+	_, err = ctx.CallRpc("getLightClientFoo", "{}", callTimeout)
+	require.Error(t, err)
+}
+
 func TestVerifProxy(t *testing.T) {
 	storage := &memStorage{values: map[string][]byte{}}
 
@@ -258,21 +279,6 @@ func TestVerifProxy(t *testing.T) {
 	defer ctx.Stop()
 
 	_, err = ctx.CallRpc("eth_blockNumber", "[]", callTimeout)
-	require.Error(t, err)
-
-	for endpoint, params := range map[string]string{
-		"getLightClientBootstrap":        `{"block_root": "0x9bcb90ec3a294591b77dd2a58e973578715cdc0e6eeeb286bc06dd120057f18b"}`,
-		"getLightClientUpdatesByRange":   `{"start_period": 1711, "count": 1}`,
-		"getLightClientFinalityUpdate":   `{}`,
-		"getLightClientOptimisticUpdate": `{}`,
-	} {
-		result, err := ctx.CallRpc(endpoint, params, callTimeout)
-		require.NoError(t, err, endpoint)
-		require.True(t, json.Valid([]byte(result)), endpoint)
-		require.Contains(t, result, `"version":`, endpoint)
-	}
-
-	_, err = ctx.CallRpc("getLightClientFoo", "{}", callTimeout)
 	require.Error(t, err)
 
 	syncing, err := ctx.CallRpc("eth_syncing", "[]", callTimeout)
