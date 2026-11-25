@@ -46,9 +46,9 @@ func blockRewardWei(fork: EVMFork): UInt256 =
   else:                         0.u256
 
 func zeroFeeArgs(args: TransactionArgs): bool =
-  args.gasPrice.get(0.Quantity).uint64 == 0 and
-    args.maxFeePerGas.get(0.Quantity).uint64 == 0 and
-    args.maxPriorityFeePerGas.get(0.Quantity).uint64 == 0
+  args.gasPrice.get(0.u256).isZero and
+    args.maxFeePerGas.get(0.u256).isZero and
+    args.maxPriorityFeePerGas.get(0.u256).isZero
 
 proc settleCallFees(vmState: BaseVMState, args: TransactionArgs,
                     header: Header, gasUsed: GasInt) =
@@ -56,16 +56,17 @@ proc settleCallFees(vmState: BaseVMState, args: TransactionArgs,
     return
   let
     baseFee  = header.baseFeePerGas.get(0.u256)
-    gasPrice = args.gasPrice.get(0.Quantity).uint64.u256
+    gasPrice = args.gasPrice.get(0.u256)
     effPrice =
       if gasPrice > 0.u256:
         gasPrice
       else:
-        min(args.maxPriorityFeePerGas.get(0.Quantity).uint64.u256 + baseFee,
-            args.maxFeePerGas.get(0.Quantity).uint64.u256)
+        min(args.maxPriorityFeePerGas.get(0.u256) + baseFee,
+            args.maxFeePerGas.get(0.u256))
   if effPrice > baseFee:
     vmState.ledger.addBalance(header.coinbase,
-                              (effPrice - baseFee) * gasUsed.u256)
+                              (effPrice - baseFee) * gasUsed.u256,
+                              vmState.fork.checkEmptyAccount())
 
 proc parseTraceTypes(types: seq[string]): set[TraceTypeFlag] =
   for t in types:
@@ -402,7 +403,7 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
       let callRes = rpcCallEvm(args, header, vmState).valueOr:
         raise invalidParams(error)
       settleCallFees(vmState, args, header, callRes.gasUsed)
-      vmState.ledger.persist()
+      vmState.ledger.persist(clearEmptyAccounts = false)
       tracerInst.finalizeStateDiff(vmState.ledger)
       let res = newJObject()
       res["output"] = newJString(tracerInst.output.to0xHex)
@@ -456,7 +457,7 @@ proc setupTraceRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
         let callRes = rpcCallEvm(args, header, vmState)
         if callRes.isOk:
           settleCallFees(vmState, args, header, callRes.get.gasUsed)
-        vmState.ledger.persist()
+        vmState.ledger.persist(clearEmptyAccounts = false)
         tracerInst.finalizeStateDiff(vmState.ledger)
         vmState.dispose()
         let entry = newJObject()
