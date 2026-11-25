@@ -256,6 +256,8 @@ type
     getLightClientFinalityUpdate*: LightClientFinalityUpdateProc
     getLightClientOptimisticUpdate*: LightClientOptimisticUpdateProc
 
+  BeaconApiFrontend* = BeaconApiBackend
+
   # Light client checkpoint storage
   LightClientCheckpoint* = object
     header*: ForkedLightClientHeader

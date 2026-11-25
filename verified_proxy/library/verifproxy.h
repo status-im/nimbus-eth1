@@ -230,9 +230,23 @@ void nvp_op_syncInterval(Context *ctx, CallBackProc cb, void *userData);
 /**
  * call any RPC method
  *
+ * Beacon light client endpoints are also accepted as the method name. They are
+ * passed through to one of the configured beacon backends, picked at random among
+ * the eligible ones and scored on the outcome, like execution backends. Responses
+ * are NOT verified. Endpoint names and params are the same as the ones passed to
+ * BeaconTransportProc:
+ *   "getLightClientBootstrap"        — params: {"block_root": "0x..."}
+ *   "getLightClientUpdatesByRange"   — params: {"start_period": N, "count": N}
+ *                                      (count is capped at 128)
+ *   "getLightClientOptimisticUpdate" — params: {}
+ *   "getLightClientFinalityUpdate"   — params: {}
+ * The callback receives the Beacon API JSON body: {"version": ..., "data": ...},
+ * or an array of those for getLightClientUpdatesByRange.
+ *
  * @param ctx       Context pointer.
- * @param name      Name of the RPC method
- * @param params    parameters required for the RPC method
+ * @param name      Name of the RPC method or beacon light client endpoint
+ * @param params    parameters required for the RPC method (JSON array), or the
+ *                  beacon endpoint (JSON object)
  * @param cb        Callback invoked with a hex block number.
  * @param userData  pointer to user data
  */

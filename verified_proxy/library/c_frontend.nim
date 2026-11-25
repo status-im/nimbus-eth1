@@ -17,7 +17,8 @@ import
   ../op/op_anchor,
   ../nimbus_verified_proxy_conf,
   ./types,
-  ./utils
+  ./utils,
+  ./c_beacon_frontend
 
 {.pragma: exported, cdecl, exportc, dynlib, raises: [].}
 
@@ -878,13 +879,13 @@ proc proxyCall(
     cb: CallBackProc,
     userData: pointer,
 ) {.exported.} =
-  let parsedParams =
+  let jsonParams =
     try:
-      let jsonNode = parseJson($params)
-      jsonNode.getElems(@[])
+      parseJson($params)
     except CatchableError as e:
       cb(ctx, RET_DESER_ERROR, alloc(e.msg), userData)
       return
+  let parsedParams = jsonParams.getElems(@[])
 
   template requireParams(n: int) =
     if parsedParams.len < n:
@@ -1223,5 +1224,13 @@ proc proxyCall(
   of "op_sendRawTransaction":
     requireParams(1)
     op_sendRawTransaction(ctx, parsedParams[0].getStr().cstring, cb, userData)
+  of "getLightClientBootstrap":
+    beaconBootstrap(ctx, jsonParams, cb, userData)
+  of "getLightClientUpdatesByRange":
+    beaconUpdates(ctx, jsonParams, cb, userData)
+  of "getLightClientFinalityUpdate":
+    beaconFinality(ctx, cb, userData)
+  of "getLightClientOptimisticUpdate":
+    beaconOptimistic(ctx, cb, userData)
   else:
     cb(ctx, RET_DESER_ERROR, alloc("unknown method"), userData)
