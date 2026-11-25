@@ -85,6 +85,9 @@ proc setDelegation*(params: CallParams): int64 =
   executionRefund
 
 proc setDelegation*(params: CallParams, c: Computation): EvmResultVoid =
+  if params.tx.authorizationList.len == 0:
+    return ok()
+
   var
     writtenAccounts: HashSet[addresses.Address]
     delegationSetFor: HashSet[addresses.Address]

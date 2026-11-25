@@ -592,7 +592,7 @@ proc getReceipts*(
     var receipts = newSeq[StoredReceipt]()
     for r in db.getReceipts(receiptsRoot):
       receipts.add(r)
-    return ok(receipts)
+    return ok(move(receipts))
 
 proc getReceiptByIndex*(
     db: CoreDbTxRef;

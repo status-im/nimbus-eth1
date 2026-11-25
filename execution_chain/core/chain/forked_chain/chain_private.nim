@@ -36,7 +36,8 @@ proc writeBaggage*(
   var txHashes = txFrame.persistTransactions(
     header.number, header.txRoot, blk.transactions, txHashToBlock = false)
   txFrame.persistReceipts(header.receiptsRoot, receipts)
-  discard txFrame.persistUncles(blk.uncles)
+  if blk.uncles.len > 0:
+    discard txFrame.persistUncles(blk.uncles)
 
   if blk.withdrawals.isSome:
     txFrame.persistWithdrawals(

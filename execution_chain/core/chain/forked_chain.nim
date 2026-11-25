@@ -673,7 +673,7 @@ proc init*(
       fcuSafe:          fcuSafe,
       baseQueue:        initDeque[BlockRef](),
       importLock:       newAsyncLock(),
-      badBlocks:        LruCache[Hash32, (Block, Opt[BlockAccessListRef])].init(100),
+      badBlocks:        LruCache[Hash32, (Block, Opt[BlockAccessListRef])].init(16),
     )
 
   # updateFinalized will stop ancestor lineage
@@ -1247,8 +1247,7 @@ proc blockHeader*(c: ForkedChainRef, blk: BlockHashOrNumber): Result[Header, str
 proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[StoredReceipt], string] =
   if blockHash != c.base.hash:
     c.hashToBlock.withValue(blockHash, loc):
-      let header = ?loc[].txFrame.getBlockHeader(loc[].hash)
-      return loc[].txFrame.getReceipts(header.receiptsRoot)
+      return loc[].txFrame.getReceipts(loc[].header.receiptsRoot)
 
   let header = c.persistedHeaderByHash(blockHash).valueOr:
     return err("Block header not found")
@@ -1258,8 +1257,7 @@ proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Stor
 proc receiptByBlockHashAndIndex*(c: ForkedChainRef, blockHash: Hash32, index: uint64): Result[StoredReceipt, string] =
   if blockHash != c.base.hash:
     c.hashToBlock.withValue(blockHash, loc):
-      let header = ?loc[].txFrame.getBlockHeader(loc[].hash)
-      return loc[].txFrame.getReceiptByIndex(header.receiptsRoot, index.uint16)
+      return loc[].txFrame.getReceiptByIndex(loc[].header.receiptsRoot, index.uint16)
 
   let header = c.persistedHeaderByHash(blockHash).valueOr:
     return err("Block header not found")

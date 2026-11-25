@@ -159,7 +159,7 @@ proc prepareToRunComputation(params: CallParams) =
 
     # Charge for gas.
     var gasFee = tx.gasLimit.u256 * params.effectiveGasPrice
-    if fork >= Cancun:
+    if fork >= Cancun and tx.versionedHashes.len > 0:
       # EIP-4844
       gasFee += blobGasFee(tx.versionedHashes.len,
         vmState.blockCtx.excessBlobGas, vmState.com, fork)
