@@ -31,12 +31,12 @@ declareCounter nec_engine_api_request_count,
 
 template apiTiming(meth: static string, body: untyped): untyped =
   let start = Moment.now()
-  let res = body
+  var res = body
   nec_engine_api_request_duration_seconds.inc(
     (Moment.now() - start).fseconds(),
     labelValues = [meth])
   nec_engine_api_request_count.inc(1, labelValues = [meth])
-  res
+  move(res)
 
 const supportedMethods = [
     "engine_newPayloadV1",

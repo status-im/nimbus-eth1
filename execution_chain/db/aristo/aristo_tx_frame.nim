@@ -321,17 +321,19 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   # are deleted.
   db.cleanSnapshots()
 
-  txFrame.snapshot.vtx.clear()
-  txFrame.snapshot.acc.clear()
-  txFrame.snapshot.sto.clear()
+  # `reset` rather than `clear`: `clear` keeps the (possibly huge) bucket
+  # arrays alive, while the base frame does not reuse them
+  txFrame.snapshot.vtx.reset()
+  txFrame.snapshot.acc.reset()
+  txFrame.snapshot.sto.reset()
   # Since txFrame is now the base, it contains all changes and therefore acts
   # as a snapshot
   txFrame.snapshot.level = Opt.some(txFrame.level)
   txFrame.detached = false
-  txFrame.sTab.clear()
-  txFrame.kMap.clear()
-  txFrame.accLeaves.clear()
-  txFrame.stoLeaves.clear()
+  txFrame.sTab.reset()
+  txFrame.kMap.reset()
+  txFrame.accLeaves.reset()
+  txFrame.stoLeaves.reset()
   txFrame.blockNumber.reset()
 
 # ------------------------------------------------------------------------------
