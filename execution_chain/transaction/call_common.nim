@@ -346,33 +346,33 @@ proc handleFrameTransaction(params: CallParams, T: type): T =
       result.blockStateGasUsed = res.value.stateGasUsed
     else:
       params.vmState.frameCtx.error = res.error
-  elif T is VoidResult:
+  elif T is void:
     discard res
   else:
     {.error: "Unknown computation output".}
 
 proc runComputation*(params: CallParams, T: type): T =
   if params.tx.txType == TxEip8141:
-    return handleFrameTransaction(params, T)
-
-  prepareToRunComputation(params)
-  initialAccessListEIP2929(params)
-
-  let
-    c = setupEVM(params, keepStack = T is DebugCallResult)
-
-  c.preExecComputation(params)
-  if c.isSuccess:
-    c.execCallOrCreate()
+    handleFrameTransaction(params, T)
   else:
-    # execCallOrCreate normally disposes the computation, dispose here too
-    # otherwise the EVM stack leaks.
-    c.dispose()
-  # postExecComputation must also run when preExecComputation fails:
-  # it records the outcome in vmState.status, which the receipt reads.
-  # Skipping it leaves the previous transaction's status in place and
-  # a top-frame failure would be receipted as successful, diverging on
-  # receiptsRoot.
-  c.postExecComputation()
+    prepareToRunComputation(params)
+    initialAccessListEIP2929(params)
 
-  finishRunningComputation(c, params, T)
+    let
+      c = setupEVM(params, keepStack = T is DebugCallResult)
+
+    c.preExecComputation(params)
+    if c.isSuccess:
+      c.execCallOrCreate()
+    else:
+      # execCallOrCreate normally disposes the computation, dispose here too
+      # otherwise the EVM stack leaks.
+      c.dispose()
+    # postExecComputation must also run when preExecComputation fails:
+    # it records the outcome in vmState.status, which the receipt reads.
+    # Skipping it leaves the previous transaction's status in place and
+    # a top-frame failure would be receipted as successful, diverging on
+    # receiptsRoot.
+    c.postExecComputation()
+
+    finishRunningComputation(c, params, T)

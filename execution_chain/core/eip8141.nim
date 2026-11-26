@@ -60,10 +60,6 @@ proc computeSigHash*(tx: Transaction): Hash32 =
   keccak256(rlpBytes)
 
 func validateTxEip8141*(tx: Transaction, intrinsic: IntrinsicGas): Result[void, string] =
-  if tx.versionedHashes.len == 0 and tx.maxFeePerBlobGas.isZero.not:
-    return err("invalid tx: maxFeePerBlobGas not zero when versionedHashes.len == 0, got: " &
-      $tx.maxFeePerBlobGas)
-
   if tx.versionedHashes.len > MAX_BLOBS_PER_TX.int:
     return err("invalid tx: exceeds MAX_BLOBS_PER_TX, got: " &
       $tx.versionedHashes.len)

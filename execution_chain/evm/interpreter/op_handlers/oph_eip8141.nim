@@ -86,9 +86,7 @@ const
   TXPARAM_NONCE_SEQ = 0x01
   TXPARAM_SENDER = 0x02
   TXPARAM_MAX_PRIORITY_FEE_PER_GAS = 0x03
-  TXPARAM_MAX_FEE_PER_GAS = 0x04
-  TXPARAM_MAX_FEE_PER_BLOB_GAS = 0x05
-  TXPARAM_MAX_COST = 0x06
+  TXPARAM_MAX_FEE = 0x04
   TXPARAM_BLOB_COUNT = 0x07
   TXPARAM_SIG_HASH = 0x08
   TXPARAM_FRAME_COUNT = 0x09
@@ -121,12 +119,8 @@ func txParamOp(cpt: VmCpt): EvmResultVoid =
     value.initFromBytesBE(tx.sender.data)
   of TXPARAM_MAX_PRIORITY_FEE_PER_GAS:
     value = tx.maxPriorityFeePerGas
-  of TXPARAM_MAX_FEE_PER_GAS:
+  of TXPARAM_MAX_FEE:
     value = tx.maxFeePerGas
-  of TXPARAM_MAX_FEE_PER_BLOB_GAS:
-    value = tx.maxFeePerBlobGas
-  of TXPARAM_MAX_COST:
-    value = vmState.getMaxCost()
   of TXPARAM_BLOB_COUNT:
     value = tx.versionedHashes.len.u256
   of TXPARAM_SIG_HASH:

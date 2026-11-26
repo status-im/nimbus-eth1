@@ -493,25 +493,24 @@ func settleFrameTransactionGas(
     stateGasUsed    : txStateGas,
   )
 
-func blobGasFee(vmState: BaseVMState): UInt256 =
-  getTotalBlobGas(vmState.txCtx.tx.versionedHashes.len).u256 *
-    vmState.txCtx.blobBaseFee
-
-proc disburseFrameGasFees(vmState: BaseVMState, gasUsed: GasInt) =
-  # `process_frames` invalidates the transaction unless a frame
-  # approved payment.
+func calculateFrameTransactionFees(vmState: BaseVMState,
+                                   tx: Transaction,
+                                   maxGas: UInt256,
+                                   blobGasPrice: UInt256): Result[UInt256, string] =
   let
-    payer = vmState.payer()
-  doAssert payer.isSome
+    baseFeePerGas = vmState.blockCtx.baseFeePerGas.u256
+    blobFee = getTotalBlobGas(tx.versionedHashes.len).u256 * blobGasPrice
+    requiredMaxFee = maxGas * baseFeePerGas + blobFee
+
+  if tx.maxFeePerGas < requiredMaxFee:
+    return err("max fee " & $tx.maxFeePerGas & " below the required " & $requiredMaxFee)
 
   let
-    blobGasFee = vmState.blobGasFee()
-    chargedFee = gasUsed.u256 * vmState.txCtx.effectiveGasPrice + blobGasFee
-    payerRefund = vmState.getMaxCost() - chargedFee
+    budgetLeft = tx.maxFeePerGas - requiredMaxFee
+    maxPriorityFee = min(tx.maxPriorityFeePerGas * maxGas, budgetLeft)
 
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.trackAddBalanceChange(payer.value, payerRefund)
-  vmState.ledger.addBalance(payer.value, payerRefund, checkEmptyAccount = false)
+  vmState.frameCtx.maxCost = requiredMaxFee + maxPriorityFee
+  ok(baseFeePerGas + maxPriorityFee div maxGas)
 
 proc prepareFrameProcessing(params: CallParams): Result[void, string] =
   let
@@ -519,13 +518,7 @@ proc prepareFrameProcessing(params: CallParams): Result[void, string] =
     vmState = params.vmState
     tx = params.tx
     fork = vmState.hardFork
-
-  vmState.txCtx = TxContext(
-    origin            : params.sender,
-    effectiveGasPrice : params.effectiveGasPrice,
-    blobBaseFee       : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, fork),
-    tx                : params.tx,
-  )
+    blobGasPrice = getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, fork)
 
   # reset global gasRefunded counter each time
   # EVM called for a new transaction
@@ -551,8 +544,15 @@ proc prepareFrameProcessing(params: CallParams): Result[void, string] =
       vmState.frameCtx.standardGasLimit,
       params.intrinsic.floorDataGas + totalFrameStateGas
     )
+    effectiveGasPrice = ? calculateFrameTransactionFees(
+      vmState, params.tx[], maxGas.u256, blobGasPrice)
 
-  vmState.frameCtx.maxCost = maxGas.u256 * tx.maxFeePerGas + vmState.blobGasFee
+  vmState.txCtx = TxContext(
+    origin            : params.sender,
+    effectiveGasPrice : effectiveGasPrice,
+    blobBaseFee       : blobGasPrice,
+    tx                : params.tx,
+  )
 
   vmState.frameCtx.resolvedSigners.setLen(tx.signatures.len)
   for i, sig in tx.signatures:
@@ -587,7 +587,5 @@ proc processFrameTransaction*(params: CallParams): Result[GasSettlement, string]
       vmState.refundCounter.GasInt,
       txOutput.stateGasUsed
     )
-
-  disburseFrameGasFees(vmState, settlement.gasUsed)
 
   ok(settlement)

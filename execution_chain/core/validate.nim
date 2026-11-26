@@ -283,10 +283,6 @@ func validateTxBasic*(
     if tx.txType == TxEip8141 and fork < Bogota:
       return err("invalid tx: EIP-8141 Tx type detected before Bogota")
 
-  # The total must be the larger of the two
-  if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
-    return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
-
   if fork >= Shanghai and tx.contractCreation:
     if fork >= Amsterdam:
       if tx.payload.len > EIP7954_MAX_INITCODE_SIZE:
@@ -301,6 +297,10 @@ func validateTxBasic*(
     ? validateNonceKeys(tx)
 
     return validateTxEip8141(tx, intrinsic)
+
+  # The total must be the larger of the two
+  if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
+    return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
 
   # EIP-2681: a nonce of 2^64-1 can never be included since executing the
   # transaction would overflow the account nonce.
@@ -452,7 +452,7 @@ proc validateTransaction*(
     if tx.nonce == high(uint64):
       return err(&"invalid tx: nonce at maximum")
 
-  if tx.txType == TxEip4844 or (tx.txType == TxEip8141 and tx.versionedHashes.len  > 0):
+  if tx.txType == TxEip4844:
     # ensure that the user was willing to at least pay the current data gasprice
     let
       excessBlobGas = vmState.blockCtx.excessBlobGas

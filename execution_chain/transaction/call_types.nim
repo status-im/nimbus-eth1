@@ -134,10 +134,14 @@ func frameTransactionIntrinsicCost(tx: Transaction): IntrinsicGas =
     signatureGas += signatureVerificationGas(sig)
     tokens += countTokensInData(sig.signer)
     tokens += countTokensInData(sig.msg)
-    tokens += countTokensInData(sig.signature)
     dataLength += sig.signer.len
     dataLength += sig.msg.len
-    dataLength += sig.signature.len
+    let signatureLength = sig.signature.len
+    if sig.msg.len == 0:
+      tokens += signatureLength * TX_DATA_TOKEN_STANDARD
+    else:
+      tokens += countTokensInData(sig.signature)
+    dataLength += signatureLength
 
   if tx.nonceKeys != LEGACY_NONCE_KEYS:
     keyedNonceAccessGas = GasInt(tx.nonceKeys.len * KEYED_NONCE_ACCESS)

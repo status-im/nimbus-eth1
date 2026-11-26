@@ -37,6 +37,47 @@ func isError(res: TxResult): bool =
     res.blockExecutionGasUsed == 0 and
     res.blockStateGasUsed == 0
 
+func blobGasFee(vmState: BaseVMState): UInt256 =
+  getTotalBlobGas(vmState.txCtx.tx.versionedHashes.len).u256 *
+    vmState.txCtx.blobBaseFee
+
+proc disburseFrameGasFees(vmState: BaseVMState, tx: Transaction, gasUsed: UInt256): UInt256 =
+  # `process_frames` invalidates the transaction unless a frame
+  # approved payment.
+  let
+    payer = vmState.payer()
+  doAssert payer.isSome
+
+  let
+    blobGasFee = vmState.blobGasFee()
+    baseFeePaid = gasUsed * vmState.blockCtx.baseFeePerGas.u256 + blobGasFee
+    priorityFeePaid = min(tx.maxPriorityFeePerGas * gasUsed,
+                        vmState.frameCtx.maxCost - baseFeePaid)
+    payerRefund = vmState.getMaxCost() - baseFeePaid - priorityFeePaid
+
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddBalanceChange(payer.value, payerRefund)
+    vmState.ledger.addBalance(payer.value, payerRefund, checkEmptyAccount = false)
+    vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), priorityFeePaid)
+    vmState.ledger.addBalance(vmState.coinbase(), priorityFeePaid, checkEmptyAccount = false)
+  else:
+    vmState.ledger.addBalance(payer.value, payerRefund, checkEmptyAccount = false)
+    vmState.ledger.addBalance(vmState.coinbase(), priorityFeePaid, checkEmptyAccount = false)
+
+  priorityFeePaid
+
+proc disburseGasFees(vmState: BaseVMState, tx: Transaction, gasUsed: UInt256): UInt256 =
+  let
+    baseFee = vmState.blockCtx.baseFeePerGas
+    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee.u256)
+    txFee = gasUsed * priorityFee
+
+  if vmState.balTrackerEnabled:
+    vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
+
+  vmState.ledger.addBalance(vmState.coinbase(), txFee, vmState.fork.checkEmptyAccount())
+  txFee
+
 proc processGasUsed(
     vmState: BaseVMState;
     tx: Transaction;
@@ -64,17 +105,11 @@ proc processGasUsed(
       return err(&"invalid tx: block gasLimit reached. gasLimit={vmState.blockCtx.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
 
   # Accept transaction and collect mining fee.
-  let
-    baseFee = vmState.blockCtx.baseFeePerGas
-    priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee.u256)
-    txFee = gasUsed.u256 * priorityFee
+  if tx.txType == TxEip8141:
+    callResult.txFee = vmState.disburseFrameGasFees(tx, gasUsed.u256)
+  else:
+    callResult.txFee = vmState.disburseGasFees(tx, gasUsed.u256)
 
-  callResult.txFee = txFee
-
-  if vmState.balTrackerEnabled:
-    vmState.balTracker.trackAddBalanceChange(vmState.coinbase(), txFee)
-
-  vmState.ledger.addBalance(vmState.coinbase(), txFee, vmState.fork.checkEmptyAccount())
   vmState.cumulativeGasUsed += gasUsed
   vmState.blockExecutionGasUsed += callResult.blockExecutionGasUsed
   vmState.blockStateGasUsed += callResult.blockStateGasUsed
