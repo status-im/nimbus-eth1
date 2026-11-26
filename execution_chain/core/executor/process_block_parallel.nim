@@ -11,7 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[atomics, algorithm],
+  std/atomics,
   ../../common/common,
   ../../db/ledger,
   ../../db/core_db,
@@ -33,7 +33,12 @@ import
 
 from ../../transaction/call_types import intrinsicGas, IntrinsicGas
 
-const optimisticPrefetchMinTxs {.intdefine.} = 5
+const 
+  optimisticPrefetchMinTxs {.intdefine.} = 5
+  balPrefetchChunkSize {.intdefine.} = 16
+static:
+  doAssert optimisticPrefetchMinTxs > 0
+  doAssert balPrefetchChunkSize > 0
 
 type
   OptimisticPrefetchCtx* = object
@@ -50,10 +55,13 @@ type
     sender: Address
     senderReady: Atomic[bool]
 
+  BalPrefetchChunk = tuple[accIdx, slotStart, slotEnd: int] # slotEnd is exclusive
+
   BalPrefetchCtx* = object
     txFrame: CoreDbTxRef
     fork: EVMFork
     balPtr: ptr BlockAccessList
+    chunks: seq[BalPrefetchChunk]
     nextIndex: Atomic[int]
     cancelled: Atomic[bool]
 
@@ -197,17 +205,32 @@ template withSenderParallel*(
     for f in futs.mitems():
       discard sync(f)
 
-func firstBalIndex(sc: SlotChanges): BlockAccessIndex =
-  ## Earliest block access index at which the slot was written.
-  ## Block access list validation guarantees `changes` is non-empty.
-  assert sc.changes.len > 0
-  sc.changes[0].blockAccessIndex
+template slotCount(accChanges: AccountChanges): int =
+  accChanges.storageReads.len + accChanges.storageChanges.len
+
+func buildBalPrefetchChunks(bal: BlockAccessList, chunks: var seq[BalPrefetchChunk]) =
+  ## Split each account's storage slots into chunks so that the slots of large
+  ## contracts are fetched by many workers in parallel. The first chunk of each
+  ## account also fetches the account and the remaining chunks follow in
+  ## round-robin order across accounts.
+  chunks = newSeqOfCap[BalPrefetchChunk](bal.len)
+  for accIdx in 0 ..< bal.len:
+    chunks.add (accIdx, 0, min(balPrefetchChunkSize, bal[accIdx].slotCount))
+
+  var c = 0
+  while c < chunks.len:
+    let
+      (accIdx, _, prevEnd) = chunks[c]
+      numSlots = bal[accIdx].slotCount
+    if prevEnd < numSlots:
+      chunks.add (accIdx, prevEnd, min(prevEnd + balPrefetchChunkSize, numSlots))
+    inc c
 
 proc balPrefetchWorker*(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
   template isCancelled(): bool =
     ctx[].cancelled.load(moAcquire)
 
-  let len = ctx[].balPtr[].len
+  let len = ctx[].chunks.len
   while true:
     if isCancelled():
       break
@@ -216,7 +239,9 @@ proc balPrefetchWorker*(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
     if i >= len:
       break
 
-    let accChanges = addr ctx[].balPtr[][i]
+    let
+      (accIdx, slotStart, slotEnd) = ctx[].chunks[i]
+      accChanges = addr ctx[].balPtr[][accIdx]
 
     # Precompile contracts don't exist in the state trie and don't get loaded
     # when called so we don't prefetch them. The BAL can contain precompile addresses
@@ -224,31 +249,22 @@ proc balPrefetchWorker*(ctx: ptr BalPrefetchCtx): bool {.nimcall.} =
     # case here is when a precompile contract receives a value transfer which will
     # load the account to update the balance but unfortunately we can't determine
     # if this was the case or not from the information in the BAL so we ignore this.
-    if isPrecompile(ctx[].fork, accChanges[].address):
+    if accChanges[].slotCount == 0 and isPrecompile(ctx[].fork, accChanges[].address):
       continue
 
     let accPath = accChanges[].address.computeAccPath
 
-    if accChanges[].storageChanges.len == 0 and accChanges[].storageReads.len == 0:
+    if slotStart == 0:
       discard ctx[].txFrame.fetchAccount(accPath)
-      continue
 
-    # Prefetch the written slots ordered by the earliest block access index at
-    # which each was written, so they are warmed in roughly the order the block
-    # touches them.
-    for slotChanges in sorted(
-      accChanges[].storageChanges,
-      proc(a, b: SlotChanges): int =
-        cmp(firstBalIndex(a), firstBalIndex(b)),
-    ):
-      if isCancelled():
-        return true
-      discard ctx[].txFrame.fetchSlot(accPath, computeSlotKey(slotChanges.slot))
-
-    for stoRead in accChanges[].storageReads:
-      if isCancelled():
-        return true
-      discard ctx[].txFrame.fetchSlot(accPath, computeSlotKey(stoRead))
+    let numReads = accChanges[].storageReads.len
+    for k in slotStart ..< slotEnd:
+      let slot =
+        if k < numReads:
+          accChanges[].storageReads[k]
+        else:
+          accChanges[].storageChanges[k - numReads].slot
+      discard ctx[].txFrame.fetchSlot(accPath, computeSlotKey(slot))
 
   true
 
@@ -263,13 +279,14 @@ template withBalPrefetchParallel*(
   # during block execution; this avoids locking on the frame data structures.
   ctx.txFrame = vmState.ledger.txFrame.parent()
   ctx.fork = vmState.fork
+  buildBalPrefetchChunks(balRef[], ctx.chunks)
   ctx.nextIndex.store(0, moRelease)
   ctx.cancelled.store(false, moRelease)
 
   let
     ctxPtr = ctx.addr
     pool = vmState.com.balPrefetchPool
-    numWorkers = min(pool.numWorkers, balRef[].len)
+    numWorkers = min(pool.numWorkers, ctx.chunks.len)
 
   var futs = newSeq[Flowvar[bool]](numWorkers)
   for i in 0 ..< numWorkers:
