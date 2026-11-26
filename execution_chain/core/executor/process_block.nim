@@ -20,8 +20,7 @@ import
   ../../evm/state,
   ../../evm/types,
   ../../block_access_list/[bal_tracker, bal_validation],
-  ../dao,
-  ../eip6110,
+  ../[dao, eip6110, eip8253],
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
@@ -202,6 +201,9 @@ proc procBlkPreamble(
   vmState.mutateLedger:
     if com.daoForkSupport and com.daoForkBlock.get == header.number:
       ledger.applyDAOHardFork()
+
+    if com.transitionToBogota(vmState.parent.timestamp, header.timestamp):
+      vmState.bumpZeroNonceStorageAccounts()
 
   if skipValidation notin flags: # Expensive!
     if blk.transactions.calcTxRoot != header.txRoot:

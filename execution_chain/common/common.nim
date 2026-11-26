@@ -467,6 +467,11 @@ func isAmsterdamOrLater*(com: CommonRef, t: EthTime): bool =
 func isBogotaOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.bogotaTime.isSome and t >= com.config.bogotaTime.value
 
+func transitionToBogota*(com: CommonRef, parentTime, t: EthTime): bool =
+  com.config.bogotaTime.isSome and
+    t >= com.config.bogotaTime.value and
+    parentTime < com.config.bogotaTime.value
+
 func chainHasAmsterdam*(com: CommonRef): bool =
   com.config.amsterdamTime.isSome()
 
