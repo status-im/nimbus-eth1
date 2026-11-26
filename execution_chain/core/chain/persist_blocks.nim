@@ -161,19 +161,16 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       txFrame
     )
 
-  template processBlock(): auto =
-    # Generate receipts for storage or validation but skip them otherwise
-    var flags: ProcessBlockFlags
-    if FullValidation notin p.flags:
-      flags.incl {skipValidation, skipStateRootCheck, skipPostExecBalCheck}
-      if PersistReceipts notin p.flags:
-        flags.incl skipReceipts
-    if PersistUncles notin p.flags:
-      flags.incl skipUncles
-    ?vmState.processBlock(blk, flags = flags)
+  var flags: ProcessBlockFlags
+  if FullValidation notin p.flags:
+    flags.incl {skipValidation, skipStateRootCheck, skipPostExecBalCheck}
+    if PersistReceipts notin p.flags:
+      flags.incl skipReceipts
+  if PersistUncles notin p.flags:
+    flags.incl skipUncles
 
   if not vmState.com.statelessProvider:
-    processBlock()
+    ?vmState.processBlock(blk, flags = flags)
   else:
     # When the stateless provider is enabled we need to have access to the
     # parent txFrame so that we can build the witness using the block pre state.
@@ -193,7 +190,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     vmState.ledger.clearWrittenCode()
     vmState.ledger.clearBlockHashesCache()
 
-    processBlock()
+    ?vmState.processBlock(blk, flags = flags)
 
     let
       preStateLedger = LedgerRef.init(parentTxFrame)

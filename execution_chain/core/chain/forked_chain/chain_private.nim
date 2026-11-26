@@ -131,6 +131,12 @@ proc processBlock*(
     if not cached:
       vmState.dispose()
 
+  var flags = {skipUncles}
+  if finalized and not c.eagerStateRoot:
+    flags.incl {skipStateRootCheck}
+  if not vmState.balTrackerEnabled:
+    flags.incl {skipPostExecBalCheck}
+
   template processBlock(): auto =
     # When processing a finalized block, we optimistically assume that the state
     # root will check out and delay such validation for when it's time to persist
@@ -140,13 +146,7 @@ proc processBlock*(
     # simply check that the provide block BAL (when skipPreExecBalCheck = false)
     # matches the header bal hash. In this case the post execution check can be
     # skipped.
-    vmState.processBlock(
-      blk,
-      blockAccessList = blockAccessList,
-      flags = {skipUncles} +
-        (if finalized and not c.eagerStateRoot: {skipStateRootCheck} else: {}) +
-        (if vmState.balTrackerEnabled: {} else: {skipPostExecBalCheck})
-    ).isOkOr:
+    vmState.processBlock(blk, blockAccessList, flags).isOkOr:
       c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
       return err(error)
 

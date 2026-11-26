@@ -393,9 +393,8 @@ proc exec(ctx: TransContext,
     output.result.currentExcessBlobGas = excessBlobGas
 
   if vmState.fork >= FkPrague:
-    let requests = executionRequests(reqs, vmState.fork)
     output.result.requestsHash = Opt.some(calcRequestsHash(reqs, vmState.fork))
-    output.result.requests = Opt.some(requests)
+    output.result.requests = Opt.some(executionRequests(reqs, vmState.fork))
 
   if vmState.balTrackerEnabled:
     let

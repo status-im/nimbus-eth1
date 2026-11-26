@@ -407,7 +407,7 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
 func blockValue*(pst: TxPacker): UInt256 =
   pst.blockValue
 
-func executionRequests*(pst: var TxPacker): seq[seq[byte]] =
+func executionRequests*(pst: TxPacker): seq[seq[byte]] =
   executionRequests(pst.reqs, pst.vmState.fork)
 
 iterator packedTxs*(pst: TxPacker): TxItemRef =

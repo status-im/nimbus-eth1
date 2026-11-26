@@ -79,7 +79,9 @@ type
     builderDeposit*: seq[byte]
     builderExit*: seq[byte]
 
-proc processBlockRequests*(vmState: BaseVMState, reqs: var BlockRequests): Result[void, string] =
+proc processBlockRequests*(
+    vmState: BaseVMState, reqs: var BlockRequests
+): Result[void, string] =
   ## Dequeue the post-execution system-call request lists into `reqs`. These
   ## alter the state, so they must run before the state root is computed.
   ## Pre-Prague leaves `reqs` empty.
@@ -99,21 +101,25 @@ func calcRequestsHash*(reqs: BlockRequests, fork: EVMFork): Hash32 =
       (WITHDRAWAL_REQUEST_TYPE, reqs.withdrawal),
       (CONSOLIDATION_REQUEST_TYPE, reqs.consolidation),
       (BUILDER_DEPOSIT_REQUEST_TYPE, reqs.builderDeposit),
-      (BUILDER_EXIT_REQUEST_TYPE, reqs.builderExit))
+      (BUILDER_EXIT_REQUEST_TYPE, reqs.builderExit),
+    )
   else:
     calcRequestsHash(
       (DEPOSIT_REQUEST_TYPE, reqs.deposit),
       (WITHDRAWAL_REQUEST_TYPE, reqs.withdrawal),
-      (CONSOLIDATION_REQUEST_TYPE, reqs.consolidation))
+      (CONSOLIDATION_REQUEST_TYPE, reqs.consolidation),
+    )
 
 func executionRequests*(reqs: BlockRequests, fork: EVMFork): seq[seq[byte]] =
   ## The execution requests (EIP-7685) carried by `reqs`, each encoded as its
   ## request type byte followed by the request data, empty requests omitted.
   template append(reqType: byte, reqData: seq[byte]) =
     if reqData.len > 0:
-      var d = reqData
-      d.insert(reqType)
-      result.add(move(d))
+      var encoded = newSeqOfCap[byte](reqData.len + 1)
+      encoded.add reqType
+      encoded.add reqData
+      result.add move(encoded)
+
   append(DEPOSIT_REQUEST_TYPE, reqs.deposit)
   append(WITHDRAWAL_REQUEST_TYPE, reqs.withdrawal)
   append(CONSOLIDATION_REQUEST_TYPE, reqs.consolidation)
