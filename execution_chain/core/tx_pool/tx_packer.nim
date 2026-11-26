@@ -51,11 +51,7 @@ type
     receiptsRoot: Hash32
     logsBloom: Bloom
     packedTxs: seq[TxItemRef]
-    withdrawalReqs: seq[byte]
-    consolidationReqs: seq[byte]
-    depositReqs: seq[byte]
-    builderDepositReqs: seq[byte]
-    builderExitReqs: seq[byte]
+    reqs: BlockRequests
 
 const
   receiptsExtensionSize = ##\
@@ -265,7 +261,10 @@ template packItem(pst: var TxPacker; item: TxItemRef; skip, stop: untyped) =
     vmState.receipts.setLen(inx + receiptsExtensionSize)
     vmState.receiptBlooms.setLen(inx + receiptsExtensionSize)
 
-  vmState.blockLogs.addDepositLogs(vmState.txLogs, vmState.com.depositContractAddress)
+  parseDepositLogs(
+    vmState.depositReqs, vmState.txLogs, vmState.com.depositContractAddress
+  ).isOkOr:
+    stop(error)
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
   vmState.receiptBlooms[inx] = calcLogsBloom(vmState.receipts[inx].logs)
 
@@ -312,14 +311,8 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 
   # EIP-6110, EIP-7002, EIP-7251
   if vmState.fork >= FkPrague:
-    pst.withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
-    pst.consolidationReqs = ?processDequeueConsolidationRequests(vmState)
-    pst.depositReqs = ?parseDepositLogs(vmState.blockLogs)
-
-    if vmState.fork >= FkAmsterdam:
-      # EIP-8282
-      pst.builderDepositReqs = ?processBuilderDepositRequests(vmState)
-      pst.builderExitReqs = ?processBuilderExitRequests(vmState)
+    pst.reqs.deposit = move vmState.depositReqs
+    ?processBlockRequests(vmState, pst.reqs)
 
 
   # Finish up, then vmState.ledger.stateRoot may be accessed
@@ -400,21 +393,7 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
     header.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
 
   if vmState.fork >= FkPrague:
-    let requestsHash = if vmState.fork >= FkAmsterdam:
-        calcRequestsHash([
-          (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
-          (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
-          (CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs),
-          (BUILDER_DEPOSIT_REQUEST_TYPE, pst.builderDepositReqs),
-          (BUILDER_EXIT_REQUEST_TYPE, pst.builderExitReqs),
-        ])
-      else:
-        calcRequestsHash([
-          (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
-          (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
-          (CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
-        ])
-    header.requestsHash = Opt.some(requestsHash)
+    header.requestsHash = Opt.some(calcRequestsHash(pst.reqs, vmState.fork))
 
   if vmState.fork >= FkAmsterdam:
     let bal = vmState.blockAccessList.expect("block access list exists")
@@ -429,22 +408,7 @@ func blockValue*(pst: TxPacker): UInt256 =
   pst.blockValue
 
 func executionRequests*(pst: var TxPacker): seq[seq[byte]] =
-  template append(dst, reqType, reqData) =
-    if reqData.len > 0:
-      reqData.insert(reqType)
-      dst.add(move(reqData))
-
-  result.append(DEPOSIT_REQUEST_TYPE, pst.depositReqs)
-  result.append(WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs)
-  result.append(CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
-
-  # EIP-8282: must mirror `assembleHeader`, which folds these into
-  # `requestsHash`. Omitting them here yields a payload whose recomputed
-  # requestsHash disagrees with the committed header, i.e. a block hash
-  # mismatch on every `engine_newPayload` receiver -- including ourselves.
-  if pst.vmState.fork >= FkAmsterdam:
-    result.append(BUILDER_DEPOSIT_REQUEST_TYPE, pst.builderDepositReqs)
-    result.append(BUILDER_EXIT_REQUEST_TYPE, pst.builderExitReqs)
+  executionRequests(pst.reqs, pst.vmState.fork)
 
 iterator packedTxs*(pst: TxPacker): TxItemRef =
   for item in pst.packedTxs:

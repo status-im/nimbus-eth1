@@ -24,7 +24,7 @@ import
   ../../execution_chain/utils/utils,
   ../../execution_chain/core/pow/difficulty,
   ../../execution_chain/core/dao,
-  ../../execution_chain/core/executor/[process_transaction, executor_helpers],
+  ../../execution_chain/core/executor/[process_transaction, process_block, executor_helpers],
   ../../execution_chain/core/eip4844,
   ../../execution_chain/core/eip6110,
   ../../execution_chain/evm/tracer/json_tracer
@@ -302,7 +302,8 @@ proc exec(ctx: TransContext,
       continue
 
     if vmState.fork >= FkPrague:
-      vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
+      parseDepositLogs(vmState.depositReqs, vmState.txLogs, depositContractAddress).isOkOr:
+        return err(t8nerr(ErrorEVM, error))
 
     let rec = vmState.makeReceipt(tx.txType)
     vmState.receipts.add rec
@@ -348,24 +349,11 @@ proc exec(ctx: TransContext,
   let miner = ctx.env.currentCoinbase
   coinbaseStateClearing(vmState, miner, stateReward.isSome())
 
-  var
-    withdrawalReqs: seq[byte]
-    consolidationReqs: seq[byte]
-    builderDepositReqs: seq[byte]
-    builderExitReqs: seq[byte]
-
-  if vmState.fork >= FkPrague:
-    # Execute EIP-7002 and EIP-7251 before calculating stateRoot
-    withdrawalReqs = processDequeueWithdrawalRequests(vmState).valueOr:
-      return err(t8nerr(ErrorConfig, error))
-    consolidationReqs = processDequeueConsolidationRequests(vmState).valueOr:
-      return err(t8nerr(ErrorConfig, error))
-
-    if vmState.fork >= FkAmsterdam:
-      builderDepositReqs = processBuilderDepositRequests(vmState).valueOr:
-        return err(t8nerr(ErrorConfig, error))
-      builderExitReqs = processBuilderExitRequests(vmState).valueOr:
-        return err(t8nerr(ErrorConfig, error))
+  # Execute EIP-7002 and EIP-7251 before calculating stateRoot
+  var reqs: BlockRequests
+  reqs.deposit = move vmState.depositReqs
+  processBlockRequests(vmState, reqs).isOkOr:
+    return err(t8nerr(ErrorConfig, error))
 
   # Commit block access list tracker changes for post-execution system calls
   if vmState.balTrackerEnabled:
@@ -405,27 +393,9 @@ proc exec(ctx: TransContext,
     output.result.currentExcessBlobGas = excessBlobGas
 
   if vmState.fork >= FkPrague:
-    var
-      depositReqs = parseDepositLogs(vmState.blockLogs).valueOr:
-        return err(t8nerr(ErrorEVM, error))
-      executionRequests: seq[seq[byte]]
-
-    template append(dst, reqType, reqData) =
-      if reqData.len > 0:
-        reqData.insert(reqType)
-        dst.add(move(reqData))
-
-    executionRequests.append(DEPOSIT_REQUEST_TYPE, depositReqs)
-    executionRequests.append(WITHDRAWAL_REQUEST_TYPE, withdrawalReqs)
-    executionRequests.append(CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
-
-    if vmState.fork >= FkAmsterdam:
-      executionRequests.append(BUILDER_DEPOSIT_REQUEST_TYPE, builderDepositReqs)
-      executionRequests.append(BUILDER_EXIT_REQUEST_TYPE, builderExitReqs)
-
-    let requestsHash = calcRequestsHash(executionRequests)
-    output.result.requestsHash = Opt.some(requestsHash)
-    output.result.requests = Opt.some(executionRequests)
+    let requests = executionRequests(reqs, vmState.fork)
+    output.result.requestsHash = Opt.some(calcRequestsHash(reqs, vmState.fork))
+    output.result.requests = Opt.some(requests)
 
   if vmState.balTrackerEnabled:
     let

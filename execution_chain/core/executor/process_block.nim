@@ -67,6 +67,60 @@ template withBalPrefetch(
   else:
     body
 
+type
+  BlockRequests* = object
+    ## Execution requests (EIP-7685) carried by a block: the deposit logs
+    ## (EIP-6110) plus the post-execution system-call request lists (EIP-7002,
+    ## EIP-7251, and the Amsterdam builder deposit/exit requests). Empty before
+    ## Prague.
+    deposit*: seq[byte]
+    withdrawal*: seq[byte]
+    consolidation*: seq[byte]
+    builderDeposit*: seq[byte]
+    builderExit*: seq[byte]
+
+proc processBlockRequests*(vmState: BaseVMState, reqs: var BlockRequests): Result[void, string] =
+  ## Dequeue the post-execution system-call request lists into `reqs`. These
+  ## alter the state, so they must run before the state root is computed.
+  ## Pre-Prague leaves `reqs` empty.
+  if vmState.fork >= FkPrague:
+    reqs.withdrawal = ?processDequeueWithdrawalRequests(vmState)
+    reqs.consolidation = ?processDequeueConsolidationRequests(vmState)
+    if vmState.fork >= FkAmsterdam:
+      reqs.builderDeposit = ?processBuilderDepositRequests(vmState)
+      reqs.builderExit = ?processBuilderExitRequests(vmState)
+  ok()
+
+func calcRequestsHash*(reqs: BlockRequests, fork: EVMFork): Hash32 =
+  ## Hash of the execution requests (EIP-7685) carried by `reqs`.
+  if fork >= FkAmsterdam:
+    calcRequestsHash(
+      (DEPOSIT_REQUEST_TYPE, reqs.deposit),
+      (WITHDRAWAL_REQUEST_TYPE, reqs.withdrawal),
+      (CONSOLIDATION_REQUEST_TYPE, reqs.consolidation),
+      (BUILDER_DEPOSIT_REQUEST_TYPE, reqs.builderDeposit),
+      (BUILDER_EXIT_REQUEST_TYPE, reqs.builderExit))
+  else:
+    calcRequestsHash(
+      (DEPOSIT_REQUEST_TYPE, reqs.deposit),
+      (WITHDRAWAL_REQUEST_TYPE, reqs.withdrawal),
+      (CONSOLIDATION_REQUEST_TYPE, reqs.consolidation))
+
+func executionRequests*(reqs: BlockRequests, fork: EVMFork): seq[seq[byte]] =
+  ## The execution requests (EIP-7685) carried by `reqs`, each encoded as its
+  ## request type byte followed by the request data, empty requests omitted.
+  template append(reqType: byte, reqData: seq[byte]) =
+    if reqData.len > 0:
+      var d = reqData
+      d.insert(reqType)
+      result.add(move(d))
+  append(DEPOSIT_REQUEST_TYPE, reqs.deposit)
+  append(WITHDRAWAL_REQUEST_TYPE, reqs.withdrawal)
+  append(CONSOLIDATION_REQUEST_TYPE, reqs.consolidation)
+  if fork >= FkAmsterdam:
+    append(BUILDER_DEPOSIT_REQUEST_TYPE, reqs.builderDeposit)
+    append(BUILDER_EXIT_REQUEST_TYPE, reqs.builderExit)
+
 proc processTransactions(
     vmState: BaseVMState,
     header: Header,
@@ -92,7 +146,7 @@ proc processTransactions(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.blockLogs.setLen(0)
+  vmState.depositReqs.setLen(0)
 
   when compileOption("threads"):
     if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
@@ -112,7 +166,7 @@ proc processTransactions(
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
 
     if collectLogs:
-      vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
+      ?parseDepositLogs(vmState.depositReqs, vmState.txLogs, depositContractAddress)
 
     if not skipReceipts:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
@@ -246,21 +300,11 @@ proc procBlkEpilogue(
   elif blk.uncles.len > 0:
     return err("Uncles in block with empty uncle hash")
 
-  var
-    withdrawalReqs: seq[byte]
-    consolidationReqs: seq[byte]
-    builderDepositReqs: seq[byte]
-    builderExitReqs: seq[byte]
-
-  if header.requestsHash.isSome:
-    # Execute EIP-7002 and EIP-7251 before calculating stateRoot
-    # because they will alter the state
-    withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
-    consolidationReqs = ?processDequeueConsolidationRequests(vmState)
-
-    if vmState.fork >= FkAmsterdam:
-      builderDepositReqs = ?processBuilderDepositRequests(vmState)
-      builderExitReqs = ?processBuilderExitRequests(vmState)
+  # Execute EIP-7002 and EIP-7251 before calculating stateRoot because they
+  # will alter the state
+  var reqs: BlockRequests
+  reqs.deposit = move vmState.depositReqs
+  ?processBlockRequests(vmState, reqs)
 
   # Commit block access list tracker changes for post‑execution system calls
   if vmState.balTrackerEnabled:
@@ -340,27 +384,7 @@ proc procBlkEpilogue(
         return err("receiptRoot mismatch")
 
     if header.requestsHash.isSome:
-      let
-        depositReqs =
-          ?parseDepositLogs(vmState.blockLogs)
-        requestsHash = if vmState.fork >= FkAmsterdam:
-            calcRequestsHash(
-              [
-                (DEPOSIT_REQUEST_TYPE, depositReqs),
-                (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
-                (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
-                (BUILDER_DEPOSIT_REQUEST_TYPE, builderDepositReqs),
-                (BUILDER_EXIT_REQUEST_TYPE, builderExitReqs),
-              ]
-            )
-          else:
-            calcRequestsHash(
-              [
-                (DEPOSIT_REQUEST_TYPE, depositReqs),
-                (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
-                (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
-              ]
-            )
+      let requestsHash = calcRequestsHash(reqs, vmState.fork)
 
       if header.requestsHash.get != requestsHash:
         debug "wrong requestsHash in block",

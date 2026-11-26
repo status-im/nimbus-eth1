@@ -126,7 +126,7 @@ proc recoverAndPrefetchTask*(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.blockLogs.setLen(0)
+  vmState.depositReqs.setLen(0)
   vmState.refundCounter = 0
   vmState.balTracker = nil
 
@@ -383,7 +383,7 @@ proc processTxTask(
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.blockLogs.setLen(0)
+  vmState.depositReqs.setLen(0)
   vmState.refundCounter = 0
   if not ctx[].sharedBuilder.isNil():
     vmState.balTracker =
@@ -505,7 +505,7 @@ proc processTransactionsParallel*(
     else:
       vmState.txLogs.setLen(0)
     if collectLogs:
-      vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
+      ?parseDepositLogs(vmState.depositReqs, vmState.txLogs, depositContractAddress)
 
     if not skipReceipts:
       vmState.receipts[i] =
