@@ -132,22 +132,20 @@ proc processBlock*(
       vmState.dispose()
 
   template processBlock(): auto =
+    # When processing a finalized block, we optimistically assume that the state
+    # root will check out and delay such validation for when it's time to persist
+    # changes to disk.
+    # Finalized blocks are known to be canonical and therefore the bal hash
+    # in the header is known to be valid and so it should be good enough to
+    # simply check that the provide block BAL (when skipPreExecBalCheck = false)
+    # matches the header bal hash. In this case the post execution check can be
+    # skipped.
     vmState.processBlock(
       blk,
       blockAccessList = blockAccessList,
-      skipValidation = false,
-      skipReceipts = false,
-      skipUncles = true,
-      # When processing a finalized block, we optimistically assume that the state
-      # root will check out and delay such validation for when it's time to persist
-      # changes to disk
-      skipStateRootCheck = finalized and not c.eagerStateRoot,
-      # Finalized blocks are known to be canonical and therefore the bal hash
-      # in the header is known to be valid and so it should be good enough to
-      # simply check that the provide block BAL (when skipPreExecBalCheck = false)
-      # matches the header bal hash. In this case the post execution check can be
-      # skipped.
-      skipPostExecBalCheck = not vmState.balTrackerEnabled
+      flags = {skipUncles} +
+        (if finalized and not c.eagerStateRoot: {skipStateRootCheck} else: {}) +
+        (if vmState.balTrackerEnabled: {} else: {skipPostExecBalCheck})
     ).isOkOr:
       c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
       return err(error)

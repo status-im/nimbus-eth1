@@ -144,7 +144,6 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   #      what would be the consequences? We would roll back the full set of
   #      blocks which is fairly low-cost.
   let
-    skipValidation = FullValidation notin p.flags
     vmState = ?p.getVmState(header, storeSlotHash = PersistSlotHashes in p.flags)
     txFrame = vmState.ledger.txFrame
 
@@ -153,7 +152,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   #      given hard fork and similar path-independent checks - these same
   #      sanity checks should be performed early in the processing pipeline no
   #      matter their provenance.
-  if not skipValidation:
+  if FullValidation in p.flags:
     ?com.validateHeaderAndKinship(
       blk,
       Opt.none(BlockAccessListRef),
@@ -164,14 +163,14 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
   template processBlock(): auto =
     # Generate receipts for storage or validation but skip them otherwise
-    ?vmState.processBlock(
-      blk,
-      skipValidation = skipValidation,
-      skipReceipts = skipValidation and PersistReceipts notin p.flags,
-      skipUncles = PersistUncles notin p.flags,
-      skipStateRootCheck = skipValidation,
-      skipPostExecBalCheck = skipValidation,
-    )
+    var flags: ProcessBlockFlags
+    if FullValidation notin p.flags:
+      flags.incl {skipValidation, skipStateRootCheck, skipPostExecBalCheck}
+      if PersistReceipts notin p.flags:
+        flags.incl skipReceipts
+    if PersistUncles notin p.flags:
+      flags.incl skipUncles
+    ?vmState.processBlock(blk, flags = flags)
 
   if not vmState.com.statelessProvider:
     processBlock()
@@ -229,7 +228,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
   if p.flags * {PersistTransactions, PersistReceipts, PersistWithdrawals} == {}:
     txFrame.setChainTail(header.number)
-    
+
   p.stats.blocks += 1
   p.stats.txs += blk.transactions.len
   p.stats.gas += blk.header.gasUsed

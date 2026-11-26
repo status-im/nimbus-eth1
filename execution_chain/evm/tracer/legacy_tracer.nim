@@ -20,8 +20,7 @@ import
   eth/common/eth_types,
   eth/rlp,
   stew/byteutils,
-  chronicles,
-  ".."/[types, memory, stack],
+  ../[types, memory, stack],
   ../interpreter/op_codes,
   ../../db/ledger,
   ../evm_errors

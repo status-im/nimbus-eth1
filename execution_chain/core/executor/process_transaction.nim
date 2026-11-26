@@ -156,12 +156,12 @@ proc processTransaction*(
     vmState.balTracker.beginCallFrame()
   let savePoint = vmState.ledger.beginSavePoint()
 
-  var callResult = tx.txCallEvm(sender, vmState, intrinsic)
-  vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
+  var txResult = tx.txCallEvm(sender, vmState, intrinsic)
+  vmState.captureTxEnd(tx.gasLimit - txResult.gasUsed)
 
   let
     tmp = processGasUsed(
-      vmState, tx, callResult)
+      vmState, tx, txResult)
     res = if tmp.isErr:
       if vmState.balTrackerEnabled:
         vmState.balTracker.rollbackCallFrame()
@@ -173,7 +173,7 @@ proc processTransaction*(
         vmState.balTracker.commitCallFrame()
       vmState.ledger.commit(savePoint)
 
-      ok(move(callResult))
+      ok(txResult)
 
   if persist:
     vmState.ledger.persist(
@@ -196,7 +196,7 @@ proc prefetchTransaction*(
   validateForInclusion(vmState, tx, sender, true, false, intrinsic)
 
   let savePoint = vmState.ledger.beginSavePoint()
-  tx.txCallEvm(sender, vmState, intrinsic, discardResult = true)
+  tx.txCallEvm(sender, vmState, intrinsic, void)
   vmState.ledger.rollback(savePoint)
 
 proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32) =

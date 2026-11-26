@@ -250,7 +250,7 @@ proc exec(ctx: TransContext,
   if ctx.env.parentBeaconBlockRoot.isSome:
     vmState.processBeaconBlockRoot(ctx.env.parentBeaconBlockRoot.value)
 
-  if vmState.com.isPragueOrLater(ctx.env.currentTimestamp) and
+  if vmState.fork >= FkPrague and
      ctx.env.blockHashes.len > 0:
     let
       prevNumber = ctx.env.currentNumber - 1
@@ -301,7 +301,7 @@ proc exec(ctx: TransContext,
       )
       continue
 
-    if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
+    if vmState.fork >= FkPrague:
       vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
 
     let rec = vmState.makeReceipt(tx.txType)
@@ -354,14 +354,14 @@ proc exec(ctx: TransContext,
     builderDepositReqs: seq[byte]
     builderExitReqs: seq[byte]
 
-  if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
+  if vmState.fork >= FkPrague:
     # Execute EIP-7002 and EIP-7251 before calculating stateRoot
     withdrawalReqs = processDequeueWithdrawalRequests(vmState).valueOr:
       return err(t8nerr(ErrorConfig, error))
     consolidationReqs = processDequeueConsolidationRequests(vmState).valueOr:
       return err(t8nerr(ErrorConfig, error))
 
-    if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
+    if vmState.fork >= FkAmsterdam:
       builderDepositReqs = processBuilderDepositRequests(vmState).valueOr:
         return err(t8nerr(ErrorConfig, error))
       builderExitReqs = processBuilderExitRequests(vmState).valueOr:
@@ -404,7 +404,7 @@ proc exec(ctx: TransContext,
     output.result.blobGasUsed = Opt.some vmState.blobGasUsed
     output.result.currentExcessBlobGas = excessBlobGas
 
-  if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
+  if vmState.fork >= FkPrague:
     var
       depositReqs = parseDepositLogs(vmState.blockLogs).valueOr:
         return err(t8nerr(ErrorEVM, error))
@@ -419,7 +419,7 @@ proc exec(ctx: TransContext,
     executionRequests.append(WITHDRAWAL_REQUEST_TYPE, withdrawalReqs)
     executionRequests.append(CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
 
-    if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
+    if vmState.fork >= FkAmsterdam:
       executionRequests.append(BUILDER_DEPOSIT_REQUEST_TYPE, builderDepositReqs)
       executionRequests.append(BUILDER_EXIT_REQUEST_TYPE, builderExitReqs)
 
@@ -434,7 +434,7 @@ proc exec(ctx: TransContext,
     output.result.blockAccessListHash = Opt.some(balHash)
     output.result.blockAccessList = Opt.some(bal)
 
-  if vmState.com.isAmsterdamOrLater(ctx.env.currentTimestamp):
+  if vmState.fork >= FkAmsterdam:
     output.result.gasUsed = max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
 
   ok(output)

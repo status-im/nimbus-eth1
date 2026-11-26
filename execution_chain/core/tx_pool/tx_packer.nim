@@ -114,9 +114,7 @@ proc prospectiveHeaderFixedSize(xp: TxPoolRef, extraData: seq[byte]): uint64 =
   ## `blobGasUsed` — the only fields whose encoded size depends on the packed
   ## txs. Everything else is either known before packing starts or fixed-width
   ## (hash roots, bloom).
-  let
-    vmState = xp.vmState
-    com = vmState.com
+  let vmState = xp.vmState
 
   var header = Header(
     number:        vmState.blockNumber,
@@ -126,15 +124,15 @@ proc prospectiveHeaderFixedSize(xp: TxPoolRef, extraData: seq[byte]): uint64 =
     extraData:     extraData,
     baseFeePerGas: Opt.some(xp.baseFee.u256),
   )
-  if com.isShanghaiOrLater(xp.timestamp):
+  if vmState.fork >= FkShanghai:
     header.withdrawalsRoot = Opt.some(default(Hash32))
-  if com.isCancunOrLater(xp.timestamp):
+  if vmState.fork >= FkCancun:
     header.parentBeaconBlockRoot = Opt.some(default(Hash32))
     header.blobGasUsed = Opt.some(0'u64)
     header.excessBlobGas = Opt.some(vmState.blockCtx.excessBlobGas)
-  if com.isPragueOrLater(xp.timestamp):
+  if vmState.fork >= FkPrague:
     header.requestsHash = Opt.some(default(Hash32))
-  if com.isAmsterdamOrLater(xp.timestamp):
+  if vmState.fork >= FkAmsterdam:
     header.blockAccessListHash = Opt.some(default(Hash32))
     header.slotNumber = Opt.some(xp.slotNumber)
 
@@ -373,9 +371,7 @@ proc packerVmExec*(
 
 func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
   ## Generate a new header, a child of the cached `head`
-  let
-    vmState = pst.vmState
-    com = vmState.com
+  let vmState = pst.vmState
 
   var header = Header(
     parentHash:    vmState.blockCtx.parentHash,
@@ -395,16 +391,16 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
     baseFeePerGas: Opt.some(xp.baseFee.u256),
     )
 
-  if com.isShanghaiOrLater(xp.timestamp):
+  if vmState.fork >= FkShanghai:
     header.withdrawalsRoot = Opt.some(calcWithdrawalsRoot(xp.withdrawals))
 
-  if com.isCancunOrLater(xp.timestamp):
+  if vmState.fork >= FkCancun:
     header.parentBeaconBlockRoot = Opt.some(xp.parentBeaconBlockRoot)
     header.blobGasUsed = Opt.some vmState.blobGasUsed
     header.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
 
-  if com.isPragueOrLater(xp.timestamp):
-    let requestsHash = if com.isAmsterdamOrLater(xp.timestamp):
+  if vmState.fork >= FkPrague:
+    let requestsHash = if vmState.fork >= FkAmsterdam:
         calcRequestsHash([
           (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
           (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
@@ -420,7 +416,7 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
         ])
     header.requestsHash = Opt.some(requestsHash)
 
-  if com.isAmsterdamOrLater(xp.timestamp):
+  if vmState.fork >= FkAmsterdam:
     let bal = vmState.blockAccessList.expect("block access list exists")
     header.blockAccessListHash = Opt.some(bal[].computeBlockAccessListHash())
     header.slotNumber = Opt.some(xp.slotNumber)

@@ -32,7 +32,6 @@ import
   ../utils/utils_numeric,
   ./oph_defs,
   ./oph_helpers,
-  chronicles,
   eth/common/addresses,
   stint
 
@@ -320,10 +319,6 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
   let code = cpt.loadCallCode(p.flags)
 
   if cpt.msg.depth >= MaxCallDepth:
-    debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     if newAccountCharged:
       cpt.gasMeter.creditStateGasRefund(CREATE_ACCOUNT_STATE_GAS)
@@ -400,10 +395,6 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
   let code = cpt.loadCallCode(p.flags)
 
   if cpt.msg.depth >= MaxCallDepth:
-    debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 
@@ -475,10 +466,6 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   let code = cpt.loadCallCode(p.flags)
 
   if cpt.msg.depth >= MaxCallDepth:
-    debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 
@@ -544,10 +531,6 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   let code = cpt.loadCallCode(p.flags)
 
   if cpt.msg.depth >= MaxCallDepth:
-    debug "Computation Failure",
-      reason = "Stack too deep",
-      maximumDepth = MaxCallDepth,
-      depth = cpt.msg.depth
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 

@@ -1410,11 +1410,7 @@ proc generateExecutionWitness*(
   ?vmState.processBlock(
     blk,
     blockAccessList = Opt.none(BlockAccessListRef),
-    skipValidation = true,
-    skipReceipts = true,
-    skipUncles = true,
-    skipStateRootCheck = false,
-    skipPostExecBalCheck = true)
+    flags = {skipValidation, skipReceipts, skipUncles, skipPostExecBalCheck})
 
   let
     preStateLedger = LedgerRef.init(parentFrame)

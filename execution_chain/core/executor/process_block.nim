@@ -29,6 +29,15 @@ import
   chronicles,
   results
 
+type
+  ProcessBlockFlag* = enum
+    skipValidation
+    skipReceipts
+    skipUncles
+    skipStateRootCheck
+    skipPostExecBalCheck
+  ProcessBlockFlags* = set[ProcessBlockFlag]
+
 when compileOption("threads"):
   import ./process_block_parallel
 
@@ -63,8 +72,7 @@ proc processTransactions(
     header: Header,
     transactions: seq[Transaction],
     blockAccessList = Opt.none(BlockAccessListRef),
-    skipReceipts = false,
-    collectLogs = false,
+    flags: ProcessBlockFlags = {},
 ): Result[void, string] =
   if header.txRoot == EMPTY_ROOT_HASH:
     if transactions.len > 0:
@@ -73,6 +81,10 @@ proc processTransactions(
 
   if transactions.len == 0:
     return err("Transactions missing from body")
+
+  let
+    skipReceipts = skipReceipts in flags
+    collectLogs = header.requestsHash.isSome and skipValidation notin flags
 
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.receiptBlooms.setLen(vmState.receipts.len)
@@ -112,7 +124,7 @@ proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    skipValidation, skipReceipts, skipUncles: bool,
+    flags: ProcessBlockFlags,
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -128,7 +140,7 @@ proc procBlkPreamble(
     if com.daoForkSupport and com.daoForkBlock.get == header.number:
       ledger.applyDAOHardFork()
 
-  if not skipValidation: # Expensive!
+  if skipValidation notin flags: # Expensive!
     if blk.transactions.calcTxRoot != header.txRoot:
       return err("Mismatched txRoot")
 
@@ -175,8 +187,7 @@ proc procBlkEpilogue(
     vmState: BaseVMState,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    skipValidation, skipReceipts, skipUncles, skipStateRootCheck, skipPostExecBalCheck:
-      bool,
+    flags: ProcessBlockFlags,
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -226,11 +237,11 @@ proc procBlkEpilogue(
   if header.ommersHash != EMPTY_UNCLE_HASH:
     # TODO It's strange that we persist uncles before processing block but the
     #      rest after...
-    if not skipUncles:
+    if skipUncles notin flags:
       let h = vmState.ledger.txFrame.persistUncles(blk.uncles)
       if h != header.ommersHash:
         return err("ommersHash mismatch")
-    elif not skipValidation and computeRlpHash(blk.uncles) != header.ommersHash:
+    elif skipValidation notin flags and computeRlpHash(blk.uncles) != header.ommersHash:
       return err("ommersHash mismatch")
   elif blk.uncles.len > 0:
     return err("Uncles in block with empty uncle hash")
@@ -266,8 +277,8 @@ proc procBlkEpilogue(
   # calls before getStateRoot below, which would otherwise assert on it.
   vmState.ledger.abortOnFatalError()
 
-  if not skipValidation:
-    if not skipPostExecBalCheck and vmState.fork >= FkAmsterdam:
+  if skipValidation notin flags:
+    if skipPostExecBalCheck notin flags and vmState.fork >= FkAmsterdam:
       doAssert vmState.balTrackerEnabled
 
       let
@@ -294,7 +305,7 @@ proc procBlkEpilogue(
         bal.validate(header.blockAccessListHash.get, header.gasLimit).isOkOr:
           return err("blockAccessList failed post-execution validation: " & $error)
 
-    if not skipStateRootCheck:
+    if skipStateRootCheck notin flags:
       let stateRoot = vmState.ledger.getStateRoot()
       if header.stateRoot != stateRoot:
         # TODO replace logging with better error
@@ -308,7 +319,7 @@ proc procBlkEpilogue(
         return
           err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
 
-    if not skipReceipts:
+    if skipReceipts notin flags:
       var bloom {.noinit.}: Bloom
       createBloom(vmState.receiptBlooms, bloom)
 
@@ -370,30 +381,16 @@ proc processBlock*(
     vmState: BaseVMState, ## Parent environment of header/body block
     blk: Block, ## Header/body block to add to the blockchain
     blockAccessList = Opt.none(BlockAccessListRef),
-    skipValidation = false,
-    skipReceipts = false,
-    skipUncles = false,
-    skipStateRootCheck = false,
-    skipPostExecBalCheck = false,
+    flags: ProcessBlockFlags = {},
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network. A given
   ## `blockAccessList` must already have been validated against the header's
   ## `blockAccessListHash`.
 
   vmState.withBalPrefetch(blockAccessList):
-    ?vmState.procBlkPreamble(
-      blk, blockAccessList, skipValidation, skipReceipts, skipUncles
-    )
-
-    let collectLogs = blk.header.requestsHash.isSome and not skipValidation
-    ?processTransactions(
-      vmState, blk.header, blk.transactions, blockAccessList, skipReceipts, collectLogs
-    )
-
-    ?vmState.procBlkEpilogue(
-      blk, blockAccessList, skipValidation, skipReceipts,
-      skipUncles, skipStateRootCheck, skipPostExecBalCheck,
-    )
+    ?vmState.procBlkPreamble(blk, blockAccessList, flags)
+    ?processTransactions(vmState, blk.header, blk.transactions, blockAccessList, flags)
+    ?vmState.procBlkEpilogue(blk, blockAccessList, flags)
 
   ok()
 
