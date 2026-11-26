@@ -18,12 +18,12 @@ import
   nimcrypto/[ripemd, utils],
   stew/assign2,
   ../common/evmforks,
-  ../core/eip4844,
+  ../core/[eip4844, eip7702],
+  ../db/ledger,
   ../compile_info,
-  ./evm_errors,
-  ./computation,
   ../transaction,
-  eth/common/[base, addresses]
+  ./evm_errors,
+  ./computation
 
 when enable_zkvm_accelerators:
   import ../stateless/zkvm/[zkvm_accelerators, blake2b_f_zkvm, blscurve_zkvm]
@@ -186,17 +186,40 @@ func getSignature(c: Computation): EvmResult[SigRes]  =
 # Precompiles functions
 # ------------------------------------------------------------------------------
 
-func ecRecover(c: Computation): EvmResultVoid =
+proc ecRecover(c: Computation, fork: EVMFork): EvmResultVoid =
   ? c.gasMeter.consumeGas(
     GasECRecover,
     reason="ECRecover Precompile")
 
-  let sig = ? c.getSignature()
-
-  var address: Address
-  {.cast(noSideEffect).}:
+  let
+    sig = ? c.getSignature()
     address = recoverSenderCached(sig.msgHash, sig.sig).valueOr:
       return err(prcErr(PrcInvalidSig))
+
+  if fork >= FkBogota:
+    # GAS (STATE-INDEPENDENT)
+    let
+      ledger = c.vmState.ledger
+      isColdAccess = not ledger.inAccessList(address)
+      # + WARM_ACCESS = Code reading cost
+      accessGasCost = if isColdAccess: COLD_ACCOUNT_ACCESS_8038 + WARM_ACCESS
+                      else: WARM_ACCESS + WARM_ACCESS
+    ? c.gasMeter.consumeGas(
+      accessGasCost.GasInt,
+      reason="ECRecover Precompile accessGasCost")
+
+    # STATE ACCESS (STATE-DEPENDENT GAS)
+    if isColdAccess:
+      ledger.accessList(address)
+
+    let
+      code = ledger.getCode(address)
+
+    # OPERATION
+    if code.len > 0 and not code.isDelegation:
+      # Leave the output empty if the account holds code other
+      # than a delegation designation
+      return ok()
 
   c.output.setLen(32)
   assign(c.output.toOpenArray(12, 31), address.data)
@@ -628,7 +651,7 @@ template isPrecompile*(fork: EVMFork, codeAddress: Address): bool =
 proc execPrecompile*(c: Computation, precompile: Precompiles) =
   let fork = c.fork
   let res = case precompile
-    of paEcRecover: ecRecover(c)
+    of paEcRecover: ecRecover(c, fork)
     of paSha256: sha256(c)
     of paRipeMd160: ripemd160(c)
     of paIdentity: identity(c)
