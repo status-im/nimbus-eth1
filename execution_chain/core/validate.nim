@@ -291,7 +291,7 @@ func validateTxBasic*(
       return err("invalid tx: initcode size exceeds EIP-3860 maximum")
 
   if tx.txType == TxEip8141:
-    if tx.nonceSeq >= MAX_NONCE_SEQ:
+    if tx.nonceKeys == LEGACY_NONCE_KEYS and tx.nonceSeq >= MAX_NONCE_SEQ:
       return err("invalid tx: nonceSeq at maximum")
 
     ? validateNonceKeys(tx)

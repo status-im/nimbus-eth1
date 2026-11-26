@@ -29,7 +29,7 @@ const
   MAX_NONCE_KEYS* = 16
   MAX_NONCE_SEQ* = uint64.high
   KEYED_NONCE_FIRST_USE* = STATE_BYTES_PER_STORAGE_SET * COST_PER_STATE_BYTE
-  LEGACY_NONCE_KEYS* = @[0.u256]
+  LEGACY_NONCE_KEYS* = default(seq[UInt256])
   NONCE_MANAGER = address"8250968c12e01a19d6f667b9b2f3b3a4d0e51cb7"
   KEYED_NONCE_ACCESS* = COLD_STORAGE_ACCESS_8038 + STORAGE_WRITE_8038
 
@@ -43,19 +43,12 @@ func validateNonceKeys*(tx: Transaction): Result[void, string] =
   ## strictly increasing order, so each set has one canonical encoding.
   ## The zero key aliases the sender's account nonce and may only appear
   ## alone, as [`LEGACY_NONCE_KEYS`][lnk].
-
-  let
-    keyCount = tx.nonceKeys.len
-
-  if keyCount < 1 or keyCount > MAX_NONCE_KEYS:
+  if tx.nonceKeys.len > MAX_NONCE_KEYS:
     return err("invalid nonce key count")
 
   for i in 1..<tx.nonceKeys.len:
     if tx.nonceKeys[i] <= tx.nonceKeys[i - 1]:
       return err("nonce keys not strictly increasing")
-
-  if 0.u256 in tx.nonceKeys and tx.nonceKeys != LEGACY_NONCE_KEYS:
-    return err("zero nonce key alongside other keys")
 
   ok()
 
@@ -74,7 +67,8 @@ func nonceCallData*(tx: Transaction): seq[byte] =
   ## priced as transaction data.
 
   result = rlp.encode(tx.nonceKeys)
-  result.add rlp.encode(tx.nonceSeq)
+  if tx.nonceKeys.len == 0 or tx.nonceSeq != MAX_NONCE_SEQ:
+    result.add rlp.encode(tx.nonceSeq)
 
 func nonceSlot(sender: Address, nonceKey: UInt256): UInt256 =
   ## Return the nonce manager storage slot holding `sender`'s sequence
@@ -91,33 +85,50 @@ func nonceSlot(sender: Address, nonceKey: UInt256): UInt256 =
 proc currentNonceSeq(vmState: BaseVMState, sender: Address, nonceKey: UInt256): uint64 =
   ## Return the current sequence of `sender`'s nonce domain `nonce_key`.
   ##
-  ## The zero key reads the account nonce. Any other key reads the nonce
-  ## manager, where an absent slot is sequence zero: the protocol never
-  ## writes zero, so a zero read identifies a key's first use.
-
-  if nonceKey.isZero:
-    if vmState.balTrackerEnabled:
-      vmState.balTracker.trackAddressAccess(sender)
-    return vmState.readOnlyLedger.getNonce(sender)
-
+  ## Every key reads the nonce manager, where an absent slot is sequence
+  ## zero: the protocol never writes zero, so a zero read identifies a
+  ## key's first use.
   let slot = nonceSlot(sender, nonceKey)
   if vmState.balTrackerEnabled:
     vmState.balTracker.trackStorageRead(NONCE_MANAGER, slot)
   let nonce = vmState.readOnlyLedger.getStorage(NONCE_MANAGER, slot)
   nonce.truncate(uint64)
 
+func checkSequence(current: uint64, nonceSeq: uint64): Result[void, string] =
+  ## Check that a nonce domain's current sequence equals the
+  ## transaction's sequence.
+
+  if current > nonceSeq:
+    return err("nonce too low")
+  elif current < nonceSeq:
+    return err("nonce too high")
+
+  ok()
+
 proc checkNonceSet*(vmState: BaseVMState, tx: Transaction): Result[void, string] =
-  ## Check that every nonce key the transaction selects currently holds
-  ## the transaction's sequence.
+  ## Check the transaction's nonce domain against its sequence.
+
+  ## The empty key set requires the sender's account nonce to equal the
+  ## sequence. A keyed set at [`MAX_NONCE_SEQ`][mns] requires every
+  ## selected key to be unused; any other keyed set requires every
+  ## selected key to hold the sequence.
+
+  if tx.nonceKeys == LEGACY_NONCE_KEYS:
+    if vmState.balTrackerEnabled:
+      vmState.balTracker.trackAddressAccess(tx.sender)
+    let nonce = vmState.readOnlyLedger.getNonce(tx.sender)
+    return checkSequence(nonce, tx.nonceSeq)
 
   for nonceKey in tx.nonceKeys:
     let
       current = currentNonceSeq(vmState, tx.sender, nonceKey)
 
-    if current > tx.nonceSeq:
-      return err("nonce too low")
-    elif current < tx.nonceSeq:
-      return err("nonce too high")
+    if tx.nonceSeq == MAX_NONCE_SEQ:
+      if current != 0:
+        return err("nonce too low")
+    else:
+      ? checkSequence(current, tx.nonceSeq)
+
   ok()
 
 proc countFirstUses*(vmState: BaseVMState, tx: Transaction): uint64 =
@@ -137,18 +148,22 @@ proc consumeNonceSet*(vmState: BaseVMState, tx: Transaction) =
   ## The legacy key set increments the sender's account nonce, whatever
   ## it currently is, rather than setting it to the transaction's
   ## sequence plus one: an earlier frame may already have changed it.
-  ## Any other key set advances each selected keyed sequence past the
-  ## transaction's sequence.
+  ## A keyed set advances each selected sequence past the transaction's
+  ## sequence, except at [`MAX_NONCE_SEQ`][mns], where it exhausts each
+  ## selected key by writing that sequence.
 
   if tx.nonceKeys == LEGACY_NONCE_KEYS:
     if vmState.balTrackerEnabled:
       vmState.balTracker.trackIncNonceChange(tx.sender)
     vmState.ledger.incNonce(tx.sender)
     return
+
+  let consumedSeq = if tx.nonceSeq == MAX_NONCE_SEQ: MAX_NONCE_SEQ.u256
+                    else: tx.nonceSeq.u256 + 1.u256
+
   for nonceKey in tx.nonceKeys:
     let
       slot = nonceSlot(tx.sender, nonceKey)
-      newValue = (tx.nonceSeq + 1).u256
     if vmState.balTrackerEnabled:
-      vmState.balTracker.trackStorageWrite(NONCE_MANAGER, slot, newValue)
-    vmState.ledger.setStorage(NONCE_MANAGER, slot, newValue)
+      vmState.balTracker.trackStorageWrite(NONCE_MANAGER, slot, consumedSeq)
+    vmState.ledger.setStorage(NONCE_MANAGER, slot, consumedSeq)

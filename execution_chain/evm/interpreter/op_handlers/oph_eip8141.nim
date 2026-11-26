@@ -140,7 +140,7 @@ func txParamOp(cpt: VmCpt): EvmResultVoid =
   of TXPARAM_NONCE_KEYS_HASH:
     value.initFromBytesBE(nonceKeysHash(tx[]).data)
   of TXPARAM_FIRST_NONCE_KEY:
-    value = tx.nonceKeys[0]
+    value = if tx.nonceKeys.len > 0: tx.nonceKeys[0] else: 0.u256
   else:
     return err(opErr(EvmInvalidParam))
 
