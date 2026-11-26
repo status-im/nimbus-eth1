@@ -30,7 +30,7 @@ func createTransferLog(originator, beneficiary: Address, value: UInt256): Log =
 func addLogEntry*(c: Computation, log: Log) =
   c.logEntries.add log
 
-func emitSelfDestructLog*(c: Computation, beneficiary: Address, value: UInt256, newContract: bool) =
+func emitSelfDestructLog*(c: Computation, beneficiary: Address, value: UInt256) =
   if value.isZero:
     return
 

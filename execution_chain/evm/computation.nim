@@ -397,15 +397,17 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
         c.vmState.balTracker.trackAddBalanceChange(beneficiary, localBalance)
       ledger.addBalance(beneficiary, localBalance, c.fork.checkEmptyAccount())
 
-      newContract = if c.fork >= FkAmsterdam:
-                      ledger.selfDestruct8246(c.msg.currentTarget)
-                    else:
-                      ledger.selfDestruct6780(c.msg.currentTarget)
-      if c.balTrackerEnabled and newContract:
-        c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.currentTarget)
+      if c.fork < FkBogota:
+        # EIP - 4758 Deactivate Self Destruct and change it into Send All
+        newContract = if c.fork >= FkAmsterdam:
+                        ledger.selfDestruct8246(c.msg.currentTarget)
+                      else:
+                        ledger.selfDestruct6780(c.msg.currentTarget)
+        if c.balTrackerEnabled and newContract:
+          c.vmState.balTracker.trackInTransactionSelfDestruct(c.msg.currentTarget)
 
       if c.fork >= FkAmsterdam:
-        c.emitSelfDestructLog(beneficiary, localBalance, newContract)
+        c.emitSelfDestructLog(beneficiary, localBalance)
     else:
       # Transfer to beneficiary
       ledger.addBalance(beneficiary, localBalance, c.fork.checkEmptyAccount())
