@@ -9,7 +9,7 @@
 
 excluded_files="config.yaml|.gitmodules|.gitignore|.gitattributes|Makefile|go.mod|go.sum"
 excluded_paths="shims|examples"
-excluded_extensions="json|md|png|txt|toml|gz|key|rlp|era1|ere|cfg|py|sh|in|patch|md.tpl|nix|lock|yml|jq"
+excluded_extensions="json|md|png|txt|toml|gz|key|rlp|era1|ere|cfg|py|sh|in|patch|md.tpl|nix|lock|yml|jq|io"
 
 current_year=$(date +"%Y")
 outdated_files=()

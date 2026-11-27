@@ -40,6 +40,7 @@ import
     test_precompiles,
     test_rpc,
     test_sender_recovery_cache,
+    test_trace_rpc,
     test_snap,
     test_transactions_receipts_storage,
     test_txpool,
