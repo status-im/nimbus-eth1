@@ -54,7 +54,7 @@ suite "Legacy code migration":
       check:
         not frame.hasKey(legacyContractHashKey(codeHash).toOpenArray)
         frame.get(contractCodeKey(codeHash).toOpenArray).expect("value") ==
-          code & jumpdestBitmap(code)
+          @[1'u8] & code & jumpdestBitmap(code)
         frame.getCodeByHash(codeHash, jumpdests).expect("code") == code
         jumpdests == jumpdestBitmap(code)
         frame.getCodeLenByHash(codeHash).expect("code len") == code.len

@@ -44,9 +44,7 @@ proc migrateRecord(
   var codeKey: array[keyLen, byte]
   assign(codeKey, key)
   codeKey[0] = codeKind
-  value.setLen(code.len + jumpdests.len)
-  assign(value.toOpenArray(0, code.high), code)
-  assign(value.toOpenArray(code.len, value.high), jumpdests)
+  value.encodeCodeRecord(code, jumpdests)
   ?batch.put(codeKey, value)
   ?batch.delete(key)
   ok(value.len)

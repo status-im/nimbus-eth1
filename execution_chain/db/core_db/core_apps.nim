@@ -721,24 +721,49 @@ proc getWitness*(
 
   Witness.decode(witnessBytes)
 
-func storedCodeLen(valueLen: int, info: static[string]): Result[int, string] =
-  let codeLen = valueLen * 8 div 9
-  if codeLen + (codeLen + 7) div 8 != valueLen:
+const
+  codeOnlyRecord = 0'u8
+  codeWithJumpdestsRecord = 1'u8
+
+func storedCodeLen(
+    data: openArray[byte], info: static[string]
+): Result[int, string] =
+  if data.len == 0:
     return err(info & ": invalid code record")
 
-  ok(codeLen)
+  let payloadLen = data.len - 1
+  case data[0]
+  of codeOnlyRecord:
+    ok(payloadLen)
+  of codeWithJumpdestsRecord:
+    let codeLen = payloadLen * 8 div 9
+    if codeLen + (codeLen + 7) div 8 != payloadLen:
+      return err(info & ": invalid code record")
+    ok(codeLen)
+  else:
+    err(info & ": invalid code record")
+
+func encodeCodeRecord*(value: var seq[byte], code, jumpdests: openArray[byte]) =
+  doAssert jumpdests.len == 0 or jumpdests.len == (code.len + 7) div 8
+  value.setLen(1 + code.len + jumpdests.len)
+  value[0] = if jumpdests.len == 0: codeOnlyRecord else: codeWithJumpdestsRecord
+  assign(value.toOpenArray(1, code.len), code)
+  assign(value.toOpenArray(1 + code.len, value.high), jumpdests)
 
 proc persistCodeByHash*(
     db: CoreDbTxRef, codeHash: Hash32, code, jumpdests: openArray[byte]
 ): Result[void, string] =
-  doAssert jumpdests.len == (code.len + 7) div 8
-  var value = newSeqUninit[byte](code.len + jumpdests.len)
-  assign(value.toOpenArray(0, code.high), code)
-  assign(value.toOpenArray(code.len, value.high), jumpdests)
+  var value: seq[byte]
+  value.encodeCodeRecord(code, jumpdests)
   db.put(contractCodeKey(codeHash).toOpenArray, value).isOkOr:
     return err("persistCodeByHash: " & $$error)
 
   ok()
+
+proc persistCodeByHash*(
+    db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]
+): Result[void, string] =
+  db.persistCodeByHash(codeHash, code, code.toOpenArray(0, -1))
 
 proc getCodeByHash*(
     db: CoreDbTxRef, codeHash: Hash32, jumpdests: var seq[byte]
@@ -748,10 +773,10 @@ proc getCodeByHash*(
     code {.threadvar.}: seq[byte]
     bitmap {.threadvar.}: seq[byte]
   let onData = proc(data: openArray[byte]) {.nimcall.} =
-    codeLen = storedCodeLen(data.len, "getCodeByHash")
+    codeLen = storedCodeLen(data, "getCodeByHash")
     if codeLen.isOk:
-      code = @(data.toOpenArray(0, codeLen.value - 1))
-      bitmap = @(data.toOpenArray(codeLen.value, data.high))
+      code = @(data.toOpenArray(1, codeLen.value))
+      bitmap = @(data.toOpenArray(1 + codeLen.value, data.high))
 
   let found = db.get(contractCodeKey(codeHash).toOpenArray, onData)
   if found.isOk:
@@ -768,22 +793,34 @@ proc getCodeByHash*(
   ok(move(rc.value))
 
 proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] =
-  var rc = db.get(contractCodeKey(codeHash).toOpenArray)
-  if rc.isOk:
-    let codeLen = ?storedCodeLen(rc.value.len, "getCodeByHash")
-    rc.value.setLen(codeLen)
-    return ok(move(rc.value))
+  var
+    codeLen {.threadvar.}: Result[int, string]
+    code {.threadvar.}: seq[byte]
+  let onData = proc(data: openArray[byte]) {.nimcall.} =
+    codeLen = storedCodeLen(data, "getCodeByHash")
+    if codeLen.isOk:
+      code = @(data.toOpenArray(1, codeLen.value))
 
-  rc = db.get(legacyContractHashKey(codeHash).toOpenArray)
+  let found = db.get(contractCodeKey(codeHash).toOpenArray, onData)
+  if found.isOk:
+    if codeLen.isErr:
+      return err(codeLen.error)
+    return ok(move(code))
+
+  var rc = db.get(legacyContractHashKey(codeHash).toOpenArray)
   if rc.isErr:
     return err("getCodeByHash: " & $$rc.error)
 
   ok(move(rc.value))
 
 proc getCodeLenByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[int, string] =
-  let rc = db.len(contractCodeKey(codeHash).toOpenArray)
-  if rc.isOk:
-    return storedCodeLen(rc.value, "getCodeLenByHash")
+  var codeLen {.threadvar.}: Result[int, string]
+  let onData = proc(data: openArray[byte]) {.nimcall.} =
+    codeLen = storedCodeLen(data, "getCodeLenByHash")
+
+  let found = db.get(contractCodeKey(codeHash).toOpenArray, onData)
+  if found.isOk:
+    return codeLen
 
   let len = db.len(legacyContractHashKey(codeHash).toOpenArray).valueOr:
     return err("getCodeLenByHash: " & $$error)
