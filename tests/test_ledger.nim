@@ -631,7 +631,7 @@ proc runLedgerBasicOperationsTests() =
             deployed & jumpdestBitmap(deployed)
           ledger.getCode(initAddr(2)).jumpdests == jumpdestBitmap(deployed)
 
-    test "Ledger loads code with its jumpdest bitmap":
+    test "Ledger loads code from the new and the legacy key":
       let
         frame = memDB.baseTxFrame()
         addr1 = initAddr(1)
@@ -656,12 +656,14 @@ proc runLedgerBasicOperationsTests() =
         check:
           ledger.getCodeSize(address) == code.len
           ledger.getCode(address) == code
-          ledger.getCode(address).jumpdests == jumpdestBitmap(code)
           ledger.getOriginalCode(address) == code
-      for code in [oldCode, oldOriginalCode]:
+      check ledger.getCode(addr1).jumpdests == jumpdestBitmap(newCode)
+      for (address, code) in [(addr2, oldCode), (addr3, oldOriginalCode)]:
         check:
-          frame.get(contractCodeKey(keccak256(code)).toOpenArray).expect("value") ==
-            code & jumpdestBitmap(code)
+          ledger.getCode(address).jumpdests.len == 0
+          ledger.getCode(address).isValidJumpdest(0)
+          ledger.getCode(address).jumpdests == jumpdestBitmap(code)
+          not frame.hasKey(contractCodeKey(keccak256(code)).toOpenArray)
           frame.get(legacyContractHashKey(keccak256(code)).toOpenArray).expect("value") ==
             code
 

@@ -766,11 +766,7 @@ proc loadCode(ledger: LedgerRef, codeHash: Hash32): Result[CodeBytesRef, string]
   if jumpdests.len > 0:
     return ok(CodeBytesRef.init(move(rc.value), move(jumpdests), persisted = true))
 
-  let code = CodeBytesRef.init(move(rc.value), persisted = true)
-  let wrc = ledger.txFrame.persistCodeByHash(codeHash, code.bytes(), code.jumpdestBitmap())
-  if wrc.isErr:
-    warn logTxt "loadCode()", codeHash, error = wrc.error
-  ok(code)
+  ok(CodeBytesRef.init(move(rc.value), persisted = true))
 
 proc getCode*(ledger: LedgerRef,
               address: Address,

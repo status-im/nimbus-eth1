@@ -22,6 +22,7 @@ import
   ./core/chain/forked_chain/chain_serialize,
   ./db/aristo/aristo_compute,
   ./db/core_db/persistent,
+  ./db/legacy_code_migration,
   ./sync/wire_protocol,
   ./common/genesis,
   ./portal/portal,
@@ -400,6 +401,9 @@ proc setupCommonRef*(
   let coreDB = AristoDbRocks.newCoreDbRef(config.dataDir(params), dbOpts)
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config, params)
+
+  coreDB.migrateLegacyCode().isOkOr:
+    warn "Contract code migration failed, legacy code records remain in use", error
 
   # Must not snap sync on a non-empty state DB.
   var emptyStateDb = false
