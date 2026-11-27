@@ -12,6 +12,7 @@
 
 import
   std/strformat,
+  pkg/blscurve, # Kludge: needed to compile `eip4844` -- sometimes :)
   ../db/ledger,
   ../common/common,
   ../transaction/call_types,
