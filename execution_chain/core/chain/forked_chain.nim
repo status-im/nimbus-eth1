@@ -84,21 +84,21 @@ const
 
 proc appendBlock(c: ForkedChainRef,
          parent: BlockRef,
+         blockHash: Hash32,
          blk: Block,
-         blkHash: Hash32,
          txFrame: CoreDbTxRef,
          txHashes: seq[Hash32]): BlockRef =
 
   let newBlock = BlockRef(
     header  : blk.header,
     txFrame : txFrame,
-    hash    : blkHash,
+    hash    : blockHash,
     parent  : parent,
     txHashes: txHashes,
     isFinalized: false,
   )
 
-  c.hashToBlock[blkHash] = newBlock
+  c.hashToBlock[blockHash] = newBlock
   c.latest = newBlock
 
   for i, head in c.heads:
@@ -525,30 +525,21 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef) =
 proc validateBlock(
     c: ForkedChainRef,
     parent: BlockRef,
+    blockHash: Hash32,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    blkHash: Hash32,
     finalized: bool,
 ): Result[BlockRef, string] =
-  if blkHash == c.pendingFCU:
+  if blockHash == c.pendingFCU:
     # Resolve the hash into latestFinalizedBlockNumber
-    discard c.tryUpdatePendingFCU(blkHash, blk.header.number)
+    discard c.tryUpdatePendingFCU(blockHash, blk.header.number)
 
-  let
-    # As a memory optimization we move the HashKeys (kMap) stored in the
-    # parent txFrame to the new txFrame unless the block number is one
-    # greater than a block which is expected to be persisted based on the
-    # persistBatchSize
-    moveParentHashKeys = c.persistBatchSize > 1 and (blk.header.number mod c.persistBatchSize) != 1
-    parentFrame = c.stateFrame(parent)
-    txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
-
-  # BLOCKHASH resolves along the block's own branch
-  txFrame.blockHashFn = branchBlockHashFn(parent, blk.header.number, blkHash)
+  let parentFrame = c.stateFrame(parent)
 
   # TODO shortLog-equivalent for eth types
   debug "Validating block",
-    blkHash, blk = (
+    blockHash,
+    blk = (
       parentHash: blk.header.parentHash.short,
       coinbase: blk.header.coinbase,
       stateRoot: blk.header.stateRoot,
@@ -564,13 +555,39 @@ proc validateBlock(
       excessBlobGas: blk.header.excessBlobGas,
       parentBeaconBlockRoot: blk.header.parentBeaconBlockRoot,
       requestsHash: blk.header.requestsHash,
-      blockAccessListHash: blk.header.blockAccessListHash
+      blockAccessListHash: blk.header.blockAccessListHash,
     ),
-    parentTxFrame=cast[uint](parentFrame),
-    txFrame=cast[uint](txFrame)
+    parentTxFrame = cast[uint](parentFrame)
 
-  let txHashes = c.processBlock(
-      parent, txFrame, blk, blockAccessList, blkHash, finalized).valueOr:
+  # Validate the header before acquiring the vmState / txFrame
+  c.com.validateHeaderAndKinship(
+    blockHash,
+    blk,
+    blockAccessList,
+    # Depending on the BAL retention period of clients, finalized blocks might
+    # be received without a BAL. In this case we skip checking the BAL against
+    # the header bal hash.
+    skipPreExecBalCheck = blockAccessList.isNone(),
+    parent.header,
+    parentFrame,
+  ).isOkOr:
+    c.badBlocks.put(blockHash, (blk, blockAccessList))
+    return err(error)
+
+  let
+    # As a memory optimization we move the HashKeys (kMap) stored in the
+    # parent txFrame to the new txFrame unless the block number is one
+    # greater than a block which is expected to be persisted based on the
+    # persistBatchSize
+    moveParentHashKeys =
+      c.persistBatchSize > 1 and (blk.header.number mod c.persistBatchSize) != 1
+    txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
+  # BLOCKHASH resolves along the block's own branch
+  txFrame.blockHashFn = branchBlockHashFn(parent, blk.header.number, blockHash)
+
+  let txHashes = c.processAndPersist(
+    parent, txFrame, blockHash, blk, blockAccessList, finalized
+  ).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -578,12 +595,12 @@ proc validateBlock(
   # expensive operation, specially when creating a new branch (ie when blk
   # is being applied to a block that is currently not a head).
   txFrame.checkpoint(blk.header.number, skipSnapshot = false)
-  c.baseTxFrame.storeTxFrame(txFrame, blkHash).expect("store frame blob")
+  c.baseTxFrame.storeTxFrame(txFrame, blockHash).expect("store frame blob")
   # The snapshot holds the block's changes too, and the blob keeps them
   # for a replay once a child takes the snapshot
   txFrame.detach()
 
-  let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, txHashes)
+  let newBlock = c.appendBlock(parent, blockHash, blk, txFrame, txHashes)
 
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
@@ -736,9 +753,10 @@ proc importBlock*(
   template header(): Header =
     blk.header
 
-  let blkHash = header.computeBlockHash
+  let blockHash = header.computeBlockHash()
+
   logScope:
-    blockHash = blkHash.short
+    blockHash = blockHash.short
     parentHash = header.parentHash.short
     number = header.number
 
@@ -761,7 +779,7 @@ proc importBlock*(
 
   # Already observed: the block content arrived earlier (from us or a concurrent
   # importer such as `el_sync`). Nothing to do.
-  if c.hashToBlock.hasKey(blkHash):
+  if c.hashToBlock.hasKey(blockHash):
     debug "Block already observed"
     return ok(AlreadyObserved)
 
@@ -788,7 +806,8 @@ proc importBlock*(
         # a stale sync target. Tell that apart from a genuine dead fork via the
         # persisted canonical marker (reorg-safe: matched by hash, not by number).
         if header.number <= c.base.number and
-            c.baseTxFrame.getBlockHash(header.number).valueOr(default(Hash32)) == blkHash:
+            c.baseTxFrame.getBlockHash(header.number).valueOr(default(Hash32)) ==
+            blockHash:
           debug "Block already observed"
           ok(AlreadyObserved)
         else:
@@ -801,7 +820,7 @@ proc importBlock*(
       else:
         # The chain has not reached this height yet: the parent may still arrive.
         # Quarantine and wait.
-        c.quarantine.addOrphan(blkHash, blk, blockAccessList)
+        c.quarantine.addOrphan(blockHash, blk, blockAccessList)
         debug "Parent not found"
         err(ImportError(kind: MissingParent, msg: "Block parent not found"))
 
@@ -816,7 +835,7 @@ proc importBlock*(
   let
     isFinalized = finalized or blk.header.number <= c.latestFinalized.number
     startTime = Moment.now()
-    newParent = c.validateBlock(parent, blk, blockAccessList, blkHash, isFinalized).valueOr:
+    newParent = c.validateBlock(parent, blockHash, blk, blockAccessList, isFinalized).valueOr:
       debug "Block invalid", validationDur = Moment.now() - startTime, error
       return err(ImportError(kind: Invalid, msg: error))
 
@@ -832,7 +851,7 @@ proc importBlock*(
     # represents the orphan task - the return value is not used any more because
     # the caller that enqueued the orphan has already moved on with
     # `MissingParent`.
-    discard c.importBlock(orphan.get()[0], orphan.get()[1])
+    discard c.importBlock(orphan[][0], orphan[][1])
 
   ok(Valid)
 
@@ -1163,7 +1182,7 @@ proc payloadBodyV2ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Executio
       # Same as above
       return ok(toPayloadBodyV2(
         EthBlock.init(move(header), move(blockBodyPortal)),
-          ?c.baseTxFrame.getBlockAccessList(header.computeRlpHash())))
+          ?c.baseTxFrame.getBlockAccessList(blockHash)))
 
   move(blk)
 
@@ -1196,8 +1215,10 @@ proc payloadBodyV2ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
     return err("Requested block number not exists: " & $number)
 
   if number <= c.base.number:
-    var header = ?c.baseTxFrame.getBlockHeader(number)
-    let blk = c.baseTxFrame.getExecutionPayloadBodyV2(header)
+    let
+      blockHash = ?c.baseTxFrame.getBlockHash(number)
+      header = ?c.baseTxFrame.getBlockHeader(blockHash)
+      blk = c.baseTxFrame.getExecutionPayloadBodyV2(header)
 
     if blk.isErr:
       # Serve portal data if block not found in db
@@ -1205,8 +1226,8 @@ proc payloadBodyV2ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
         var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
         # same as above
         return ok(toPayloadBodyV2(
-          EthBlock.init(move(header), move(blockBodyPortal)),
-            ?c.baseTxFrame.getBlockAccessList(header.computeRlpHash())))
+          EthBlock.init(header, move(blockBodyPortal)),
+            ?c.baseTxFrame.getBlockAccessList(blockHash)))
 
     return blk
 

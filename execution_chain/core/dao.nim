@@ -8,13 +8,13 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import stint, eth/common/addresses, ../db/ledger
+import stint, stew/byteutils, eth/common/addresses, ../db/ledger
 
 const
   # DAOForkBlockExtra is the block header extra-data field to set for the DAO fork
   # point and a number of consecutive blocks to allow fast/light syncers to correctly
   # pick the side they want  ("dao-hard-fork").
-  DAOForkBlockExtra* = "0x64616f2d686172642d666f726b"
+  DAOForkBlockExtra* = "0x64616f2d686172642d666f726b".hexToSeqByte()
 
   # DAOForkExtraRange is the number of consecutive blocks from the DAO fork point
   # to override the extra-data in to prevent no-fork attacks.

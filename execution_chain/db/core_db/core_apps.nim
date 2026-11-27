@@ -271,8 +271,8 @@ proc persistTransactions*(
   var txHashes = newSeqOfCap[Hash32](transactions.len)
 
   for idx, tx in transactions:
-    var encodedTx = rlp.encode(tx)
     let
+      encodedTx = rlp.encode(tx)
       txHash = keccak256(encodedTx)
       key = hashIndexKey(txRoot, idx.uint16)
 
@@ -285,7 +285,7 @@ proc persistTransactions*(
       let
         blockKey = transactionHashToBlockKey(txHash)
         txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
-      var encodedTxKey = rlp.encode(txKey)
+        encodedTxKey = rlp.encode(txKey)
       db.put(blockKey.toOpenArray, encodedTxKey).isOkOr:
         raiseAssert info & ": " & $$error
 
@@ -693,14 +693,12 @@ proc persistHeaderAndSetHead*(
     blockHash = header.computeBlockHash
   db.persistHeaderAndSetHead(blockHash, header, startOfHistory)
 
-proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
+proc persistUncles*(db: CoreDbTxRef, ommersHash: Hash32, uncles: openArray[Header]) =
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.
-  var enc = rlp.encode(uncles)
-  result = keccak256(enc)
-  db.put(genericHashKey(result).toOpenArray, enc).isOkOr:
-    warn "persistUncles()", unclesHash=result, error=($$error)
-    return EMPTY_ROOT_HASH
+  let enc = rlp.encode(uncles)
+  db.put(genericHashKey(ommersHash).toOpenArray, enc).isOkOr:
+    warn "persistUncles()", ommersHash, error=($$error)
 
 proc persistWitness*(
     db: CoreDbTxRef;

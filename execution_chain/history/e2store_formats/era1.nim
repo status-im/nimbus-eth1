@@ -517,14 +517,11 @@ proc verify*(f: Era1File): Result[Digest, string] =
   var blockTuple: BlockTuple
   for blockNumber in startNumber .. endNumber:
     ?f.getBlockTuple(blockNumber, blockTuple)
-    let
-      txRoot = calcTxRoot(blockTuple.body.transactions)
-      ommershHash = computeRlpHash(blockTuple.body.uncles)
 
-    if blockTuple.header.txRoot != txRoot:
+    if blockTuple.header.txRoot != calcTxRoot(blockTuple.body.transactions):
       return err("Invalid transactions root")
 
-    if blockTuple.header.ommersHash != ommershHash:
+    if blockTuple.header.ommersHash != computeRlpHash(blockTuple.body.uncles):
       return err("Invalid ommers hash")
 
     if blockTuple.header.receiptsRoot != calcReceiptsRoot(blockTuple.receipts):

@@ -695,13 +695,11 @@ proc verify*(
     let
       header = ?getBlockHeader(f, blockNumber)
       body = ?getBlockBody(f, blockNumber)
-      txRoot = calcTxRoot(body.transactions)
-      ommershHash = computeRlpHash(body.uncles)
 
-    if header.txRoot != txRoot:
+    if header.txRoot != calcTxRoot(body.transactions):
       return err("Invalid transactions root: blocknumber " & $blockNumber)
 
-    if header.ommersHash != ommershHash:
+    if header.ommersHash != computeRlpHash(body.uncles):
       return err("Invalid ommers hash: blocknumber " & $blockNumber)
 
     if not f.blockIdx.noReceipts:

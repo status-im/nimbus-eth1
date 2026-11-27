@@ -316,7 +316,7 @@ proc newPayload*(ben: BeaconEngineRef,
     warn "Invalid timestamp",
       number = header.number, parentNumber = parent.number,
       parent = parent.timestamp, header = header.timestamp
-    return invalidStatus(parent.computeBlockHash, "Invalid timestamp")
+    return invalidStatus(header.parentHash, "Invalid timestamp")
 
   if not chain.haveBlockAndState(header.parentHash):
     chain.quarantine.addOrphan(blockHash, blk, blockAccessList)

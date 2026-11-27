@@ -432,7 +432,7 @@ proc processTransactionsParallel*(
     transactions: seq[Transaction],
     balRef: BlockAccessListRef,
     skipReceipts: bool,
-    collectLogs: bool,
+    collectDeposits: bool,
 ): Result[void, string] =
   doAssert vmState.fork >= FkAmsterdam
   doAssert not vmState.com.statelessProvider
@@ -521,7 +521,7 @@ proc processTransactionsParallel*(
       vmState.txLogs = unpackLogs(entries[i].logs.data(asOpenArray = true))
     else:
       vmState.txLogs.setLen(0)
-    if collectLogs:
+    if collectDeposits:
       ?parseDepositLogs(vmState.depositReqs, vmState.txLogs, depositContractAddress)
 
     if not skipReceipts:

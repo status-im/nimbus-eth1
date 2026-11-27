@@ -22,7 +22,7 @@ import
   ../execution_chain/db/ledger,
   ../execution_chain/db/storage_types,
   ../execution_chain/core/chain,
-  ../execution_chain/core/[eip4844, eip7702],
+  ../execution_chain/core/[eip4844, eip7702, pooled_txs_rlp],
   ../execution_chain/core/validate,
   ../execution_chain/[conf, transaction, constants],
   ../execution_chain/core/tx_pool,

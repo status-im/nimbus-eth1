@@ -11,22 +11,17 @@
 {.push raises: [], gcsafe.}
 
 import
+  std/strformat,
   ../../common/common,
   ../../constants,
   ../../utils/utils,
-  ../../db/ledger,
-  ../../db/core_db,
+  ../../db/[core_db, ledger],
   ../../transaction,
-  ../../evm/state,
-  ../../evm/types,
+  ../../evm/[state, types],
   ../../block_access_list/[bal_tracker, bal_validation],
-  ../dao,
-  ../eip6110,
-  ./calculate_reward,
-  ./executor_helpers,
-  ./process_transaction,
+  ../[dao, eip6110],
+  ./[calculate_reward, executor_helpers, process_transaction],
   eth/common/[keys, transaction_utils],
-  chronicles,
   results
 
 type
@@ -40,6 +35,9 @@ type
 
 when compileOption("threads"):
   import ./process_block_parallel
+
+template mismatch(what, expected, got: untyped): string =
+  what & " mismatch, expected " & $expected & ", got " & $got
 
 template withSenderSerial(txs: openArray[Transaction], body: untyped) =
   for txIndex {.inject.}, tx {.inject.} in txs:
@@ -132,11 +130,11 @@ proc processTransactions(
     header: Header,
     transactions: seq[Transaction],
     blockAccessList = Opt.none(BlockAccessListRef),
-    flags: ProcessBlockFlags = {},
+    flags: ProcessBlockFlags,
 ): Result[void, string] =
   if header.txRoot == EMPTY_ROOT_HASH:
     if transactions.len > 0:
-        return err("Transactions in block with empty txRoot")
+      return err("Transactions in block with empty txRoot")
     return ok()
 
   if transactions.len == 0:
@@ -144,7 +142,7 @@ proc processTransactions(
 
   let
     skipReceipts = skipReceipts in flags
-    collectLogs = header.requestsHash.isSome and skipValidation notin flags
+    collectDeposits = header.requestsHash.isSome and skipValidation notin flags
 
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.receiptBlooms.setLen(vmState.receipts.len)
@@ -157,21 +155,21 @@ proc processTransactions(
   when compileOption("threads"):
     if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
       return processTransactionsParallel(
-        vmState, transactions, blockAccessList.get(), skipReceipts, collectLogs)
+        vmState, transactions, blockAccessList.get(), skipReceipts, collectDeposits
+      )
 
   let depositContractAddress = vmState.com.depositContractAddress
   vmState.withSender(transactions, blockAccessList):
     if sender == default(Address):
-      return err("Could not get sender for tx with index " & $(txIndex))
+      return err(&"Could not get sender for tx with index {txIndex}")
 
     if vmState.balTrackerEnabled:
       vmState.balTracker.setBlockAccessIndex(txIndex + 1)
 
-    var rc = vmState.processTransaction(tx, sender)
-    if rc.isErr:
-      return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
+    vmState.processTransaction(tx, sender).isOkOr:
+      return err(&"Error processing tx with index {txIndex}: {error}")
 
-    if collectLogs:
+    if collectDeposits:
       ?parseDepositLogs(vmState.depositReqs, vmState.txLogs, depositContractAddress)
 
     if not skipReceipts:
@@ -180,12 +178,7 @@ proc processTransactions(
 
   ok()
 
-proc procBlkPreamble(
-    vmState: BaseVMState,
-    blk: Block,
-    blockAccessList: Opt[BlockAccessListRef],
-    flags: ProcessBlockFlags,
-): Result[void, string] =
+proc procBlkPreamble(vmState: BaseVMState, blk: Block): Result[void, string] =
   template header(): Header =
     blk.header
 
@@ -197,45 +190,14 @@ proc procBlkPreamble(
 
   let com = vmState.com
   vmState.mutateLedger:
-    if com.daoForkSupport and com.daoForkBlock.get == header.number:
+    if com.daoForkSupport and com.daoForkBlock == Opt.some(header.number):
       ledger.applyDAOHardFork()
 
-  if skipValidation notin flags: # Expensive!
-    if blk.transactions.calcTxRoot != header.txRoot:
-      return err("Mismatched txRoot")
-
-  if vmState.fork >= FkOsaka:
-    if rlp.getEncodedLength(blk) > MAX_RLP_BLOCK_SIZE:
-      return err("Post-Osaka block exceeded MAX_RLP_BLOCK_SIZE")
+  if header.parentBeaconBlockRoot.isSome():
+    vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot[])
 
   if vmState.fork >= FkPrague:
-    if header.requestsHash.isNone:
-      return err("Post-Prague block header must have requestsHash")
-
     vmState.processParentBlockHash(header.parentHash)
-  else:
-    if header.requestsHash.isSome:
-      return err("Pre-Prague block header must not have requestsHash")
-
-  if vmState.fork >= FkCancun:
-    if header.parentBeaconBlockRoot.isNone:
-      return err("Post-Cancun block header must have parentBeaconBlockRoot")
-
-    vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.value)
-  else:
-    if header.parentBeaconBlockRoot.isSome:
-      return err("Pre-Cancun block header must not have parentBeaconBlockRoot")
-
-  if vmState.fork >= FkAmsterdam:
-    if header.blockAccessListHash.isNone:
-      return err("Post-Amsterdam block header must have blockAccessListHash")
-    if header.slotNumber.isNone:
-      return err("Post-Amsterdam block header must have slotNumber")
-  else:
-    if header.blockAccessListHash.isSome:
-      return err("Pre-Amsterdam block header must not have blockAccessListHash")
-    if header.slotNumber.isSome:
-      return err("Pre-Amsterdam block header must not have slotNumber")
 
   # Commit block access list tracker changes for pre‑execution system calls
   if vmState.balTrackerEnabled:
@@ -258,53 +220,28 @@ proc procBlkEpilogue(
     vmState.balTracker.beginCallFrame()
 
   # EIP-3675: no reward for miner in POA/POS
-  if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
-    vmState.calculateReward(blk.header, blk.uncles)
+  if not vmState.com.proofOfStake(header, vmState.ledger.txFrame):
+    vmState.calculateReward(header, blk.uncles)
 
-  if vmState.fork >= FkShanghai:
-    if header.withdrawalsRoot.isNone:
-      return err("Post-Shanghai block header must have withdrawalsRoot")
-    if blk.withdrawals.isNone:
-      return err("Post-Shanghai block body must have withdrawals")
-
+  if blk.withdrawals.isSome():
     if vmState.balTrackerEnabled:
-      for withdrawal in blk.withdrawals.get:
+      for withdrawal in blk.withdrawals[]:
         vmState.balTracker.trackAddBalanceChange(withdrawal.address, withdrawal.weiAmount)
         vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
     else:
-      for withdrawal in blk.withdrawals.get:
+      for withdrawal in blk.withdrawals[]:
         vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount, checkEmptyAccount = false)
-  else:
-    if header.withdrawalsRoot.isSome:
-      return err("Pre-Shanghai block header must not have withdrawalsRoot")
-    if blk.withdrawals.isSome:
-      return err("Pre-Shanghai block body must not have withdrawals")
 
   if vmState.fork >= FkAmsterdam:
     let blockGasUsed = max(vmState.blockExecutionGasUsed, vmState.blockStateGasUsed)
     if blockGasUsed != header.gasUsed:
-      # TODO replace logging with better error
-      debug "gasUsed neq blockGasUsed",
-        gasUsed = header.gasUsed, blockGasUsed = blockGasUsed
-      return err("gasUsed mismatch")
+      return err(mismatch("gasUsed", header.gasUsed, blockGasUsed))
   else:
     if vmState.cumulativeGasUsed != header.gasUsed:
-      # TODO replace logging with better error
-      debug "gasUsed neq cumulativeGasUsed",
-        gasUsed = header.gasUsed, cumulativeGasUsed = vmState.cumulativeGasUsed
-      return err("gasUsed mismatch")
+      return err(mismatch("gasUsed", header.gasUsed, vmState.cumulativeGasUsed))
 
-  if header.ommersHash != EMPTY_UNCLE_HASH:
-    # TODO It's strange that we persist uncles before processing block but the
-    #      rest after...
-    if skipUncles notin flags:
-      let h = vmState.ledger.txFrame.persistUncles(blk.uncles)
-      if h != header.ommersHash:
-        return err("ommersHash mismatch")
-    elif skipValidation notin flags and computeRlpHash(blk.uncles) != header.ommersHash:
-      return err("ommersHash mismatch")
-  elif blk.uncles.len > 0:
-    return err("Uncles in block with empty uncle hash")
+  if skipUncles notin flags and header.ommersHash != EMPTY_UNCLE_HASH:
+    vmState.ledger.txFrame.persistUncles(header.ommersHash, blk.uncles)
 
   # Execute EIP-7002 and EIP-7251 before calculating stateRoot because they
   # will alter the state
@@ -340,16 +277,7 @@ proc procBlkEpilogue(
             bal[].computeBlockAccessListHash() == header.blockAccessListHash.get
       if not matches:
         let balHash = bal[].computeBlockAccessListHash()
-        debug "wrong blockAccessListHash, generated block access list does not " &
-          "match expected blockAccessListHash in header",
-          blockNumber = header.number,
-          blockHash = header.computeBlockHash,
-          parentHash = header.parentHash,
-          expected = header.blockAccessListHash.get,
-          actual = balHash,
-          blockAccessList = $(bal[])
-        return err("blockAccessListHash mismatch, expect: " &
-          $header.blockAccessListHash.get & ", got: " & $balHash)
+        return err(mismatch("blockAccessListHash", header.blockAccessListHash.get, balHash))
 
       if vmState.com.balPostExecValidation:
         bal.validate(header.blockAccessListHash.get, header.gasLimit).isOkOr:
@@ -358,48 +286,24 @@ proc procBlkEpilogue(
     if skipStateRootCheck notin flags:
       let stateRoot = vmState.ledger.getStateRoot()
       if header.stateRoot != stateRoot:
-        # TODO replace logging with better error
-        debug "wrong stateRoot in block",
-          blockNumber = header.number,
-          blockHash = header.computeBlockHash,
-          parentHash = header.parentHash,
-          expected = header.stateRoot,
-          actual = stateRoot,
-          parentStateRoot = vmState.parent.stateRoot
-        return
-          err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
+        return err(mismatch("stateRoot", header.stateRoot, stateRoot))
 
     if skipReceipts notin flags:
       var bloom {.noinit.}: Bloom
       createBloom(vmState.receiptBlooms, bloom)
 
       if header.logsBloom != bloom:
-        debug "wrong logsBloom in block",
-          blockNumber = header.number, actual = bloom, expected = header.logsBloom
-        return err("bloom mismatch")
+        return err(mismatch("bloom", header.logsBloom, bloom))
 
       let receiptsRoot = calcReceiptsRoot(vmState.receipts, vmState.receiptBlooms)
       if header.receiptsRoot != receiptsRoot:
-        # TODO replace logging with better error
-        debug "wrong receiptRoot in block",
-          blockNumber = header.number,
-          parentHash = header.parentHash.short,
-          blockHash = header.computeBlockHash.short,
-          actual = receiptsRoot,
-          expected = header.receiptsRoot
-        return err("receiptRoot mismatch")
+        return err(mismatch("receiptRoot", header.receiptsRoot, receiptsRoot))
 
     if header.requestsHash.isSome:
       let requestsHash = calcRequestsHash(reqs, vmState.fork)
 
       if header.requestsHash.get != requestsHash:
-        debug "wrong requestsHash in block",
-          blockNumber = header.number,
-          parentHash = header.parentHash.short,
-          blockHash = header.computeBlockHash.short,
-          actual = requestsHash,
-          expected = header.requestsHash.get
-        return err("requestsHash mismatch")
+        return err(mismatch("requestsHash", header.requestsHash, requestsHash))
 
   ok()
 
@@ -418,7 +322,7 @@ proc processBlock*(
   ## `blockAccessListHash`.
 
   vmState.withBalPrefetch(blockAccessList):
-    ?vmState.procBlkPreamble(blk, blockAccessList, flags)
+    ?vmState.procBlkPreamble(blk)
     ?processTransactions(vmState, blk.header, blk.transactions, blockAccessList, flags)
     ?vmState.procBlkEpilogue(blk, blockAccessList, flags)
 
