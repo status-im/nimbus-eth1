@@ -743,15 +743,22 @@ proc persistCodeByHash*(
 proc getCodeByHash*(
     db: CoreDbTxRef, codeHash: Hash32, jumpdests: var seq[byte]
 ): Result[seq[byte], string] =
-  var rc = db.get(contractCodeKey(codeHash).toOpenArray)
-  if rc.isOk:
-    let codeLen = ?storedCodeLen(rc.value.len, "getCodeByHash")
-    assign(jumpdests, rc.value.toOpenArray(codeLen, rc.value.high))
-    rc.value.setLen(codeLen)
-    return ok(move(rc.value))
+  var
+    codeLen: Result[int, string]
+    code, bitmap: seq[byte]
+  let found = db.get(contractCodeKey(codeHash).toOpenArray) do (data: openArray[byte]):
+    codeLen = storedCodeLen(data.len, "getCodeByHash")
+    if codeLen.isOk:
+      code = @(data.toOpenArray(0, codeLen.value - 1))
+      bitmap = @(data.toOpenArray(codeLen.value, data.high))
+  if found.isOk:
+    if codeLen.isErr:
+      return err(codeLen.error)
+    jumpdests = move(bitmap)
+    return ok(move(code))
 
   jumpdests.setLen(0)
-  rc = db.get(legacyContractHashKey(codeHash).toOpenArray)
+  var rc = db.get(legacyContractHashKey(codeHash).toOpenArray)
   if rc.isErr:
     return err("getCodeByHash: " & $$rc.error)
 

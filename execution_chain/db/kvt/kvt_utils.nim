@@ -138,6 +138,16 @@ proc get*(
 
   db.getBe key
 
+proc get*(
+    db: KvtDbRef;
+    key: openArray[byte];
+    onData: KvpDataProc;
+      ): Result[void,KvtError] =
+  if key.len == 0:
+    return err(KeyInvalid)
+
+  db.getDataKvpFn(key, onData)
+
 proc len*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record

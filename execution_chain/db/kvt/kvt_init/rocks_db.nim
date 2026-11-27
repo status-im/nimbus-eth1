@@ -58,6 +58,19 @@ proc getKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): GetKvpFn =
 
       err(GetNotFound)
 
+proc getDataKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): GetDataKvpFn =
+  result =
+    proc(key: openArray[byte], onData: KvpDataProc): Result[void, KvtError] =
+      let gotData = db.rdb.store[cf].get(key, onData).valueOr:
+        when extraTraceMessages:
+          debug "getDataKvpFn() failed", key, error=($error)
+        return err(RdbBeDriverGetError)
+
+      if not gotData:
+        return err(GetNotFound)
+
+      ok()
+
 proc lenKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): LenKvpFn =
   result =
     proc(key: openArray[byte]): Result[int,KvtError] =
@@ -174,6 +187,7 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
   be.rdb.init(baseDb)
 
   db.getKvpFn = getKvpFn(be, cf)
+  db.getDataKvpFn = getDataKvpFn(be, cf)
   db.lenKvpFn = lenKvpFn(be, cf)
   db.multiGetKvpFn = multiGetKvpFn(be, cf)
 

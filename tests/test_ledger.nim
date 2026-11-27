@@ -538,12 +538,15 @@ proc runLedgerBasicOperationsTests() =
         check frame.persistCodeByHash(codeHash, code, bitmap).isOk
 
         var jumpdests: seq[byte]
+        let loaded = frame.getCodeByHash(codeHash, jumpdests).expect("code")
         check:
           frame.get(contractCodeKey(codeHash).toOpenArray).expect("value") ==
             code & bitmap
           not frame.hasKey(legacyContractHashKey(codeHash).toOpenArray)
-          frame.getCodeByHash(codeHash, jumpdests).expect("code") == code
+          loaded == code
+          loaded.capacity == code.len
           jumpdests == bitmap
+          jumpdests.capacity == bitmap.len
           frame.getCodeByHash(codeHash).expect("code") == code
           frame.getCodeLenByHash(codeHash).expect("code len") == size
 

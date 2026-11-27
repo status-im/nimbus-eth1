@@ -171,6 +171,15 @@ proc get*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   else:
     err(rc.error.toError(""))
 
+proc get*(kvt: CoreDbTxRef; key: openArray[byte]; onData: KvpDataProc): CoreDbRc[void] =
+  let rc = kvt.kvt.get(key, onData)
+  if rc.isOk:
+    ok()
+  elif rc.error == GetNotFound:
+    err(rc.error.toError("", KvtNotFound))
+  else:
+    err(rc.error.toError(""))
+
 proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## Variant of `get()` returning an empty `seq[byte]` if the key is not found
   ## on the database.
