@@ -15,6 +15,8 @@ import
   ../../../db/core_db,
   ./[helpers, cache_db, update, worker_desc]
 
+from ../../../evm/code_bytes import jumpdestBitmap
+
 logScope:
   topics = "snap sync"
 
@@ -181,7 +183,7 @@ proc mergeCtrCode(
     return err()
 
   # Save contract code to core DB
-  tx.persistCodeByHash(hash, data).isOkOr:
+  tx.persistCodeByHash(hash, data, jumpdestBitmap(data)).isOkOr:
     error info & ": Failed storing contract code",
       accPath=accPath.toStr, codeHash=hash.toStr,
       nCodes=data.len, `error`=error

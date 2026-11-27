@@ -22,7 +22,7 @@ type
     transactionHashToBlock = 3
     canonicalHeadHash = 4
     slotHashToSlot = 5
-    contractHash = 6
+    contractHash = 6 # Deprecated - code without its jumpdest bitmap, kept for existing databases and stateless execution
     dataDirId = 7 # Deprecated - keep to avoid reuse which might breaking existing databases
     fcuNumAndHash = 8
     fcState = 9
@@ -105,7 +105,7 @@ func slotHashToSlotKey*(h: Hash32): DbKey {.inline.} =
   result.data[1 .. 32] = h.data()
   result.dataEndPos = uint8 32
 
-func contractHashKey*(h: Hash32): DbKey {.inline.} =
+func legacyContractHashKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(contractHash)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32

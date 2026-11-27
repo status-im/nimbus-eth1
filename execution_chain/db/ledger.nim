@@ -756,6 +756,23 @@ proc recordCodeRead(ledger: LedgerRef, address: Address, codeHash: Hash32) =
   if ledger.collectWitness and ledger.writtenCode(codeHash).isNone():
     ledger.witnessKeys[(address, Opt.none(UInt256))] = true
 
+proc loadCode(ledger: LedgerRef, codeHash: Hash32): Result[CodeBytesRef, string] =
+  var
+    jumpdests: seq[byte]
+    rc = ledger.txFrame.getCodeByHash(codeHash, jumpdests)
+  if rc.isErr:
+    return err(rc.error)
+
+  if jumpdests.len > 0:
+    return ok(CodeBytesRef.init(move(rc.value), move(jumpdests), persisted = true))
+
+  let code = CodeBytesRef.init(move(rc.value), persisted = true)
+  if not ledger.stateless:
+    let wrc = ledger.txFrame.persistCodeByHash(codeHash, code.bytes(), code.jumpdestBitmap())
+    if wrc.isErr:
+      warn logTxt "loadCode()", codeHash, error = wrc.error
+  ok(code)
+
 proc getCode*(ledger: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
@@ -770,8 +787,7 @@ proc getCode*(ledger: LedgerRef,
 
   if acc.code.isNil:
     acc.code = ledger.cachedCode(acc.statement.codeHash).valueOr:
-      var jumpdests: seq[byte]
-      var rc = ledger.txFrame.getCodeByHash(acc.statement.codeHash, jumpdests)
+      let rc = ledger.loadCode(acc.statement.codeHash)
       if rc.isErr:
         # A non-empty code hash with no code in the database: record a fatalError
         # but still return empty code so the async EVM continues.
@@ -779,9 +795,8 @@ proc getCode*(ledger: LedgerRef,
         ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
         CodeBytesRef()
       else:
-        let newCode = CodeBytesRef.init(move(rc.value), move(jumpdests), persisted = true)
-        ledger.code.put(acc.statement.codeHash, newCode)
-        newCode
+        ledger.code.put(acc.statement.codeHash, rc.value)
+        rc.value
 
   when returnHash:
     (acc.statement.codeHash, acc.code)
@@ -801,15 +816,13 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
 
   if acc.originalCode.isNil:
     acc.originalCode = ledger.cachedCode(codeHash).valueOr:
-      var jumpdests: seq[byte]
-      var rc = ledger.txFrame.getCodeByHash(codeHash, jumpdests)
+      let rc = ledger.loadCode(codeHash)
       if rc.isErr:
         warn logTxt "getOriginalCode()", codeHash, error = rc.error
         CodeBytesRef()
       else:
-        let newCode = CodeBytesRef.init(move(rc.value), move(jumpdests), persisted = true)
-        ledger.code.put(codeHash, newCode)
-        newCode
+        ledger.code.put(codeHash, rc.value)
+        rc.value
 
   acc.originalCode
 

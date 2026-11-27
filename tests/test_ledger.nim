@@ -535,40 +535,43 @@ proc runLedgerBasicOperationsTests() =
           code = testCode(size)
           codeHash = keccak256(code)
           bitmap = jumpdestBitmap(code)
-        check frame.persistCodeByHash(codeHash, code).isOk
+        check frame.persistCodeByHash(codeHash, code, bitmap).isOk
 
         var jumpdests: seq[byte]
         check:
           frame.get(contractCodeKey(codeHash).toOpenArray).expect("value") ==
             code & bitmap
-          not frame.hasKey(contractHashKey(codeHash).toOpenArray)
+          not frame.hasKey(legacyContractHashKey(codeHash).toOpenArray)
           frame.getCodeByHash(codeHash, jumpdests).expect("code") == code
           jumpdests == bitmap
           frame.getCodeByHash(codeHash).expect("code") == code
           frame.getCodeLenByHash(codeHash).expect("code len") == size
 
-    test "Code under the old key is copied to the new key on first load":
+    test "Code with a jumpdest bitmap of the wrong length is rejected":
+      let
+        frame = memDB.baseTxFrame()
+        code = testCode(16)
+        codeHash = keccak256(code)
+      for bitmapLen in [0, 1, 3, 11]:
+        expect AssertionDefect:
+          discard frame.persistCodeByHash(codeHash, code, newSeq[byte](bitmapLen))
+      check not frame.hasKey(contractCodeKey(codeHash).toOpenArray)
+
+    test "Code under the legacy key is read without a jumpdest bitmap":
       let
         frame = memDB.baseTxFrame()
         code = testCode(100)
         codeHash = keccak256(code)
-        oldKey = contractHashKey(codeHash)
-        newKey = contractCodeKey(codeHash)
-      check frame.put(oldKey.toOpenArray, code).isOk
+      check frame.persistLegacyCodeByHash(codeHash, code).isOk
 
+      var jumpdests = @[1'u8]
       check:
+        frame.get(legacyContractHashKey(codeHash).toOpenArray).expect("value") == code
+        frame.getCodeByHash(codeHash, jumpdests).expect("code") == code
+        jumpdests.len == 0
+        frame.getCodeByHash(codeHash).expect("code") == code
         frame.getCodeLenByHash(codeHash).expect("code len") == code.len
-        frame.hasKey(oldKey.toOpenArray)
-        not frame.hasKey(newKey.toOpenArray)
-
-      for _ in 0 ..< 2:
-        var jumpdests: seq[byte]
-        check:
-          frame.getCodeByHash(codeHash, jumpdests).expect("code") == code
-          jumpdests == jumpdestBitmap(code)
-          frame.get(oldKey.toOpenArray).expect("value") == code
-          frame.get(newKey.toOpenArray).expect("value") == code & jumpdestBitmap(code)
-          frame.getCodeLenByHash(codeHash).expect("code len") == code.len
+        not frame.hasKey(contractCodeKey(codeHash).toOpenArray)
 
     test "Code under both keys is read from the new key":
       let
@@ -576,13 +579,14 @@ proc runLedgerBasicOperationsTests() =
         code = testCode(100)
         codeHash = keccak256(code)
       check:
-        frame.put(contractHashKey(codeHash).toOpenArray, testCode(50)).isOk
-        frame.persistCodeByHash(codeHash, code).isOk
+        frame.persistLegacyCodeByHash(codeHash, testCode(50)).isOk
+        frame.persistCodeByHash(codeHash, code, jumpdestBitmap(code)).isOk
 
       var jumpdests: seq[byte]
       check:
         frame.getCodeByHash(codeHash, jumpdests).expect("code") == code
         jumpdests == jumpdestBitmap(code)
+        frame.getCodeByHash(codeHash).expect("code") == code
         frame.getCodeLenByHash(codeHash).expect("code len") == code.len
 
     test "Missing and malformed code are errors":
@@ -598,6 +602,9 @@ proc runLedgerBasicOperationsTests() =
           frame.getCodeByHash(codeHash, jumpdests).isErr
           frame.getCodeByHash(codeHash).isErr
           frame.getCodeLenByHash(codeHash).isErr
+      check:
+        frame.getCodeByHash(malformed).error == "getCodeByHash: invalid code record"
+        frame.getCodeLenByHash(malformed).error == "getCodeLenByHash: invalid code record"
 
     test "Persisted code keeps the jumpdest bitmap of the code object":
       for hold in [false, true]:
@@ -626,25 +633,51 @@ proc runLedgerBasicOperationsTests() =
         frame = memDB.baseTxFrame()
         addr1 = initAddr(1)
         addr2 = initAddr(2)
+        addr3 = initAddr(3)
         newCode = testCode(100)
         oldCode = testCode(200)
+        oldOriginalCode = testCode(300)
       block:
         let ledger = LedgerRef.init(frame)
         ledger.setCode(addr1, newCode)
         ledger.persist(clearEmptyAccounts = false)
-      frame.mergeAccount(
-        addr2.computeAccPath, CoreDbAccount(codeHash: keccak256(oldCode)), true
-      ).expect("ok")
-      check frame.put(contractHashKey(keccak256(oldCode)).toOpenArray, oldCode).isOk
+      for (address, code) in [(addr2, oldCode), (addr3, oldOriginalCode)]:
+        frame.mergeAccount(
+          address.computeAccPath, CoreDbAccount(codeHash: keccak256(code)), true
+        ).expect("ok")
+        check frame.persistLegacyCodeByHash(keccak256(code), code).isOk
 
       let ledger = LedgerRef.init(frame)
-      for (address, code) in [(addr1, newCode), (addr2, oldCode)]:
+      check ledger.getOriginalCode(addr3) == oldOriginalCode
+      for (address, code) in [(addr1, newCode), (addr2, oldCode), (addr3, oldOriginalCode)]:
         check:
           ledger.getCodeSize(address) == code.len
           ledger.getCode(address) == code
           ledger.getCode(address).jumpdests == jumpdestBitmap(code)
           ledger.getOriginalCode(address) == code
-      check frame.hasKey(contractCodeKey(keccak256(oldCode)).toOpenArray)
+      for code in [oldCode, oldOriginalCode]:
+        check:
+          frame.get(contractCodeKey(keccak256(code)).toOpenArray).expect("value") ==
+            code & jumpdestBitmap(code)
+          frame.get(legacyContractHashKey(keccak256(code)).toOpenArray).expect("value") ==
+            code
+
+    test "Stateless ledger loads legacy code without its jumpdest bitmap":
+      let
+        frame = memDB.baseTxFrame()
+        contract = initAddr(1)
+        code = testCode(100)
+        codeHash = keccak256(code)
+      frame.mergeAccount(
+        contract.computeAccPath, CoreDbAccount(codeHash: codeHash), true
+      ).expect("ok")
+      check frame.persistLegacyCodeByHash(codeHash, code).isOk
+
+      let ledger = LedgerRef.init(frame, storeSlotHash = false, stateless = true)
+      check:
+        ledger.getCode(contract) == code
+        ledger.getCode(contract).jumpdests.len == 0
+        not frame.hasKey(contractCodeKey(codeHash).toOpenArray)
 
     test "Stateless: code written earlier in the block serves reads by hash":
       let
