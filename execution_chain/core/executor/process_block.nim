@@ -352,7 +352,7 @@ proc procBlkEpilogue(
           $header.blockAccessListHash.get & ", got: " & $balHash)
 
       if vmState.com.balPostExecValidation:
-        bal.validate(header.blockAccessListHash.get, header.gasLimit).isOkOr:
+        bal.validate(header.blockAccessListHash.get, vmState.fork >= FkBogota, header.gasLimit).isOkOr:
           return err("blockAccessList failed post-execution validation: " & $error)
 
     if skipStateRootCheck notin flags:
