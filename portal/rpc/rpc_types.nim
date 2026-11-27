@@ -9,7 +9,6 @@
 
 import
   stint,
-  json_rpc/errors,
   stew/byteutils,
   results,
   eth/p2p/discoveryv5/[routing_table, node],
