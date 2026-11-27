@@ -19,8 +19,8 @@ jobs:
           - aarch64-darwin
           - x86_64-linux
         nixpkg:
-          - nimbus_execution_client
-          - nimbus_verified_proxy
+          - execution_client
+          - verified_proxy
 
         include:
           - system: aarch64-darwin
@@ -46,11 +46,13 @@ jobs:
 
       - name: 'Run Nix build for ${{ matrix.nixpkg }}'
         shell: bash
-        run: nix build --fallback -L '.?submodules=1#${{ matrix.nixpkg }}'
+        run: nix build --fallback -L '.?submodules=1#nimbus_${{ matrix.nixpkg }}'
 
       - name: 'Run NixOS service check for ${{ matrix.nixpkg }}'
-        if: ${{ matrix.nixpkg == 'execution-client' }}
-        run: nix run '.#checks.${{ matrix.system }}.${{ matrix.check }}.driver'
+        #if: ${{ matrix.system == 'aarch64-darwin' }}
+        run: |
+          nix run '.#checks.${{ matrix.system }}.${{ matrix.nixpkg }}.driver' \
+            --show-trace -L --print-build-logs
 
       - name: 'Show result contents'
         shell: bash
