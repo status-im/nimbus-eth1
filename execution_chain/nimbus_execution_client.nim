@@ -402,8 +402,9 @@ proc setupCommonRef*(
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config, params)
 
-  coreDB.migrateLegacyCode().isOkOr:
-    warn "Contract code migration failed, legacy code records remain in use", error
+  if config.codeMigration:
+    coreDB.migrateLegacyCode().isOkOr:
+      warn "Contract code migration failed, legacy code records remain in use", error
 
   # Must not snap sync on a non-empty state DB.
   var emptyStateDb = false
