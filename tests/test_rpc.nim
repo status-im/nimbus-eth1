@@ -1400,6 +1400,66 @@ proc rpcMain*() =
           storageProof.len() == 1
           verifySlotLeafExists(proofResponse.storageHash, storageProof[0])
 
+    test "eth_getProof - Storage key echo":
+      const
+        key63 = "0x" & repeat('0', 62) & "1"
+        key64 = "0x" & repeat('0', 63) & "1"
+        key64Upper = "0x" & repeat('0', 62) & "AB"
+      let
+        r = await client.call("eth_getProof", %[
+          %(contractAccWithStorage.to0xHex),
+          %[%key63, %key64, %"0x", %"0x01", %"0x1", %"0x1", %key64Upper],
+          %"latest"], EthJson)
+        storageProof = parseJson(r.string)["storageProof"]
+
+      check:
+        storageProof.len == 7
+        storageProof[0]["key"].getStr == key64
+        storageProof[1]["key"].getStr == key64
+        storageProof[2]["key"].getStr == "0x0"
+        storageProof[3]["key"].getStr == "0x1"
+        storageProof[4]["key"].getStr == "0x1"
+        storageProof[5]["key"].getStr == "0x1"
+        storageProof[6]["key"].getStr == "0x" & repeat('0', 62) & "ab"
+        storageProof[0]["value"].getStr == "0x929"
+        storageProof[1]["value"].getStr == "0x929"
+        storageProof[2]["value"].getStr == "0x4d2"
+        storageProof[3]["value"].getStr == "0x929"
+        storageProof[4] == storageProof[5]
+
+    test "eth_getProof - Invalid storage keys":
+      for key in ["0xzz", "0x" & repeat('0', 64) & "1", "01", ""]:
+        try:
+          discard await client.call("eth_getProof",
+            %[%(contractAccWithStorage.to0xHex), %[%key], %"latest"], EthJson)
+          check false
+        except RpcResponseError as exc:
+          check exc.code == -32602
+
+    test "eth_getProof - 1024 storage keys":
+      var keys = newJArray()
+      for i in 0 ..< 1024:
+        keys.add %("0x" & i.u256.toHex)
+      let
+        r = await client.call("eth_getProof",
+          %[%(contractAccWithStorage.to0xHex), keys, %"latest"], EthJson)
+        storageProof = parseJson(r.string)["storageProof"]
+      check:
+        storageProof.len == 1024
+        storageProof[0]["key"].getStr == "0x0"
+        storageProof[1023]["key"].getStr == "0x3ff"
+
+    test "eth_getProof - Block below the base is pruned history":
+      # The fixture node keeps state from its base block only.
+      try:
+        discard await fixtureClient.call("eth_getProof",
+          %[%(regularAcc.to0xHex), %[], %"0x0"], EthJson)
+        check false
+      except RpcResponseError as exc:
+        check:
+          exc.code == 4444
+          exc.msg == "Pruned history unavailable"
+
     test "debug_setHead":
       # The current head is a valid target
       let res = await client.call("debug_setHead", %[%"latest"], EthJson)
