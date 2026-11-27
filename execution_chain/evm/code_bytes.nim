@@ -150,6 +150,11 @@ func jumpdestBitmap*(bytes: openArray[byte]): seq[byte] =
       op = bytes[i]
     i += op.int - 94
 
+func jumpdestBitmap*(c: CodeBytesRef): lent seq[byte] =
+  if c.jumpdests.len == 0:
+    c.jumpdests = jumpdestBitmap(c.bytes)
+  c.jumpdests
+
 func isValidJumpdest*(c: CodeBytesRef, position: int): bool =
   if uint(position) >= uint(len(c)):
     return false

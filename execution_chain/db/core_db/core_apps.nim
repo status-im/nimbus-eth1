@@ -17,13 +17,15 @@ import
   std/[sequtils],
   chronicles,
   eth/[common, rlp],
-  stew/[byteutils, endians2],
+  stew/[assign2, byteutils, endians2],
   results,
   "../.."/[constants],
   "../.."/stateless/witness_types,
   ".."/[aristo, storage_types],
   "../kvt"/[kvt_desc, kvt_utils],
   "."/base
+
+from "../.."/evm/code_bytes import jumpdestBitmap
 
 logScope:
   topics = "core_db"
@@ -721,20 +723,54 @@ proc getWitness*(
 
   Witness.decode(witnessBytes)
 
-proc persistCodeByHash*(db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]): Result[void, string] =
-  db.put(contractHashKey(codeHash).toOpenArray, code).isOkOr:
+func storedCodeLen(valueLen: int): Result[int, string] =
+  let codeLen = valueLen * 8 div 9
+  if codeLen + (codeLen + 7) div 8 != valueLen:
+    return err("invalid code record")
+
+  ok(codeLen)
+
+proc persistCodeByHash*(
+    db: CoreDbTxRef, codeHash: Hash32, code, jumpdests: openArray[byte]
+): Result[void, string] =
+  var value = newSeqUninit[byte](code.len + jumpdests.len)
+  assign(value.toOpenArray(0, code.high), code)
+  assign(value.toOpenArray(code.len, value.high), jumpdests)
+  db.put(contractCodeKey(codeHash).toOpenArray, value).isOkOr:
     return err("persistCodeByHash: " & $$error)
 
   ok()
 
-proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] {.inline.} =
-  var rc = db.get(contractHashKey(codeHash).toOpenArray)
+proc persistCodeByHash*(db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]): Result[void, string] =
+  db.persistCodeByHash(codeHash, code, jumpdestBitmap(code))
+
+proc getCodeByHash*(
+    db: CoreDbTxRef, codeHash: Hash32, jumpdests: var seq[byte]
+): Result[seq[byte], string] =
+  var rc = db.get(contractCodeKey(codeHash).toOpenArray)
   if rc.isOk:
-    ok(move(rc.value))
-  else:
-    err("getCodeByHash: " & $$rc.error)
+    let codeLen = ?storedCodeLen(rc.value.len)
+    assign(jumpdests, rc.value.toOpenArray(codeLen, rc.value.high))
+    rc.value.setLen(codeLen)
+    return ok(move(rc.value))
+
+  rc = db.get(contractHashKey(codeHash).toOpenArray)
+  if rc.isErr:
+    return err("getCodeByHash: " & $$rc.error)
+
+  jumpdests = jumpdestBitmap(rc.value)
+  discard db.persistCodeByHash(codeHash, rc.value, jumpdests)
+  ok(move(rc.value))
+
+proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] {.inline.} =
+  var jumpdests: seq[byte]
+  db.getCodeByHash(codeHash, jumpdests)
 
 proc getCodeLenByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[int, string] =
+  let rc = db.len(contractCodeKey(codeHash).toOpenArray)
+  if rc.isOk:
+    return storedCodeLen(rc.value)
+
   let len = db.len(contractHashKey(codeHash).toOpenArray).valueOr:
     return err("getCodeLenByHash: " & $$error)
 

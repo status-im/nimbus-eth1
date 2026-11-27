@@ -36,6 +36,7 @@ type
     balTail = 17
     firstBlockHash = 18
     blockDataRefs = 19
+    contractCode = 20
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -106,6 +107,11 @@ func slotHashToSlotKey*(h: Hash32): DbKey {.inline.} =
 
 func contractHashKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(contractHash)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = uint8 32
+
+func contractCodeKey*(h: Hash32): DbKey {.inline.} =
+  result.data[0] = byte ord(contractCode)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
