@@ -237,24 +237,24 @@ proc assembleBlock*(
         blobsBundle.blobs.add blob
   blk.header.transactionsRoot = calcTxRoot(blk.txs)
 
-  if com.isShanghaiOrLater(blk.header.timestamp):
+  if xp.vmState.fork >= FkShanghai:
     blk.withdrawals = Opt.some(xp.withdrawals)
 
   # EIP-7934: the packer bounds the encoded block size while selecting txs.
   # Never truncate the body here — the header and the EIP-7928 block access
   # list already commit to the full packed tx set.
-  if com.isOsakaOrLater(blk.header.timestamp) and
+  if xp.vmState.fork >= FkOsaka and
      rlp.getEncodedLength(blk) > MAX_RLP_BLOCK_SIZE:
     return err("assembled block exceeds MAX_RLP_BLOCK_SIZE")
 
-  if not com.isCancunOrLater(blk.header.timestamp) and blobsBundle.commitments.len > 0:
+  if xp.vmState.fork < FkCancun and blobsBundle.commitments.len > 0:
     return err("PooledTransaction contains blobs prior to Cancun")
   let blobsBundleOpt =
-    if com.isOsakaOrLater(blk.header.timestamp):
+    if xp.vmState.fork >= FkOsaka:
       doAssert blobsBundle.commitments.len == blobsBundle.blobs.len
       doAssert blobsBundle.proofs.len == blobsBundle.blobs.len * CELLS_PER_EXT_BLOB
       blobsBundle
-    elif com.isCancunOrLater(blk.header.timestamp):
+    elif xp.vmState.fork >= FkCancun:
       doAssert blobsBundle.commitments.len == blobsBundle.blobs.len
       doAssert blobsBundle.proofs.len == blobsBundle.blobs.len
       blobsBundle
@@ -266,13 +266,13 @@ proc assembleBlock*(
     blk.header.baseFeePerGas = Opt.some(blk.header.baseFeePerGas.get(0.u256))
 
   let executionRequestsOpt =
-    if com.isPragueOrLater(blk.header.timestamp):
+    if xp.vmState.fork >= FkPrague:
       Opt.some(pst.executionRequests)
     else:
       Opt.none(seq[seq[byte]])
 
   let bal =
-    if com.isAmsterdamOrLater(blk.header.timestamp):
+    if xp.vmState.fork >= FkAmsterdam:
       doAssert(xp.vmState.blockAccessList.isSome())
       xp.vmState.blockAccessList
     else:

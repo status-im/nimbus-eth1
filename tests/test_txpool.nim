@@ -998,7 +998,7 @@ suite "TxPool test suite":
     # only allow 1 blob tx, the other one removed automatically
     xp.checkImportBlock(1, 0)
 
-    check xp.com.isOsakaOrLater(xp.timestamp)
+    check xp.vmState.fork >= FkOsaka
 
     # restore blobSchedule
     cc.blobSchedule[Prague] = bs

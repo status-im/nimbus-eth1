@@ -117,11 +117,8 @@ proc statelessProcessBlock*(
   # Execute the block with all validations enabled
   ?memoryVmState.processBlock(
     blk,
-    skipValidation = false,
-    skipReceipts = false,
-    skipUncles = true,
-    skipStateRootCheck = false,
-    skipPostExecBalCheck = not memoryVmState.balTrackerEnabled,
+    flags = {skipUncles} +
+      (if memoryVmState.balTrackerEnabled: {} else: {skipPostExecBalCheck}),
   )
   doAssert memoryVmState.ledger.getStateRoot() == blk.header.stateRoot
 

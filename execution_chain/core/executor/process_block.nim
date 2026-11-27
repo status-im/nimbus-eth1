@@ -29,6 +29,15 @@ import
   chronicles,
   results
 
+type
+  ProcessBlockFlag* = enum
+    skipValidation
+    skipReceipts
+    skipUncles
+    skipStateRootCheck
+    skipPostExecBalCheck
+  ProcessBlockFlags* = set[ProcessBlockFlag]
+
 when compileOption("threads"):
   import ./process_block_parallel
 
@@ -58,13 +67,72 @@ template withBalPrefetch(
   else:
     body
 
+type
+  BlockRequests* = object
+    ## Execution requests (EIP-7685) carried by a block: the deposit logs
+    ## (EIP-6110) plus the post-execution system-call request lists (EIP-7002,
+    ## EIP-7251, and the Amsterdam builder deposit/exit requests). Empty before
+    ## Prague.
+    deposit*: seq[byte]
+    withdrawal*: seq[byte]
+    consolidation*: seq[byte]
+    builderDeposit*: seq[byte]
+    builderExit*: seq[byte]
+
+proc processBlockRequests*(
+    vmState: BaseVMState, reqs: var BlockRequests
+): Result[void, string] =
+  ## Dequeue the post-execution system-call request lists into `reqs`. These
+  ## alter the state, so they must run before the state root is computed.
+  ## Pre-Prague leaves `reqs` empty.
+  if vmState.fork >= FkPrague:
+    reqs.withdrawal = ?processDequeueWithdrawalRequests(vmState)
+    reqs.consolidation = ?processDequeueConsolidationRequests(vmState)
+    if vmState.fork >= FkAmsterdam:
+      reqs.builderDeposit = ?processBuilderDepositRequests(vmState)
+      reqs.builderExit = ?processBuilderExitRequests(vmState)
+  ok()
+
+func calcRequestsHash*(reqs: BlockRequests, fork: EVMFork): Hash32 =
+  ## Hash of the execution requests (EIP-7685) carried by `reqs`.
+  if fork >= FkAmsterdam:
+    calcRequestsHash(
+      (DEPOSIT_REQUEST_TYPE, reqs.deposit),
+      (WITHDRAWAL_REQUEST_TYPE, reqs.withdrawal),
+      (CONSOLIDATION_REQUEST_TYPE, reqs.consolidation),
+      (BUILDER_DEPOSIT_REQUEST_TYPE, reqs.builderDeposit),
+      (BUILDER_EXIT_REQUEST_TYPE, reqs.builderExit),
+    )
+  else:
+    calcRequestsHash(
+      (DEPOSIT_REQUEST_TYPE, reqs.deposit),
+      (WITHDRAWAL_REQUEST_TYPE, reqs.withdrawal),
+      (CONSOLIDATION_REQUEST_TYPE, reqs.consolidation),
+    )
+
+func executionRequests*(reqs: BlockRequests, fork: EVMFork): seq[seq[byte]] =
+  ## The execution requests (EIP-7685) carried by `reqs`, each encoded as its
+  ## request type byte followed by the request data, empty requests omitted.
+  template append(reqType: byte, reqData: seq[byte]) =
+    if reqData.len > 0:
+      var encoded = newSeqOfCap[byte](reqData.len + 1)
+      encoded.add reqType
+      encoded.add reqData
+      result.add move(encoded)
+
+  append(DEPOSIT_REQUEST_TYPE, reqs.deposit)
+  append(WITHDRAWAL_REQUEST_TYPE, reqs.withdrawal)
+  append(CONSOLIDATION_REQUEST_TYPE, reqs.consolidation)
+  if fork >= FkAmsterdam:
+    append(BUILDER_DEPOSIT_REQUEST_TYPE, reqs.builderDeposit)
+    append(BUILDER_EXIT_REQUEST_TYPE, reqs.builderExit)
+
 proc processTransactions(
     vmState: BaseVMState,
     header: Header,
     transactions: seq[Transaction],
     blockAccessList = Opt.none(BlockAccessListRef),
-    skipReceipts = false,
-    collectLogs = false,
+    flags: ProcessBlockFlags = {},
 ): Result[void, string] =
   if header.txRoot == EMPTY_ROOT_HASH:
     if transactions.len > 0:
@@ -74,13 +142,17 @@ proc processTransactions(
   if transactions.len == 0:
     return err("Transactions missing from body")
 
+  let
+    skipReceipts = skipReceipts in flags
+    collectLogs = header.requestsHash.isSome and skipValidation notin flags
+
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.receiptBlooms.setLen(vmState.receipts.len)
   vmState.cumulativeGasUsed = 0
   vmState.blockExecutionGasUsed = 0
   vmState.blockStateGasUsed = 0
   vmState.blobGasUsed = 0'u64
-  vmState.blockLogs.setLen(0)
+  vmState.depositReqs.setLen(0)
 
   when compileOption("threads"):
     if vmState.com.balParallelExecutionEnabled(header.timestamp, blockAccessList):
@@ -100,7 +172,7 @@ proc processTransactions(
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
 
     if collectLogs:
-      vmState.blockLogs.addDepositLogs(vmState.txLogs, depositContractAddress)
+      ?parseDepositLogs(vmState.depositReqs, vmState.txLogs, depositContractAddress)
 
     if not skipReceipts:
       vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType)
@@ -112,7 +184,7 @@ proc procBlkPreamble(
     vmState: BaseVMState,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    skipValidation, skipReceipts, skipUncles: bool,
+    flags: ProcessBlockFlags,
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -128,7 +200,7 @@ proc procBlkPreamble(
     if com.daoForkSupport and com.daoForkBlock.get == header.number:
       ledger.applyDAOHardFork()
 
-  if not skipValidation: # Expensive!
+  if skipValidation notin flags: # Expensive!
     if blk.transactions.calcTxRoot != header.txRoot:
       return err("Mismatched txRoot")
 
@@ -175,8 +247,7 @@ proc procBlkEpilogue(
     vmState: BaseVMState,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    skipValidation, skipReceipts, skipUncles, skipStateRootCheck, skipPostExecBalCheck:
-      bool,
+    flags: ProcessBlockFlags,
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -226,30 +297,20 @@ proc procBlkEpilogue(
   if header.ommersHash != EMPTY_UNCLE_HASH:
     # TODO It's strange that we persist uncles before processing block but the
     #      rest after...
-    if not skipUncles:
+    if skipUncles notin flags:
       let h = vmState.ledger.txFrame.persistUncles(blk.uncles)
       if h != header.ommersHash:
         return err("ommersHash mismatch")
-    elif not skipValidation and computeRlpHash(blk.uncles) != header.ommersHash:
+    elif skipValidation notin flags and computeRlpHash(blk.uncles) != header.ommersHash:
       return err("ommersHash mismatch")
   elif blk.uncles.len > 0:
     return err("Uncles in block with empty uncle hash")
 
-  var
-    withdrawalReqs: seq[byte]
-    consolidationReqs: seq[byte]
-    builderDepositReqs: seq[byte]
-    builderExitReqs: seq[byte]
-
-  if header.requestsHash.isSome:
-    # Execute EIP-7002 and EIP-7251 before calculating stateRoot
-    # because they will alter the state
-    withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
-    consolidationReqs = ?processDequeueConsolidationRequests(vmState)
-
-    if vmState.fork >= FkAmsterdam:
-      builderDepositReqs = ?processBuilderDepositRequests(vmState)
-      builderExitReqs = ?processBuilderExitRequests(vmState)
+  # Execute EIP-7002 and EIP-7251 before calculating stateRoot because they
+  # will alter the state
+  var reqs: BlockRequests
+  reqs.deposit = move vmState.depositReqs
+  ?processBlockRequests(vmState, reqs)
 
   # Commit block access list tracker changes for post‑execution system calls
   if vmState.balTrackerEnabled:
@@ -266,8 +327,8 @@ proc procBlkEpilogue(
   # calls before getStateRoot below, which would otherwise assert on it.
   vmState.ledger.abortOnFatalError()
 
-  if not skipValidation:
-    if not skipPostExecBalCheck and vmState.fork >= FkAmsterdam:
+  if skipValidation notin flags:
+    if skipPostExecBalCheck notin flags and vmState.fork >= FkAmsterdam:
       doAssert vmState.balTrackerEnabled
 
       let
@@ -294,7 +355,7 @@ proc procBlkEpilogue(
         bal.validate(header.blockAccessListHash.get, header.gasLimit).isOkOr:
           return err("blockAccessList failed post-execution validation: " & $error)
 
-    if not skipStateRootCheck:
+    if skipStateRootCheck notin flags:
       let stateRoot = vmState.ledger.getStateRoot()
       if header.stateRoot != stateRoot:
         # TODO replace logging with better error
@@ -308,7 +369,7 @@ proc procBlkEpilogue(
         return
           err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
 
-    if not skipReceipts:
+    if skipReceipts notin flags:
       var bloom {.noinit.}: Bloom
       createBloom(vmState.receiptBlooms, bloom)
 
@@ -329,27 +390,7 @@ proc procBlkEpilogue(
         return err("receiptRoot mismatch")
 
     if header.requestsHash.isSome:
-      let
-        depositReqs =
-          ?parseDepositLogs(vmState.blockLogs)
-        requestsHash = if vmState.fork >= FkAmsterdam:
-            calcRequestsHash(
-              [
-                (DEPOSIT_REQUEST_TYPE, depositReqs),
-                (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
-                (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
-                (BUILDER_DEPOSIT_REQUEST_TYPE, builderDepositReqs),
-                (BUILDER_EXIT_REQUEST_TYPE, builderExitReqs),
-              ]
-            )
-          else:
-            calcRequestsHash(
-              [
-                (DEPOSIT_REQUEST_TYPE, depositReqs),
-                (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
-                (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
-              ]
-            )
+      let requestsHash = calcRequestsHash(reqs, vmState.fork)
 
       if header.requestsHash.get != requestsHash:
         debug "wrong requestsHash in block",
@@ -370,30 +411,16 @@ proc processBlock*(
     vmState: BaseVMState, ## Parent environment of header/body block
     blk: Block, ## Header/body block to add to the blockchain
     blockAccessList = Opt.none(BlockAccessListRef),
-    skipValidation = false,
-    skipReceipts = false,
-    skipUncles = false,
-    skipStateRootCheck = false,
-    skipPostExecBalCheck = false,
+    flags: ProcessBlockFlags = {},
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network. A given
   ## `blockAccessList` must already have been validated against the header's
   ## `blockAccessListHash`.
 
   vmState.withBalPrefetch(blockAccessList):
-    ?vmState.procBlkPreamble(
-      blk, blockAccessList, skipValidation, skipReceipts, skipUncles
-    )
-
-    let collectLogs = blk.header.requestsHash.isSome and not skipValidation
-    ?processTransactions(
-      vmState, blk.header, blk.transactions, blockAccessList, skipReceipts, collectLogs
-    )
-
-    ?vmState.procBlkEpilogue(
-      blk, blockAccessList, skipValidation, skipReceipts,
-      skipUncles, skipStateRootCheck, skipPostExecBalCheck,
-    )
+    ?vmState.procBlkPreamble(blk, blockAccessList, flags)
+    ?processTransactions(vmState, blk.header, blk.transactions, blockAccessList, flags)
+    ?vmState.procBlkEpilogue(blk, blockAccessList, flags)
 
   ok()
 

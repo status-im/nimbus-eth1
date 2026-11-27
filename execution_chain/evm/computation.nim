@@ -23,16 +23,12 @@ import
   ../common/[evmforks],
   ../utils/[utils, mergeutils],
   ../common/common,
-  eth/common/eth_types_rlp,
-  chronicles
+  eth/common/eth_types_rlp
 
 export
   common, balTrackerEnabled,
   emitTransferLog,
   addLogEntry
-
-logScope:
-  topics = "vm computation"
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -261,11 +257,6 @@ proc accountDeployable*(c: Computation): bool =
   true
 
 proc writeContract*(c: Computation) =
-  template withExtra(tracer: untyped, args: varargs[untyped]) =
-    tracer args, newContract=($c.msg.currentTarget),
-      blockNumber=c.vmState.blockNumber,
-      parentHash=($c.vmState.parent.computeBlockHash)
-
   # In each check below, they are guarded by `len > 0`.  This includes writing
   # out the code, because the account already has zero-length code to handle
   # nested calls (this is specified).  May as well simplify other branches.
@@ -275,7 +266,6 @@ proc writeContract*(c: Computation) =
 
   # EIP-3541 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkLondon and c.output[0] == 0xEF.byte:
-    withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
     c.setError(StatusCode.ContractValidationFailure, true)
     return
 
@@ -295,8 +285,6 @@ proc writeContract*(c: Computation) =
       # https://github.com/ethereum/execution-specs/commit/0c7d32c13bbd3fc91ea44ff56a32ca766d59f1d5
       if len > EIP7954_MAX_CODE_SIZE:
         # EIP-7954 constraint (https://eips.ethereum.org/EIPS/eip-7954).
-        withExtra trace, "New contract code exceeds EIP-7954 limit",
-          codeSize=len, maxSize=EIP7954_MAX_CODE_SIZE
         break writeContractCode
 
       let
@@ -318,8 +306,6 @@ proc writeContract*(c: Computation) =
 
       if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
         # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
-        withExtra trace, "New contract code exceeds EIP-170 limit",
-          codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
         c.setError(StatusCode.OutOfGas, true)
         return
 
@@ -327,19 +313,16 @@ proc writeContract*(c: Computation) =
       if c.balTrackerEnabled:
         c.vmState.balTracker.trackCodeChange(c.msg.currentTarget, c.output)
       ledger.setCode(c.msg.currentTarget, c.output)
-    withExtra trace, "Writing new contract code"
     return
 
+  # Before EIP-2, when out of gas for code storage, the account ends up with
+  # zero-length code and no error.  No gas is charged.  Code cited in EIP-2:
+  # https://github.com/ethereum/pyethereum/blob/d117c8f3fd93/ethereum/processblock.py#L304
+  # https://github.com/ethereum/go-ethereum/blob/401354976bb4/core/vm/instructions.go#L586
+  # The account already has zero-length code to handle nested calls.
   if fork >= FkHomestead:
     # EIP-2 (https://eips.ethereum.org/EIPS/eip-2).
     c.setError(StatusCode.OutOfGas, true)
-  else:
-    # Before EIP-2, when out of gas for code storage, the account ends up with
-    # zero-length code and no error.  No gas is charged.  Code cited in EIP-2:
-    # https://github.com/ethereum/pyethereum/blob/d117c8f3fd93/ethereum/processblock.py#L304
-    # https://github.com/ethereum/go-ethereum/blob/401354976bb4/core/vm/instructions.go#L586
-    # The account already has zero-length code to handle nested calls.
-    withExtra trace, "New contract given empty code by pre-Homestead rules"
 
 template chainTo*(cpt: Computation,
                   toChild: typeof(cpt.child),
@@ -383,11 +366,6 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
       # Transfer to beneficiary
       ledger.addBalance(beneficiary, localBalance, c.fork.checkEmptyAccount())
       ledger.selfDestruct(c.msg.currentTarget)
-
-    trace "SELFDESTRUCT",
-      currentTarget = c.msg.currentTarget.toHex,
-      localBalance = localBalance.toString,
-      beneficiary = beneficiary.toHex
 
 func merge*(c, child: Computation) =
   c.logEntries.mergeAndReset(child.logEntries)

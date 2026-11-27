@@ -245,7 +245,7 @@ proc finishRunningComputation(
     result.gasUsed = gasUsed.txGasUsed
     result.blockExecutionGasUsed = gasUsed.blockExecutionGasUsed
     result.blockStateGasUsed = gasUsed.blockStateGasUsed
-  elif T is VoidResult:
+  elif T is void:
     discard
   else:
     {.error: "Unknown computation output".}

@@ -12,15 +12,11 @@
 
 import
   std/[macros, strformat],
-  chronicles,
   stew/[byteutils, ptrops],
   ../constants,
   ../db/ledger,
   ./interpreter/[op_dispatcher],
   ./[code_stream, computation, evm_errors, message, precompiles, state, types]
-
-logScope:
-  topics = "vm opcode"
 
 # ------------------------------------------------------------------------------
 # Private functions
