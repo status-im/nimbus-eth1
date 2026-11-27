@@ -136,9 +136,9 @@ suite "Block access list builder":
     check:
       bal.len() == 2
       bal[0].address == address1
-      bal[0].codeChanges == @[(3.BlockAccessIndex, @[0x4.byte])]
+      bal[0].codeChanges == @[(3.BlockAccessIndex, @[0x4.byte], Opt.none(Hash32))]
       bal[1].address == address2
-      bal[1].codeChanges == @[(0.BlockAccessIndex, @[0x1.byte]), (1.BlockAccessIndex, @[0x2.byte])]
+      bal[1].codeChanges == @[(0.BlockAccessIndex, @[0x1.byte], Opt.none(Hash32)), (1.BlockAccessIndex, @[0x2.byte], Opt.none(Hash32))]
 
   test "Appending two code changes at the same index frees both on dispose":
     let before = getOccupiedSharedMem()
@@ -199,7 +199,7 @@ suite "Block access list builder":
       bal[0].storageReads.len() == 0 # read removed by storage change with the same slot
       bal[0].balanceChanges == @[(2.BlockAccessIndex, 10.u256)]
       bal[0].nonceChanges == @[(3.BlockAccessIndex, 3.AccountNonce)]
-      bal[0].codeChanges == @[(3.BlockAccessIndex, @[0x4.byte])]
+      bal[0].codeChanges == @[(3.BlockAccessIndex, @[0x4.byte], Opt.none(Hash32))]
 
       bal[1].address == address2
       bal[1].storageChanges.len() == 1
@@ -207,7 +207,7 @@ suite "Block access list builder":
       bal[1].storageReads == @[slot2, slot3]
       bal[1].balanceChanges == @[(0.BlockAccessIndex, 1.u256), (1.BlockAccessIndex, 0.u256)]
       bal[1].nonceChanges == @[(1.BlockAccessIndex, 1.AccountNonce), (2.BlockAccessIndex, 2.AccountNonce)]
-      bal[1].codeChanges == @[(0.BlockAccessIndex, @[0x1.byte]), (1.BlockAccessIndex, @[0x2.byte])]
+      bal[1].codeChanges == @[(0.BlockAccessIndex, @[0x1.byte], Opt.none(Hash32)), (1.BlockAccessIndex, @[0x2.byte], Opt.none(Hash32))]
 
       bal[2].address == address3
       bal[2].storageReads == @[slot3]
@@ -280,7 +280,7 @@ suite "Concurrent block access list builder":
         bal[i].storageReads == @[2.u256]
         bal[i].balanceChanges == @[(index.BlockAccessIndex, (index * 10).u256)]
         bal[i].nonceChanges == @[(index.BlockAccessIndex, index.AccountNonce)]
-        bal[i].codeChanges == @[(index.BlockAccessIndex, @[index.byte])]
+        bal[i].codeChanges == @[(index.BlockAccessIndex, @[index.byte], Opt.none(Hash32))]
 
   test "Concurrent writes to the same slot at distinct indices merge":
     # Every task targets the same address and slot but each at its own distinct

@@ -1216,7 +1216,6 @@ suite "TxPool test suite":
       env = initEnv(Cancun)
       xp = env.xp
       mx = env.sender
-      chain = env.chain
       acc = mx.getAccount(AccountEOA)
 
     let ptx = mx.makeTx(BaseTx(
@@ -1234,7 +1233,6 @@ suite "TxPool test suite":
       env = initEnv(Prague)
       xp = env.xp
       mx = env.sender
-      chain = env.chain
       acc = mx.getAccount(AccountEOA)
       accInvalid = mx.getAccount(AccountEOAInvalid)
 
