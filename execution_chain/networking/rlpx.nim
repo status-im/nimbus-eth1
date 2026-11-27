@@ -46,6 +46,9 @@ const
     ## decompression bombs:
     ## https://eips.ethereum.org/EIPS/eip-706#avoiding-dos-attacks
 
+  maxHelloMsgSize = 2 * 1024
+    ## Before the hello only a hello or a disconnect may be received, both small.
+
   connectionTimeout = 10.seconds
 
   peerPingInterval = 15.seconds
@@ -225,13 +228,13 @@ proc invokeThunk*(
     await msgInfo.thunk(peer, msgData)
 
 proc recvMsg(
-    peer: Peer
+    peer: Peer, maxSize: int
 ): Future[tuple[msgId: uint64, msgRlp: Rlp]] {.
     async: (raises: [CancelledError, EthP2PError])
 .} =
   var msgBody: seq[byte]
   try:
-    msgBody = await peer.transport.recvMsg()
+    msgBody = await peer.transport.recvMsg(maxSize)
     peer.lastReceived = Moment.now()
 
     trace "Received message",
@@ -290,7 +293,7 @@ proc recvMsg(
 proc dispatchMessages(peer: Peer) {.async: (raises: []).} =
   try:
     while peer.connectionState notin {Disconnecting, Disconnected}:
-      var (msgId, msgData) = await peer.recvMsg()
+      var (msgId, msgData) = await peer.recvMsg(maxFrameSize)
 
       await peer.invokeThunk(msgId, msgData)
   except EthP2PError:
@@ -519,7 +522,7 @@ proc helloHandshake(
   )
 
   # The first message received must be a hello or a disconnect
-  var (msgId, msgData) = await peer.recvMsg()
+  var (msgId, msgData) = await peer.recvMsg(maxHelloMsgSize)
 
   try:
     case msgId

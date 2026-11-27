@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2018-2026 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -43,12 +43,63 @@ suite "RLPx transport":
 
     defer:
       await client.closeWait()
-    let rmsg = await client.recvMsg().wait(1.seconds)
+    let rmsg = await client.recvMsg(maxFrameSize).wait(1.seconds)
 
     check:
       msg == rmsg
 
     await serverFut
+
+  asyncTest "Frame larger than the first read":
+    let msg = block:
+      var res = newSeq[byte](1024 * 1024 + 1)
+      for i in 0 ..< res.len:
+        res[i] = byte(i mod 251)
+      res
+    proc serveClient(
+        server: StreamServer
+    ) {.async: (raises: [CancelledError, TransportError, RlpxTransportError]).} =
+      let transp = await server.accept()
+      let a = await RlpxTransport.accept(rng, keys1, transp)
+      await a.sendMsg(msg)
+      await a.closeWait()
+
+    let serverFut = server.serveClient()
+    defer:
+      await serverFut.wait(1.seconds)
+
+    let client =
+      await RlpxTransport.connect(rng, keys2, server.localAddress(), keys1.pubkey)
+
+    defer:
+      await client.closeWait()
+    let rmsg = await client.recvMsg(maxFrameSize).wait(1.seconds)
+
+    check:
+      msg == rmsg
+
+  asyncTest "Frame above maxSize":
+    proc serveClient(
+        server: StreamServer
+    ) {.async: (raises: [CancelledError, TransportError, RlpxTransportError]).} =
+      let transp = await server.accept()
+      let a = await RlpxTransport.accept(rng, keys1, transp)
+      await a.sendMsg(newSeq[byte](100))
+      await a.sendMsg(newSeq[byte](101))
+      await a.closeWait()
+
+    let serverFut = server.serveClient()
+    defer:
+      await serverFut.wait(1.seconds)
+
+    let client =
+      await RlpxTransport.connect(rng, keys2, server.localAddress(), keys1.pubkey)
+
+    defer:
+      await client.closeWait()
+    check (await client.recvMsg(100).wait(1.seconds)).len == 100
+    expect(RlpxTransportError):
+      discard await client.recvMsg(100).wait(1.seconds)
 
   asyncTest "Detect invalid pubkey":
     proc serveClient(server: StreamServer) {.async.} =
