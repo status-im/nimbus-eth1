@@ -66,6 +66,7 @@ func checkBalSize*(
 func validate*(
     bal: BlockAccessListRef,
     expectedHash: Hash32,
+    adoptCodeActive: bool = false,
     blockGasLimit: GasInt = DEFAULT_GAS_LIMIT,
 ): Result[void, string] =
   ## Validate that a block access list is structurally correct and matches the
@@ -120,7 +121,13 @@ func validate*(
 
     # Validate the bytecode recorded by each code change.
     for codeChange in accountChanges.codeChanges:
-      ?checkCodeChange(codeChange.newCode)
+      if not adoptCodeActive and codeChange.newCodeHash.isSome:
+        return err("newCodeHash should not be present before Bogota")
+      if adoptCodeActive and codeChange.newCodeHash.isSome:
+        if codeChange.newCode.len != 0:
+          return err("newCode should be empty when newCodeHash is present")
+      else:
+        ?checkCodeChange(codeChange.newCode)
 
   # Check that the block access list matches the expected hash.
   if bal[].computeBlockAccessListHash() != expectedHash:

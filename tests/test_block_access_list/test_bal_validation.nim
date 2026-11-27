@@ -14,7 +14,8 @@ import
   unittest2,
   eth/common/block_access_lists_rlp,
   ../../execution_chain/constants,
-  ../../execution_chain/block_access_list/[bal_builder, bal_validation]
+  ../../execution_chain/block_access_list/[bal_builder, bal_validation],
+  ../../execution_chain/concurrency/shared_types
 
 const
   ENABLE_BENCHMARKS = false
@@ -312,6 +313,25 @@ suite "Block access list validation":
 
     let bal = builder.buildBlockAccessList()
     check bal.validate(bal[].computeBlockAccessListHash()).isErr()
+
+  test "Adopt code before Bogota":
+    builder.addAdoptCode(0, builder.addAccount(0, address1), EMPTY_SHA3)
+
+    let bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash(), false).isErr()
+
+  test "Adopt code after Bogota":
+    builder.addAdoptCode(0, builder.addAccount(0, address1), EMPTY_SHA3)
+
+    let bal = builder.buildBlockAccessList()
+    check bal.validate(bal[].computeBlockAccessListHash(), true).isOk()
+
+  test "Adopt code after Bogota but newCode present":
+    builder.addAdoptCode(0, builder.addAccount(0, address1), EMPTY_SHA3)
+
+    let bal = builder.buildBlockAccessList()
+    bal[0].codeChanges[0].newCode = @[3.byte]
+    check bal.validate(bal[].computeBlockAccessListHash(), true).isErr()
 
 when ENABLE_BENCHMARKS:
   import std/times
