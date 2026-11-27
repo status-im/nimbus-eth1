@@ -744,13 +744,16 @@ proc getCodeByHash*(
     db: CoreDbTxRef, codeHash: Hash32, jumpdests: var seq[byte]
 ): Result[seq[byte], string] =
   var
-    codeLen: Result[int, string]
-    code, bitmap: seq[byte]
-  let found = db.get(contractCodeKey(codeHash).toOpenArray) do (data: openArray[byte]):
+    codeLen {.threadvar.}: Result[int, string]
+    code {.threadvar.}: seq[byte]
+    bitmap {.threadvar.}: seq[byte]
+  let onData = proc(data: openArray[byte]) {.nimcall.} =
     codeLen = storedCodeLen(data.len, "getCodeByHash")
     if codeLen.isOk:
       code = @(data.toOpenArray(0, codeLen.value - 1))
       bitmap = @(data.toOpenArray(codeLen.value, data.high))
+
+  let found = db.get(contractCodeKey(codeHash).toOpenArray, onData)
   if found.isOk:
     if codeLen.isErr:
       return err(codeLen.error)
