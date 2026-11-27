@@ -375,7 +375,6 @@ type
 
     codeMigration* {.
       hidden
-      defaultValue: true
       desc: "Rewrite legacy contract code records at startup so that they " &
         "include the jump destination bitmap"
       name: "debug-code-migration".}: bool
