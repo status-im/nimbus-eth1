@@ -740,14 +740,6 @@ proc persistCodeByHash*(
 
   ok()
 
-proc persistLegacyCodeByHash*(
-    db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]
-): Result[void, string] =
-  db.put(legacyContractHashKey(codeHash).toOpenArray, code).isOkOr:
-    return err("persistLegacyCodeByHash: " & $$error)
-
-  ok()
-
 proc getCodeByHash*(
     db: CoreDbTxRef, codeHash: Hash32, jumpdests: var seq[byte]
 ): Result[seq[byte], string] =

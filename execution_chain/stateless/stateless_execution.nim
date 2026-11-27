@@ -80,7 +80,9 @@ proc statelessProcessBlock*(
   for c in witness.codes:
     if c.len == 0:
       continue
-    memoryTxFrame.persistLegacyCodeByHash(keccak256(c.asSeq()), c.asSeq()).isOkOr:
+    memoryTxFrame.persistCodeByHash(
+      keccak256(c.asSeq()), c.asSeq(), jumpdestBitmap(c.asSeq())
+    ).isOkOr:
       return err("Unable to load witness code: " & error)
 
   # Load the block hashes into the database indexed by block number.

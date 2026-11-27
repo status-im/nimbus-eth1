@@ -562,7 +562,7 @@ proc runLedgerBasicOperationsTests() =
         frame = memDB.baseTxFrame()
         code = testCode(100)
         codeHash = keccak256(code)
-      check frame.persistLegacyCodeByHash(codeHash, code).isOk
+      check frame.put(legacyContractHashKey(codeHash).toOpenArray, code).isOk
 
       var jumpdests = @[1'u8]
       check:
@@ -579,7 +579,7 @@ proc runLedgerBasicOperationsTests() =
         code = testCode(100)
         codeHash = keccak256(code)
       check:
-        frame.persistLegacyCodeByHash(codeHash, testCode(50)).isOk
+        frame.put(legacyContractHashKey(codeHash).toOpenArray, testCode(50)).isOk
         frame.persistCodeByHash(codeHash, code, jumpdestBitmap(code)).isOk
 
       var jumpdests: seq[byte]
@@ -645,7 +645,7 @@ proc runLedgerBasicOperationsTests() =
         frame.mergeAccount(
           address.computeAccPath, CoreDbAccount(codeHash: keccak256(code)), true
         ).expect("ok")
-        check frame.persistLegacyCodeByHash(keccak256(code), code).isOk
+        check frame.put(legacyContractHashKey(keccak256(code)).toOpenArray, code).isOk
 
       let ledger = LedgerRef.init(frame)
       check ledger.getOriginalCode(addr3) == oldOriginalCode
@@ -661,23 +661,6 @@ proc runLedgerBasicOperationsTests() =
             code & jumpdestBitmap(code)
           frame.get(legacyContractHashKey(keccak256(code)).toOpenArray).expect("value") ==
             code
-
-    test "Stateless ledger loads legacy code without its jumpdest bitmap":
-      let
-        frame = memDB.baseTxFrame()
-        contract = initAddr(1)
-        code = testCode(100)
-        codeHash = keccak256(code)
-      frame.mergeAccount(
-        contract.computeAccPath, CoreDbAccount(codeHash: codeHash), true
-      ).expect("ok")
-      check frame.persistLegacyCodeByHash(codeHash, code).isOk
-
-      let ledger = LedgerRef.init(frame, storeSlotHash = false, stateless = true)
-      check:
-        ledger.getCode(contract) == code
-        ledger.getCode(contract).jumpdests.len == 0
-        not frame.hasKey(contractCodeKey(codeHash).toOpenArray)
 
     test "Stateless: code written earlier in the block serves reads by hash":
       let

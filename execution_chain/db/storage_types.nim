@@ -22,7 +22,7 @@ type
     transactionHashToBlock = 3
     canonicalHeadHash = 4
     slotHashToSlot = 5
-    contractHash = 6 # Deprecated - code without its jumpdest bitmap, kept for existing databases and stateless execution
+    contractHash = 6 # Deprecated - code without its jumpdest bitmap, kept for existing databases
     dataDirId = 7 # Deprecated - keep to avoid reuse which might breaking existing databases
     fcuNumAndHash = 8
     fcState = 9
