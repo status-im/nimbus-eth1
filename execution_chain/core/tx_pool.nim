@@ -148,8 +148,7 @@ export
 # getBlobAndProofV2(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2]
 
 proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
-  let fromHash = if optHash.isSome: optHash.get
-                 else: blk.header.computeBlockHash
+  let fromHash = optHash.valueOr(blk.header.computeBlockHash)
 
   # Up to date, no need for further actions
   if fromHash == xp.rmHash:

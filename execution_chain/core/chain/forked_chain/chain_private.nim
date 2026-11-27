@@ -21,11 +21,11 @@ import
   ./chain_branch,
   ./chain_db
 
-proc writeBaggage*(
+proc writeBaggage(
     c: ForkedChainRef,
+    blockHash: Hash32,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    blkHash: Hash32,
     txFrame: CoreDbTxRef,
     receipts: openArray[StoredReceipt],
     generatedBal: Opt[BlockAccessListRef],
@@ -37,7 +37,7 @@ proc writeBaggage*(
     header.number, header.txRoot, blk.transactions, txHashToBlock = false)
   txFrame.persistReceipts(header.receiptsRoot, receipts)
   if blk.uncles.len > 0:
-    discard txFrame.persistUncles(blk.uncles)
+    txFrame.persistUncles(blk.header.ommersHash, blk.uncles)
 
   if blk.withdrawals.isSome:
     txFrame.persistWithdrawals(
@@ -47,12 +47,12 @@ proc writeBaggage*(
 
   if blockAccessList.isSome:
     txFrame.persistBlockAccessList(
-      blkHash,
+      blockHash,
       blockAccessList.get(),
     )
   elif generatedBal.isSome:
     txFrame.persistBlockAccessList(
-      blkHash,
+      blockHash,
       generatedBal.get(),
     )
 
@@ -97,32 +97,17 @@ proc getVmState(
   )
   vmState
 
-proc processBlock*(
+proc processAndPersist*(
     c: ForkedChainRef,
     parentBlk: BlockRef,
     txFrame: CoreDbTxRef,
+    blockHash: Hash32,
     blk: Block,
     blockAccessList: Opt[BlockAccessListRef],
-    blkHash: Hash32,
     finalized: bool,
 ): Result[seq[Hash32], string] =
   template header(): Header =
     blk.header
-
-  # Validate the header before acquiring the vmState so that invalid
-  # headers must not evict the warm vmState that valid blocks reuse.
-  c.com.validateHeaderAndKinship(
-    blk,
-    blockAccessList,
-    # Depending on the BAL retention period of clients, finalized blocks might
-    # be received without a BAL. In this case we skip checking the BAL against
-    # the header bal hash.
-    skipPreExecBalCheck = blockAccessList.isNone(),
-    parentBlk.header,
-    txFrame
-  ).isOkOr:
-    c.badBlocks.put(blkHash, (blk, blockAccessList))
-    return err(error)
 
   let vmState = c.getVmState(parentBlk, txFrame, header, blockAccessList, finalized)
 
@@ -147,7 +132,7 @@ proc processBlock*(
     # matches the header bal hash. In this case the post execution check can be
     # skipped.
     vmState.processBlock(blk, blockAccessList, flags).isOkOr:
-      c.badBlocks.put(blkHash, (blk, vmState.blockAccessList))
+      c.badBlocks.put(blockHash, (blk, vmState.blockAccessList))
       return err(error)
 
   if not vmState.com.statelessProvider:
@@ -173,20 +158,21 @@ proc processBlock*(
       let executionWitness = ExecutionWitnessWithKeys.build(witness, vmState.ledger)
       ?executionWitness.toExecutionWitness().statelessProcessBlock(c.com, blk)
 
-    ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
+    ?txFrame.persistWitness(blockHash, witness)
 
   ?vmState.ledger.storeHeldCode()
 
   # We still need to write header to database
   # because validateUncles still need it
-  txFrame.writeBlockOwnershipData(header, blkHash)
+  txFrame.writeBlockOwnershipData(header, blockHash)
   # Lookups by number and by tx hash on disk cover the persisted chain only,
   # they are written when the block becomes base (`writeCanonicalMappings`)
-  ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory,
+  ?txFrame.persistHeader(blockHash, header, c.com.startOfHistory,
     numberToHash = false)
 
   var txHashes = c.writeBaggage(
-    blk, blockAccessList, blkHash, txFrame, vmState.receipts, vmState.blockAccessList)
+    blockHash, blk, blockAccessList, txFrame, vmState.receipts, vmState.blockAccessList
+  )
 
   vmState.receipts.setLen(0)
   vmState.receiptBlooms.setLen(0)
@@ -194,7 +180,7 @@ proc processBlock*(
 
   # Cache for the next block - the ledger caches stay warm on linear import
   c.vmState = vmState
-  c.vmStateBlockHash = blkHash
+  c.vmStateBlockHash = blockHash
   cached = true
 
   ok(move(txHashes))

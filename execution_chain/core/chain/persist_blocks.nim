@@ -101,13 +101,6 @@ proc checkpoint*(p: var Persister): Result[void, string] =
       return err($$error)
 
     if p.parent.stateRoot != stateRoot:
-      # TODO replace logging with better error
-      debug "wrong state root in block",
-        blockNumber = p.parent.number,
-        blockHash = p.parent.computeBlockHash,
-        parentHash = p.parent.parentHash,
-        expected = p.parent.stateRoot,
-        actual = stateRoot
       return err(
         "stateRoot mismatch, expect: " & $p.parent.stateRoot & ", got: " & $stateRoot
       )
@@ -146,6 +139,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   let
     vmState = ?p.getVmState(header, storeSlotHash = PersistSlotHashes in p.flags)
     txFrame = vmState.ledger.txFrame
+    blockHash = blk.header.computeBlockHash()
 
   # TODO even if we're skipping validation, we should perform basic sanity
   #      checks on the block and header - that fields are sanely set for the
@@ -154,6 +148,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   #      matter their provenance.
   if FullValidation in p.flags:
     ?com.validateHeaderAndKinship(
+      blockHash,
       blk,
       Opt.none(BlockAccessListRef),
       skipPreExecBalCheck = true,
@@ -202,12 +197,11 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       let executionWitness = ExecutionWitnessWithKeys.build(witness, vmState.ledger)
       ?executionWitness.toExecutionWitness().statelessProcessBlock(com, blk)
 
-    ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
+    ?vmState.ledger.txFrame.persistWitness(blockHash, witness)
 
   ?vmState.ledger.storeHeldCode()
 
   if PersistHeaders in p.flags:
-    let blockHash = header.computeBlockHash()
     ?txFrame.persistHeaderAndSetHead(blockHash, header, com.startOfHistory)
 
   if PersistTransactions in p.flags:

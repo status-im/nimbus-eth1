@@ -91,12 +91,12 @@ proc statelessProcessBlock*(
   # https://github.com/ethereum/execution-specs/blob/3ebcb5d02126918eb2aad599b3cf286200d4f458/src/ethereum/forks/amsterdam/fork.py#L308
   # TODO: on the payload path this rebuilds the withdrawals trie that `toBlock`
   # just built, and `processBlock` below rebuilds the transaction trie likewise.
-  ?com.validateHeader(
+  ?com.validateHeader(blk.header, parentHeader = parent, txFrame = memoryTxFrame)
+  ?com.validateBlock(
     blk,
     blockAccessList = Opt.none(BlockAccessListRef),
     skipPreExecBalCheck = true,
     parentHeader = parent,
-    txFrame = memoryTxFrame,
   )
 
   # Create evm instance using the in memory database.

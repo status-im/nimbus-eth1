@@ -522,9 +522,8 @@ proc sendTransaction*(
     client: RpcClient, tx: PooledTransaction): Result[void, string] =
   wrapTry:
     let encodedTx = rlp.encode(tx)
-    let res = waitFor client.eth_sendRawTransaction(encodedTx)
-    let txHash = computeRlpHash(tx)
-    let getHash = res
+    let getHash = waitFor client.eth_sendRawTransaction(encodedTx)
+    let txHash = keccak256(encodedTx)
     if txHash != getHash:
       return err("sendTransaction: tx hash mismatch")
     return ok()

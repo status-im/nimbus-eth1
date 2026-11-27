@@ -11,8 +11,7 @@
 {.push raises: [], gcsafe.}
 
 import
-  std/[sequtils, sets, strformat],
-  pkg/blscurve, # Kludge: needed to compile `eip4844` -- sometimes :)
+  std/strformat,
   ../db/ledger,
   ../common/common,
   ../transaction/call_types,
@@ -24,15 +23,8 @@ import
   stew/objects,
   results
 
-from stew/byteutils
-  import nil
-
 export
   results
-
-const
-  daoForkBlockExtraData* =
-    byteutils.hexToByteArray[13](DAOForkBlockExtra).toSeq
 
 # ------------------------------------------------------------------------------
 # Private validator functions
@@ -43,11 +35,13 @@ func validateBlockAccessList*(
     com: CommonRef,
     header: Header,
     blockAccessList: Opt[BlockAccessListRef],
-    skipPreExecBalCheck: bool): Result[void, string] =
-
+    skipPreExecBalCheck: bool,
+): Result[void, string] =
   if com.isAmsterdamOrLater(header.timestamp):
     if header.blockAccessListHash.isNone:
       return err("Post-Amsterdam block header must have blockAccessListHash")
+    if header.slotNumber.isNone:
+      return err("Post-Amsterdam block header must have slotNumber")
     if not skipPreExecBalCheck:
       if blockAccessList.isNone:
         return err("Post-Amsterdam block must have blockAccessList")
@@ -56,22 +50,18 @@ func validateBlockAccessList*(
   else:
     if header.blockAccessListHash.isSome:
       return err("Pre-Amsterdam block header must not have blockAccessListHash")
+    if header.slotNumber.isSome:
+      return err("Pre-Amsterdam block header must not have slotNumber")
     if blockAccessList.isSome:
       return err("Pre-Amsterdam block must not have blockAccessList")
 
   return ok()
 
 proc validateHeader*(
-    com: CommonRef;
-    blk: Block;
-    blockAccessList: Opt[BlockAccessListRef];
-    skipPreExecBalCheck: bool;
-    parentHeader: Header;
-    txFrame: CoreDbTxRef;
-      ): Result[void,string] =
-  template header: Header = blk.header
-  # TODO this code is used for validating uncles also, though these get passed
-  #      an empty body - avoid this by separating header and block validation
+    com: CommonRef, header: Header, parentHeader: Header, txFrame: CoreDbTxRef
+): Result[void, string] =
+  ## Validate that the header is structurally sound: all checks that do not
+  ## require block bodies, blobs etc
   template inDAOExtraRange(blockNumber: BlockNumber): bool =
     # EIP-799
     # Blocks with block numbers in the range [1_920_000, 1_920_009]
@@ -84,8 +74,8 @@ proc validateHeader*(
   if header.extraData.len > 32:
     return err("Header.extraData larger than 32 bytes")
 
-  if header.gasUsed == 0 and 0 < blk.transactions.len:
-    return err("zero gasUsed but transactions present");
+  if header.gasUsed == 0 and header.txRoot != EMPTY_ROOT_HASH:
+    return err("zero gasUsed but transactions present")
 
   if header.gasUsed < 0 or header.gasUsed > header.gasLimit:
     return err("gasUsed should be non negative and smaller or equal gasLimit")
@@ -100,7 +90,7 @@ proc validateHeader*(
     return err("gasLimit exceeds GAS_LIMIT_MAXIMUM")
 
   if com.daoForkSupport and inDAOExtraRange(header.number) and not com.isShanghaiOrLater(header.timestamp):
-    if header.extraData != daoForkBlockExtraData:
+    if header.extraData != DAOForkBlockExtra:
       return err("header extra data should be marked DAO")
 
   if com.proofOfStake(header, txFrame):
@@ -121,43 +111,84 @@ proc validateHeader*(
     if header.difficulty < calcDiffc:
       return err("provided header difficulty is too low")
 
-  ? com.validateWithdrawals(header, blk.withdrawals)
-  ? com.validateEip4844Header(header, parentHeader, blk.transactions)
+  if com.isCancunOrLater(header.timestamp):
+    if header.parentBeaconBlockRoot.isNone:
+      return err("Post-Cancun block header must have parentBeaconBlockRoot")
+  else:
+    if header.parentBeaconBlockRoot.isSome:
+      return err("Pre-Cancun block header must not have parentBeaconBlockRoot")
+
+  if com.isPragueOrLater(header.timestamp):
+    if header.requestsHash.isNone:
+      return err("Post-Prague block header must have requestsHash")
+  else:
+    if header.requestsHash.isSome:
+      return err("Pre-Prague block header must not have requestsHash")
+
   ? com.validateGasLimitOrBaseFee(header, parentHeader)
-  ? com.validateBlockAccessList(header, blockAccessList, skipPreExecBalCheck)
 
   ok()
 
-proc validateUncles(com: CommonRef; header: Header; txFrame: CoreDbTxRef,
-                    uncles: openArray[Header]): Result[void,string] =
-  let hasUncles = uncles.len > 0
-  let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
+proc validateBlock*(
+    com: CommonRef,
+    blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
+    skipPreExecBalCheck: bool,
+    parentHeader: Header,
+): Result[void, string] =
+  ## Validate that the block body conforms to the header: txRoot, withdrawals,
+  ## blob gas, RLP size, and structural consistency. Assumes `validateHeader`
+  ## has already passed.
+  template header(): Header =
+    blk.header
 
-  if not hasUncles and not shouldHaveUncles:
-    # optimization to avoid loading ancestors from DB, since the block has
-    # no uncles
+  if header.gasUsed == 0 and 0 < blk.transactions.len:
+    return err("zero gasUsed but transactions present")
+
+  if blk.transactions.calcTxRoot != header.txRoot:
+    return err("Mismatched txRoot")
+
+  ?com.validateWithdrawals(header, blk.withdrawals)
+  ?com.validateEip4844Header(header, parentHeader, blk.transactions)
+
+  if com.isOsakaOrLater(header.timestamp):
+    if rlp.getEncodedLength(blk) > MAX_RLP_BLOCK_SIZE:
+      return err("Post-Osaka block exceeded MAX_RLP_BLOCK_SIZE")
+
+  ?com.validateBlockAccessList(header, blockAccessList, skipPreExecBalCheck)
+
+  ok()
+
+proc validateUncles(
+    com: CommonRef,
+    blockHash: Hash32,
+    header: Header,
+    txFrame: CoreDbTxRef,
+    uncles: openArray[Header],
+): Result[void, string] =
+  if header.ommersHash == EMPTY_UNCLE_HASH:
+    if uncles.len > 0:
+      return err("Block has uncles but header suggests uncles should be empty")
     return ok()
-  if hasUncles and not shouldHaveUncles:
-    return err("Block has uncles but header suggests uncles should be empty")
-  if shouldHaveUncles and not hasUncles:
+
+  if uncles.len == 0:
     return err("Header suggests block should have uncles but block has none")
 
-  # Check for duplicates
-  var uncleSet = HashSet[Hash32]()
-  for uncle in uncles:
-    let uncleHash = uncle.computeBlockHash
-    if uncleHash in uncleSet:
-      return err("Block contains duplicate uncles")
-    else:
-      uncleSet.incl uncleHash
+  if uncles.len > MAX_UNCLES:
+    return err("Number of uncles exceed limit.")
 
   let
     recentAncestorHashes = ?txFrame.getAncestorsHashes(MAX_UNCLE_DEPTH + 1, header)
     recentUncleHashes = ?txFrame.getUncleHashes(recentAncestorHashes)
-    blockHash = header.computeBlockHash
 
+  # Capped to MAX_UNCLES == 2
+  var uncleHashes: ArrayBuf[MAX_UNCLES, Hash32]
   for uncle in uncles:
     let uncleHash = uncle.computeBlockHash
+
+    if uncleHash in uncleHashes.data():
+      return err("Block contains duplicate uncles")
+    uncleHashes.add uncleHash
 
     if uncleHash == blockHash:
       return err("Uncle has same hash as block")
@@ -185,13 +216,10 @@ proc validateUncles(com: CommonRef; header: Header; txFrame: CoreDbTxRef,
       return err("Uncle's parent must me older")
 
     let uncleParent = ?txFrame.getBlockHeader(uncle.parentHash)
-    ?com.validateHeader(
-      Block.init(uncle, BlockBody()),
-      Opt.none(BlockAccessListRef),
-      false,
-      uncleParent,
-      txFrame
-    )
+    ?com.validateHeader(uncle, uncleParent, txFrame)
+
+  if uncles.computeRlpHash() != header.ommersHash:
+    return err("Uncles do not match ommersHash")
 
   ok()
 
@@ -448,18 +476,15 @@ proc validateTransaction*(
 
   ok()
 
-# ------------------------------------------------------------------------------
-# Public functions, extracted from test_blockchain_json
-# ------------------------------------------------------------------------------
-
 proc validateHeaderAndKinship*(
-    com: CommonRef;
-    blk: Block;
-    blockAccessList: Opt[BlockAccessListRef];
+    com: CommonRef,
+    blockHash: Hash32,
+    blk: Block,
+    blockAccessList: Opt[BlockAccessListRef],
     skipPreExecBalCheck: bool,
-    parent: Header;
-    txFrame: CoreDbTxRef
-      ): Result[void, string] =
+    parent: Header,
+    txFrame: CoreDbTxRef,
+): Result[void, string] =
   template header: Header = blk.header
 
   if header.isGenesis:
@@ -467,13 +492,11 @@ proc validateHeaderAndKinship*(
       return err("Header.extraData larger than 32 bytes")
     return ok()
 
-  ? com.validateHeader(blk, blockAccessList, skipPreExecBalCheck, parent, txFrame)
-
-  if blk.uncles.len > MAX_UNCLES:
-    return err("Number of uncles exceed limit.")
+  ? com.validateHeader(header, parent, txFrame)
+  ? com.validateBlock(blk, blockAccessList, skipPreExecBalCheck, parent)
 
   if not com.proofOfStake(header, txFrame):
-    ? com.validateUncles(header, txFrame, blk.uncles)
+    ? com.validateUncles(blockHash, header, txFrame, blk.uncles)
 
   ok()
 

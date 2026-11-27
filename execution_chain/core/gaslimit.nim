@@ -60,9 +60,7 @@ proc verifyEip1559Header(com: CommonRef;
                 parent.gasLimit
               else:
                 parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
-  let rc = header.validateGasLimit(limit)
-  if rc.isErr:
-    return rc
+  ? header.validateGasLimit(limit)
 
   let headerBaseFee = header.baseFeePerGas.get(0.u256)
   # Verify the header is not malformed
