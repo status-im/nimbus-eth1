@@ -768,8 +768,11 @@ proc persistCodeWithoutJumpdests*(
 ): Result[void, string] =
   db.persistCodeByHash(codeHash, code, code.toOpenArray(0, -1))
 
-proc getCodeByHash*(
-    db: CoreDbTxRef, codeHash: Hash32, jumpdests: var seq[byte]
+proc getStoredCode(
+    db: CoreDbTxRef,
+    codeHash: Hash32,
+    withJumpdests: static bool,
+    jumpdests: var seq[byte],
 ): Result[seq[byte], string] =
   var
     codeLen {.threadvar.}: Result[int, string]
@@ -779,7 +782,8 @@ proc getCodeByHash*(
     codeLen = storedCodeLen(data, "getCodeByHash")
     if codeLen.isOk:
       code = @(data.toOpenArray(1, codeLen.value))
-      bitmap = @(data.toOpenArray(1 + codeLen.value, data.high))
+      when withJumpdests:
+        bitmap = @(data.toOpenArray(1 + codeLen.value, data.high))
 
   let found = db.get(contractCodeKey(codeHash).toOpenArray, onData)
   if found.isOk:
@@ -795,26 +799,14 @@ proc getCodeByHash*(
 
   ok(move(rc.value))
 
+proc getCodeByHash*(
+    db: CoreDbTxRef, codeHash: Hash32, jumpdests: var seq[byte]
+): Result[seq[byte], string] =
+  db.getStoredCode(codeHash, withJumpdests = true, jumpdests)
+
 proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] =
-  var
-    codeLen {.threadvar.}: Result[int, string]
-    code {.threadvar.}: seq[byte]
-  let onData = proc(data: openArray[byte]) {.nimcall.} =
-    codeLen = storedCodeLen(data, "getCodeByHash")
-    if codeLen.isOk:
-      code = @(data.toOpenArray(1, codeLen.value))
-
-  let found = db.get(contractCodeKey(codeHash).toOpenArray, onData)
-  if found.isOk:
-    if codeLen.isErr:
-      return err(codeLen.error)
-    return ok(move(code))
-
-  var rc = db.get(legacyContractHashKey(codeHash).toOpenArray)
-  if rc.isErr:
-    return err("getCodeByHash: " & $$rc.error)
-
-  ok(move(rc.value))
+  var jumpdests: seq[byte]
+  db.getStoredCode(codeHash, withJumpdests = false, jumpdests)
 
 proc getCodeLenByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[int, string] =
   var codeLen {.threadvar.}: Result[int, string]
