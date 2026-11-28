@@ -676,6 +676,35 @@ proc runLedgerBasicOperationsTests() =
             @[1'u8] & deployed & jumpdestBitmap(deployed)
           ledger.getCode(initAddr(2)).jumpdests == jumpdestBitmap(deployed)
 
+    test "Delegation designators are persisted without a jumpdest bitmap":
+      for hold in [false, true]:
+        let
+          frame = memDB.baseTxFrame()
+          ledger = LedgerRef.init(frame)
+          tail = @[byte(1 + ord(hold))]
+          delegation = @[0xef'u8, 0x01, 0x00] & newSeq[byte](19) & tail
+          sameSize = @[0x5b'u8, 0x01, 0x00] & newSeq[byte](19) & tail
+          samePrefix = @[0xef'u8, 0x01, 0x00] & newSeq[byte](20) & tail
+        ledger.setCode(initAddr(1), delegation)
+        ledger.setCode(initAddr(2), sameSize)
+        ledger.setCode(initAddr(3), samePrefix)
+        ledger.persist(clearEmptyAccounts = false, hold = hold)
+        if hold:
+          check ledger.storeHeldCode().isOk
+
+        var jumpdests = @[1'u8]
+        check:
+          delegation.len == 23
+          frame.get(contractCodeKey(keccak256(delegation)).toOpenArray).expect("value") ==
+            @[0'u8] & delegation
+          frame.get(contractCodeKey(keccak256(sameSize)).toOpenArray).expect("value") ==
+            @[1'u8] & sameSize & jumpdestBitmap(sameSize)
+          frame.get(contractCodeKey(keccak256(samePrefix)).toOpenArray).expect("value") ==
+            @[1'u8] & samePrefix & jumpdestBitmap(samePrefix)
+          frame.getCodeByHash(keccak256(delegation), jumpdests).expect("code") == delegation
+          jumpdests.len == 0
+          frame.getCodeLenByHash(keccak256(delegation)).expect("code len") == 23
+
     test "Ledger loads code with, without and before the jumpdest bitmap record":
       let
         frame = memDB.baseTxFrame()

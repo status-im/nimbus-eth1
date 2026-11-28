@@ -460,14 +460,21 @@ proc cachedCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
     return Opt.some(held[])
   Opt.none(CodeBytesRef)
 
+proc storeCode(
+    ledger: LedgerRef, codeHash: Hash32, code: CodeBytesRef
+): Result[void, string] =
+  if code.len == EIP7702_DELEGATION_SIZE and code.hasPrefix(EIP7702_DELEGATION_PREFIX):
+    ledger.txFrame.persistCodeWithoutJumpdests(codeHash, code.bytes())
+  else:
+    ledger.txFrame.persistCodeByHash(codeHash, code.bytes(), code.jumpdestBitmap())
+
 proc persistCode(acc: AccountRef, ledger: LedgerRef, hold: bool) =
   if acc.code.len != 0 and not acc.code.persisted:
     if hold:
       # Defer the write until the block is accepted, see `storeHeldCode`
       ledger.heldCode[acc.statement.codeHash] = acc.code
       return
-    let rc = ledger.txFrame.persistCodeByHash(
-      acc.statement.codeHash, acc.code.bytes(), acc.code.jumpdestBitmap())
+    let rc = ledger.storeCode(acc.statement.codeHash, acc.code)
     if rc.isErr:
       warn "persistCode failed",
        codeHash=acc.statement.codeHash, error=rc.error
@@ -1326,7 +1333,7 @@ proc storeHeldCode*(ledger: LedgerRef): Result[void, string] =
   ## Write the code `holdCode` kept back, once its block is accepted.
   for codeHash, code in ledger.heldCode:
     if not code.persisted:
-      ledger.txFrame.persistCodeByHash(codeHash, code.bytes(), code.jumpdestBitmap()).isOkOr:
+      ledger.storeCode(codeHash, code).isOkOr:
         return err("storeHeldCode(): " & error)
       code.persisted = true
   ledger.heldCode.clear()
