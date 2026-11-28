@@ -13,6 +13,7 @@ import
   ../execution_chain/compile_info
 
 import
+  std/os,
   chronicles,
   eth/net/nat,
   metrics,
@@ -402,10 +403,6 @@ proc setupCommonRef*(
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, config, params)
 
-  if config.codeMigration:
-    coreDB.migrateLegacyCode().isOkOr:
-      warn "Contract code migration failed, legacy code records remain in use", error
-
   # Must not snap sync on a non-empty state DB.
   var emptyStateDb = false
   if config.cmd != NimbusCmd.`import`:
@@ -637,5 +634,34 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   else:
     runExeClient(config, com, params, nil, nimbus=nimbus)
 
+proc migrateCode(config: ExecutionClientConf) =
+  setupLogging(config.logLevel, config.logFormat)
+  setupFileLimits()
+
+  info "Launching contract code migration", version = FullVersionStr
+
+  ProcessState.setupStopHandlers()
+  let
+    params = config.computeNetworkParams()
+    dataDir = config.dataDir(params)
+  if not dirExists(dataDir):
+    fatal "Data dir does not exist", dataDir
+    quit QuitFailure
+
+  proc running(): bool =
+    not ProcessState.stopIt(notice("Shutting down", reason = it))
+
+  let db = AristoDbRocks.newCoreDbRef(dataDir, config.dbOptions(noKeyCache = true))
+  preventLoadingDataDirForTheWrongNetwork(db, config, params)
+  let rc = db.migrateLegacyCode(running)
+  db.close()
+  if rc.isErr:
+    fatal "Contract code migration failed", error = rc.error
+    quit QuitFailure
+
 when isMainModule:
-  main()
+  let cmdLine = commandLineParams()
+  if cmdLine.len > 0 and cmdLine[0] == "migrate-code":
+    migrateCode(makeConfig(cmdLine[1 .. ^1]))
+  else:
+    main()

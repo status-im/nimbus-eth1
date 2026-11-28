@@ -63,6 +63,38 @@ suite "Legacy code migration":
       frame.get(above).expect("value") == [byte 2]
       db.migrateLegacyCode().expect("migrated") == 0
 
+  test "A stopped migration keeps its progress and the next run finishes it":
+    let
+      path = createTempDir("nimbus-code-migration-", "")
+      db = AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+      frame = db.baseTxFrame()
+      codes = [10, 20, 30, 40, 50].mapIt(testCode(it))
+    defer:
+      db.close()
+      removeDir(path)
+
+    for code in codes:
+      check frame.put(legacyContractHashKey(keccak256(code)).toOpenArray, code).isOk
+
+    var calls = 0
+    let stopAfterTwo = proc(): bool {.gcsafe, raises: [].} =
+      inc calls
+      calls <= 2
+    check db.migrateLegacyCode(stopAfterTwo).expect("migrated") == 2
+
+    var migrated = 0
+    for code in codes:
+      let codeHash = keccak256(code)
+      if frame.hasKey(contractCodeKey(codeHash).toOpenArray):
+        inc migrated
+        check not frame.hasKey(legacyContractHashKey(codeHash).toOpenArray)
+      check frame.getCodeByHash(codeHash).expect("code") == code
+    check:
+      migrated == 2
+      db.migrateLegacyCode().expect("migrated") == 3
+    for code in codes:
+      check not frame.hasKey(legacyContractHashKey(keccak256(code)).toOpenArray)
+
   test "Nothing is migrated without legacy records":
     let
       path = createTempDir("nimbus-code-migration-", "")

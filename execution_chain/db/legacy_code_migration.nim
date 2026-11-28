@@ -49,7 +49,9 @@ proc migrateRecord(
   ?batch.delete(key)
   ok(value.len)
 
-proc migrateLegacyCode*(db: CoreDbRef): Result[int, string] =
+proc migrateLegacyCode*(
+    db: CoreDbRef, running: proc(): bool {.gcsafe, raises: [].} = nil
+): Result[int, string] =
   let be = db.kvtBackend()
   if not (be of RdbBackendRef):
     return ok(0)
@@ -71,9 +73,13 @@ proc migrateLegacyCode*(db: CoreDbRef): Result[int, string] =
     value: seq[byte]
     lastProgress = start
     pending, codes, bytes = 0
+    stopped = false
 
   iter.seekToKey([legacyKind])
   while iter.isValid() and isLegacyCode(iter.key(asOpenArray = true)):
+    if running != nil and not running():
+      stopped = true
+      break
     let written = ?batch.migrateRecord(
       value, iter.key(asOpenArray = true), iter.value(asOpenArray = true)
     )
@@ -94,9 +100,16 @@ proc migrateLegacyCode*(db: CoreDbRef): Result[int, string] =
   ?iter.status()
 
   if codes == 0:
+    if not stopped:
+      info "No legacy contract code records to migrate"
     return ok(0)
 
   ?rdb.write(batch)
+  if stopped:
+    info "Contract code migration stopped",
+      codes, bytes, elapsed = Moment.now() - start
+    return ok(codes)
+
   ?cf.suggestCompactRange([legacyKind], [legacyKind + 1])
   info "Contract code migration completed",
     codes, bytes, elapsed = Moment.now() - start
