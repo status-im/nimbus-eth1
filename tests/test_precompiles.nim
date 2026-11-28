@@ -46,8 +46,10 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; precompile: Precompiles
       chainId: 1.u256,
       payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
     )
-    let tx = signTransaction(unsignedTx, privateKey, false)
-    let fixtureResult = testCallEvm(tx, tx.recoverSender().expect("valid signature"), vmState)
+    let
+      tx = signTransaction(unsignedTx, privateKey, false)
+      sender = tx.recoverSender().expect("valid signature")
+      fixtureResult = txCallEvm(tx, sender, vmState, IntrinsicGas(), CallResult)
 
     if expectedErr:
       check fixtureResult.isError

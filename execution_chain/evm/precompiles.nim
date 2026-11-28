@@ -15,7 +15,6 @@ import
   ./types,
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
-  chronicles,
   nimcrypto/[ripemd, utils],
   stew/assign2,
   ../common/evmforks,
@@ -652,10 +651,6 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
     if res.error.code == EvmErrorCode.OutOfGas:
       c.setError(StatusCode.OutOfGas, $res.error.code, true)
     else:
+      # Other precompiles errors are swallowed
       if fork >= FkByzantium and precompile > paIdentity:
         c.setError(StatusCode.PrecompileFailure, $res.error.code, true)
-      else:
-        # swallow any other precompiles errors
-        debug "execPrecompiles validation error",
-          errCode = $res.error.code,
-          precompile = precompile

@@ -24,6 +24,9 @@ import
   ./[access_list as ac_access_list, core_db, storage_types],
   ./aristo/[aristo_blobify, aristo_desc]
 
+logScope:
+  topics = "ledger"
+
 export code_bytes, core_db.computeAccPath, core_db.computeSlotKey
 
 const
@@ -233,9 +236,6 @@ const
     ## proof of absence we can't tell if the account/slot exists. Covers an
     ## incomplete witness (stateless) or a not-yet-fetched trie (verified proxy).
 
-template logTxt(info: static[string]): static[string] =
-  "LedgerRef " & info
-
 template txFrame*(ledger: LedgerRef): CoreDbTxRef =
   ledger.txFrameRef.get()
 
@@ -274,7 +274,7 @@ proc slotKey(ledger: LedgerRef, slot: UInt256): Hash32 =
       # over..
       let key = slotKey.slotHashToSlotKey
       ledger.txFrame.put(key.toOpenArray, blobify(slot).data).isOkOr:
-        warn logTxt "slotKey()", slot, error = ($$error)
+        warn "Put slot key failed", slot, error = ($$error)
 
     slotKey
 
@@ -325,7 +325,8 @@ proc getAccount(ledger: LedgerRef, address: Address, shouldCreate = true): Accou
     if rc.isErr and rc.error.isAristo and rc.error.aErr in MissingNodeErrors:
       # Record a fatalError: never assert here, always fall through to the normal
       # "not found" path. The async EVM (verified proxy) relies on that.
-      warn logTxt "getAccount()", address, error = ($$rc.error)
+      warn "Witness missing an internal trie node required to resolve account",
+        address, error = ($$rc.error)
       ledger.fatalError = Opt.some(
         "getAccount(): witness missing an internal trie node required to resolve account " & $address)
 
@@ -382,7 +383,7 @@ template fetchSlotChecked(ledger: LedgerRef, accPath: Hash32, slot: UInt256): UI
   let slotRc = ledger.txFrame.fetchSlot(accPath, slotKey)
   if slotRc.isErr:
     if slotRc.error.isAristo and slotRc.error.aErr in MissingNodeErrors:
-      warn logTxt "fetchSlot()", error = ($$slotRc.error)
+      warn "fetchSlot failed", error = ($$slotRc.error)
       ledger.fatalError = Opt.some(
         "fetchSlot(): witness missing an internal trie node required to resolve storage slot")
     0'u256
@@ -468,7 +469,7 @@ proc persistCode(acc: AccountRef, ledger: LedgerRef, hold: bool) =
     let rc = ledger.txFrame.persistCodeByHash(
       acc.statement.codeHash, acc.code.bytes(), acc.code.jumpdestBitmap())
     if rc.isErr:
-      warn logTxt "persistCode()",
+      warn "persistCode failed",
        codeHash=acc.statement.codeHash, error=rc.error
     else:
       # If the ledger changes rolled back entirely from the database, the ledger
@@ -786,7 +787,7 @@ proc getCode*(ledger: LedgerRef,
       if rc.isErr:
         # A non-empty code hash with no code in the database: record a fatalError
         # but still return empty code so the async EVM continues.
-        warn logTxt "getCode()", codeHash = acc.statement.codeHash, error = rc.error
+        warn "getCodeByHash failed", codeHash = acc.statement.codeHash, error = rc.error
         ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
         CodeBytesRef()
       else:
@@ -813,7 +814,7 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
     acc.originalCode = ledger.cachedCode(codeHash).valueOr:
       let rc = ledger.loadCode(codeHash)
       if rc.isErr:
-        warn logTxt "getOriginalCode()", codeHash, error = rc.error
+        warn "getCodeByHash failed", codeHash, error = rc.error
         CodeBytesRef()
       else:
         ledger.code.put(codeHash, rc.value)
@@ -839,7 +840,7 @@ proc getCodeSize*(ledger: LedgerRef, address: Address): int =
       return ledger.txFrame.getCodeLenByHash(acc.statement.codeHash).valueOr:
         # A non-empty code hash whose length is missing from the database: record
         # a fatalError but still return 0 so the async EVM continues.
-        warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error
+        warn "getCodeLenByHash failed", codeHash=acc.statement.codeHash, error
         ledger.fatalError = Opt.some("getCodeSize(): failed to fetch code length from database")
         return 0
 
@@ -1347,11 +1348,11 @@ iterator storage*(
   for (slotHash, value) in ledger.txFrame.slotPairs address.computeAccPath:
     let rc = ledger.txFrame.get(slotHashToSlotKey(slotHash).toOpenArray)
     if rc.isErr:
-      warn logTxt "storage()", slotHash, error=($$rc.error)
+      warn "get storage failed", slotHash, error=($$rc.error)
       continue
     let r = deblobify(rc.value, UInt256)
     if r.isErr:
-      warn logTxt "storage.deblobify", slotHash, msg=r.error
+      warn "storage deblobify failed", slotHash, msg=r.error
       continue
     yield (r.value, value)
 

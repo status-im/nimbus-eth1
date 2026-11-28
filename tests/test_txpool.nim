@@ -998,7 +998,7 @@ suite "TxPool test suite":
     # only allow 1 blob tx, the other one removed automatically
     xp.checkImportBlock(1, 0)
 
-    check xp.com.isOsakaOrLater(xp.timestamp)
+    check xp.vmState.fork >= FkOsaka
 
     # restore blobSchedule
     cc.blobSchedule[Prague] = bs
@@ -1216,7 +1216,6 @@ suite "TxPool test suite":
       env = initEnv(Cancun)
       xp = env.xp
       mx = env.sender
-      chain = env.chain
       acc = mx.getAccount(AccountEOA)
 
     let ptx = mx.makeTx(BaseTx(
@@ -1234,7 +1233,6 @@ suite "TxPool test suite":
       env = initEnv(Prague)
       xp = env.xp
       mx = env.sender
-      chain = env.chain
       acc = mx.getAccount(AccountEOA)
       accInvalid = mx.getAccount(AccountEOAInvalid)
 

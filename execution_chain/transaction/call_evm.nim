@@ -9,12 +9,10 @@
 {.push raises: [].}
 
 import
-  eth/common/eth_types_rlp,
-  ../evm/[types, state],
+  eth/common/[addresses, transactions],
+  ../evm/types,
   ../transaction,
-  ./call_common,
-  web3/eth_api_types,
-  ../common/common
+  ./call_common
 
 export
   call_common
@@ -38,17 +36,6 @@ proc txCallEvm*(tx: Transaction,
                 sender: Address,
                 vmState: BaseVMState,
                 intrinsic: IntrinsicGas,
-                discardResult: static bool = false): auto =
-  let
-    call = callParams(tx, sender, vmState, intrinsic)
-  when discardResult:
-    discard runComputation(call, VoidResult)
-  else:
-    runComputation(call, TxResult)
-
-proc testCallEvm*(tx: Transaction,
-                  sender: Address,
-                  vmState: BaseVMState): DebugCallResult =
-  let
-    call = callParams(tx, sender, vmState, IntrinsicGas())
-  runComputation(call, DebugCallResult)
+                T: type = TxResult): T =
+  let call = callParams(tx, sender, vmState, intrinsic)
+  runComputation(call, T)

@@ -412,16 +412,16 @@ proc runTestOverflow() =
       config = chainConfigForNetwork(MainNet)
     )
 
-    let s = BaseVMState.new(
+    let vmState = BaseVMState.new(
       header,
       header,
       com,
       com.db.baseTxFrame()
     )
     defer:
-      s.dispose()
+      vmState.dispose()
 
-    s.ledger.setCode(codeAddress, @data)
+    vmState.ledger.setCode(codeAddress, @data)
     let unsignedTx = Transaction(
       txType: TxLegacy,
       nonce: 0,
@@ -433,9 +433,11 @@ proc runTestOverflow() =
       payload: @data
     )
 
-    let privateKey = PrivateKey.fromHex("0000000000000000000000000000000000000000000000000000001000000000")[]
-    let tx = signTransaction(unsignedTx, privateKey, false)
-    let res = testCallEvm(tx, tx.recoverSender().expect("valid signature"), s)
+    let
+      privateKey = PrivateKey.fromHex("0000000000000000000000000000000000000000000000000000001000000000")[]
+      tx = signTransaction(unsignedTx, privateKey, false)
+      sender = tx.recoverSender().expect("valid signature")
+      res = txCallEvm(tx, sender, vmState, IntrinsicGas(), CallResult)
 
     # After gasCall values always on positive, this test become OOG
     check res.error == "Opcode Dispatch Error: OutOfGas, depth=1"
@@ -622,12 +624,12 @@ proc runCreateCacheTests() =
     check ledger.peekCode(codeHash).get == cached
 
   test "top-level deployment initcode is not admitted":
-    let vm = initVMEnv("Cancun")
-    defer: vm.dispose()
+    let vmState = initVMEnv("Cancun")
+    defer: vmState.dispose()
     let tx = Transaction(gasLimit: 1_000_000, payload: initcode)
-    let res = testCallEvm(tx, factoryCaller, vm)
+    let res = txCallEvm(tx, factoryCaller, vmState, IntrinsicGas(), CallResult)
     check res.error.len == 0
-    check vm.ledger.peekCode(codeHash).isNone
+    check vmState.ledger.peekCode(codeHash).isNone
 
 proc evmSupportMain() =
   runStackTests()

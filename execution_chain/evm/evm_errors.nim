@@ -37,7 +37,7 @@ type
     StaticContext
     InvalidJumpDest
     OutOfBounds
-    InvalidInitCode
+    InitCodeSizeExceeded
     EvmInvalidParam
 
   EvmErrorObj* = object

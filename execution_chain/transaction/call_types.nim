@@ -54,8 +54,6 @@ type
     error*:   string
     output*:  seq[byte]
 
-  VoidResult* = object
-
   IntrinsicGas* = object
     execution*: GasInt
     floorDataGas*: GasInt

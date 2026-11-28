@@ -51,11 +51,7 @@ type
     receiptsRoot: Hash32
     logsBloom: Bloom
     packedTxs: seq[TxItemRef]
-    withdrawalReqs: seq[byte]
-    consolidationReqs: seq[byte]
-    depositReqs: seq[byte]
-    builderDepositReqs: seq[byte]
-    builderExitReqs: seq[byte]
+    reqs: BlockRequests
 
 const
   receiptsExtensionSize = ##\
@@ -114,9 +110,7 @@ proc prospectiveHeaderFixedSize(xp: TxPoolRef, extraData: seq[byte]): uint64 =
   ## `blobGasUsed` — the only fields whose encoded size depends on the packed
   ## txs. Everything else is either known before packing starts or fixed-width
   ## (hash roots, bloom).
-  let
-    vmState = xp.vmState
-    com = vmState.com
+  let vmState = xp.vmState
 
   var header = Header(
     number:        vmState.blockNumber,
@@ -126,15 +120,15 @@ proc prospectiveHeaderFixedSize(xp: TxPoolRef, extraData: seq[byte]): uint64 =
     extraData:     extraData,
     baseFeePerGas: Opt.some(xp.baseFee.u256),
   )
-  if com.isShanghaiOrLater(xp.timestamp):
+  if vmState.fork >= FkShanghai:
     header.withdrawalsRoot = Opt.some(default(Hash32))
-  if com.isCancunOrLater(xp.timestamp):
+  if vmState.fork >= FkCancun:
     header.parentBeaconBlockRoot = Opt.some(default(Hash32))
     header.blobGasUsed = Opt.some(0'u64)
     header.excessBlobGas = Opt.some(vmState.blockCtx.excessBlobGas)
-  if com.isPragueOrLater(xp.timestamp):
+  if vmState.fork >= FkPrague:
     header.requestsHash = Opt.some(default(Hash32))
-  if com.isAmsterdamOrLater(xp.timestamp):
+  if vmState.fork >= FkAmsterdam:
     header.blockAccessListHash = Opt.some(default(Hash32))
     header.slotNumber = Opt.some(xp.slotNumber)
 
@@ -267,7 +261,10 @@ template packItem(pst: var TxPacker; item: TxItemRef; skip, stop: untyped) =
     vmState.receipts.setLen(inx + receiptsExtensionSize)
     vmState.receiptBlooms.setLen(inx + receiptsExtensionSize)
 
-  vmState.blockLogs.addDepositLogs(vmState.txLogs, vmState.com.depositContractAddress)
+  parseDepositLogs(
+    vmState.depositReqs, vmState.txLogs, vmState.com.depositContractAddress
+  ).isOkOr:
+    stop(error)
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
   vmState.receiptBlooms[inx] = calcLogsBloom(vmState.receipts[inx].logs)
 
@@ -314,14 +311,8 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 
   # EIP-6110, EIP-7002, EIP-7251
   if vmState.fork >= FkPrague:
-    pst.withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
-    pst.consolidationReqs = ?processDequeueConsolidationRequests(vmState)
-    pst.depositReqs = ?parseDepositLogs(vmState.blockLogs)
-
-    if vmState.fork >= FkAmsterdam:
-      # EIP-8282
-      pst.builderDepositReqs = ?processBuilderDepositRequests(vmState)
-      pst.builderExitReqs = ?processBuilderExitRequests(vmState)
+    pst.reqs.deposit = move vmState.depositReqs
+    ?processBlockRequests(vmState, pst.reqs)
 
 
   # Finish up, then vmState.ledger.stateRoot may be accessed
@@ -373,9 +364,7 @@ proc packerVmExec*(
 
 func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
   ## Generate a new header, a child of the cached `head`
-  let
-    vmState = pst.vmState
-    com = vmState.com
+  let vmState = pst.vmState
 
   var header = Header(
     parentHash:    vmState.blockCtx.parentHash,
@@ -395,32 +384,18 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
     baseFeePerGas: Opt.some(xp.baseFee.u256),
     )
 
-  if com.isShanghaiOrLater(xp.timestamp):
+  if vmState.fork >= FkShanghai:
     header.withdrawalsRoot = Opt.some(calcWithdrawalsRoot(xp.withdrawals))
 
-  if com.isCancunOrLater(xp.timestamp):
+  if vmState.fork >= FkCancun:
     header.parentBeaconBlockRoot = Opt.some(xp.parentBeaconBlockRoot)
     header.blobGasUsed = Opt.some vmState.blobGasUsed
     header.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
 
-  if com.isPragueOrLater(xp.timestamp):
-    let requestsHash = if com.isAmsterdamOrLater(xp.timestamp):
-        calcRequestsHash([
-          (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
-          (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
-          (CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs),
-          (BUILDER_DEPOSIT_REQUEST_TYPE, pst.builderDepositReqs),
-          (BUILDER_EXIT_REQUEST_TYPE, pst.builderExitReqs),
-        ])
-      else:
-        calcRequestsHash([
-          (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
-          (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),
-          (CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
-        ])
-    header.requestsHash = Opt.some(requestsHash)
+  if vmState.fork >= FkPrague:
+    header.requestsHash = Opt.some(calcRequestsHash(pst.reqs, vmState.fork))
 
-  if com.isAmsterdamOrLater(xp.timestamp):
+  if vmState.fork >= FkAmsterdam:
     let bal = vmState.blockAccessList.expect("block access list exists")
     header.blockAccessListHash = Opt.some(bal[].computeBlockAccessListHash())
     header.slotNumber = Opt.some(xp.slotNumber)
@@ -432,23 +407,8 @@ func assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
 func blockValue*(pst: TxPacker): UInt256 =
   pst.blockValue
 
-func executionRequests*(pst: var TxPacker): seq[seq[byte]] =
-  template append(dst, reqType, reqData) =
-    if reqData.len > 0:
-      reqData.insert(reqType)
-      dst.add(move(reqData))
-
-  result.append(DEPOSIT_REQUEST_TYPE, pst.depositReqs)
-  result.append(WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs)
-  result.append(CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
-
-  # EIP-8282: must mirror `assembleHeader`, which folds these into
-  # `requestsHash`. Omitting them here yields a payload whose recomputed
-  # requestsHash disagrees with the committed header, i.e. a block hash
-  # mismatch on every `engine_newPayload` receiver -- including ourselves.
-  if pst.vmState.fork >= FkAmsterdam:
-    result.append(BUILDER_DEPOSIT_REQUEST_TYPE, pst.builderDepositReqs)
-    result.append(BUILDER_EXIT_REQUEST_TYPE, pst.builderExitReqs)
+func executionRequests*(pst: TxPacker): seq[seq[byte]] =
+  executionRequests(pst.reqs, pst.vmState.fork)
 
 iterator packedTxs*(pst: TxPacker): TxItemRef =
   for item in pst.packedTxs:
