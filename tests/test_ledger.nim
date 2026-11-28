@@ -556,7 +556,7 @@ proc runLedgerBasicOperationsTests() =
         let
           code = testCode(size)
           codeHash = keccak256(code)
-        check frame.persistCodeByHash(codeHash, code).isOk
+        check frame.persistCodeWithoutJumpdests(codeHash, code).isOk
 
         var jumpdests = @[1'u8]
         let loaded = frame.getCodeByHash(codeHash, jumpdests).expect("code")
@@ -582,6 +582,16 @@ proc runLedgerBasicOperationsTests() =
         expect AssertionDefect:
           discard frame.persistCodeByHash(codeHash, code, newSeq[byte](bitmapLen))
       check not frame.hasKey(contractCodeKey(codeHash).toOpenArray)
+
+    test "Empty code is not stored":
+      let
+        frame = memDB.baseTxFrame()
+        codeHash = keccak256([0xaa'u8])
+      check:
+        frame.persistCodeByHash(codeHash, newSeq[byte](), newSeq[byte]()).isErr
+        frame.persistCodeWithoutJumpdests(codeHash, newSeq[byte]()).isErr
+        not frame.hasKey(contractCodeKey(codeHash).toOpenArray)
+        frame.getCodeByHash(codeHash).isErr
 
     test "Code under the legacy key is read without a jumpdest bitmap":
       let
@@ -687,7 +697,7 @@ proc runLedgerBasicOperationsTests() =
         ).expect("ok")
       for code in [oldCode, oldOriginalCode]:
         check frame.put(legacyContractHashKey(keccak256(code)).toOpenArray, code).isOk
-      check frame.persistCodeByHash(keccak256(bareCode), bareCode).isOk
+      check frame.persistCodeWithoutJumpdests(keccak256(bareCode), bareCode).isOk
 
       let
         ledger = LedgerRef.init(frame)

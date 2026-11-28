@@ -753,6 +753,9 @@ func encodeCodeRecord*(value: var seq[byte], code, jumpdests: openArray[byte]) =
 proc persistCodeByHash*(
     db: CoreDbTxRef, codeHash: Hash32, code, jumpdests: openArray[byte]
 ): Result[void, string] =
+  if code.len == 0:
+    return err("persistCodeByHash: empty code")
+
   var value: seq[byte]
   value.encodeCodeRecord(code, jumpdests)
   db.put(contractCodeKey(codeHash).toOpenArray, value).isOkOr:
@@ -760,7 +763,7 @@ proc persistCodeByHash*(
 
   ok()
 
-proc persistCodeByHash*(
+proc persistCodeWithoutJumpdests*(
     db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]
 ): Result[void, string] =
   db.persistCodeByHash(codeHash, code, code.toOpenArray(0, -1))
