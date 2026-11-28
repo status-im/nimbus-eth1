@@ -1697,7 +1697,7 @@ suite "TxPool contract code storage":
       # Store the runtime code in memory and return it
       initCode = hexToSeqByte("0x65602a600055006000526006601af3")
     let
-      codeKey = contractHashKey(keccak256(runtimeCode))
+      codeKey = contractCodeKey(keccak256(runtimeCode))
       tc = BaseTx(gasLimit: 200000, payload: initCode)
 
     xp.checkAddTx(mx.makeTx(tc, mx.getAccount(5), 0))

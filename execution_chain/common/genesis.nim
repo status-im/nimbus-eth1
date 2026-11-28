@@ -115,7 +115,7 @@ proc flushGenesisAccounts*(g: Genesis, db: CoreDbTxRef) =
       data = db.fetchAccount(accPath).expect "valid account"
     db.deleteAccount(accPath).expect "account deleted"
     if data.codeHash != EMPTY_CODE_HASH:
-      db.del(contractHashKey(data.codeHash).toOpenArray).expect "code deleted"
+      db.del(contractCodeKey(data.codeHash).toOpenArray).expect "code deleted"
 
 proc genesisBlockHash*(params: NetworkParams): Hash32 =
   let db = newCoreDbRef(AristoDbMemory)

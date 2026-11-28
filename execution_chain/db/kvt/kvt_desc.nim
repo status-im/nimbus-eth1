@@ -33,6 +33,12 @@ type
     proc(key: openArray[byte]): Result[seq[byte], KvtError] {.gcsafe, raises: [].}
     ## Generic backend database retrieval function
 
+  KvpDataProc* = proc(data: openArray[byte]) {.gcsafe, raises: [].}
+
+  GetDataKvpFn* = proc(
+    key: openArray[byte], onData: KvpDataProc
+  ): Result[void, KvtError] {.gcsafe, raises: [].}
+
   LenKvpFn* = proc(key: openArray[byte]): Result[int, KvtError] {.gcsafe, raises: [].}
     ## Generic backend database retrieval function
 
@@ -71,6 +77,7 @@ type
 
   KvtDbRef* = ref object of RootRef ## Backend interface.
     getKvpFn*: GetKvpFn ## Read key-value pair
+    getDataKvpFn*: GetDataKvpFn
     lenKvpFn*: LenKvpFn ## Read key-value pair length
     multiGetKvpFn*: MultiGetKvpFn ## Bulk read key-value pairs
 

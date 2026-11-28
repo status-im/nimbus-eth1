@@ -18,6 +18,7 @@ import
   eth/common/[addresses, hashes, block_access_lists],
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
+  ../core/eip7702,
   ../concurrency/maybe_owned,
   ../constants,
   ../block_access_list/[bal_overlay, bal_utils],
@@ -460,13 +461,21 @@ proc cachedCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
     return Opt.some(held[])
   Opt.none(CodeBytesRef)
 
+proc storeCode(
+    ledger: LedgerRef, codeHash: Hash32, code: CodeBytesRef
+): Result[void, string] =
+  if isDelegation(code):
+    ledger.txFrame.persistCodeWithoutJumpdests(codeHash, code.bytes())
+  else:
+    ledger.txFrame.persistCodeByHash(codeHash, code.bytes(), code.jumpdestBitmap())
+
 proc persistCode(acc: AccountRef, ledger: LedgerRef, hold: bool) =
   if acc.code.len != 0 and not acc.code.persisted:
     if hold:
       # Defer the write until the block is accepted, see `storeHeldCode`
       ledger.heldCode[acc.statement.codeHash] = acc.code
       return
-    let rc = ledger.txFrame.persistCodeByHash(acc.statement.codeHash, acc.code.bytes())
+    let rc = ledger.storeCode(acc.statement.codeHash, acc.code)
     if rc.isErr:
       warn "persistCode failed",
        codeHash=acc.statement.codeHash, error=rc.error
@@ -756,6 +765,18 @@ proc recordCodeRead(ledger: LedgerRef, address: Address, codeHash: Hash32) =
   if ledger.collectWitness and ledger.writtenCode(codeHash).isNone():
     ledger.witnessKeys[(address, Opt.none(UInt256))] = true
 
+proc loadCode(ledger: LedgerRef, codeHash: Hash32): Result[CodeBytesRef, string] =
+  var
+    jumpdests: seq[byte]
+    rc = ledger.txFrame.getCodeByHash(codeHash, jumpdests)
+  if rc.isErr:
+    return err(rc.error)
+
+  if jumpdests.len > 0:
+    return ok(CodeBytesRef.init(move(rc.value), move(jumpdests), persisted = true))
+
+  ok(CodeBytesRef.init(move(rc.value), persisted = true))
+
 proc getCode*(ledger: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
@@ -770,7 +791,7 @@ proc getCode*(ledger: LedgerRef,
 
   if acc.code.isNil:
     acc.code = ledger.cachedCode(acc.statement.codeHash).valueOr:
-      var rc = ledger.txFrame.getCodeByHash(acc.statement.codeHash)
+      let rc = ledger.loadCode(acc.statement.codeHash)
       if rc.isErr:
         # A non-empty code hash with no code in the database: record a fatalError
         # but still return empty code so the async EVM continues.
@@ -778,9 +799,8 @@ proc getCode*(ledger: LedgerRef,
         ledger.fatalError = Opt.some("getCode(): failed to fetch code from database")
         CodeBytesRef()
       else:
-        let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
-        ledger.code.put(acc.statement.codeHash, newCode)
-        newCode
+        ledger.code.put(acc.statement.codeHash, rc.value)
+        rc.value
 
   when returnHash:
     (acc.statement.codeHash, acc.code)
@@ -800,14 +820,13 @@ proc getOriginalCode*(ledger: LedgerRef, address: Address): CodeBytesRef =
 
   if acc.originalCode.isNil:
     acc.originalCode = ledger.cachedCode(codeHash).valueOr:
-      var rc = ledger.txFrame.getCodeByHash(codeHash)
+      let rc = ledger.loadCode(codeHash)
       if rc.isErr:
         warn "getCodeByHash failed", codeHash, error = rc.error
         CodeBytesRef()
       else:
-        let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
-        ledger.code.put(codeHash, newCode)
-        newCode
+        ledger.code.put(codeHash, rc.value)
+        rc.value
 
   acc.originalCode
 
@@ -1315,7 +1334,7 @@ proc storeHeldCode*(ledger: LedgerRef): Result[void, string] =
   ## Write the code `holdCode` kept back, once its block is accepted.
   for codeHash, code in ledger.heldCode:
     if not code.persisted:
-      ledger.txFrame.persistCodeByHash(codeHash, code.bytes()).isOkOr:
+      ledger.storeCode(codeHash, code).isOkOr:
         return err("storeHeldCode(): " & error)
       code.persisted = true
   ledger.heldCode.clear()

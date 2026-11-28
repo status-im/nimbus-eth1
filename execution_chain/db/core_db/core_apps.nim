@@ -17,7 +17,7 @@ import
   std/[sequtils],
   chronicles,
   eth/[common, rlp],
-  stew/[byteutils, endians2],
+  stew/[assign2, byteutils, endians2],
   results,
   "../.."/[constants],
   "../.."/stateless/witness_types,
@@ -721,21 +721,103 @@ proc getWitness*(
 
   Witness.decode(witnessBytes)
 
-proc persistCodeByHash*(db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]): Result[void, string] =
-  db.put(contractHashKey(codeHash).toOpenArray, code).isOkOr:
+const
+  codeOnlyRecord = 0'u8
+  codeWithJumpdestsRecord = 1'u8
+
+func storedCodeLen(
+    data: openArray[byte], info: static[string]
+): Result[int, string] =
+  if data.len == 0:
+    return err(info & ": invalid code record")
+
+  let payloadLen = data.len - 1
+  case data[0]
+  of codeOnlyRecord:
+    ok(payloadLen)
+  of codeWithJumpdestsRecord:
+    let codeLen = payloadLen * 8 div 9
+    if codeLen + (codeLen + 7) div 8 != payloadLen:
+      return err(info & ": invalid code record")
+    ok(codeLen)
+  else:
+    err(info & ": invalid code record")
+
+func encodeCodeRecord*(value: var seq[byte], code, jumpdests: openArray[byte]) =
+  doAssert jumpdests.len == 0 or jumpdests.len == (code.len + 7) div 8
+  value.setLen(1 + code.len + jumpdests.len)
+  value[0] = if jumpdests.len == 0: codeOnlyRecord else: codeWithJumpdestsRecord
+  assign(value.toOpenArray(1, code.len), code)
+  assign(value.toOpenArray(1 + code.len, value.high), jumpdests)
+
+proc persistCodeByHash*(
+    db: CoreDbTxRef, codeHash: Hash32, code, jumpdests: openArray[byte]
+): Result[void, string] =
+  if code.len == 0:
+    return err("persistCodeByHash: empty code")
+
+  var value: seq[byte]
+  value.encodeCodeRecord(code, jumpdests)
+  db.put(contractCodeKey(codeHash).toOpenArray, value).isOkOr:
     return err("persistCodeByHash: " & $$error)
 
   ok()
 
-proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] {.inline.} =
-  var rc = db.get(contractHashKey(codeHash).toOpenArray)
-  if rc.isOk:
-    ok(move(rc.value))
-  else:
-    err("getCodeByHash: " & $$rc.error)
+proc persistCodeWithoutJumpdests*(
+    db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]
+): Result[void, string] =
+  db.persistCodeByHash(codeHash, code, code.toOpenArray(0, -1))
+
+proc getStoredCode(
+    db: CoreDbTxRef,
+    codeHash: Hash32,
+    withJumpdests: static bool,
+    jumpdests: var seq[byte],
+): Result[seq[byte], string] =
+  var
+    codeLen {.threadvar.}: Result[int, string]
+    code {.threadvar.}: seq[byte]
+    bitmap {.threadvar.}: seq[byte]
+  let onData = proc(data: openArray[byte]) {.nimcall.} =
+    codeLen = storedCodeLen(data, "getCodeByHash")
+    if codeLen.isOk:
+      code = @(data.toOpenArray(1, codeLen.value))
+      when withJumpdests:
+        bitmap = @(data.toOpenArray(1 + codeLen.value, data.high))
+
+  let found = db.get(contractCodeKey(codeHash).toOpenArray, onData)
+  if found.isOk:
+    if codeLen.isErr:
+      return err(codeLen.error)
+    jumpdests = move(bitmap)
+    return ok(move(code))
+
+  jumpdests.setLen(0)
+  var rc = db.get(legacyContractHashKey(codeHash).toOpenArray)
+  if rc.isErr:
+    return err("getCodeByHash: " & $$rc.error)
+
+  ok(move(rc.value))
+
+proc getCodeByHash*(
+    db: CoreDbTxRef, codeHash: Hash32, jumpdests: var seq[byte]
+): Result[seq[byte], string] =
+  db.getStoredCode(codeHash, withJumpdests = true, jumpdests)
+
+proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] =
+  var jumpdests: seq[byte]
+  db.getStoredCode(codeHash, withJumpdests = false, jumpdests)
 
 proc getCodeLenByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[int, string] =
-  let len = db.len(contractHashKey(codeHash).toOpenArray).valueOr:
+  var codeLen {.threadvar.}: Result[int, string]
+  let onData = proc(data: openArray[byte]) {.nimcall.} =
+    codeLen = storedCodeLen(data, "getCodeLenByHash")
+
+  let found = db.get(contractCodeKey(codeHash).toOpenArray, onData)
+  if found.isOk:
+    return codeLen
+
+  let len = db.len(legacyContractHashKey(codeHash).toOpenArray).valueOr:
     return err("getCodeLenByHash: " & $$error)
 
   ok(len)
