@@ -21,6 +21,8 @@ import
   ./storage_types,
   ../evm/code_bytes
 
+from ../core/eip7702 import isDelegation
+
 logScope:
   topics = "code-migration"
 
@@ -40,11 +42,13 @@ proc migrateRecord(
   if key.len != keyLen or code.len == 0:
     return ok(0)
 
-  let jumpdests = jumpdestBitmap(code)
   var codeKey: array[keyLen, byte]
   assign(codeKey, key)
   codeKey[0] = codeKind
-  value.encodeCodeRecord(code, jumpdests)
+  if isDelegation(code):
+    value.encodeCodeRecord(code, code.toOpenArray(0, -1))
+  else:
+    value.encodeCodeRecord(code, jumpdestBitmap(code))
   ?batch.put(codeKey, value)
   ?batch.delete(key)
   ok(value.len)

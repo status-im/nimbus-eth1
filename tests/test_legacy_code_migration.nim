@@ -63,6 +63,30 @@ suite "Legacy code migration":
       frame.get(above).expect("value") == [byte 2]
       db.migrateLegacyCode().expect("migrated") == 0
 
+  test "Delegation designators are migrated without a jumpdest bitmap":
+    let
+      path = createTempDir("nimbus-code-migration-", "")
+      db = AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+      frame = db.baseTxFrame()
+      delegation = @[0xef'u8, 0x01, 0x00] & newSeq[byte](19) & @[1'u8]
+      code = testCode(23)
+    defer:
+      db.close()
+      removeDir(path)
+
+    for c in [delegation, code]:
+      check frame.put(legacyContractHashKey(keccak256(c)).toOpenArray, c).isOk
+    check db.migrateLegacyCode().expect("migrated") == 2
+
+    var jumpdests = @[1'u8]
+    check:
+      frame.get(contractCodeKey(keccak256(delegation)).toOpenArray).expect("value") ==
+        @[0'u8] & delegation
+      frame.get(contractCodeKey(keccak256(code)).toOpenArray).expect("value") ==
+        @[1'u8] & code & jumpdestBitmap(code)
+      frame.getCodeByHash(keccak256(delegation), jumpdests).expect("code") == delegation
+      jumpdests.len == 0
+
   test "A stopped migration keeps its progress and the next run finishes it":
     let
       path = createTempDir("nimbus-code-migration-", "")

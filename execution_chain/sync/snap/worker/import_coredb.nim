@@ -16,6 +16,7 @@ import
   ./[helpers, cache_db, update, worker_desc]
 
 from ../../../evm/code_bytes import jumpdestBitmap
+from ../../../core/eip7702 import isDelegation
 
 logScope:
   topics = "snap sync"
@@ -183,7 +184,12 @@ proc mergeCtrCode(
     return err()
 
   # Save contract code to core DB
-  tx.persistCodeByHash(hash, data, jumpdestBitmap(data)).isOkOr:
+  let rc =
+    if isDelegation(data):
+      tx.persistCodeWithoutJumpdests(hash, data)
+    else:
+      tx.persistCodeByHash(hash, data, jumpdestBitmap(data))
+  rc.isOkOr:
     error info & ": Failed storing contract code",
       accPath=accPath.toStr, codeHash=hash.toStr,
       nCodes=data.len, `error`=error

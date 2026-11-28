@@ -18,6 +18,7 @@ import
   eth/common/[addresses, hashes, block_access_lists],
   ../utils/[mergeutils, utils],
   ../evm/code_bytes,
+  ../core/eip7702,
   ../concurrency/maybe_owned,
   ../constants,
   ../block_access_list/[bal_overlay, bal_utils],
@@ -463,7 +464,7 @@ proc cachedCode(ledger: LedgerRef, codeHash: Hash32): Opt[CodeBytesRef] =
 proc storeCode(
     ledger: LedgerRef, codeHash: Hash32, code: CodeBytesRef
 ): Result[void, string] =
-  if code.len == EIP7702_DELEGATION_SIZE and code.hasPrefix(EIP7702_DELEGATION_PREFIX):
+  if isDelegation(code):
     ledger.txFrame.persistCodeWithoutJumpdests(codeHash, code.bytes())
   else:
     ledger.txFrame.persistCodeByHash(codeHash, code.bytes(), code.jumpdestBitmap())
